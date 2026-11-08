@@ -228,13 +228,17 @@ function Podium({ rows, gains, compact }: { rows: Ranked[]; gains: Gains; compac
 const BIG_PARTY = 27
 
 // Row layouts, roomiest first: the first whose rows fit the space (filled top
-// to bottom, in at most maxColumns columns) is used. Rows have fixed heights
-// so the fit maths holds.
+// to bottom, in at most maxColumns columns, each at least minColumnWidth wide)
+// is used. Rows have fixed heights so the fit maths holds.
 const ROW_LAYOUTS = [
-  { kind: 'regular', height: 56, gap: 8, maxColumns: 4 },
-  { kind: 'compact', height: 40, gap: 8, maxColumns: 5 },
-  { kind: 'tiny', height: 32, gap: 4, maxColumns: 6 },
+  { kind: 'regular', height: 56, gap: 8, maxColumns: 4, minColumnWidth: 420 },
+  { kind: 'compact', height: 40, gap: 8, maxColumns: 5, minColumnWidth: 300 },
+  { kind: 'tiny', height: 32, gap: 4, maxColumns: 6, minColumnWidth: 220 },
 ] as const
+/** The space between columns (gap-x-6), in px. */
+const COLUMN_GAP = 24
+/** Badges only fit beside a name in a column at least this wide (px); in a narrower one they crush it. */
+const BADGES_MIN_WIDTH = 520
 
 const ROW_STYLE = {
   regular: { row: 'h-14 gap-4 rounded-2xl px-5', rank: 'w-9 text-2xl', avatar: 'size-10 text-base', name: 'text-2xl leading-tight', points: 'text-3xl', details: true },
@@ -242,20 +246,24 @@ const ROW_STYLE = {
   tiny: { row: 'h-8 gap-2 rounded-xl px-3', rank: 'w-6 text-base', avatar: 'size-6 text-[0.6rem]', name: 'text-base', points: 'text-lg', details: false },
 }
 
-function rowLayout(count: number, height: number) {
+function rowLayout(count: number, width: number, height: number) {
   for (const layout of ROW_LAYOUTS) {
     const perColumn = Math.max(1, Math.floor((height + layout.gap) / (layout.height + layout.gap)))
     const columns = Math.ceil(count / perColumn)
-    if (columns <= layout.maxColumns) return { layout, columns }
+    const widthColumns = Math.floor((width + COLUMN_GAP) / (layout.minColumnWidth + COLUMN_GAP))
+    if (columns <= Math.min(layout.maxColumns, widthColumns)) return { layout, columns }
   }
+  // Nothing fits: the smallest rows, in as few columns as their height allows.
   const layout = ROW_LAYOUTS[ROW_LAYOUTS.length - 1]
-  return { layout, columns: layout.maxColumns }
+  const perColumn = Math.max(1, Math.floor((height + layout.gap) / (layout.height + layout.gap)))
+  return { layout, columns: Math.min(layout.maxColumns, Math.ceil(count / perColumn)) }
 }
 
 function Standings({ rows, leaderPoints, gains }: { rows: Ranked[]; leaderPoints: number; gains: Gains }) {
-  const [ref, { height }] = useElementSize<HTMLDivElement>()
-  const { layout, columns } = rowLayout(rows.length, height)
+  const [ref, { width, height }] = useElementSize<HTMLDivElement>()
+  const { layout, columns } = rowLayout(rows.length, width, height)
   const style = ROW_STYLE[layout.kind]
+  const badges = style.details && (width - (columns - 1) * COLUMN_GAP) / columns >= BADGES_MIN_WIDTH
   // Fill columns top to bottom so the ranking reads down, then across.
   const perColumn = Math.ceil(rows.length / columns)
 
@@ -286,7 +294,7 @@ function Standings({ rows, leaderPoints, gains }: { rows: Ranked[]; leaderPoints
                 <div className="min-w-0 flex-1">
                   <p className="flex min-w-0 items-center gap-2">
                     <span className={cn('truncate font-semibold', style.name)}>{row.name}</span>
-                    {style.details && <ProfileBadges profile={row.profile} className="shrink-0 flex-nowrap" />}
+                    {badges && <ProfileBadges profile={row.profile} className="shrink-0 flex-nowrap" />}
                   </p>
                   {style.details && (
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">

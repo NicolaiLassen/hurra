@@ -10,10 +10,16 @@ import { Label } from '@/components/ui/label'
 import { isHost } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-/** Where to go after signing in: the host page that asked for the login (same site only), or the sessions. */
+/**
+ * Where to go after signing in: the page that asked for the login, or the
+ * sessions. Only a path in this app: browsers read a backslash as a slash, so
+ * "/\x" would leave the site just like "//x".
+ */
 function returnPath(state: unknown) {
   const from = (state as { from?: unknown } | null)?.from
-  return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') ? from : '/host'
+  return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.includes('\\')
+    ? from
+    : '/host'
 }
 
 export default function HostLogin() {

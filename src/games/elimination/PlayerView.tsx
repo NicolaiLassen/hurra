@@ -71,6 +71,10 @@ export default function PlayerView({
 
   async function knockOut(scanned: Player, method: Method) {
     setBusy(true)
+    // Keep the dialog on this player and use up a camera-scanned code now, so
+    // this knockout's own result (e.g. winning) can't re-run the checks above.
+    setTarget(scanned)
+    if (scannedCode) onScanHandled?.()
     try {
       // The game announces the result to both players (with a sound); nothing to add here.
       await act({ type: method, target: scanned.id })
@@ -78,7 +82,7 @@ export default function PlayerView({
       toast.error((error as Error).message)
     } finally {
       setBusy(false)
-      closeDialog()
+      setTarget(null) // the camera code, if any, is already used up
     }
   }
 

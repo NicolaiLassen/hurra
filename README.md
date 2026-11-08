@@ -2,12 +2,14 @@
   <img src="public/icon-512.png" alt="" width="112" height="112">
 </p>
 
-<h1 align="center">SockHop</h1>
+<h1 align="center">Hurra</h1>
 
 <p align="center">
   Live party games for a room full of friends. Guests play on their phones,
   a TV runs the show, and every game is a plugin on a homemade engine.
 </p>
+
+<p align="center"><em>Named after the Danish birthday cheer: Hurra, hurra, hurra!</em></p>
 
 <p align="center">
   <img src="docs/screenshots/tv-game.png" alt="The TV during Last one standing: 4 of 5 still standing, the player tiles, top hunters and a banner saying Mads got Anna" width="900">

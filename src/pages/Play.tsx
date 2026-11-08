@@ -73,8 +73,12 @@ function PlayerHome({ session: joinedSession, player: joined }: { session: Sessi
   const scan = useScannedCode()
   const takesScans = !over && activeGame !== undefined && getGameModule(activeGame.game_type)?.acceptsScans === true
   const ready = games !== undefined && players !== undefined
+  // Clearing ?scanned= commits in a router transition, so a players reload can
+  // re-run this effect with the old code still in place: handle each code once.
+  const handledScan = useRef<string | null>(null)
   useEffect(() => {
-    if (!scan.code || !ready || takesScans) return
+    if (!scan.code || !ready || takesScans || handledScan.current === scan.code) return
+    handledScan.current = scan.code
     const owner = players?.find((p) => p.code === scan.code)
     toast.info(owner ? `That's ${owner.name}'s code` : "That code isn't from this party", {
       description: owner ? 'Only the host can give points with it.' : undefined,
