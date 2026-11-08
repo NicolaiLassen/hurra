@@ -1,0 +1,292 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+/* Short screens (laptops, projectors), or anything inside [data-short]: the
+   scoreboard shrinks to leave room (a big party marks its podium data-short). */
+@custom-variant short {
+  @media (max-height: 960px) {
+    @slot;
+  }
+  &:where([data-short] *) {
+    @slot;
+  }
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-confetti-pink: var(--confetti-pink);
+  --color-confetti-teal: var(--confetti-teal);
+  --color-confetti-violet: var(--confetti-violet);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Icon sizes. Phosphor icons are bold by default and 1em when unsized (src/main.tsx).
+   - inline with text: 1em, the default (no class)
+   - controls: size-4, set by Button, menu and select styles
+   - badges: size-3 or size-3.5 (Badge, ProfileBadges, AvatarBadge)
+   - list and feed rows: size-5
+   - card and section headers: size-5 or size-6
+   - hero and empty states only: size-12 to size-24 (duotone or fill)
+   The TV scoreboard is read from across the room, so it goes up a step or two. */
+
+/* The app is dark-only (index.html sets class="dark"): a night-time party
+   palette with gold as the primary colour. */
+:root {
+  --background: #0f0d1a;
+  --foreground: #f5f3ff;
+  --card: #1b1830;
+  --card-foreground: #f5f3ff;
+  --popover: #1b1830;
+  --popover-foreground: #f5f3ff;
+  --primary: #f5c542;
+  --primary-foreground: #0f0d1a;
+  --secondary: #2a2645;
+  --secondary-foreground: #f5f3ff;
+  --muted: #24203d;
+  --muted-foreground: #a9a3c7;
+  --accent: #2a2645;
+  --accent-foreground: #f5f3ff;
+  --destructive: #ff6b6b;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: #f5c542;
+  --radius: 0.75rem;
+  /* Accent colours from the app icon, used next to gold for party touches. */
+  --confetti-pink: #ff6fae;
+  --confetti-teal: #4fd1c5;
+  --confetti-violet: #a78bfa;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  /* Tailwind v4 resets buttons to the default cursor. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* The app's one loader overlay (#splash in index.html). src/lib/loader.ts
+     decides when it shows: "boot" is the first open (up from the first paint),
+     "shown" a later load (fades in), "leaving" fades it out into the screen. */
+  .splash {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1rem;
+    background-color: var(--background);
+    transition: opacity 250ms ease-out;
+  }
+
+  .splash[hidden] {
+    display: none;
+  }
+
+  .splash[data-state='shown'] {
+    animation: loader-in 150ms ease-out;
+  }
+
+  .splash[data-state='leaving'] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The safety net: a loader still up after 15s offers a reload. */
+  .splash-slow {
+    display: grid;
+    justify-items: center;
+    gap: 0.75rem;
+    text-align: center;
+    @apply text-muted-foreground;
+  }
+
+  .splash-slow[hidden] {
+    display: none;
+  }
+
+  .splash-slow button {
+    @apply inline-flex h-10 items-center justify-center rounded-lg bg-secondary px-4 text-sm font-medium text-secondary-foreground hover:bg-secondary/80;
+  }
+
+  /* Hopping confetti: one wave of the four pieces takes about 1.5s. */
+  .confetti-loader {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.7rem;
+    height: 3.5rem;
+  }
+
+  .confetti-loader > span {
+    width: 0.85rem;
+    height: 0.85rem;
+    animation: confetti-hop 1.2s infinite;
+  }
+
+  .confetti-loader > span:nth-child(1) {
+    background: var(--primary);
+    border-radius: 3px;
+  }
+
+  .confetti-loader > span:nth-child(2) {
+    background: var(--confetti-pink);
+    border-radius: 9999px;
+    animation-delay: 0.12s;
+  }
+
+  .confetti-loader > span:nth-child(3) {
+    background: var(--confetti-teal);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    animation-delay: 0.24s;
+  }
+
+  .confetti-loader > span:nth-child(4) {
+    width: 0.45rem;
+    height: 1.15rem;
+    background: var(--confetti-violet);
+    border-radius: 9999px;
+    animation-delay: 0.36s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .confetti-loader > span {
+      animation: confetti-pulse 1.4s ease-in-out infinite;
+    }
+  }
+}
+
+@keyframes loader-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confetti-hop {
+  0% {
+    transform: translateY(0) rotate(0);
+    animation-timing-function: cubic-bezier(0.25, 0.7, 0.4, 1);
+  }
+  42% {
+    transform: translateY(-1.8rem) rotate(200deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.75, 0.3);
+  }
+  76% {
+    transform: translateY(0) rotate(360deg);
+  }
+  84% {
+    transform: translateY(0) rotate(360deg) scale(1.25, 0.75);
+  }
+  92%,
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+
+@keyframes confetti-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Scoreboard backdrop: soft glows plus slowly falling confetti. */
+.scoreboard-glow {
+  background:
+    radial-gradient(60% 45% at 50% 0%, color-mix(in oklch, var(--primary) 16%, transparent), transparent),
+    radial-gradient(45% 45% at 0% 100%, color-mix(in oklch, var(--confetti-violet) 16%, transparent), transparent),
+    radial-gradient(40% 40% at 100% 90%, color-mix(in oklch, var(--confetti-pink) 10%, transparent), transparent);
+}
+
+.confetti-fall {
+  animation: confetti-fall linear infinite;
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translateY(-5vh) rotate(0deg);
+  }
+  to {
+    transform: translateY(110vh) rotate(720deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-fall {
+    display: none;
+  }
+}
+
+/* Confetti dots for party surfaces (e.g. the face of a SecretCard). */
+.confetti-pattern {
+  background-image:
+    radial-gradient(circle at 12% 18%, var(--confetti-pink) 0 5px, transparent 6px),
+    radial-gradient(circle at 86% 20%, var(--confetti-teal) 0 4px, transparent 5px),
+    radial-gradient(circle at 80% 82%, var(--confetti-violet) 0 6px, transparent 7px),
+    radial-gradient(circle at 18% 84%, var(--confetti-teal) 0 3px, transparent 4px),
+    radial-gradient(circle at 52% 9%, var(--confetti-violet) 0 3px, transparent 4px),
+    radial-gradient(circle at 93% 55%, var(--confetti-pink) 0 3px, transparent 4px),
+    radial-gradient(circle at 6% 52%, var(--confetti-violet) 0 3px, transparent 4px);
+}
+
+/* A number that just changed: pops in, then settles (re-key the element to replay). */
+@keyframes count-pop {
+  0% {
+    transform: scale(1.5);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@theme {
+  --animate-count-pop: count-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}

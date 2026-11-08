@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- display "browser": a home-screen icon opens in the normal browser, which
+         shares localStorage, so guests stay the same player. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f0d1a" />
+    <title>SockHop</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- The app's one loader, outside #root so React never replaces it: up from
+         the first paint until the first screen has its data, then reused for
+         loads inside the app (src/lib/loader.ts). -->
+    <div id="splash" class="splash" data-state="boot" role="status">
+      <div class="confetti-loader" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <span class="sr-only">Loading</span>
+      <div class="splash-slow" hidden>
+        <p>This is taking longer than usual.</p>
+        <button type="button">Retry</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

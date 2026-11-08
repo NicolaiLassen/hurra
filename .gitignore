@@ -1,0 +1,12 @@
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+.netlify
+.DS_Store
+*.tsbuildinfo
+supabase/.temp
+supabase/.branches
+sound-takes
