@@ -10,3 +10,6 @@ dist
 supabase/.temp
 supabase/.branches
 sound-takes
+
+# Design-round sources for the build agents (local only, never committed)
+.design

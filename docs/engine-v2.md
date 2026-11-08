@@ -2,14 +2,16 @@
 
 The design and build contract for Hurra v2: several live games at once, a live
 quiz, Participant fusion, an event log of the whole night with a recap, and
-games that finish by themselves. Written on Sunday 8 November 2026 for the
-build that starts Monday 9 November. The party is Saturday 28 November 2026:
-about 45 guests on their phones, one host and one TV.
+games that finish by themselves. Written on Sunday 8 November 2026 and revised
+on Monday 9 November, before the build starts, to resolve the critic's review
+of the first version (appendix 12.5 maps each finding to its fix). The party is
+Saturday 28 November 2026: about 45 guests on their phones, one host and one
+TV.
 
 It merges three engine designs from the design round (evolve, event-first and
-realtime-native), the verified engine review and its critique, and the screen
-flows in [user-flows.md](user-flows.md). It stays in the repo as the engine's
-design doc.
+realtime-native), the verified engine review and its critique, the critic's
+review of this spec, and the screen flows in [user-flows.md](user-flows.md). It
+stays in the repo as the engine's design doc.
 
 **How to use it**
 
@@ -17,8 +19,8 @@ design doc.
   argument lists and JSON shapes. Build exactly these. If you must deviate, say
   so in your final report; the main engineer updates this doc. Don't edit this
   file yourself.
-- Section 10 says which files each work package owns. Never edit a file you
-  don't own.
+- Section 10 says which files each work package owns and how the packages work
+  side by side (one git worktree each). Never edit a file you don't own.
 - Section 11 is for the main engineer only.
 
 **Ground rules**
@@ -37,7 +39,9 @@ design doc.
   screens, and the TV fit logic (`fitGrid`, the standings row layouts).
 - **Never touch production.** No `supabase db push`, nothing with `--linked`, no
   deploys, no Supabase or Netlify MCP write tools, no `git push`. Never print
-  values from `.env` files. Use only the local Supabase stack.
+  values from `.env` files. Use only the local Supabase stack. The production
+  steps in section 11 belong to the main engineer alone, on the switch-over
+  days, with the owner's go-ahead.
 
 ## Contents
 
@@ -64,24 +68,25 @@ idea comes from.
 | --- | --- | --- |
 | Event sourcing? | No. The game state row is the truth; projections are derived from it on every save. An append-only `event_log` is written in the same transaction as every change. Nothing is ever replayed from it. | all three |
 | Schema migration | One fresh init file, `20261109000000_hurra_v2.sql`. No compatibility with the old schema or old phone bundles. | owner |
-| Who reads the log | Hosts only. The room sees a recap the host publishes. | evolve, event-first |
+| Who reads the log | Hosts only. The room sees a recap the host publishes. A round still running gets only a generic "Still running" chapter; a game's own highlights come from finished rounds. | evolve, event-first, critique |
 | Burst input (quiz answers, fusion votes) | Prompts and sealed submissions: phones call `submit_answer` straight to Postgres. It takes a share lock on the prompt row, never the game state row. | realtime-native |
 | Seeing all answers at a reveal | Closing a prompt is an update that waits for answers in flight. The engine closes prompts in `game_load` (due deadlines always, and the keys a host action names), then the plugin gets the final answers in `info.answers`. | realtime-native |
-| Timers | `wakeAt` and `onWake`. `session_games.wake_at` is public. The TV sends a `sync` at that moment, and the host page sends a backup 1.5 s later. Early or repeated syncs save nothing. | evolve |
-| Realtime | Broadcast pings on private topics (`room:`, `stage:`, `player:`), then one `session_snapshot` read. No table is in the Postgres Changes publication. | realtime-native |
+| Timers | `wakeAt` and `onWake`. `session_games.wake_at` is public. One shared scheduler, `useWakeSync`, sends a `sync` from the TV 250 ms after it and from the host page 1.5 s after it, at most one per game every 2 s, with backoff after failures. Early or repeated syncs save nothing. A wake that doesn't move `wakeAt` forward is dropped and logged (`game.wake_stuck`). | evolve, critique |
+| Realtime | Broadcast pings on private topics (`room:`, `stage:`, `player:`), then one `session_snapshot` read. No table is in the Postgres Changes publication. Phones also poll every 10 s while a game has an open prompt or a timer, and every screen notices when pings stop arriving. | realtime-native, critique |
 | Several live games | No more one-live-game index. A start never ends other games. `stage` on the start request (default from the game's `presentation`) decides whether it takes the TV. | realtime-native, evolve |
 | TV stage | One column, `sessions.spotlight_game_id`, plus `spotlight_at`. A finishing game takes a free stage. The final screen shows for 3 minutes from `max(finished_at, spotlight_at)`. `sessions.tv_scene = 'recap'` plays the recap. | evolve, realtime-native |
 | Secret settings | `game_settings` (hosts only), frozen into `game_states.config` at start. No public config column. | all three |
-| Request ids | One id per call, reused only for that call's own retries. The claim is the first write, unique on `(user_id, request_id)`. `game_load` reports `claimed`, so a copy never reruns the plugin. | realtime-native, critique |
-| Finishing | `isFinished` after every change. The same save runs `onEnd(..., 'game')` and sets `finished_at`, `finished_by` and `winners`. End always ends. | all three |
+| Request ids | One id per call, reused only for that call's own retries. The claim is the first write, unique on `(user_id, request_id)`. `game_load` reports `claimed`, so a copy never reruns the plugin. Host actions also name the step they were made for, so a double tap or a race with a timer does nothing. | realtime-native, critique |
+| Finishing | `isFinished` after every change. The same save runs `onEnd(..., 'game')` and sets `finished_at`, `finished_by` and `winners`. End always ends. Default winners: the top of this round's points (its scores plus its awards); nobody when the top is 0. | all three, critique |
 | Players who leave | Effects and scores for them are skipped. Optional `onPlayerJoin` and `onPlayerLeave` hooks run from a member list kept in `game_states.members`. | review, event-first |
 | Read scope | Row level security scopes every read to members of the party and hosts. Joining looks a party up through `session_by_code`. | first review (C8) |
 | Player codes | Stay readable by members of the same party. Cheating by player id stays possible; close joining once everyone is in. | all three (C5 deferred) |
-| The TV | A host-signed page on a dedicated laptop. Its snapshot never includes host-only data. | realtime-native, event-first |
+| The TV | A paired screen, never a host. The host page issues a 6-character code; the TV laptop opens the public `/tv/:joinCode`, signs in anonymously and types it. A screen reads what a guest reads, hears the TV's pings and sends timer syncs, nothing else. | critique |
 | Quiz scoring | Quiz points (500 to 1,000 for a right answer, by speed) rank the quiz. The day's scoreboard gets right answers times `pointsPerRight` (default 1). | event-first |
 | Quiz flow | The host taps Next. Time's up reveals by itself (timer), or the host taps Reveal now. The leaderboard follows 7 s later by itself. The host crowns the winner. | merged |
 | Fusion answer key | Optional in the settings; also settable on the night with a `setKey` host action until that picture is revealed. | event-first, realtime-native |
-| Fusion images | Optional, in a public `game-media` Storage bucket; only hosts upload. The prints are on the wall, so an image is not a secret, but who is in it is. | new |
+| Fusion images | Optional, in a public `game-media` Storage bucket; only hosts upload. The prints are on the wall, so an image is not a secret, but who is in it is. The browser re-encodes every upload (a 1600 px JPEG of about 300 KB plus a 400 px thumbnail, all metadata dropped); phones load only the thumbnails. | new, critique |
+| Announcements from background games | A quiet ticker on the TV while another game holds the stage, unless the game marks one `interrupt` (a winner). | critique |
 | "Everyone answered" | No automatic early close. The host page shows "45 of 45 answered" and the host taps Reveal now. | decided |
 | Undo of game moves | Not built. Host awards keep their Undo. | decided |
 | Engine hosting | Netlify Free, Ohio. Two database round trips per request. No edge port and no Netlify Pro before the party. | all three |
@@ -96,7 +101,7 @@ flowchart LR
   classDef box fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
   classDef db fill:#2a2645,stroke:#f5c542,color:#f5f3ff
   P["Phones<br/>/play/:code"]:::box
-  T["TV<br/>/host/s/:id/scoreboard<br/>host-signed laptop"]:::box
+  T["TV<br/>/tv/:joinCode<br/>paired screen, not a host"]:::box
   H["Host control room<br/>/host/s/:id"]:::box
   E["/api/game<br/>Netlify Function, Ohio"]:::box
   DB[("Postgres, Frankfurt<br/>state, projections, event_log")]:::db
@@ -128,12 +133,14 @@ flowchart LR
    touches the engine or the game state row. 45 answers at once take about
    0.2 s in total.
 3. **A host action or a timer**: the host page posts `host-action` (Next,
-   Reveal, Lock voting) or the TV posts `sync` when `wake_at` is due. Same path
-   as a move. A host action may name prompts to close first, so it sees their
-   final answers.
+   Reveal, Lock voting) or the TV posts `sync` when `wake_at` is due (the host
+   page sends a backup). Same path as a move. A host action may name prompts to
+   close first, so it sees their final answers, and it names the step it was
+   made for, so a stale copy does nothing.
 4. **A screen refresh**: every committed change sends one tiny Broadcast ping
    per audience. Screens then read one `session_snapshot` (row level security
-   decides what each screen gets). Phones jitter that read by up to 300 ms.
+   decides what each screen gets). Phones jitter that read by up to 300 ms,
+   except when a prompt just opened. Polls back the pings up (section 5.4).
 
 ### 1.3 Truth, projections, log, recap
 
@@ -167,13 +174,13 @@ flowchart LR
 | --- | --- | --- |
 | A knockout | 2 (engine) | 48 |
 | One quiz answer | 1 (RPC) | 3 (tally to TV and host) |
-| A quiz question (next, 45 answers, reveal, leaderboard) | 3 engine requests and 45 RPCs | about 280 |
+| A quiz question (next, 45 answers, reveal, leaderboard) | 3 engine requests and 45 RPCs | about 330 |
 | A fusion vote | 1 (RPC) | 3 |
 | A guest joins | 1 (RPC) | 3 |
 | A host award | 1 (insert) | 5 |
 
 The Free plan allows about 100 Realtime events per second averaged over 5 s
-buckets. The worst plausible bucket (45 answers plus a reveal) is about 37 per
+buckets. The worst plausible bucket (45 answers plus a reveal) is about 46 per
 second. See appendix 12.1.
 
 ## 2. Database: the init file
@@ -192,6 +199,28 @@ so there is no data migration.
   grants, and every function gets `revoke execute ... from public, anon,
   authenticated` followed by exact grants. Section 2.12 checks this and aborts
   the migration if anything is missing.
+- **Never rely on grants a wipe can remove.** The schema's usage grants and the
+  default privileges are attached to the `public` schema itself, so a wipe that
+  drops and recreates it loses them. The file therefore states every grant it
+  needs (section 2.5): usage on schema `public` for anon, authenticated and
+  service_role, and service_role's table privileges. It also turns the default
+  privileges off for the future, so a party-week hotfix migration can't open a
+  new table or function by accident:
+
+  ```sql
+  alter default privileges for role postgres in schema public
+    revoke all on tables from anon, authenticated;
+  alter default privileges for role postgres in schema public
+    revoke all on sequences from anon, authenticated;
+  alter default privileges for role postgres in schema public
+    revoke all on functions from anon, authenticated;
+  -- Postgres grants EXECUTE to PUBLIC globally, and a per-schema revoke can't
+  -- undo a global grant, so this one has no "in schema".
+  alter default privileges for role postgres revoke execute on functions from public;
+  ```
+
+  A hotfix migration states its own grants and ends with a copy of the
+  self-check block (2.12).
 - **Functions** all use `set search_path = ''` and fully qualified names.
   `security definer` only where a function must read or write past row level
   security; those are owned by `postgres`.
@@ -208,33 +237,38 @@ so there is no data migration.
   the exception: they are meant to refuse.
 - **Idempotent where Supabase owns the object.** Statements on
   `storage.buckets`, `storage.objects` and `realtime.messages` use
-  `on conflict do nothing` and `drop policy if exists` first, because a
-  production wipe may keep those schemas.
+  `on conflict (id) do update` (so a bucket left over from an earlier attempt
+  gets this file's settings) and `drop policy if exists` first, because the
+  production wipe keeps those schemas.
 - **No data.** No host row, no user ids, no emails, no project refs: the repo
   is public.
 
 ### 2.2 Order of the file
 
 1. Header comment (what the file is, the rules above in two lines).
-2. Helpers that need no tables: `random_code`, `epoch_ms`, `try_uuid`.
-3. Tables, in this order: `hosts`, `sessions`, `players`, `session_games`,
+2. Schema usage grants and the default privileges (2.1).
+3. Helpers that need no tables: `random_code`, `epoch_ms`, `try_uuid`.
+4. Tables, in this order: `hosts`, `sessions`, `players`, `session_games`,
    `game_settings`, `game_states`, `game_player_views`, `game_scores`,
    `score_events`, `session_feed`, `game_prompts`, `game_submissions`,
-   `event_log`, `player_transfers`, `session_recaps`.
-4. Helpers that read tables: `is_host`, `my_player_ids`, `my_session_ids`,
+   `event_log`, `player_transfers`, `session_screens`, `screen_codes`,
+   `session_recaps`.
+5. Helpers that read tables: `is_host`, `my_player_ids`, `my_session_ids`,
    `session_exists`.
-5. Row level security, policies and grants per table.
-6. The `scoreboard` view.
-7. Realtime: `ping`, `ping_session`, `ping_player`, `can_listen`, the
+6. Row level security, policies and grants per table.
+7. The `scoreboard` view, then service_role's grants (2.5), which come after
+   every table and view so that `on all tables` covers them all.
+8. Realtime: `ping`, `ping_session`, `ping_player`, `can_listen`, the
    `realtime.messages` policy.
-8. Trigger functions and triggers.
-9. Client RPCs: `session_by_code`, `join_session`, `check_answer`,
-   `submit_answer`, `prompt_tallies`, `session_snapshot`, `session_recap`,
-   `host_issue_transfer`, `claim_player`, `keep_alive`.
-10. Engine RPCs: `game_load`, `game_commit`.
-11. Storage: the `game-media` bucket and its policies.
-12. One block of function grants and revokes.
-13. Self-checks.
+9. Trigger functions and triggers.
+10. Client RPCs: `session_by_code`, `join_session`, `check_answer`,
+    `submit_answer`, `prompt_tallies`, `session_snapshot`, `session_recap`,
+    `host_issue_transfer`, `claim_player`, `host_issue_screen_code`,
+    `claim_screen`, `keep_alive`.
+11. Engine RPCs: `game_load`, `game_commit`.
+12. Storage: the `game-media` bucket and its policies.
+13. One block of function grants and revokes.
+14. Self-checks.
 
 ### 2.3 Helpers
 
@@ -245,7 +279,7 @@ so there is no data migration.
 | `try_uuid(t text) returns uuid` | immutable | The uuid, or null when the text isn't one. Topic names come from clients. |
 | `is_host() returns boolean` | stable, definer | `exists (select 1 from public.hosts where user_id = auth.uid())` |
 | `my_player_ids() returns uuid[]` | stable, definer | The caller's player ids (one per party joined). |
-| `my_session_ids() returns uuid[]` | stable, definer | The sessions the caller is a player in. |
+| `my_session_ids() returns uuid[]` | stable, definer | The sessions the caller is a player in, or a paired screen of (`session_screens`). Every "member" rule below therefore covers paired TVs too; anything tied to a player (`my_player_ids`) does not. |
 | `session_exists(p_session_id uuid) returns boolean` | stable, definer | Whether the party exists, whoever asks. Lets a removed guest tell "removed" from "party deleted". |
 
 Policies call these wrapped in `(select ...)` so Postgres evaluates them once
@@ -381,6 +415,7 @@ create table public.session_feed (
   sound text check (char_length(sound) <= 40),
   icon text check (char_length(icon) <= 40),
   tone text check (char_length(tone) <= 20),
+  interrupt boolean not null default false, -- the TV banners it even from a background game
   created_at timestamptz not null default now()
 );
 create index session_feed_session_idx on public.session_feed (session_id, id desc);
@@ -441,11 +476,29 @@ create table public.player_transfers (
   expires_at timestamptz not null default now() + interval '15 minutes'
 );
 
+-- TVs the host paired (section 7.2): anonymous users with a guest's read access
+-- and the right to send timer syncs. Rows come only from claim_screen; hosts
+-- read and delete them (Unpair).
+create table public.session_screens (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  session_id uuid not null references public.sessions (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, session_id)
+);
+create index session_screens_session_idx on public.session_screens (session_id);
+
+-- Pairing codes, the player_transfers pattern. Only the two RPCs touch it.
+create table public.screen_codes (
+  code text primary key default public.random_code(6),
+  session_id uuid not null unique references public.sessions (id) on delete cascade,
+  expires_at timestamptz not null default now() + interval '15 minutes'
+);
+
 -- The recap the host published: room-safe facts only.
 create table public.session_recaps (
   session_id uuid primary key references public.sessions (id) on delete cascade,
   data jsonb not null check (jsonb_typeof(data) = 'object' and pg_column_size(data) < 1048576),
-  published_at timestamptz,
+  published_at timestamptz,                 -- set to now() by touch_recap whenever it is written non-null
   updated_at timestamptz not null default now()
 );
 ```
@@ -473,17 +526,32 @@ means `session_id = any ((select public.my_session_ids()))`; "host" means
 | `game_submissions` | `select` | `player_id = any ((select public.my_player_ids()))` or host. |
 | `event_log` | `select` | select: host. |
 | `player_transfers` | none | none. |
+| `session_screens` | `select, delete` | select, delete: host. Inserts only through `claim_screen`. |
+| `screen_codes` | none | none. |
 | `session_recaps` | `select, insert, update, delete` | select: host, or `published_at is not null` and member. insert, update, delete: host. |
 
-service_role (the engine): Supabase's default grants stay, except
-`revoke update, delete, truncate on public.event_log from service_role` and
-`grant select, insert on public.event_log to service_role`. Nothing outside the
+**Schema usage**, stated explicitly (2.1): `grant usage on schema public to
+anon, authenticated, service_role`. Anon needs it for `keep_alive` only.
+
+**service_role (the engine, the tests and the scripts)** gets explicit grants
+instead of relying on the defaults:
+
+```sql
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+revoke update, delete, truncate on public.event_log from service_role;
+```
+
+So the engine's `game_load` and `game_commit` (security invoker, run as
+service_role) work even on a database whose default privileges are gone, and
+service_role can only select and insert log rows. Nothing outside the
 `postgres` role can change a log row. Deleting a party still removes its log
 through the foreign key cascade.
 
 Engine-owned columns (`status`, `public_state`, `started_at`, `finished_*`,
 `winners`, `wake_at` on `session_games`; `data` and `spotlight_at` on
-`sessions`; `profile` on `players`) are never in a client grant.
+`sessions`; `profile` on `players`) are never in a client grant, and neither
+are `players.user_id`, `players.session_id` and `score_events.awarded_by`.
 
 ### 2.6 The scoreboard view
 
@@ -580,34 +648,41 @@ phones never parse timestamps. Returns:
 ```jsonc
 {
   "now": 1795900000000,                   // epoch ms, database clock
-  "member": true,                         // is_host() or a player of this party
+  "member": true,                         // is_host(), a player of this party or a paired screen
   "exists": true,                         // session_exists(p_session_id)
   "session": { "id", "name", "join_code", "status", "data", "spotlight_game_id",
                "spotlight_at", "tv_scene", "archived_at", "created_at" } ,  // null if not readable
   "games": [ { "id", "game_type", "title", "position", "status",
-               "public_state",            // only for active games, the spotlit game and games
-                                          // finished in the last 60 minutes; else null
+               "public_state",            // "shown games" only, else null (below)
                "started_at", "finished_at", "finished_by", "winners", "wake_at",
                "archived_at", "created_at" } ],   // order by position, created_at
   "prompts": [ { "game_id", "key", "spec", "opened_at", "closes_at", "closed_at",
                  "revealed_at" } ],      // prompts of active games
   "tallies": { "<game id>": { "<key>": 31 } },            // prompt_tallies()
-  "game_points": { "<game id>": { "<player id>": 7 } },   // game_scores + score_events per game,
-                                                          // for active, spotlit and recently finished games
+  "game_points": { "<game id>": { "<player id>": 7 } },   // game_scores + score_events per game, shown games
   "players": [ { "id", "name", "code", "profile", "created_at" } ],   // by created_at, id
   "standings": [ { "player_id", "name", "code", "points", "profile" } ], // points desc, name
   "feed": [ { "id", "game_id", "message", "detail", "audience", "sound", "icon",
-              "tone", "created_at" } ],   // newest 12 the caller may read; 'tv' and 'host': audience is null only
-  "me": { "player_id", "views": { "<game id>": view },
-          "answers": { "<game id>": { "<key>": payload } } },   // 'phone' only; null if not a player
+              "tone", "interrupt", "created_at" } ],
+      // newest 12 the caller may read; 'tv' and 'host': audience is null only
+  "me": { "player_id", "views": { "<game id>": view },     // shown games
+          "answers": { "<game id>": { "<key>": payload } } },   // active games only
+      // 'phone' only; null if not a player
   "states": { "<game id>": { "state", "config", "round", "members" } },  // 'host' and is_host() only, active games
+  "screens": 1,                           // 'host' and is_host() only: paired screens of this party; else null
   "recap": { "published_at": 1795900000000 }                    // null when nothing is published
 }
 ```
 
+**Shown games** are the active games, the spotlit game, games finished in the
+last 60 minutes, and the most recently finished game (not archived), so the
+phone's result card always has its data however long ago it finished (5.5).
+`public_state`, `game_points` and `me.views` cover exactly these games;
+`prompts` and `me.answers` cover active games only.
+
 When the caller is not a member (a removed guest, an old phone after "Move to
-a new phone"), it returns `{ now, member: false, exists, session: null }` with
-empty lists. A deleted party returns `exists: false`.
+a new phone", an unpaired TV), it returns `{ now, member: false, exists,
+session: null }` with empty lists. A deleted party returns `exists: false`.
 
 **`session_recap(p_session_id uuid) returns jsonb`**, stable, plpgsql,
 invoker. Hosts only: anyone else gets `PT403` "Only hosts can read this". The
@@ -623,7 +698,8 @@ raw material for the recap builder (section 5.7):
   "rounds": [ { "game_id", "round", "started_at", "finished_at", "finished_by",
                 "config", "state", "public_state", "scores", "points", "winners" } ],
       // one per game.started row, joined to its game.finished row; an unfinished
-      // round uses the current game_states row
+      // round (finished_at null) uses the current game_states row. Its state and
+      // config hold live secrets: the recap builder never publishes them (5.7)
   "log": [ { "id", "at", "kind", "game_id", "game_type", "round", "actor",
              "player_id", "about", "data" } ],
       // the whole log in id order, without the data of game.started and game.finished rows
@@ -642,6 +718,22 @@ If the caller already has a player in that party: `PT409` "This phone already
 has a player in this party". Otherwise sets `players.user_id = auth.uid()` and
 returns the player. The `players` trigger logs `player.moved` and pings the
 old phone.
+
+**`host_issue_screen_code(p_session_id uuid) returns text`**, definer. Hosts
+only (`PT403` "Only hosts can do that" otherwise). Deletes the party's old
+code and every expired code, inserts a new 6-character code valid for 15
+minutes, returns it.
+
+**`claim_screen(p_code text) returns uuid`**, definer. Pairs the caller's
+browser as a TV of the party and returns the party's id. `PT401` when signed
+out. Deletes the matching unexpired code (`upper(btrim(p_code))`); none:
+`PT404` "That code is wrong or has expired. Get a new one from the host page."
+Inserts `(auth.uid(), session_id)` into `session_screens` (`on conflict do
+nothing`, so a second claim on the same browser is harmless). The
+`session_screens` trigger logs `screen.paired` and pings stage, so the host
+page shows "1 TV paired". A screen can read what a guest reads, listen on
+`room:` and `stage:`, and send syncs (2.8); it has no player, so it can't
+answer, vote or move.
 
 **`keep_alive() returns boolean`**, stable, invoker: `select true`. Granted to
 `anon` and `authenticated`: the one function anon may run.
@@ -662,6 +754,9 @@ volatile.
    p_game_id and closed_at is null and closes_at <= clock_timestamp()`.
    Both updates wait for answers in flight (they hold share locks), so the
    read below sees every accepted answer, and nothing can be accepted after.
+   If either update closed anything, `ping_session(session, 'room', { game })`
+   once, so phones learn of the close even when the request then skips or is
+   refused.
 3. One `select` (one statement, so one snapshot) returning, or null when the
    game doesn't exist:
 
@@ -674,8 +769,12 @@ volatile.
   "current": { "state", "version", "round", "config", "members" },   // null before the first start
   "session": { "id", "name", "data", "spotlight_game_id" },
   "players": [ { "id", "name", "profile" } ],   // the party now, by created_at, id
-  "caller": { "player_id": "..." , "is_host": false },
+  "caller": { "player_id": "..." , "is_host": false, "is_screen": false },
+      // is_screen: p_user_id is a paired screen of this game's party
   "scoreboard": { "<player id>": 12 },
+  "awards": { "<player id>": 3 },
+      // this round's score_events with this game_id (host awards and game bonuses),
+      // created at or after the round's started_at; {} before the first start
   "prompts": { "<key>": { "spec", "opened_at", "closes_at", "closed_at", "revealed_at",
                           "submissions": [ { "player_id", "answer", "first_at", "at", "ms", "changes" } ] } }
       // this round's prompts; "submissions" only for closed and unrevealed prompts, else null;
@@ -696,11 +795,12 @@ In order, in one transaction:
 4. **The claim**, the first write: insert the cause row into `event_log`
    (kind by request type: `game.start`, `game.end`, `game.action`,
    `game.host_action`, `game.sync`; `actor`, `player_id`, `user_id`,
-   `request_id`, `data = { action, close, stage }`) with `on conflict (user_id,
-   request_id) where request_id is not null do nothing`. Nothing inserted:
-   return `{ "replayed": true }`. A copy that races its original waits for it
-   (at the row lock in step 2), then returns replayed; if the original rolled
-   back, the copy goes ahead.
+   `request_id`; `data` by type: start `{ stage }`, end `{}`, action
+   `{ action }`, host-action `{ action, close }`, sync `{ woke }`) with
+   `on conflict (user_id, request_id) where request_id is not null do
+   nothing`. Nothing inserted: return `{ "replayed": true }`. A copy that races
+   its original waits for it (at the row lock in step 2), then returns
+   replayed; if the original rolled back, the copy goes ahead.
 5. **Checks**, each raising (which rolls the claim back):
    - start on an archived game: `PT409` "Unarchive this game before starting
      it" (`archived`);
@@ -725,9 +825,10 @@ In order, in one transaction:
 8. **Effects**: `score_events` (`awarded_by` null, joined to players);
    profile patches into each player's `profile -> game_type` (only when it
    changes); the session data patch into `sessions.data -> game_type` (only
-   when it changes); announcements into `session_feed` (a targeted one keeps
-   only players still present, and is dropped when none are); records as
-   `game.record` rows in `event_log` (`cause_id`, `about`).
+   when it changes); announcements into `session_feed` with their `interrupt`
+   flag (a targeted one keeps only players still present, and is dropped when
+   none are); records as `game.record` rows in `event_log` (`cause_id`,
+   `about`).
 9. **Prompts**: insert opened prompts (`round`, `opened_at =
    clock_timestamp()`, `closes_at` from ms); set `closed_at` on closed ones and
    `closed_at`, `revealed_at` on revealed ones (each `coalesce`d, so repeats
@@ -745,7 +846,10 @@ In order, in one transaction:
       `public_state`, `members`;
     - on a finish, `game.finished` with `title`, `game_type`, `by`, `winners`,
       `state`, `public_state`, `scores` and `points` (game scores plus this
-      game's `score_events`).
+      round's `score_events` for this game, the same sum as `awards` in
+      `game_load`);
+    - `game.wake_stuck` with `{ wake_at }` when `p.log.wake_stuck` is true
+      (3.3, step 7).
 12. **The stage**:
     - Start with `stage = 'take'`: `spotlight_game_id = this game` and
       `tv_scene = 'live'`; log `stage.changed` (`reason: 'start'`). Start with
@@ -758,12 +862,14 @@ In order, in one transaction:
       live on the stage) leave it: the TV rail shows a "Finished" chip and the
       host can put it on the TV.
 13. **One ping.** If anything the room sees changed (status, public state,
-    winners, scores, points, profiles, session data, a public announcement, a
-    prompt opened, closed or revealed, the stage), `ping_session(session,
-    'room', { game })`. Otherwise ping each player whose view changed or who
-    got a targeted announcement (`ping_player`; a room ping instead when more
-    than 10), plus `ping_session(session, 'stage')` for the host's view of the
-    full state.
+    `wake_at`, winners, scores, points, profiles, session data, a public
+    announcement, a prompt opened, closed or revealed, the stage),
+    `ping_session(session, 'room', { game })`, with `prompt: true` added when
+    this save opened a prompt (phones then read at once, without their jitter,
+    so every countdown starts together). Otherwise ping each player whose view
+    changed or who got a targeted announcement (`ping_player`; a room ping
+    instead when more than 10), plus `ping_session(session, 'stage')` for the
+    host's view of the full state.
 14. Return `{ "replayed": false, "version", "round", "now" }`.
 
 ### 2.9 Triggers
@@ -773,7 +879,7 @@ In order, in one transaction:
 | `sessions` | `before update of spotlight_game_id` | `touch_spotlight()`: sets `spotlight_at = now()` when the value changes. Runs for the engine too. |
 | `sessions` | `after insert` | Logs `session.created`. No ping. |
 | `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`. Pings room. |
-| `sessions` | `after delete` | `ping('room:' || id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
+| `sessions` | `after delete` | `ping('room:' \|\| id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
 | `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll). |
 | `players` | `after update of name, user_id` | Name: logs `player.renamed`, pings room. User: logs `player.moved`, sends `moved` on `player:<id>` (the old phone hears it), pings stage. |
 | `players` | `after delete` | Skipped when the party itself is being deleted. Logs `player.removed` (`data.name`), pings room. |
@@ -781,15 +887,17 @@ In order, in one transaction:
 | `session_games` | `before update of archived_at` | Guard, not fail open: archiving an active game raises `PT409` "End the game before archiving it". |
 | `session_games` | `after insert or update of title, position, archived_at or delete` | Logs `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted` (skipped while the party is being deleted). Archiving or deleting the spotlit game clears `sessions.spotlight_game_id`. Pings room for a delete, an archive, or a rename of a live game; else stage. |
 | `game_settings` | `after insert or update` | Logs `game.settings_changed` (never the values). No ping. |
-| `session_recaps` | `after insert or update of published_at` | Logs `recap.published` or `recap.unpublished`. Pings room. |
+| `session_screens` | `after insert or delete` | Skipped when the party itself is being deleted. Logs `screen.paired` or `screen.unpaired` (`data.user_id`). Pings stage: the host page counts screens, and an unpaired TV reads `member: false` (on this ping, or at its next poll) and shows its pairing screen. |
+| `session_recaps` | `before insert or update` | `touch_recap()`: `updated_at = now()`, and `published_at = now()` whenever the new value isn't null. So every Publish and every Update carries the database clock, and the revision screens follow (`snapshot.recap.published_at`) changes each time. |
+| `session_recaps` | `after insert or update of published_at` | Logs `recap.published` (every Publish and Update) or `recap.unpublished`. Pings room. |
 
 Trigger functions: `touch_spotlight`, `log_session_change`,
 `ping_session_deleted`, `log_player_change`, `log_score_change`,
 `guard_game_archive`, `log_game_change`, `log_settings_change`,
-`log_recap_change`. All revoked from every client role. The logging ones are
-`security definer`, so they can write the log and ping. Actor: `host` when
-`is_host()`, `player` when the caller has a player in the party, else
-`system`.
+`log_screen_change`, `touch_recap`, `log_recap_change`. All revoked from every
+client role. The logging ones are `security definer`, so they can write the
+log and ping. Actor: `host` when `is_host()`, `player` when the caller has a
+player in the party, else `system`.
 
 ### 2.10 Realtime
 
@@ -799,20 +907,21 @@ Postgres Changes. Pings are Broadcast messages from the database
 
 | Topic | Who may listen | Events | Payload |
 | --- | --- | --- | --- |
-| `room:<session id>` | hosts, and players of that party | `changed` | `{ session, game?, deleted?, at }` |
-| `stage:<session id>` | hosts | `changed`, `tally` | `{ session, at }`; tally: `{ game, key, count, at }` |
+| `room:<session id>` | hosts, players of that party, and its paired screens | `changed` | `{ session, game?, prompt?, deleted?, at }` (`prompt: true` when a prompt just opened) |
+| `stage:<session id>` | hosts, and the party's paired screens | `changed`, `tally` | `{ session, at }`; tally: `{ game, key, count, at }` |
 | `player:<player id>` | the user who owns that player | `changed`, `moved` | `{ player, at }` |
 
 Functions, all `security definer` and owned by `postgres`. The three ping
-functions are revoked from `public, anon, authenticated` and keep their
-`service_role` grant, because `game_commit` runs as `service_role` and calls
-them:
+functions are revoked from `public, anon, authenticated` and granted to
+`service_role` explicitly (not left to default privileges, 2.1), because
+`game_load` and `game_commit` run as `service_role` and call them:
 
 - `ping(p_topic text, p_event text default 'changed', p_payload jsonb default '{}')`:
   calls `realtime.send(p_payload || { at }, p_event, p_topic, true)`. At most
   one `changed` per topic per transaction, tracked in the transaction-local
   setting `hurra.pinged`. Other events always go out. `realtime.send` never
-  raises; a failure is only a database warning, and screens heal by polling.
+  raises; a failure is only a database warning. Screens heal by polling and
+  notice pings that stop arriving (5.4).
 - `ping_session(p_session_id uuid, p_audience text, p_payload jsonb default '{}')`:
   `p_audience` is `'room'` or `'stage'`. A stage ping is skipped when the room
   was already pinged in this transaction.
@@ -820,8 +929,9 @@ them:
   a `changed` ping is skipped when the room was already pinged.
 - `can_listen(p_topic text) returns boolean`, stable, granted to
   `authenticated` (Realtime evaluates it as the connecting user):
-  `room:<id>` for hosts and players of that party, `stage:<id>` for hosts,
-  `player:<id>` for that player's user. Malformed topics are false.
+  `room:<id>` for hosts, players of that party and its paired screens;
+  `stage:<id>` for hosts and the party's paired screens; `player:<id>` for that
+  player's user. Malformed topics are false.
 
 The policy, created after `drop policy if exists`:
 
@@ -834,22 +944,33 @@ create policy "Hurra screens receive their pings" on realtime.messages
 
 There is no insert policy, so clients can't send on these topics. A ping is
 written to `realtime.messages` inside the saving transaction, so it is
-delivered only after the commit and never after a rollback.
+delivered only after the commit and never after a rollback. v2 uses private
+channels only, so production turns off the Realtime setting "Allow public
+access" (section 11).
 
 ### 2.11 Storage
 
 ```sql
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('game-media', 'game-media', true, 10485760, array['image/jpeg', 'image/png', 'image/webp'])
-on conflict (id) do nothing;
+values ('game-media', 'game-media', true, 2097152, array['image/jpeg'])
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 ```
 
-Policies on `storage.objects` (each after `drop policy if exists`):
-"Hosts upload game media" (insert), "Hosts change game media" (update) and
-"Hosts delete game media" (delete), all `to authenticated` with
-`bucket_id = 'game-media' and (select public.is_host())`. Reads go through the
-bucket's public URL. Paths are `<session id>/<game id>/<random uuid>.<ext>`, so
-a file name never says who is in a picture.
+2 MB and JPEG only, because the browser re-encodes every upload before sending
+it (5.8): a full image of about 300 KB and a thumbnail of about 30 KB.
+
+Policies on `storage.objects` (each after `drop policy if exists`), all
+`to authenticated` with `bucket_id = 'game-media' and (select
+public.is_host())`: "Hosts read game media" (select), "Hosts upload game media"
+(insert), "Hosts change game media" (update) and "Hosts delete game media"
+(delete). Storage needs the select policy before an update or a delete can
+find the object. Everyone else reads through the bucket's public URL, which
+needs no policy. Paths are `<session id>/<game id>/<random uuid>.jpg` with the
+thumbnail beside it as `<random uuid>.thumb.jpg`, so a file name never says who
+is in a picture.
 
 ### 2.12 Self-checks
 
@@ -857,17 +978,31 @@ The last statement is a `do $$ ... $$` block that raises (and so aborts the
 migration) when:
 
 - any table in `public` has row level security off;
-- anon can execute any function in `public` other than `keep_alive`;
+- anon, authenticated or service_role lacks usage on schema `public`;
+- anon has any privilege on any table, view or sequence in `public`;
+- anon can execute any function in `public` other than `keep_alive`
+  (functions that belong to an extension, found through `pg_depend` with
+  `deptype = 'e'`, are skipped here and in every other function check);
 - authenticated can execute `game_load`, `game_commit`, `ping`,
   `ping_session`, `ping_player`, `check_answer` or any trigger function;
-- service_role can't execute `game_load`, `game_commit`, `ping`,
-  `ping_session` or `ping_player` (the engine needs them);
-- authenticated or service_role can update or delete `event_log`;
+- authenticated has any privilege on `hosts`, `player_transfers` or
+  `screen_codes`, or can insert into `players` or `session_screens`;
 - authenticated can insert into or update `event_log`, `game_states`,
   `game_player_views`, `game_scores`, `session_feed`, `game_prompts` or
   `game_submissions`;
+- authenticated can insert or update any column listed as never in a client
+  grant (2.5), checked one by one with `has_column_privilege`;
+- service_role can't execute `game_load`, `game_commit`, `ping`,
+  `ping_session` or `ping_player` (the engine needs them);
+- service_role lacks what the engine uses: select on every table and view in
+  `public`; insert, update and delete on `game_states`, `game_player_views`,
+  `game_scores`, `game_prompts`; insert on `score_events`, `session_feed` and
+  `event_log`; update on `sessions`, `players` and `session_games`;
+- authenticated or service_role can update, delete or truncate `event_log`;
 - the `realtime.messages` policy is missing;
 - any `public` table is in the `supabase_realtime` publication;
+- the `game-media` bucket is missing, isn't public, or its limit or types
+  differ from 2.11, or one of its four policies is missing;
 - there is not exactly one foreign key between `sessions` and `session_games`.
 
 ### 2.13 Host bootstrap
@@ -883,17 +1018,21 @@ select count(*) from public.hosts;  -- expect 1
 
 The auth user survives a wipe of the public schema. If it is missing, create
 it under Authentication, Users, Add user (tick Auto confirm), then run the
-insert. Locally, `npm run dev:setup` (section 10) makes a local host.
+insert. Locally, `npm run dev:setup` (section 10) makes a local host with the
+email and password in `DEV_HOST_EMAIL` and `DEV_HOST_PASSWORD` from the
+gitignored `.env.development.local`; the script refuses to run without them,
+so no password ever sits in the repo.
 
 ### 2.14 Event log reference
 
 | Kind | Written by | Actor | `data` |
 | --- | --- | --- | --- |
-| `game.start` | game_commit (the claim) | host | `{ stage, players }` |
+| `game.start` | game_commit (the claim) | host | `{ stage }` (the players are in `game.started`'s `members`) |
 | `game.end` | game_commit | host | `{}` |
 | `game.action` | game_commit | player | `{ action }` (the parsed action) |
 | `game.host_action` | game_commit | host | `{ action, close }` |
-| `game.sync` | game_commit | timer, host or system | `{ woke }` |
+| `game.sync` | game_commit | timer | `{ woke }` |
+| `game.wake_stuck` | game_commit | game | `{ wake_at }`: a sync whose wake loop left `wakeAt` at or before now; `wake_at` was cleared |
 | `game.effects` | game_commit | game | `{ announcements, points, profiles, session_data, scores, prompts: { opened, closed, revealed }, members: { joined, left } }` |
 | `game.record` | game_commit (`ctx.record`) | game | `{ type, ...data }` |
 | `game.started` | game_commit | game | `{ title, game_type, config, state, public_state, members }` |
@@ -904,7 +1043,8 @@ insert. Locally, `npm run dev:setup` (section 10) makes a local host.
 | `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }` |
 | `points.awarded`, `points.undone` | trigger (host awards only) | host | `{ player_id, points, reason, game_id, score_event_id }` |
 | `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted`, `game.settings_changed` | triggers | host | `{ title, game_type }` |
-| `recap.published`, `recap.unpublished` | trigger | host | `{}` |
+| `screen.paired`, `screen.unpaired` | trigger | system or host | `{ user_id }` |
+| `recap.published` (every Publish and Update), `recap.unpublished` | trigger | host | `{}` |
 
 About 2,000 to 3,000 rows for the night, a few MB with the start and finish
 states.
@@ -913,8 +1053,9 @@ states.
 
 Every new member is optional or additive: today's games compile against v2
 with no change and then adopt what they need. Files in `src/games/core` and
-`src/games/*/logic.ts` are bundled into the Netlify function: relative imports
-only, no React, no browser globals.
+`src/games/*/logic.ts` are bundled into the Netlify function, and
+`src/games/*/bot.ts` and `src/games/bots.ts` run in the rehearsal under Node:
+relative imports only, no React, no browser globals.
 
 ### 3.1 Game.ts
 
@@ -938,6 +1079,12 @@ export type AnnouncementOptions = {
   sound?: SoundName
   icon?: AnnouncementIcon
   tone?: Tone
+  /**
+   * The TV shows it as a banner with its sound even while another game holds
+   * the stage (a background game's announcements otherwise go to a quiet
+   * ticker). Only for results the whole room should hear, such as a winner.
+   */
+  interrupt?: boolean
 }
 
 /** Where a game shows by default when the host starts it. */
@@ -949,7 +1096,7 @@ export type Actor =
   | { readonly kind: 'host' }
   /** A time from wakeAt() has passed. */
   | { readonly kind: 'timer' }
-  /** Someone joined the party or left it. */
+  /** Someone joined the party or left it: onPlayerJoin and onPlayerLeave always run with this actor. */
   | { readonly kind: 'system' }
 
 /** What an answer to a prompt may be. The database checks every answer against it. */
@@ -1067,6 +1214,8 @@ export type RecapRound<State, Config> = {
   readonly gameId: string
   readonly title: string
   readonly round: number
+  /** The recap builder passes only finished rounds to recap(); a hook must still return [] when this is false. */
+  readonly finished: boolean
   readonly startedAt: number
   readonly finishedAt: number | null
   readonly finishedBy: 'game' | 'host' | null
@@ -1114,13 +1263,20 @@ export abstract class Game<State, Action, PublicState, PlayerView, Config, HostA
   /** Applies a player's move. Throw GameError to refuse it. Not called once finished. */
   abstract handleAction(state: State, action: Action, playerId: PlayerId, ctx: GameContext<Config>): State
 
-  /** Host controls (Next, Reveal). A separate path: a guest can never send one. */
+  /**
+   * Host controls (Next, Reveal). A separate path: a guest can never send one.
+   * Each action names the step it was made for; one whose step has passed
+   * returns the state unchanged, which the engine answers as skipped (3.5).
+   */
   parseHostAction?(input: unknown): HostAction
   handleHostAction?(state: State, action: HostAction, ctx: GameContext<Config>): State
 
   /** When this state wants a sync (ms), or null. Public as session_games.wake_at. */
   wakeAt?(state: State, info: GameInfo<Config>): number | null
-  /** Runs once wakeAt has passed. Must move wakeAt later or to null. */
+  /**
+   * Runs once wakeAt has passed. Must move wakeAt later or to null: a sync
+   * that leaves it at or before now clears wake_at and logs game.wake_stuck.
+   */
   onWake?(state: State, ctx: GameContext<Config>): State
 
   /** Someone joined the party while this round runs. */
@@ -1130,7 +1286,11 @@ export abstract class Game<State, Action, PublicState, PlayerView, Config, HostA
 
   /** True once the game has its result. The same save finishes it (finished_by 'game'). */
   isFinished?(state: State, info: GameInfo<Config>): boolean
-  /** Who won, for the TV, phones, the log and the recap. Default: the top scorers. */
+  /**
+   * Who won, for the TV, phones, the log and the recap. Default: the top of
+   * this round's points (scores() plus this game's awards and bonuses), all
+   * tied ones. Return [] when nobody scored; the default does too.
+   */
   winners?(state: State, info: GameInfo<Config>): PlayerId[]
   /**
    * Runs exactly once per finish: right after the deciding change ('game') or
@@ -1146,7 +1306,11 @@ export abstract class Game<State, Action, PublicState, PlayerView, Config, HostA
   /** What one player may see. Called for every player in the party, including ones the game doesn't know. */
   abstract playerView(state: State, playerId: PlayerId, info: GameInfo<Config>): PlayerView
 
-  /** This game's highlights for the recap. Pure; runs in the host's browser. */
+  /**
+   * This game's highlights for the recap. Pure; runs in the host's browser.
+   * Called only for finished rounds, and reveals only what the finished round
+   * showed the room (3.5). Returns [] for a round that isn't finished.
+   */
   recap?(round: RecapRound<State, Config>): Highlight[]
 }
 
@@ -1169,6 +1333,8 @@ export type ContextOptions = {
   actor?: Actor // default { kind: 'host' }
   /** 'throw' (default, for tests) treats an effect for an unknown player as a bug; 'skip' (the engine) drops it and reports it. */
   unknownPlayers?: 'throw' | 'skip'
+  /** Collect into these effects instead of new ones: step() runs the member hooks in a second context (actor system) that shares the request's effects. */
+  effects?: GameEffects
 }
 
 export function createGameContext<Config>(
@@ -1205,8 +1371,10 @@ export type Loaded = {
   current: { state: unknown; version: number; round: number; config: unknown; members: PlayerId[] } | null
   session: { id: string; name: string; data: GameData; spotlight_game_id: string | null }
   players: GamePlayer[]
-  caller: { player_id: PlayerId | null; is_host: boolean }
+  caller: { player_id: PlayerId | null; is_host: boolean; is_screen: boolean }
   scoreboard: Record<PlayerId, number>
+  /** This round's score_events for this game: host awards and game bonuses. */
+  awards: Record<PlayerId, number>
   prompts: Record<string, {
     spec: PromptSpec; opened_at: number; closes_at: number | null; closed_at: number | null; revealed_at: number | null
     submissions: { player_id: PlayerId; answer: AnswerPayload; first_at: number; at: number; ms: number; changes: number }[] | null
@@ -1238,7 +1406,7 @@ export type CommitPayload = {
   scores?: Record<PlayerId, number>
   wake_at: number | null
   effects: GameEffects
-  log: { joined: PlayerId[]; left: PlayerId[]; woke: number }
+  log: { joined: PlayerId[]; left: PlayerId[]; woke: number; wake_stuck?: true }
 }
 
 export type ErrorCode =
@@ -1246,7 +1414,14 @@ export type ErrorCode =
   | 'already_running' | 'not_running' | 'archived' | 'restarted' | 'busy'
   | 'unknown_game_type' | 'unavailable' | 'internal'
 
-export type StepEnv = { userId: string; now: number; random: () => number }
+export type StepEnv = {
+  userId: string
+  /** The first attempt's loaded.now, kept for every retry. */
+  now: number
+  random: () => number
+  /** The first attempt's loaded.current.round, kept for every retry; null on the first attempt and on a start. */
+  round: number | null
+}
 
 export type Step =
   | { kind: 'commit'; commit: CommitPayload; view?: unknown }
@@ -1273,10 +1448,14 @@ What `step()` does, in order:
 
 1. **Who may.** start, end and host-action need `caller.is_host` (else 403
    `not_host` "Only hosts can do that"). action needs `caller.player_id` (else
-   403 `not_player` "You're not a player in this party"). sync needs either.
+   403 `not_player` "You're not a player in this party"). sync needs
+   `is_host`, `player_id` or `is_screen` (else 403 `not_player`). So a paired
+   screen can send syncs and nothing else.
 2. **Status.** start: archived is 409 `archived`, active is 409
    `already_running`. sync on a game that isn't active: `skip`. Anything else
-   on a game that isn't active, or without state: 409 `not_running`.
+   on a game that isn't active, or without state: 409 `not_running`. When
+   `env.round` is set and differs from `current.round` (a restart came in
+   between two attempts of this request): 409 `restarted`.
 3. **Settings.** start: `parseConfig(defaultConfig merged with settings)`, or
    the merge as is. Otherwise `current.config`.
 4. **Info.** `round` (start: `current.round + 1`, or 1), `players` (the party
@@ -1287,14 +1466,21 @@ What `step()` does, in order:
    sync.
 6. **Membership** (not on a start): who left is `current.members` minus the
    present players, who joined is the reverse, in player order. Run
-   `onPlayerLeave` for each leaver, then `onPlayerJoin` for each joiner. These
-   hooks fail open: if one throws, keep the state from before it and drop only
-   its effects. `members` becomes the present player ids.
+   `onPlayerLeave` for each leaver, then `onPlayerJoin` for each joiner, in a
+   second context with actor `{ kind: 'system' }` that shares the request's
+   effects and random source (`ContextOptions.effects`). These hooks fail
+   open: if one throws, keep the state from before it and drop only its
+   effects. `members` becomes the present player ids.
 7. **The hook.** start: `setup`. end: `onEnd(state, ctx, 'host')`, then status
    finished by host. action: `parseAction` then `handleAction`. host-action:
    `parseHostAction` then `handleHostAction` (400 "This game has no host
-   controls" when the game has none). sync: while `wakeAt(state) <= now`, run
-   `onWake`, at most `MAX_WAKES` times.
+   controls" when the game has none); a stale host action returns the state
+   unchanged and step 12 turns it into a skip. sync: when the stored
+   `game.wake_at` is set and at or before now, run `onWake` while
+   `wakeAt(state) <= now`, at most `MAX_WAKES` times. If `wakeAt(state)` is
+   still at or before now after the loop, commit `wake_at` null and set
+   `log.wake_stuck`: the game stops asking for syncs until a later save gives
+   it a new `wakeAt`, and screens never loop on it.
 8. **Self-finish.** If the status is still unchanged and `isFinished(state,
    info)`, run `onEnd(state, ctx, 'game')` and finish by game. If `onEnd`
    throws, the game still finishes: keep the state from before it and drop
@@ -1303,15 +1489,20 @@ What `step()` does, in order:
    status finished with the stored state, no `public_state`, `player_views` or
    `scores` keys (game_commit keeps the stored ones), and no effects.
 10. **Projections, winners, wake.** `project()`. On a finish, `winners` is
-    `logic.winners?.(state, info)` or the top scorers. `wake_at` is null on a
-    finish, else `wakeAt(state, info)`.
+    `logic.winners?.(state, info)`, or by default the players with the most
+    points this round: the projected scores plus `loaded.awards` plus this
+    save's own `awardPoints`, all tied ones, and none when that top is 0 or
+    below (an in-person round scores only through awards; a round ended before
+    anyone scored crowns nobody). `wake_at` is null on a finish, else
+    `wakeAt(state, info)` (or null after a stuck wake, step 7).
 11. **Refusals.** A `GameError` from any hook becomes 400 `rule` with its
     message. Any other throw propagates (500 `internal`).
 12. **Skip.** No status change, the state, members and `wake_at` unchanged
     (`canonicalJson`), and no effects: `skip`.
 13. **Commit.** `stage` on a start: `'take'` when `request.stage` is true, or
     when it is left out and `presentation` isn't `'background'`; else
-    `'keep'`. `view` is the caller's own projection.
+    `'keep'`. `expected_round` is `env.round ?? current.round` (null on a
+    start). `view` is the caller's own projection.
 
 ### 3.4 Testing helpers
 
@@ -1347,6 +1538,8 @@ export type ContractStep =
   | { kind: 'answer'; player: number; key: string; answer: AnswerPayload; afterMs?: number }
   | { kind: 'tick'; ms: number }
   | { kind: 'sync' }
+  /** A new guest joins the party, then a sync runs, so onPlayerJoin runs. */
+  | { kind: 'join' }
   | { kind: 'leave'; player: number }
   | { kind: 'end' }
 /** Runs the example through simulate() and returns the problems found (empty when fine). */
@@ -1356,9 +1549,13 @@ export function checkGameContract(logic: AnyGame, example: ContractExample): str
 The contract checks, after every step: projections are identical before and
 after a strict jsonb round trip of the state; `publicState`, every
 `playerView` and `scores` survive a strict round trip; `playerView` works for a
-player the game never knew; scores are whole numbers; hooks don't mutate their
-input (the state is deep-frozen); a finished game refuses further actions with
-409 `not_running`. Each game's own test calls it with its example.
+player the game never knew, and for one who joined mid-round; scores are whole
+numbers; hooks don't mutate their input (the state is deep-frozen); after
+every sync, `wakeAt` is null or later than now; while the round runs,
+`recap()` (when the game has one) returns [] for a round with `finished`
+false; a finished game refuses further actions with 409 `not_running`. Each
+game's own test calls it with its example, which must include a `join` and a
+`leave`.
 
 **simulate.ts**
 
@@ -1371,6 +1568,8 @@ export function simulateParty(options: { games: AnyGame[]; players: number; star
 export class FakeParty {
   now: number
   readonly hostUser: string
+  /** A paired TV: sync() sends from this user. */
+  readonly screenUser: string
   players: GamePlayer[]
   log: LogEntry[]
   /** 'room', 'stage <key>', 'player <id>' in the order they were sent. */
@@ -1383,7 +1582,7 @@ export class FakeParty {
   /** submit_answer's rules in memory. Throws an error with .code ('closed', 'already_answered', ...). */
   submit(gameId: string, key: string, playerId: PlayerId, answer: AnswerPayload, afterMs?: number): { accepted: true; replayed?: true; ms: number }
   tick(ms: number): void
-  /** What the TV does at wake_at: a sync from the host user. */
+  /** What the TV does at wake_at: a sync from the paired screen's user. */
   sync(gameId: string): Step
   addPlayer(name: string): GamePlayer
   removePlayer(playerId: PlayerId): void
@@ -1393,7 +1592,17 @@ export class FakeParty {
 ```
 
 Every save in `FakeParty` stores the state and projections through
-`jsonbRoundTrip`, so games meet Postgres-shaped data in tests.
+`jsonbRoundTrip`, so games meet Postgres-shaped data in tests. `FakeParty`
+re-implements `game_load` and `game_commit` in memory, so a conformance test
+(9.2) checks it against the SQL.
+
+**probe.ts**
+
+`ProbeGame` (type `'probe'`): a tiny game for the SDK's own tests and the
+conformance test, never registered. It has a prompt with a deadline and a
+`wakeAt` that reveals it, a host action that names its step, member hooks
+that record who joined and left, and `isFinished` after a given number of
+moves.
 
 ### 3.5 Rules for game authors
 
@@ -1406,15 +1615,87 @@ These go into the README's "Writing a game" section.
   arrays.
 - `publicState` never holds a secret. Put secrets in the state and show each
   player theirs in `playerView`.
+- **Prompt specs are public**: every member reads `game_prompts.spec`. Never
+  put an answer in one.
 - Throw `GameError` to refuse; the message is shown as is.
-- A tap counts once: plugins never need to make actions idempotent.
+- A tap counts once, even when the phone resends it: plugins never need to
+  make a resend idempotent. Two taps are two requests, though, so:
+- **Host actions carry the step they were made for** (a question index, a
+  picture number). An action whose step has passed returns the state
+  unchanged; the engine answers it as skipped, with no error and no save. A
+  double tap on Next, or Reveal now racing the timer, then does nothing. Views
+  disable a button while its `act` or `submit` is pending.
 - Big inputs from everyone (answers, votes) are prompts, never actions.
 - A prompt's answers arrive in `info.answers` once it is closed: by its
   deadline, by a host action's `close` list, or by an earlier
   `ctx.closePrompt()`.
+- `onWake` must move `wakeAt` forward (or to null). A sync that leaves it at or
+  before now clears `wake_at` and logs `game.wake_stuck`; the contract test
+  catches it first.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
+  Mark a winner's room-wide announcement `interrupt`, so the TV banners it even
+  while another game holds the stage. Nothing else uses `interrupt`.
+- `winners()` returns [] when nobody scored.
+- Results that reach everyone at once (a quiz reveal, a fusion reveal) come to
+  each phone through `playerView`, never as one targeted announcement per
+  player: 45 rows would push everything else out of the 12-row feed. The view
+  plays the moment's sound once, remembered in `sessionStorage` (keyed by game
+  id, `started_at` and the step), so opening the sheet or reloading never
+  replays it.
+- **`recap()` reveals only what the finished round showed the room**: never a
+  question that wasn't asked, a picture that wasn't revealed, or a secret that
+  is still in play. The recap builder calls it only for finished rounds, and it
+  returns [] for a round with `finished` false.
 - Settings are frozen at start. Data that changes during a round (like the
   fusion key) lives in the state and changes through host actions.
+- Every game ships a `bot.ts` (3.6) so the rehearsal can play it without
+  knowing its rules.
+
+### 3.6 bot.ts: rehearsal bots
+
+The rehearsal (9.3) plays every game through these, so the script knows no
+game's rules. `src/games/core/bot.ts` (CORE-SDK) holds the types; each game
+exports `bot` from `src/games/<folder>/bot.ts`; `src/games/bots.ts` (CORE-SDK)
+maps game types to bots, like `src/games/logic.ts`. A bot file follows the
+logic rules: relative imports only, no React, no browser globals, randomness
+only from `sight.random`.
+
+```ts
+/** What a guest bot sees: what its phone sees. */
+export type BotSight = {
+  readonly playerId: PlayerId
+  readonly players: readonly { readonly id: PlayerId; readonly name: string; readonly code: string }[]
+  readonly publicState: unknown
+  readonly view: unknown
+  /** This game's prompts this round. */
+  readonly prompts: readonly Prompt[]
+  readonly myAnswers: Readonly<Record<string, AnswerPayload>>
+  /** Ms since epoch by the database clock. */
+  readonly now: number
+  readonly random: () => number
+}
+
+/** What the scripted host sees: the host page's view of the game. */
+export type HostBotSight = Omit<BotSight, 'playerId' | 'view' | 'myAnswers'> & {
+  readonly state: unknown
+  readonly config: unknown
+  readonly tallies: Readonly<Record<string, number>>
+}
+
+export type BotMove =
+  | { readonly kind: 'action'; readonly action: unknown }
+  | { readonly kind: 'answer'; readonly key: string; readonly answer: AnswerPayload }
+  | null
+
+export type GameBot = {
+  /** Settings for a scripted round, given the party's player ids. Default {}. */
+  settings?(playerIds: readonly PlayerId[]): Record<string, unknown>
+  /** A guest's next move, or null to wait. Called about once a second per bot and live game. */
+  move(sight: BotSight): BotMove
+  /** The scripted host's next action, or null to wait (timers move the game on). */
+  hostMove?(sight: HostBotSight): { action: unknown; close?: string[] } | null
+}
+```
 
 ## 4. Engine: netlify/
 
@@ -1436,7 +1717,8 @@ type Body =
   sends one.
 - `close` holds at most 50 prompt keys.
 - Success: `200 { view?: unknown, replayed?: true, skipped?: true }`. `view`
-  is the caller's own new player view, when they have one.
+  is the caller's own new player view, when they have one. `skipped` covers an
+  early sync and a stale host action; clients treat it as success.
 - Failure: `{ error: string, code: ErrorCode }` with the status below.
 - Every response carries `Server-Timing: auth;dur=..., load;dur=...,
   step;dur=..., commit;dur=..., attempts;desc=N` for the rehearsal.
@@ -1466,7 +1748,12 @@ export async function handleGameRequest(
   db: SupabaseClient,
   userId: string,
   request: EngineRequest,
-  options?: { random?: () => number; now?: number },
+  options?: {
+    random?: () => number
+    now?: number
+    /** Tests only (the conformance test's probe game). Default: the registry in src/games/logic.ts. */
+    logicFor?: (gameType: string) => AnyGame | undefined
+  },
 ): Promise<{ view?: unknown; replayed?: true; skipped?: true }>
 ```
 
@@ -1476,11 +1763,14 @@ export async function handleGameRequest(
    host-action. Null: 404 `not_found`.
 2. `claimed`: answer `{ replayed: true }` without running the game. A copy
    of a knockout that already saved is never refused as "Bo is already out".
-3. The logic for `game.game_type` from `src/games/logic.ts`; none: 409
-   `unknown_game_type` "This app doesn't know the game type X".
-4. `now` is the first attempt's `loaded.now`, kept for every retry.
-5. `step(logic, loaded, request, { userId, now, random })`. `refuse`: throw
-   `HttpError`. `skip`: answer `{ skipped: true, view }`.
+3. The logic for `game.game_type` from `src/games/logic.ts` (or
+   `options.logicFor`); none: 409 `unknown_game_type` "This app doesn't know
+   the game type X".
+4. `now` and `round` are the first attempt's `loaded.now` and
+   `loaded.current.round`, kept for every retry.
+5. `step(logic, loaded, request, { userId, now, random, round })`, with
+   `round` null on the first attempt. `refuse`: throw `HttpError`. `skip`:
+   answer `{ skipped: true, view }`.
 6. `game_commit(commit)`. `replayed`: answer `{ replayed: true }`. Otherwise
    `{ view }`.
 7. Retries: see 4.3.
@@ -1490,8 +1780,11 @@ export async function handleGameRequest(
 - `40001` and `40P01` from `game_commit`: wait `10 + random() * min(160, 20 *
   2^attempt)` ms, then load and step again. At most 6 attempts within 4 s,
   then 409 `busy` "The game is busy. Try again."
-- A retry that finds a new round gets `PT409 restarted` from `game_commit`:
-  409 "The game was restarted".
+- A retry keeps the first attempt's round (`env.round`). If a restart came in
+  between, `step()` refuses with 409 `restarted` "The game was restarted"
+  before anything is saved, so a knockout from round 1 never lands in round 2.
+  (`game_commit` checks `expected_round` as well, for a restart that lands
+  between this attempt's load and its commit.)
 - The engine never retries anything else. The Supabase client calls are RPCs
   (POST), which postgrest-js never retries itself.
 - No `waitUntil`: everything finishes before the response.
@@ -1503,8 +1796,8 @@ export async function handleGameRequest(
 | 400 | `bad_request` | malformed body, a bad UUID, an unknown type, no host controls | "gameId is required", "requestId must be a UUID", "This game has no host controls" |
 | 400 | `rule` | a `GameError` from the game | the game's message, e.g. "Bo is already out" |
 | 401 | `not_signed_in` | no token, or an invalid one | "Not signed in" |
-| 403 | `not_host` | start, end or host-action by a guest | "Only hosts can do that" |
-| 403 | `not_player` | an action from someone not in the party | "You're not a player in this party" |
+| 403 | `not_host` | start, end or host-action by a guest or a paired screen | "Only hosts can do that" |
+| 403 | `not_player` | an action from someone without a player in the party (a screen included), or a sync from someone who is neither host, player nor screen | "You're not a player in this party" |
 | 404 | `not_found` | the game is gone | "Game not found" |
 | 405 | | not POST | "Method not allowed" |
 | 409 | `already_running` | start on a live game | "This game is already running" |
@@ -1522,15 +1815,30 @@ error's `details`.
 ### 4.5 Timers and sync
 
 - A game with `wakeAt` gets `session_games.wake_at` (public).
-- **The TV** schedules a `sync` for each live game at `wake_at + 250 ms` by
-  its corrected clock. **The host control room** schedules one at
-  `wake_at + 1500 ms` as a backup. Phones never send syncs.
-- A sync answered `skipped` while `wake_at` is unchanged is retried once,
-  1 s later (clock skew). One sync in flight per game per screen.
+- **One scheduler, two screens.** DATA's `useWakeSync({ delayMs })` (5.10) is
+  the only code that sends timer syncs. The TV mounts it with 250 ms, the host
+  control room with 1500 ms as a backup. Phones never send syncs. For each live
+  game with `wake_at`, it sends a `sync` at `wake_at + delayMs` by the
+  corrected clock, under these rules:
+  - one sync in flight per game, and at most one per game every 2 s;
+  - a sync answered `skipped` while `wake_at` is unchanged is retried once,
+    2 s later (clock skew);
+  - after a failure (no answer, 409 `busy`, 5xx) it backs off 2, 5, 10, then
+    every 30 s until a sync succeeds or `wake_at` changes;
+  - any other refusal (404, 409 `not_running`, 403) stops syncs for that game
+    until its `wake_at` changes;
+  - after 3 failures in a row it reports the game, and the host page shows a
+    warning (7.3);
+  - after a successful sync it calls `refresh()`, so a lost ping never stalls
+    the screen that acted.
 - **The host page** also sends a `sync` to every live game right after it
   removes a player, so `onPlayerLeave` and `isFinished` run at once.
 - Racing syncs are settled by the version check; the loser finds nothing due
   and skips.
+- **No loops.** A sync whose wake loop leaves `wakeAt` at or before now commits
+  `wake_at` null and logs `game.wake_stuck` (3.3, step 7), so the screens stop
+  asking. A buggy `onWake` costs one extra commit, and with the 2 s limit per
+  screen it can never become a stream of room pings.
 
 ### 4.6 Keep-alive
 
@@ -1549,16 +1857,24 @@ directly: every read and write goes through the functions below.
 | File | What it holds |
 | --- | --- |
 | `types.ts` | Row and snapshot shapes (5.2). |
-| `supabase.ts` | The client (unchanged, with its signed-in read guard). |
-| `auth.ts` | `ensureSignedIn`, `currentUser`, `isHost` (unchanged), plus `signInHost`, `signOut`. |
-| `gameApi.ts` | `callGame`, `submitAnswer`, `newRequestId`, `GameCallError` (5.3). |
-| `live.ts` | `createLiveSession`: pings, snapshot reads, polling, server clock (5.4). |
-| `useLive.tsx` | `LiveSessionProvider`, `useLive` and the adapted hooks (5.4, 5.6). |
+| `supabase.ts` | The app's client (unchanged, with its signed-in read guard). |
+| `auth.ts` | `ensureSignedIn` (now with 429 retries), `currentUser`, `isHost`, plus `signInHost`, `signOut` (5.9). |
+| `gameApi.ts` | `createGameApi` for any client, `newRequestId`, `GameCallError` (5.3). |
+| `live.ts` | `createLiveSession` for any client: pings, snapshot reads, polling, ping health, server clock (5.4). |
+| `useLive.tsx` | `LiveSessionProvider` (live, or a fixture), `useLive` and the adapted hooks (5.4, 5.6). |
 | `stage.ts` | Pure helpers: TV scene, phone layout, final screen window (5.5). |
-| `queries.ts` | One-off reads and every write (5.6). |
+| `queries.ts` | One-off reads and every write, including the app's `callGame` and `submitAnswer` and the recap calls (5.3, 5.6, 5.7). |
 | `useLiveQuery.ts` | The existing loader hook, minus Postgres Changes (5.6). |
-| `recap.ts` | Raw recap, `buildRecapDoc`, publishing (5.7). |
-| `media.ts` | Game media upload and URLs (5.8). |
+| `recap.ts` | The recap types and the pure `buildRecapDoc` (5.7). |
+| `media.ts` | Image re-encoding, upload and URLs (5.8). |
+| `wakeSync.ts` | `createWakeScheduler` and `useWakeSync`: the only code that sends timer syncs (5.10). |
+| `fixtures.ts` | Typed sample snapshots for every scene, for building screens before the data is live (5.11). |
+
+`types.ts`, `gameApi.ts`, `live.ts`, `stage.ts` and `recap.ts` import only
+relative paths and npm packages and touch no DOM, Vite or `import.meta`
+globals, so the rehearsal's bots run them under Node (9.3). They never import
+`supabase.ts`: the client comes in as an argument, and `live.ts` gets the
+browser-only events (visibility, online) through its `environment` option.
 
 UI-only helpers stay as they are and no package edits them: `announcement.tsx`,
 `callout.ts`, `fitGrid.ts`, `format.ts`, `loader.ts`, `sound.ts`,
@@ -1586,7 +1902,7 @@ export type PlayerRow = { id: string; session_id: string; user_id: string; name:
 
 export type SessionGame = {
   id: string; game_type: string; title: string; position: number; status: GameStatus
-  /** Null for games the snapshot leaves out (pending, or finished over an hour ago). */
+  /** Null outside the snapshot's shown games (2.7): pending games, and older finished ones. */
   public_state: unknown
   started_at: number | null; finished_at: number | null; finished_by: 'game' | 'host' | null
   winners: string[]; wake_at: number | null; archived_at: number | null; created_at: number
@@ -1594,9 +1910,10 @@ export type SessionGame = {
 
 export type ScoreRow = { player_id: string; name: string; code: string; points: number; profile: GameData }
 export type ScoreEvent = { id: number; session_id: string; player_id: string; game_id: string | null; points: number; reason: string | null; awarded_by: string | null; created_at: string }
-export type FeedItem = { id: number; game_id: string | null; message: string; detail: string | null; audience: string[] | null; sound: string | null; icon: string | null; tone: string | null; created_at: number }
+export type FeedItem = { id: number; game_id: string | null; message: string; detail: string | null; audience: string[] | null; sound: string | null; icon: string | null; tone: string | null; interrupt: boolean; created_at: number }
 
-export type { AnswerPayload, PromptSpec } from '@/games/core/Game'
+// Relative, not '@/': the rehearsal type-checks and runs this file under Node (5.1).
+export type { AnswerPayload, PromptSpec } from '../games/core/Game'
 export type PromptState = { game_id: string; key: string; spec: PromptSpec; opened_at: number; closes_at: number | null; closed_at: number | null; revealed_at: number | null }
 /** What submit_answer returns (section 2.7). */
 export type SubmitResult = { accepted: true; replayed?: true; answer: AnswerPayload; at: number; ms: number }
@@ -1617,6 +1934,8 @@ export type Snapshot = {
   feed: FeedItem[]
   me: { player_id: string; views: Record<string, unknown>; answers: Record<string, Record<string, AnswerPayload>> } | null
   states: Record<string, { state: unknown; config: unknown; round: number; members: string[] }> | null
+  /** Paired screens of this party: the host screen only, else null. */
+  screens: number | null
   recap: { published_at: number } | null
 }
 ```
@@ -1639,10 +1958,24 @@ export class GameCallError extends Error {
 }
 
 export function newRequestId(): string
-export async function callGame(request: EngineRequest): Promise<EngineResponse>
 
-export async function submitAnswer(gameId: string, key: string, answer: AnswerPayload): Promise<SubmitResult>
+export type GameApi = {
+  callGame(request: EngineRequest): Promise<EngineResponse>
+  submitAnswer(gameId: string, key: string, answer: AnswerPayload): Promise<SubmitResult>
+}
+/**
+ * The calls for one signed-in client. The app makes one for its shared client
+ * (queries.ts); each rehearsal bot makes its own with an absolute endpoint.
+ */
+export function createGameApi(
+  client: SupabaseClient,
+  options?: { endpoint?: string /* default '/api/game' */; fetch?: typeof fetch },
+): GameApi
 ```
+
+The app's own calls, bound to the shared client, are exported from
+`queries.ts`: `callGame(request)` and `submitAnswer(gameId, key, answer)`.
+Screens import them from there; game views get them only through props.
 
 - **One request id per call**, made with `crypto.randomUUID()` or, when that
   is missing (the plain-http LAN dev URL, iOS before 15.4), a v4 UUID from
@@ -1660,7 +1993,9 @@ export async function submitAnswer(gameId: string, key: string, answer: AnswerPa
   closed") and the `details` code.
 - The phone's `act` and `submit` wrappers (built by PHONE around these
   functions) call `useLive().refresh()` after a success, because a phone gets
-  no ping for its own answer.
+  no ping for its own answer. The host page's `act` wrapper (HOST) and
+  `useWakeSync` do the same after their own successful calls, so a lost ping
+  never stalls the screen that acted.
 
 ### 5.4 live.ts and useLive.tsx
 
@@ -1675,14 +2010,23 @@ export type LiveState = {
   tallies: Tallies
   /** Every channel joined. */
   connected: boolean
+  /** 'unhealthy' when changes arrive that no ping announced (below). */
+  pings: 'ok' | 'unhealthy'
   /** This phone's player moved to another phone. */
   moved: boolean
 }
+/** Browser-only events, passed in by useLive.tsx; the rehearsal's bots pass none. */
+export type LiveEnvironment = {
+  onVisible?: (listener: () => void) => () => void
+  onOnline?: (listener: () => void) => () => void
+}
 export function createLiveSession(
   client: SupabaseClient,
-  options: { sessionId: string; screen: Screen; playerId?: string | null },
+  options: { sessionId: string; screen: Screen; playerId?: string | null; environment?: LiveEnvironment },
   onChange: (state: LiveState) => void,
 ): { refresh(): void; serverNow(): number; close(): void }
+/** The parts of a snapshot that change only with a ping this screen hears (ping health, below). */
+export function pingedFingerprint(screen: Screen, snapshot: Snapshot): string
 ```
 
 How it behaves:
@@ -1691,19 +2035,55 @@ How it behaves:
   flight and at most one queued, so an older answer never lands over a newer
   one. A failed read keeps what is on screen and retries after 1, 2, 5, then
   every 10 s.
-- **Channels**, joined after the first successful read (so the channel carries
-  the signed-in user's token, not anon's), each with `config: { private: true }`:
-  phone: `room:<session>` and `player:<own player>`; TV and host:
-  `room:<session>` and `stage:<session>`.
-- **On `changed`**: read again; phones wait a random 0 to 300 ms first, the TV
-  and host page don't wait. **On `moved`**: set `moved` and read at once.
-  **On `tally`**: keep the highest count per game and key, and read once 400 ms
-  after the last tally (pinged counts can undercount when answers arrive
-  together).
+- **Channels**, joined once a read says `member: true` (so the channel carries
+  the signed-in user's token and rights, not anon's), and left when a read says
+  `member: false`, so a removed guest or an unpaired TV never retries refused
+  joins, and a TV that has just been paired joins at once. Each has
+  `config: { private: true }`: phone: `room:<session>` and
+  `player:<own player>`; TV and host: `room:<session>` and
+  `stage:<session>`. realtime-js returns the existing
+  channel when a topic is asked for twice (`client.channel()` reuses it), so
+  StrictMode's double mount, or the award page's provider beside another one,
+  would share a channel and tear it down under each other. live.ts therefore
+  keeps one channel per client and topic in a module-level map with a
+  reference count, passes each event to every subscriber, and leaves the
+  channel only when the last subscriber closes.
+- **On `changed`**: read again; phones wait a random 0 to 300 ms first, except
+  for a ping with `prompt: true` (a question just opened), which every phone
+  reads at once so the countdowns start together; the TV and host page never
+  wait. **On `moved`**: set `moved` and read at once. **On `tally`**: keep the
+  highest count per game and key, and read once 400 ms after the last tally
+  (pinged counts can undercount when answers arrive together).
 - **Healing.** Read on channel join and rejoin, when the tab becomes visible,
-  when the device comes back online, and on a safety poll: every 60 s on
-  phones, every 30 s on the TV and host page. When a channel fails to join 3
-  times in a row, poll every 5 s until it joins.
+  when the device comes back online, and on a safety poll:
+  - phones every 60 s, or every 10 s while a live game has an open prompt or
+    a `wake_at` (about 4.5 reads a second for 45 phones, no Realtime cost);
+  - phones also read once 2 s after each `wake_at` and `closes_at` they know
+    of, by `serverNow()`, plus 0 to 1 s of jitter;
+  - the TV and host page every 30 s;
+  - every 5 s while a channel has failed to join 3 times in a row, or while
+    pings are unhealthy, until a ping arrives.
+- **Ping health.** `realtime.send` never raises, so a missing partition, a
+  Realtime incident or a half-open socket after Wi-Fi roaming fails silently
+  while the channels still look joined. After each safety poll, live.ts
+  compares `pingedFingerprint()` with the previous read's. If it changed, no
+  ping arrived since that read, and none arrives within 3 s, `pings` becomes
+  `'unhealthy'` (the live dot turns grey, 5 s polling starts) until the next
+  ping. The fingerprint holds only what changes with a ping this screen hears:
+  - phones: the session's name, status, spotlight, `tv_scene` and
+    `archived_at`; for each active or finished game its status,
+    `finished_at`, `archived_at` and `wake_at`, plus `public_state` while it
+    is active; each prompt's key, `closed_at` and `revealed_at`; the newest feed id;
+    `me.views` of active games; the recap's `published_at`. Never players,
+    standings, game points, tallies or pending games, which change with
+    stage-only pings, and never anything that leaves the snapshot by time
+    alone (the 60-minute window);
+  - the TV and host page: the same, plus players, standings, game points,
+    tallies, `states` and `screens` (they hear the stage pings too).
+- **Mass rejoin.** After the socket reconnects, `room:` rejoins at once and a
+  phone re-creates its `player:` channel after a random 0 to 3 s, so 45 phones
+  coming back from a Wi-Fi blip stay well under the Free plan's 100 joins a
+  second.
 - **Server clock.** `offset = snapshot.now - (sentAt + receivedAt) / 2`;
   `serverNow() = Date.now() + offset`.
 
@@ -1713,6 +2093,8 @@ export function LiveSessionProvider(props: {
   sessionId: string
   screen: Screen
   playerId?: string | null
+  /** Render this snapshot with no network (5.11): refresh does nothing, serverNow runs from fixture.now. */
+  fixture?: Snapshot
   children: ReactNode
 }): JSX.Element
 
@@ -1722,6 +2104,7 @@ export type LiveValue = {
   snapshot: Snapshot | undefined
   tallies: Tallies
   connected: boolean
+  pings: 'ok' | 'unhealthy'
   moved: boolean
   serverNow: () => number
   refresh: () => void
@@ -1791,22 +2174,29 @@ Rules:
   start of any other game.
 - **`phoneLayout`**: `over` when archived. Otherwise `main` is the spotlit
   live game (`onStage: true`), else the newest live game, else a `result` card
-  for the most recently finished game when it finished in the last 30 minutes
-  and after every other game's start, else `lobby`. `alsoRunning` is every
-  other live game, newest start first. `finishedLately` is every other game
-  finished in the last 30 minutes.
+  for the most recently finished game (not archived) when no other game has
+  started since it finished, else `lobby`. So the result stays until the next
+  game starts, as in user-flows 7.4, and the snapshot always carries its data
+  (the shown games, 2.7). `alsoRunning` is every other live game, newest start
+  first. `finishedLately` is every other game finished in the last 30 minutes.
 
 ### 5.6 queries.ts and the adapted hooks
 
 **One-off reads and writes** (all throw `Error` with the server's message):
 
 ```ts
+// The engine and answer calls, bound to the app's client (5.3)
+export async function callGame(request: EngineRequest): Promise<EngineResponse>
+export async function submitAnswer(gameId: string, key: string, answer: AnswerPayload): Promise<SubmitResult>
+
 export async function sessionByCode(joinCode: string): Promise<PublicSession | null>
 export async function partyExists(joinCode: string): Promise<boolean>
 export async function loadMembership(joinCode: string): Promise<{ session: PublicSession; player: PlayerRow | null } | null>
-/** join_session, retried with jitter for up to about 30 s on HTTP 429 (shared venue Wi-Fi). */
+/** join_session. No retry of its own: PostgREST has no rate limit; the 429 comes from sign-in (5.9). */
 export async function joinSession(joinCode: string, name: string): Promise<PlayerRow>
 export async function claimPlayer(code: string): Promise<PlayerRow>
+/** claim_screen: pairs this browser as a TV of the party. Returns the party's id. */
+export async function claimScreen(code: string): Promise<string>
 export async function getPlayerByCode(code: string): Promise<(PlayerRow & { session: PublicSession }) | null>
 
 // Host
@@ -1829,6 +2219,10 @@ export async function renamePlayer(playerId: string, name: string): Promise<void
 /** Deletes the player, then sends a sync to every live game of the party. */
 export async function removePlayer(sessionId: string, playerId: string): Promise<void>
 export async function issuePlayerTransfer(playerId: string): Promise<{ code: string; expiresAt: number }>
+/** host_issue_screen_code: a 6-character code for pairing a TV, valid 15 minutes. */
+export async function issueScreenCode(sessionId: string): Promise<{ code: string; expiresAt: number }>
+/** Deletes every paired screen of the party; each TV falls back to its pairing screen. */
+export async function unpairScreens(sessionId: string): Promise<void>
 export async function awardPoints(input: { sessionId: string; playerId: string; gameId: string | null; points: number; reason: string | null }): Promise<void>
 export async function undoPoints(eventId: number): Promise<void>
 /** The award page's history; refetches whenever `revision` changes (pass snapshot.now). */
@@ -1907,18 +2301,33 @@ export type RecapDoc = {
   timeline: { at: number; text: string; detail?: string; icon?: AnnouncementIcon; gameId?: string }[]
 }
 
+// recap.ts: pure, no client (the rehearsal imports it under Node)
+export function buildRecapDoc(raw: RawRecap, logic: ReadonlyMap<string, AnyGame>): RecapDoc
+
+// queries.ts: the calls
 export async function fetchRawRecap(sessionId: string): Promise<RawRecap>   // hosts only
-export function buildRecapDoc(raw: RawRecap, logic: ReadonlyMap<string, AnyGame>): RecapDoc   // pure
+/** Upserts data with published_at set, so every Publish and Update logs, pings the room and changes the revision. */
 export async function publishRecap(sessionId: string, doc: RecapDoc): Promise<void>
 export async function unpublishRecap(sessionId: string): Promise<void>
-/** The published recap; refetches when `revision` changes. Null when nothing is published. */
+/** The published recap; refetches when `revision` (snapshot.recap.published_at) changes. Null when nothing is published. */
 export function usePublishedRecap(sessionId: string, revision: number): LiveQuery<RecapDoc | null>
 ```
 
+`publishRecap` always sends a non-null `published_at`; the `touch_recap`
+trigger replaces it with the database clock (2.9). An Update that rewrote only
+`data` would otherwise leave every screen on the old recap.
+
 `buildRecapDoc`, pure and unit-tested:
 
-- **Chapters**: one per round, in start order. Highlights from
-  `logic.recap?.(round)`; without a hook, one generic line: "Mads won X".
+- **Secrets stay out.** The doc is room-safe even when built mid-party, while
+  rounds still run with live tasks and answer keys. `logic.recap()` runs only
+  for finished rounds (`finished: true`), and the raw `state` and `config` of a
+  round never go into the doc.
+- **Chapters**: one per round, in start order. A finished round's highlights
+  come from `logic.recap?.(round)`; without a hook, one generic line: "Mads won
+  X" (or "X is over" when it has no winners). A round still running gets a
+  generic chapter instead: its title, "Still running", and "Leading so far:
+  Ana with 7" from its points; no game hook sees it.
 - **Race**: replay the log in order, adding `game.effects.scores` changes,
   `game.effects.points` and `points.awarded` or `points.undone`.
 - **Lead changes**: whenever the leader changes, ignoring ties and the first
@@ -1934,19 +2343,101 @@ export function usePublishedRecap(sessionId: string, revision: number): LiveQuer
 
 ```ts
 export const GAME_MEDIA_BUCKET = 'game-media'
-/** Uploads to <session>/<game>/<uuid>.<ext> (no upsert). Returns the path for the settings. */
+/** The re-encoding: canvas drawing drops every metadata block (EXIF, GPS, PNG text chunks). */
+export async function prepareImage(file: File): Promise<{ full: Blob; thumb: Blob }>
+/** prepareImage, then uploads <session>/<game>/<uuid>.jpg and <uuid>.thumb.jpg (no upsert). Returns the full image's path for the settings. */
 export async function uploadGameMedia(sessionId: string, gameId: string, file: File): Promise<string>
-export function gameMediaUrl(path: string): string
+export function gameMediaUrl(path: string, size?: 'full' | 'thumb'): string   // default 'full'
+/** Pure helpers, unit-tested: the target size, and whether JPEG bytes still hold an EXIF (APP1) or comment (COM) segment. */
+export function fitWithin(width: number, height: number, longEdge: number): { width: number; height: number }
+export function jpegHasMetadata(bytes: Uint8Array): boolean
 ```
 
-Images over 10 MB, or not JPEG, PNG or WebP, are refused before the upload.
+Fusion images go to 45 phones over the venue's one connection, so nothing is
+uploaded raw:
+
+- The browser decodes the file (JPEG, PNG, WebP, and HEIC where the browser
+  can read it, as Safari can), draws it onto a canvas and encodes a JPEG: a
+  1600 px long edge at quality 0.82, stepping down to 0.6 until it is under
+  400 KB (about 300 KB typically), and a 400 px thumbnail (about 30 KB).
+- Drawing onto a canvas drops all metadata: AI images often carry the prompt
+  or the input file names (and so who is in the picture) in EXIF or PNG text
+  chunks.
+- A file the browser can't decode is refused before any upload: "This image
+  can't be read here. Use a JPEG or PNG."
+- Phones show only the thumbnails, with `loading="lazy"` and their width and
+  height set; the TV shows the full image. 12 pictures cost about 16 MB across
+  45 phones instead of 1.6 to 5.4 GB.
 
 ### 5.9 auth.ts
 
-Unchanged: `ensureSignedIn`, `currentUser`, `isHost`. New:
-`signInHost(email, password): Promise<void>` (signs out again and throws "This
-account isn't a host" when `is_host()` is false, as the login page does today)
-and `signOut(): Promise<void>`.
+```ts
+/**
+ * Returns the signed-in user, creating an anonymous one on the first visit
+ * (concurrent callers share one sign-in, as today). On HTTP 429 from
+ * signInAnonymously it calls onBusy once and retries with jitter (1 to 3 s,
+ * growing) for up to about 30 s, then throws "Lots of guests are arriving.
+ * Try again in a minute."
+ */
+export function ensureSignedIn(options?: { onBusy?: () => void }): Promise<User>
+```
+
+Guests share the venue's one IP, so when the host says "scan now", guests past
+the Auth bucket get 429 from the anonymous sign-in, not from `join_session`
+(PostgREST has no rate limit). Join, Play and the TV page show a calm "Lots of
+guests arriving, one moment" with the loader while `onBusy` has fired, never
+the error notice.
+
+Unchanged: `currentUser`, `isHost`. New: `signInHost(email, password):
+Promise<void>` (signs out again and throws "This account isn't a host" when
+`is_host()` is false, as the login page does today) and `signOut():
+Promise<void>`.
+
+### 5.10 wakeSync.ts
+
+```ts
+export type WakeFailure = { gameId: string; failures: number; message: string }
+
+/** The scheduling rules of 4.5 as a plain object with injected time, so they are unit-tested with fake timers. */
+export function createWakeScheduler(options: {
+  delayMs: number
+  now: () => number                                   // serverNow
+  call: (gameId: string) => Promise<EngineResponse>   // a sync through callGame
+  onSynced: () => void                                // refresh()
+  onFailing: (failing: WakeFailure[]) => void         // games with 3 or more failures in a row
+}): { update(games: SessionGame[]): void; stop(): void }
+
+/** Mounts the scheduler on the nearest LiveSessionProvider. TV: 250. Host page: 1500. */
+export function useWakeSync(options: { delayMs: number }): { failing: WakeFailure[] }
+```
+
+`update()` receives every snapshot's games and keeps one timer per live game
+with `wake_at` (active, not archived). The rules are exactly those of 4.5.
+Tests with fake timers: one sync in flight per game; never two for one game
+within 2 s; the skipped retry once after 2 s; the 2, 5, 10, 30 s backoff and
+its reset on success; a stop on 404 or `not_running`; `onFailing` after 3
+failures; a new `wake_at` replacing the old timer.
+
+### 5.11 fixtures.ts
+
+```ts
+export type FixtureScene =
+  | 'lobby' | 'quiz-question' | 'quiz-reveal' | 'quiz-leaderboard'
+  | 'fusion-voting' | 'fusion-locked' | 'fusion-reveal'
+  | 'final' | 'background' | 'removed' | 'archived'
+/** A typed snapshot of that scene as the given screen reads it ('phone' as one guest, with `me`). */
+export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot
+```
+
+Lands in phase 0, so PHONE, TV, HOST and the game views build against real
+shapes from day 1 and switch to live data later. `background` has two
+background games (Last one standing and fusion voting) beside a quiz on the
+stage; `final` is a finished game inside its 3 minutes; `removed` has
+`member: false`. Game data in the fixtures (`public_state`, views, `states`)
+is sample JSON in the shapes of section 8, for screens only: no core code
+reads it. In dev builds (`import.meta.env.DEV`), the phone, TV and host pages
+read `?fixture=<scene>` and pass `fixtureSnapshot(scene, screen)` to their
+provider.
 
 ## 6. Game module API: src/games/types.ts
 
@@ -1972,6 +2463,8 @@ export type GameScreenProps<G extends AnyGame = AnyGame> = {
   prompts: PromptState[]
   /** Now by the database clock: use it for every countdown. */
   serverNow: () => number
+  /** The public URL of a game-media path. Phones use 'thumb' (with loading="lazy"); the TV uses 'full'. */
+  mediaUrl: (path: string, size?: 'full' | 'thumb') => string
 }
 
 export type PlayerViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
@@ -2014,7 +2507,11 @@ export type HostViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
   /** Answers in so far, by unrevealed prompt key. */
   tallies: Readonly<Record<string, number>>
   gamePoints: Readonly<Record<PlayerId, number>>
-  /** Sends a host action. `close` names prompts to close first, so the action sees their final answers. */
+  /**
+   * Sends a host action. `close` names prompts to close first, so the action
+   * sees their final answers. Resolves on success and on a skip (a stale
+   * action); disable the button while it is pending.
+   */
   act: (action: Parts<G>['hostAction'], options?: { close?: string[] }) => Promise<void>
 }
 
@@ -2046,8 +2543,8 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   game: SessionGame
   /** The party's players, e.g. to pick who is in a picture. */
   players: Player[]
-  /** Uploads to the public game-media bucket (hosts only). */
-  media: { upload: (file: File) => Promise<string>; url: (path: string) => string }
+  /** Re-encodes and uploads to the public game-media bucket (hosts only, 5.8). */
+  media: { upload: (file: File) => Promise<string>; url: (path: string, size?: 'full' | 'thumb') => string }
 }
 
 /** A badge on a player's profile, shown on phones, the host page and the TV. Unchanged. */
@@ -2091,8 +2588,10 @@ Every v1 prop still exists, so today's views compile unchanged. Game views
 import only React, Phosphor, `motion`, `@/components/*`, `@/games/core/*`,
 `@/games/types`, their own folder, `@/lib/types` (types only) and the UI-only
 helpers in section 5.1. Never `@/lib/supabase`, `@/lib/queries`,
-`@/lib/live`, `@/lib/useLive` or `@/lib/gameApi`'s functions: everything comes
-through props.
+`@/lib/live`, `@/lib/useLive`, `@/lib/media` or `@/lib/gameApi`'s functions:
+everything comes through props. Views may use `sessionStorage` (in a
+try/catch) to play a moment's sound only once (3.5). Every button that calls
+`act` or `submit` is disabled while that call is pending.
 
 ## 7. Screens and behaviour
 
@@ -2100,7 +2599,9 @@ through props.
 
 **Loading.** `loadMembership(code)` (unchanged flow: not a player goes to
 `/join/:code`). Then `<LiveSessionProvider sessionId screen="phone"
-playerId>`. The loader holds until the first snapshot.
+playerId>`. The loader holds until the first snapshot; while the sign-in
+waits out a 429, it says "Lots of guests arriving, one moment" (5.9). In dev
+builds, `?fixture=<scene>` renders a fixture instead (5.11).
 
 **Layout**, top to bottom:
 
@@ -2109,7 +2610,9 @@ playerId>`. The loader holds until the first snapshot.
    - `game`: a card with the eyebrow "On the TV" (when `onStage`) or "Now
      playing", the game's title and its icon, and the module's `PlayerView`.
    - `result`: eyebrow "Finished", the title, the module's `ResultView` (or the
-     generic one: winners, "You scored N"), then "Waiting for the next game".
+     generic one: winners, or "{title} is over" when it has none, and "You
+     scored N"), then "Waiting for the next game". It stays until the next
+     game starts.
    - `lobby`: "You're in! The host will start the next game soon." with the
      faces of the latest joiners.
    - `over`: "That's a wrap!", plus "Your night" once a recap is published.
@@ -2140,22 +2643,43 @@ playerId>`. The loader holds until the first snapshot.
   success. A `GameCallError` is a toast with its message.
 
 **Join** (`/join/:joinCode`): as today, but through `sessionByCode` and
-`joinSession`. "Joining is closed" polls `sessionByCode` every 5 s and lets the
-guest in when the host reopens. New: a "Got a code from the host?" link opens
-a 6-character code field; `claimPlayer(code)` then goes to `/play/:code`. The
-taken-name error links to it: "Is that you on another phone? Ask the host for
-a code."
+`joinSession`, with the calm busy state while the sign-in waits out a 429.
+"Joining is closed" polls `sessionByCode` every 5 s and lets the guest in when
+the host reopens. New: a "Got a code from the host?" link opens a 6-character
+code field; `claimPlayer(code)` then goes to `/play/:code`. The taken-name
+error links to it: "Is that you on another phone? Ask the host for a code."
 
 **Home** (`/`): as today, with `sessionByCode` for "Continue in {party}".
 
-**PlayerCard** (`/p/:playerCode`): as today. A guest of another party, or an
+**PlayerCard** (`/p/:playerCode`): as today. For a host it renders
+`<AwardPoints playerId={player.id} sessionId={player.session_id} />` (HOST's
+component mounts its own provider, 7.3). A guest of another party, or an
 unknown code, now reads "Unknown code: this code isn't from your party, or it
 is wrong."
 
-### 7.2 TV (`/host/s/:sessionId/scoreboard`)
+### 7.2 TV (`/tv/:joinCode`)
 
-A host-signed page on a dedicated laptop, `<LiveSessionProvider screen="tv">`.
-Its snapshot never holds host-only data.
+A public route, outside `RequireHost`. The TV laptop is a paired screen, never
+a host, so nothing in that room can open the control room or read a secret,
+even with devtools: it reads exactly what a guest reads.
+
+**Pairing** (the page, `Scoreboard.tsx`):
+
+1. `ensureSignedIn()` (anonymous, with the busy state of 5.9) and
+   `sessionByCode(joinCode)`; none: Party not found.
+2. `<LiveSessionProvider sessionId screen="tv">`. When the snapshot says
+   `member: true`, the TV scene below.
+3. Otherwise the pairing screen (pattern reference: the Xbox TV code screen,
+   12.3): the logo, the party name, "Pair this screen", a 6-character code
+   field, and "On the host page, tap Pair a TV and type the code shown
+   there." `claimScreen(code)`, then `refresh()`: the read says `member: true`
+   and the channels join (5.4). A wrong or expired code shows the RPC's words
+   under the field. A TV the host unpairs falls back to this screen by itself
+   (its next read says `member: false`).
+4. A host's own browser skips pairing (`member` is true through `is_host()`)
+   and shows a small "Host preview" label in the corner. At the party, the TV
+   laptop is never signed in as the host.
+5. In dev builds, `?fixture=<scene>` renders a fixture instead (5.11).
 
 **Layout** at 1920 by 1080 (and 1440 by 900 with the `short` variant):
 
@@ -2167,11 +2691,13 @@ Its snapshot never holds host-only data.
   - `live`: a 3 s title card the first time a game takes the stage ("Hurra
     presents" over the game's icon, name and description; fades only with
     reduced motion), then the module's `TvView`, or the standings with "Now
-    playing" when it has none.
+    playing" when it has none. This is the only title card: games don't draw
+    their own.
   - `final`: the module's `FinalTvView`, else its `TvView` with
     `finished`, else the generic final screen (title, the winners' avatars
-    with a crown, this game's top 5, its last room-wide announcement). It
-    switches to the standings by itself when the 3 minutes are over.
+    with a crown, or "{title} is over" when it has no winners, this game's top
+    5, its last room-wide announcement). It switches to the standings by
+    itself when the 3 minutes are over.
   - `standings`: the podium and standings, exactly as today (`rowLayout`, the
     compact podium over 27 players).
   - `over`: final standings, as today.
@@ -2186,13 +2712,14 @@ Its snapshot never holds host-only data.
   game, or from any game while the standings show. A stage game with
   `stageBanners: 'sound-only'` plays only the sound. Announcements from
   background games while a game holds the stage go to a quiet one-line ticker
-  in the rail, without sound, except crown and trophy announcements, which get
-  the banner and their sound.
-- **Corner**: full screen, sound, and a live dot: teal when `connected`, grey
-  while polling.
+  in the rail, without sound, except those marked `interrupt` (a winner),
+  which get the banner and their sound. The core never looks at icons to
+  decide.
+- **Corner**: full screen, sound, and a live dot: teal when `connected` and
+  `pings` is `'ok'`, grey otherwise (polling).
 
-**Timers.** For each live game with `wake_at`, a `sync` at `wake_at + 250 ms`
-by `serverNow()` (section 4.5).
+**Timers.** `useWakeSync({ delayMs: 250 })` (5.10, 4.5): the TV's sync for
+each live game at `wake_at + 250 ms`, with the shared rate limit and backoff.
 
 **Recap scene** (`tv_scene 'recap'`): slides that advance every 8 s and loop,
 from the published `RecapDoc`: (1) "{party}: the night in numbers", (2) the
@@ -2205,17 +2732,27 @@ animation, fades only.
 
 `<LiveSessionProvider screen="host">`. From the top:
 
-1. **Header**: join code, party name, Close or Open joining, Open TV (new tab
-   to the TV route), Recap (to `/host/s/:id/recap`), the session menu.
+1. **Header**: join code, party name, Close or Open joining, Pair a TV,
+   Recap (to `/host/s/:id/recap`), the session menu, and a live dot like the
+   TV's.
 2. **On the TV now**: the current `tvScene()` in words, with:
    - Back to standings (clears the spotlight); during a final screen it shows
      the countdown ("The TV goes back in 2:59").
    - Show the recap on the TV, or Back to the party (`setTvScene`), once a
      recap is published.
+   - The screens line: "1 TV paired" (`snapshot.screens`) with Unpair
+     (`unpairScreens`, with a confirm), or "No TV paired yet" with Pair a TV.
+   - **Pair a TV** (`issueScreenCode`): a dialog with "On the TV laptop, open
+     {origin}/tv/{join code} and type this code", the code in large type, and
+     the time left. It closes by itself when `screens` goes up. Preview the TV
+     opens the same route in a new tab of this browser (Host preview).
 3. **Live games**: one card per live game, newest first: title, type icon,
    Live and "On the TV" badges, the module's `HostView` (fed `state`, `config`,
    `tallies`, `gamePoints`, `act`), Show on the TV (when it isn't), and End
    (with a confirm: "End {title}? It finishes now and shows how it stood.").
+   HOST's `act` wrapper calls `callGame` with a `host-action`, treats
+   `skipped` and `replayed` as success, refreshes after a success, and shows a
+   refusal as a toast with the server's words.
 4. **Games** (pending, finished, archived), each row with:
    - pending: a split button, Start on the TV or Start in the background; the
      default side follows the game's `presentation`;
@@ -2234,12 +2771,14 @@ animation, fades only.
    - **Remove**: confirm, then `removePlayer` (which syncs every live game).
 6. **Join card** (as today).
 
-**Timers.** For each live game with `wake_at`, a backup `sync` at
-`wake_at + 1500 ms`.
+**Timers.** `useWakeSync({ delayMs: 1500 })` (5.10): the backup sync for each
+live game. When it reports a failing game, a warning sits above the live games:
+"{title}'s timer isn't getting through. Use its buttons to move on by hand."
 
-**Award page** (`/p/:code` for a host): as today, inside its own
-`<LiveSessionProvider screen="host">`. "For game" defaults to the stage game
-if live, else the newest live game. New: Move to a new phone.
+**Award page** (`/p/:code` for a host): `AwardPoints({ playerId, sessionId })`
+mounts its own `<LiveSessionProvider sessionId screen="host">`, so it works
+wherever PHONE's `PlayerCard` renders it. "For game" defaults to the stage
+game if live, else the newest live game. New: Move to a new phone.
 
 **Host home** (`/host`): as today, through `useSessions`, `createSession`,
 `archiveSession` and `deleteSession`.
@@ -2248,13 +2787,16 @@ if live, else the newest live game. New: Move to a new phone.
 
 1. **Build**: `fetchRawRecap`, then `buildRecapDoc(raw, gameLogic)`, where
    `gameLogic` comes from the registry's modules. Rebuilt on demand
-   (Refresh); works any time, also mid-party.
+   (Refresh); works any time, also mid-party: rounds still running show as
+   "Still running" chapters without the game's highlights, so publishing early
+   never reveals a live task or an answer key (5.7).
 2. **Preview**: the numbers, the race chart (a line chart of the top 8), the
    chapters with their highlights, the timeline, and a player picker showing
    any guest's "Your night".
-3. **Actions**: Publish (or Update) with `publishRecap`; Unpublish; Show on
-   the TV and Back to the party (`setTvScene`); Download the night (the raw
-   recap as JSON, hosts only, for memories before guests are anonymised).
+3. **Actions**: Publish (or Update) with `publishRecap`, which reaches every
+   screen each time; Unpublish; Show on the TV and Back to the party
+   (`setTvScene`); Download the night (the raw recap as JSON, hosts only, for
+   memories before guests are anonymised).
 
 ### 7.5 From the winning move to the next game, with several games
 
@@ -2289,21 +2831,28 @@ if live, else the newest live game. New: Move to a new phone.
   - `handleAction` refuses a target who left the party ("{name} left the
     party");
   - `onPlayerLeave`: drops the leaver's task; if exactly one player is left
-    standing, announces "{name} is the last one standing!" (crown, fanfare)
-    and the personal one;
+    standing, announces "{name} is the last one standing!" (crown, fanfare,
+    `interrupt`) and the personal one;
+  - the deciding knockout's "{name} is the last one standing!" is marked
+    `interrupt` too, so the TV banners it while the quiz holds the stage;
   - `isFinished`: one standing and more than one dealt in; `winners`: that
     player;
   - `onEnd(by)`: quiet for `'game'`; for `'host'`, "Last one standing is over"
     with "N still standing" (gong), as today;
-  - `recap`: "{name} was the last one standing" (headline); "Top hunter: {name}"
-    with N knockouts; "First out: {name}" with how many minutes in and by whom;
-    "Deadliest task" when one task knocked out more than one player.
+  - `recap` (finished rounds only, [] otherwise): "{name} was the last one
+    standing" (headline); "Top hunter: {name}" with N knockouts; "First out:
+    {name}" with how many minutes in and by whom; "Deadliest task" when one
+    task knocked out more than one player. Spent tasks only: they were public
+    once used.
 - **Scoring**: unchanged (points per tag and per catch).
 - **Views**:
   - `PlayerView`: as today, minus its own "Now playing" header.
-  - `PlayerCard` (new): "You're in, 17 of 45 standing", the task behind a
-    small `SecretCard`, and Got someone? Scan (the `ScanSheet` and knockout
-    dialog, so knockouts work during the quiz).
+  - `PlayerCard` (new): "You're in, 17 of 45 standing", the task behind
+    `SecretCard` with its new `compact` prop (GAME-elimination owns
+    `SecretCard.tsx` for the build and adds the prop; the default look stays),
+    and Got someone? Scan (the `ScanSheet` and knockout dialog, so knockouts
+    work during the quiz). The knockout button is disabled while its `act` is
+    pending.
   - `ResultView` (new): "You're the last one standing!", or "You're out: Mads
     got you with 'hum a tune'. Ana won.", or "Ana won" for spectators.
   - `HostView`: as today, using `standing` and `winnerOf`.
@@ -2311,6 +2860,9 @@ if live, else the newest live game. New: Move to a new phone.
   - `TvStatus` (new): a slim `SurvivorMeter` ("17 of 45 still standing"), the
     top hunter, the latest knockout.
   - `ConfigEditor`: points capped at 100, the task limits.
+- **Bot** (`bot.ts`): while standing, now and then (about one chance in 20 per
+  call) tags or catches a random other standing player; no `hostMove`;
+  default settings.
 - `acceptsScans: true`; `profileBadges` unchanged; `icon: SwordIcon`.
 
 ### 8.2 In-person rounds, ported
@@ -2319,12 +2871,17 @@ if live, else the newest live game. New: Move to a new phone.
   example beer pong in the kitchen during the quiz). Several can run at once.
 - **Logic**: unchanged. Players can't act; the host gives points by scanning
   codes (`score_events` with this `game_id`). No `isFinished`: the host ends
-  it. New `recap`: "Top scorer in {title}: {name}" from `round.points`.
+  it. No `winners()`: the default takes the top of this round's awards, so
+  "Ana won beer pong" shows after End, and nobody when no points were given.
+  New `recap` (finished rounds only): "Top scorer in {title}: {name}" from
+  `round.points`.
 - **Views**: `PlayerView` without its own header ("Played in person. When you
   score, show your code to the host."); `PlayerCard`: the same in one line;
   `HostView`: unchanged (Scan a player); `TvStatus` (new): "Played in person,
   Ana leads with 7" from `gamePoints`; `ResultView` (new): "Top scorer: Ana
   (+7). You scored 3." `icon: UsersThreeIcon`.
+- **Bot** (`bot.ts`): no moves and no `hostMove`; the rehearsal gives its
+  points through the ordinary award path.
 
 ### 8.3 Quiz (new)
 
@@ -2365,22 +2922,35 @@ questions; the host crowns the winner.
   ```
 
 - **Constants**: `GRACE_MS = 1000` (answers are taken 1 s past the
-  countdown), `REVEAL_HOLD_MS = 7000`, `MAX_QUIZ_POINTS = 1000`. Prompt keys
-  `q1` to `qN`.
-- **Host actions** (`QuizHostAction`):
-  - `{ type: 'next' }` in lobby, reveal or leaderboard: opens the next
-    question. `openPrompt('q' + n, { kind: 'choice', options: ['0', ..], final:
-    true }, { closesAt: now + seconds * 1000 + GRACE_MS })`, phase
-    `question`, `openedAt = now`, `endsAt = now + seconds * 1000`. After the
-    last question: `GameError` "That was the last question. Crown the
-    winner."
-  - `{ type: 'reveal' }` in question, sent with `close: ['q' + n]` ("Reveal
-    now"): needs `info.answers['q' + n]` (else `GameError` "The question is
-    still open"). Scores it, `revealPrompt`, phase `reveal`, `revealedAt = now`.
-  - `{ type: 'leaderboard' }` in reveal: phase `leaderboard`.
+  countdown), `REVEAL_HOLD_MS = 7000`, `MAX_QUIZ_POINTS = 1000`. Question
+  `index` i (from 0) has the prompt key `'q' + (i + 1)`, so keys run `q1` to
+  `qN`.
+- **Host actions** (`QuizHostAction`). Each names the step the host page
+  showed (3.5); one whose step has passed returns the state unchanged, which
+  the engine answers as skipped:
+  - `{ type: 'next', from: number }` (`from` is `state.index` as the page
+    showed it, -1 in the lobby): unchanged unless `from === state.index`. In
+    lobby, reveal or leaderboard: opens question `from + 1`.
+    `openPrompt(key, { kind: 'choice', options: ['0', ..], final: true },
+    { closesAt: now + seconds * 1000 + GRACE_MS })`, phase `question`,
+    `openedAt = now`, `endsAt = now + seconds * 1000`. After the last
+    question: `GameError` "That was the last question. Crown the winner." In
+    question: `GameError` "Reveal this question first".
+  - `{ type: 'reveal', index }`, sent with `close: [key]` ("Reveal now"):
+    unchanged unless the phase is `question` and `index === state.index` (the
+    timer may have revealed it already). Needs `info.answers[key]` (else
+    `GameError` "The question is still open"). Scores it, `revealPrompt`,
+    phase `reveal`, `revealedAt = now`.
+  - `{ type: 'leaderboard', index }`: unchanged unless the phase is `reveal`
+    and `index === state.index` (the 7 s timer may have moved on already).
+    Phase `leaderboard`.
   - `{ type: 'finish' }` in lobby, reveal or leaderboard: phase `done`;
-    announces "{name} wins the quiz!" (crown, fanfare) and "You won the quiz!"
-    to the winner; `updateProfile(winner, { wins: wins + 1 })`.
+    announces "{name} wins the quiz!" (crown, fanfare, `interrupt`) and "You
+    won the quiz!" to the winner; `updateProfile(winner, { wins: wins + 1 })`.
+    With no quiz points on the board: "The quiz is over", no winner. In
+    question: `GameError` "Reveal this question first". A second finish finds
+    the game finished: the engine's 409 `not_running`, which the disabled
+    button never sends.
 - **Timers**: `wakeAt` is `endsAt + GRACE_MS` in question (by then
   `game_load` has closed the prompt) and `revealedAt + REVEAL_HOLD_MS` in
   reveal; else null. `onWake`: question goes to the reveal (same scoring);
@@ -2390,7 +2960,8 @@ questions; the host crowns the winner.
   right: `round(1000 * (1 - min(1, ms / (seconds * 1000)) / 2))`, so 500 to
   1,000 quiz points; wrong or none: 0. `right[player] += 1` for a right
   answer. `scores()` (the day's scoreboard) is `right * pointsPerRight`.
-  `winners`: the top `quizPoints` (all tied ones).
+  `winners`: the top `quizPoints` (all tied ones), and nobody when the top is
+  0 (a quiz ended before anyone scored).
 - **isFinished**: phase `done`. `onEnd('host')`: "The quiz is over" with the
   leader (trophy). `onEnd('game')`: quiet.
 - **publicState** (never the right answer before its reveal):
@@ -2408,49 +2979,68 @@ questions; the host crowns the winner.
 
 - **playerView**: `{ quizPoints, rank, right, last: { index, choice, correct, points } | null }`.
   The player's own pick during a question comes from `myAnswers`.
-- **recap**: "{name} won the quiz" (headline, quiz points); "Fastest right
-  answer: {name}, 1.2 s on question 3"; "Hardest question: '{text}', 4 of 40
-  knew '{answer}'"; "Perfect score: {names}" when someone got every one right.
+- **recap** (finished rounds only, [] otherwise; asked and revealed questions
+  only, never one the host didn't get to, which a later quiz round may still
+  use): "{name} won the quiz" (headline, quiz points); "Fastest right answer:
+  {name}, 1.2 s on question 3"; "Hardest question: '{text}', 4 of 40 knew
+  '{answer}'"; "Perfect score: {names}" when someone got every asked one
+  right.
 - **Badges**: `wins` as "Quiz champion" (`TrophyIcon`, gold). `icon:
   QuestionIcon`.
 
-**The look: original, Hurra's own.** Not Kahoot's: no triangle, diamond,
-circle and square symbols, no red, blue, yellow and green tiles, no purple
-backdrop, no music. Instead:
+**The look: original, Hurra's own.** Not Kahoot's shapes, colours, music or
+layout: no 2 by 2 grid of four coloured answer tiles, no triangle, diamond,
+circle and square symbols, no red, blue, yellow and green, no purple backdrop,
+no circular countdown, no music. Instead:
 
-- options are dark cards (`bg-card`) with a large letter badge, A to D, in
-  gold, pink, teal and violet, the option text beside it, on the night sky
-  backdrop with the falling confetti;
-- the countdown is a gold ring draining around the number (pattern reference:
-  Deezer's quiz timer), turning pink in the last 5 s;
-- sounds come only from the library: whoosh (a question appears, TV), drumroll
-  (the reveal), coin (your right answer, phone), sad (wrong, phone), fanfare
-  (the winner);
-- a "Hurra presents" title card in the lobby phase.
+- the question is a large dark card (`bg-card`) on the night sky backdrop with
+  the falling confetti; the countdown is a gold bar draining along the bottom
+  edge of that card, turning pink in the last 5 s;
+- the 2 to 4 options are full-width rows stacked under the question, each a
+  dark card with a letter badge (A to D) and the option text. The four
+  confetti colours (gold, pink, teal, violet) colour the letter badges only;
+- the answered count is a row of small circles, one per guest, filling in gold
+  as answers arrive, with "31 of 45" beside it. Counts only: the circles carry
+  no names or faces, so nobody can tell who hasn't answered;
+- sounds come only from the library and are played by the views, once per
+  question (3.5): whoosh when a question appears and drumroll at the reveal
+  (TV), coin for your right answer and sad for a wrong one or none (phone).
+  The winner's fanfare comes with the finish announcement;
+- no title card of its own: the core's "Hurra presents" card (7.2) opens the
+  game, and the lobby phase shows "N questions. Answer on your phone."
 
 **Screens.**
 
-- **TV** (`TvView`): lobby: the title card with "N questions. Answer on your
-  phone." Question: question number of total, the text large, the 2 by 2
-  option cards, the ring, "31 of 45 answered" (from `tallies`). When the
-  countdown ends: "Time's up". Reveal: a bar per option growing to its count,
-  the right one gold with a check, the wrong ones dimmed, the 3 fastest right
-  answers with their times. Leaderboard: the top 5 quiz points with "+850"
-  gains and animated rank changes. `FinalTvView`: the top 3 on a podium with
-  confetti and "Hurra!".
+- **TV** (`TvView`): lobby: "N questions. Answer on your phone." Question:
+  "Question 3 of 10", the question card with its draining bar, the option
+  rows, the circles. When the countdown ends: "Time's up". Reveal: each option
+  row fills like a bar to its count, the right one gold with a check, the
+  wrong ones dimmed; the 3 fastest right answers with their times.
+  Leaderboard: the top 5 quiz points with "+850" gains and animated rank
+  changes. `FinalTvView`: the top 3 on a podium with confetti and "Hurra!".
 - **Phone** (`PlayerView`): lobby: "Quiz time! Watch the TV." Question: the
-  2 to 4 options as big buttons with their letters and texts (phones show the
-  text, not only the letter), the countdown bar; once answered, "Locked in: B"
-  and the buttons lock. Time's up without an answer: "Time's up". Reveal:
-  "Right! +850" with coin, or "Not this time. It was C." with sad, then "You're
-  #4 with 2,350". `ResultView`: "You won the quiz!" or "#4 of 45, 2,350 points".
-- **Host** (`HostView`): the current question with its right answer
-  (from `config`), "31 of 45 answered", and one big button for the next step:
-  Start the first question, Reveal now, Show the leaderboard, Next question,
-  Crown the winner. A small list of all questions with their answers.
+  options as big full-width buttons with their letters and texts (phones show
+  the text, not only the letter) and the countdown bar; the buttons are
+  disabled while the answer is being sent, then lock with "Locked in: B".
+  Time's up without an answer: "Time's up". Reveal (from `view.last`): "Right!
+  +850" with coin, or "Not this time. It was C." with sad, then "You're #4
+  with 2,350". `ResultView`: "You won the quiz!" or "#4 of 45, 2,350 points".
+- **Host** (`HostView`): the current question, "31 of 45 answered", and one
+  big button for the next step, disabled while its `act` is pending: Start the
+  first question, Reveal now, Show the leaderboard, Next question, Crown the
+  winner. Each sends the step it was made for (`from`, `index`). The right
+  answer, and the list of all questions with their answers, sit behind a Show
+  answers toggle (off by default, like elimination's Show tasks), because the
+  host's phone is out in the room.
 - **Settings** (`ConfigEditor`): a list of questions (text, 2 to 4 options, a
   radio for the right one, optional seconds), the default seconds, points per
   right answer. Paste-friendly: one question per block.
+- **Bot** (`bot.ts`): `settings` makes 10 rehearsal questions of 10 s with 4
+  options; `move` answers an open, unanswered question with a random option,
+  at a random moment inside its countdown; `hostMove`: Next from the lobby and
+  the leaderboard, nothing during a question (the timer reveals) unless every
+  player has answered, then Reveal now; nothing in the reveal (the leaderboard
+  follows by itself); Crown the winner after the last question.
 
 ### 8.4 Participant fusion (new)
 
@@ -2491,23 +3081,30 @@ prints one by one on the TV. A point per right person.
   `p1` to `pN`, each `{ kind: 'choice', options: 'players', min: 2, max: 2,
   exclude_self: true }` with no deadline and changeable votes; announces "Who
   is fused? N pictures on the wall. Vote on your phone." (detective, chime).
-- **Host actions**:
-  - `{ type: 'setKey', n, people }`: n valid and not revealed; two different
-    players in the party.
-  - `{ type: 'lock' }` in voting: `closePrompt` for every picture; phase
+- **Host actions**. Each names its step (3.5): a picture number, or a phase
+  that has passed:
+  - `{ type: 'setKey', n, people }`: n valid and not revealed (else
+    `GameError` "#n is already revealed"); two different players in the
+    party.
+  - `{ type: 'lock' }`: in voting, `closePrompt` for every picture; phase
     `locked`; announces "Voting is closed" (megaphone, drumroll). The next
-    request sees every vote in `info.answers`.
-  - `{ type: 'reveal', n }` in locked: needs `key[n]` (else `GameError` "Set
-    who is in #n first") and n not revealed. For each vote: people in the
-    picture don't score on it; `hits` is how many of the two the voter got;
-    `totals += hits * pointsPerPerson`. `revealPrompt('p' + n)`; announces
-    "#3 was Mads and Anna!" with "14 of 38 got both" (detective, gotcha);
-    `lastReveal = { n, at: now }`.
+    request sees every vote in `info.answers`. In locked or done: unchanged
+    (a double tap).
+  - `{ type: 'reveal', n }`: in voting, `GameError` "Lock voting first". In
+    locked: unchanged when n is already revealed (a double tap on Reveal
+    next); needs `key[n]` (else `GameError` "Set who is in #n first"). For
+    each vote: people in the picture don't score on it; `hits` is how many of
+    the two the voter got; `totals += hits * pointsPerPerson`.
+    `revealPrompt('p' + n)`; announces "#3 was Mads and Anna!" with "14 of 38
+    got both" (detective, gotcha); `lastReveal = { n, at: now }`.
   - `{ type: 'finish' }` in locked: phase `done`; announces "{name} has the
-    sharpest eye!" (crown, fanfare) and the personal one;
-    `updateProfile(top, { detective: n + 1 })`.
+    sharpest eye!" (crown, fanfare, `interrupt`) and the personal one;
+    `updateProfile(top, { detective: n + 1 })`. With no points on the board:
+    "Participant fusion is over", no winner. In voting: `GameError` "Lock
+    voting first".
 - **isFinished**: phase `done`. `onEnd('host')`: "Participant fusion is over"
-  (trophy). `scores()`: `totals`. `winners`: the top totals.
+  (trophy). `scores()`: `totals`. `winners`: the top totals, and nobody when
+  the top is 0.
 - **publicState** (never a key before its reveal):
 
   ```ts
@@ -2522,34 +3119,45 @@ prints one by one on the TV. A point per right person.
 
 - **playerView**: `{ points, hits: Record<string, number> }` (own guesses come
   from `myAnswers`).
-- **recap**: "Best disguise: #4 fooled the room" (only 3 of 40 got both);
-  "Sharpest eye: {name}"; "Perfect eye: {names}" for anyone who got both people
-  of every revealed picture.
+- **recap** (finished rounds only, [] otherwise; revealed pictures only, so a
+  picture the host never revealed keeps its people secret): "Best disguise:
+  #4 fooled the room" (only 3 of 40 got both); "Sharpest eye: {name}";
+  "Perfect eye: {names}" for anyone who got both people of every revealed
+  picture.
 - **Badges**: `detective` as "Face detective" (`DetectiveIcon`, violet).
   `icon: DetectiveIcon`.
 
 **Screens.**
 
-- **Phone** (`PlayerView`): a grid of the pictures (label, thumbnail when
-  there is an image, the two faces you picked, or "Not voted yet"), "5 of 12
+- **Phone** (`PlayerView`): a grid of the pictures (label, the thumbnail when
+  there is an image, through `mediaUrl(path, 'thumb')` with
+  `loading="lazy"`, the two faces you picked, or "Not voted yet"), "5 of 12
   voted". Tap a picture: a people picker (search by name, an avatar grid
-  without yourself, pick 2), Save. Changeable until locked. Locked: "Voting is
-  closed. Watch the TV." After a reveal, that picture shows the right people
-  and "You got 1 of 2 (+1)" with coin. `PlayerCard`: "Vote on the pictures: 5
-  of 12 done" and Vote.
+  without yourself, pick 2), Save (disabled while it is being sent).
+  Changeable until locked. Locked: "Voting is closed. Watch the TV." After a
+  reveal, that picture shows the right people and "You got 1 of 2 (+1)" from
+  `view.hits`, with coin, played once per reveal. `PlayerCard`: "Vote on the
+  pictures: 5 of 12 done" and Vote.
 - **TV** (`TvView`, on the stage for the reveal): a grid of the pictures with
   their numbers; revealed ones show the two faces and names. On a new
-  `lastReveal`: the picture fills the stage (its image, or its large number) for
-  2 s, then the two avatars and names spring in with confetti and the counts.
-  `TvStatus` (background): "Who is fused? 12 pictures, 214 votes" (the sum of
-  `tallies`). `FinalTvView`: the top 3 face detectives.
+  `lastReveal`: the picture fills the stage (its full image, or its large
+  number) for 2 s, then the two avatars and names spring in with confetti and
+  the counts. `TvStatus` (background): "Who is fused? 12 pictures, 214 votes"
+  (the sum of `tallies`). `FinalTvView`: the top 3 face detectives.
 - **Host** (`HostView`): per picture: label, thumbnail, "Who is it?" with two
   player selects (sends `setKey`), the vote count, and Reveal (after the lock).
-  Buttons: Lock voting (before), Reveal next (the lowest unrevealed), Crown the
-  face detective (after the lock).
+  Buttons, each disabled while its `act` is pending: Lock voting (before),
+  Reveal next (the lowest unrevealed, sent with its `n`), Crown the face
+  detective (after the lock). The people per picture sit behind a Show who
+  toggle, off by default.
 - **Settings** (`ConfigEditor`): number of pictures, a label and an optional
-  image per picture (uploaded with `media.upload`), optional people, points
-  per person.
+  image per picture (re-encoded and uploaded with `media.upload`), optional
+  people, points per person.
+- **Bot** (`bot.ts`): `settings` makes 4 pictures whose people are pairs of
+  the first 8 players; `move` votes on every open picture it hasn't voted on
+  with 2 random other players; `hostMove`: Lock voting once every player has
+  voted on every picture (from `tallies`) or 60 s after the start, then
+  Reveal next until all are revealed, then Crown the face detective.
 
 ## 9. Testing plan
 
@@ -2557,79 +3165,187 @@ prints one by one on the TV. A point per right person.
 
 | Package | Tests |
 | --- | --- |
-| CORE | `context.test.ts`: clipping, skip mode, prompt key rules. `runtime.test.ts`: permissions, status rules, frozen config, membership hooks and their fail-open, self-finish with a throwing `onEnd`, End's fail-open, skip on no-op, the wake loop cap, stage defaults. `contract.test.ts`: the contract runner on a probe game. `simulate.test.ts`: claims, versions, prompts, the stage rules, `jsonbRoundTrip` on saves. `testing.test.ts`: `jsonbRoundTrip` key order and strict refusals. `registry.test.ts`: four game types, logic and modules match. |
-| DATA | `gameApi.test.ts` (a mocked fetch): one id per call, the same id on retries, no retry on 4xx or 500, the offline message. `live.test.ts` (a fake client): one read in flight, the tally settle, jitter, the offset, polling fallback. `stage.test.ts`: every `tvScene` and `phoneLayout` case, the 3-minute window from `max(finished_at, spotlight_at)`. `recap.test.ts`: `buildRecapDoc` on a recorded raw recap. |
-| GAME-elimination | Today's tests on v2, plus: removal drops the task and finishes the game with one left; `isFinished`; `onEnd` quiet for game; alive order after a round trip; the contract. |
-| GAME-inperson | The contract; `recap`. |
-| GAME-quiz | `parseConfig` refusals; the public state never holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; 45 answers through `simulateParty`; finish and winners; the contract. |
-| GAME-fusion | `setKey` rules; lock closes every picture; people in a picture don't score on it; points per right person; reveal before lock refused; finish; the contract. |
+| CORE-SDK | `context.test.ts`: clipping, skip mode, prompt key rules, shared effects. `runtime.test.ts`: permissions (a screen may only sync), status rules, frozen config, the member hooks with actor system and their fail-open, self-finish with a throwing `onEnd`, End's fail-open, skip on a no-op and on a stale host action, the wake loop cap and the stuck guard (`wake_at` null, `log.wake_stuck`), `env.round` refusing a request held across a restart, default winners from scores plus awards (an in-person round; nobody when the top is 0), stage defaults. `contract.test.ts`: the contract runner on the probe game, with its join, wake and recap checks. `simulate.test.ts`: claims, versions, prompts, the stage rules, `jsonbRoundTrip` on saves, the screen's sync. `testing.test.ts`: `jsonbRoundTrip` key order and strict refusals. `registry.test.ts`: four game types, and logic, modules and bots match. |
+| REHEARSE | `rehearse.test.ts`: flag parsing and every guard: a non-local URL refused without `--target production`; a `--confirm` that doesn't match the URL's project ref refused; no secret key use in production except `--cleanup`. |
+| DATA | `gameApi.test.ts` (a mocked fetch): one id per call, the same id on retries, no retry on 4xx or 500, the offline message, an injected client and endpoint. `live.test.ts` (a fake client): one read in flight, the tally settle, jitter, no jitter for `prompt: true`, the 10 s poll while a prompt or timer is live, the deadline reads, the offset, polling fallback, ping health (an unannounced change turns it unhealthy, a ping heals it, and none of the stage-only changes alters a phone's fingerprint), two sessions on one topic with one closed, the delayed `player:` rejoin. `wakeSync.test.ts` (fake timers): the rules of 4.5 (5.10). `stage.test.ts`: every `tvScene` and `phoneLayout` case, the 3-minute window from `max(finished_at, spotlight_at)`, the result card staying until the next start. `recap.test.ts`: `buildRecapDoc` on a recorded raw recap; a raw recap with a running elimination round and a quiz ended after 3 of 10 questions: no task text, unasked question or answer key appears anywhere in the doc. `media.test.ts`: `fitWithin`, the quality steps with a fake encoder, `jpegHasMetadata` on JPEG bytes built with an EXIF and a comment segment; plus one check in a real browser on the local stack (canvas needs one): a JPEG with an EXIF comment, uploaded through `uploadGameMedia`, downloads again without it (`jpegHasMetadata` false) and under 400 KB. `auth.test.ts` (a mocked client): the 429 retries and `onBusy`. `queries.test.ts` (a mocked client): `publishRecap` always sends `published_at`; `joinSession` doesn't retry. |
+| GAME-elimination | Today's tests on v2, plus: removal drops the task and finishes the game with one left; `isFinished`; `onEnd` quiet for game; the winner's announcement is `interrupt`; alive order after a round trip; `recap` on a finished round; the contract (with a join and a leave); the bot playing a round to its end through `simulateParty`. |
+| GAME-inperson | The contract; `recap`; the default winners after End (the top of the awards, nobody without awards). |
+| GAME-quiz | `parseConfig` refusals; neither the public state nor a prompt spec holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; a duplicated Next opens one question; Reveal now racing the timer scores once with no error; a stale Show the leaderboard is skipped; 45 answers through `simulateParty`; finish and winners (nobody when nobody scored); the recap of an early-ended quiz names no unasked question; the contract; the bot playing a full quiz through `simulateParty`. |
+| GAME-fusion | `setKey` rules; lock closes every picture; a second lock and a second reveal of the same n are skipped; people in a picture don't score on it; points per right person; reveal before lock refused; finish (nobody when nobody scored); the recap names no unrevealed picture's people; the contract; the bot playing a round through `simulateParty`. |
+| PHONE, TV, HOST | Unit tests for any pure helper they add. Screens are checked against the fixtures (5.11) and then on the local stack; TV also runs the fit checks in 10.4. |
 
 ### 9.2 Integration tests (`npm run test:integration`, local stack)
 
-All in `netlify/lib/`, through the real `/api/game` handler and real signed-in
-users. Each file creates its own party and users and deletes them afterwards.
+All in `netlify/lib/` (CORE-DB), through the real `/api/game` handler and real
+signed-in users, on the full local stack with storage running. Each file
+creates its own party and users and deletes them afterwards.
+`npm run test:integration` runs the files one at a time
+(`--no-file-parallelism`): the local stack has one Realtime tenant capped at
+100 events a second, and the 45-answer burst must not starve the realtime
+file's pings.
 
 - **`engine.integration.test.ts`**: start on stage and in the background; two
   and three live games at once; a move, a copy of it with the same request id
   (`replayed`, one feed row), a copy racing its original; a different move on a
   stale version (`40001`, then success); End twice (one "is over"); End with a
   throwing `onEnd` still ends; a move after End (409); start twice at once (one
-  deal); restart and a move held across it (409 restarted); self-finish takes
-  a free stage but not a busy one; Back to standings; archive refused while
-  live; a removed player mid-move (the move saves, no 23503); the member hooks
-  through a sync; `wake_at` and a sync; error codes and statuses; the event log
-  rows of each path; `session_recap` shape.
+  deal); restart and a move held across it (409 restarted); a restart between
+  two attempts of one request (the retry is refused, nothing lands in the new
+  round); self-finish takes a free stage but not a busy one; Back to
+  standings; archive refused while live; a removed player mid-move (the move
+  saves, no 23503); the member hooks through a sync; `wake_at` and a sync; a
+  stuck wake commits `wake_at` null and logs `game.wake_stuck`; default
+  winners from host awards; a guest's host-action with `close` (`game_load`
+  ignores the close, and the action is refused 403); a screen's sync accepted,
+  its action, host-action and start refused (403); a prompt closed by its
+  deadline pings the room even when the request then skips; error codes and
+  statuses; the event log rows of each path; the `session_recap` shape.
+  **Conformance**: one scripted round (a probe game started on the stage, a
+  second one in the background that finishes by itself, a removal, a timer
+  reveal) runs through `FakeParty` and through `handleGameRequest` (with
+  `logicFor` serving the probe game), and status, `finished_by`, winners, the
+  spotlight and the views must match.
 - **`prompts.integration.test.ts`**: every `submit_answer` rule (closed, past
-  the deadline, not a player, outsider, anon, invalid choices, final, the same
-  answer again, a changeable vote, 20 changes); a reveal with `close` sees an
-  answer held in flight, and an answer after the close is refused; **the burst:
-  45 guests answer at once** (45 clients, `Promise.all`): 45 accepted, 0
-  errors, under 2 s locally, tally 45, the reveal sees all 45 and writes 45
-  views in one save.
+  the deadline, not a player, outsider, anon, a paired screen, invalid
+  choices, final, the same answer again, a changeable vote, 20 changes); a
+  reveal with `close` sees an answer held in flight, and an answer after the
+  close is refused; `prompt_tallies` for an outsider is `{}`; **the burst: 45
+  guests answer at once** (45 clients, `Promise.all`): 45 accepted, 0 errors,
+  under 2 s locally, tally 45, the reveal sees all 45 and writes 45 views in
+  one save.
 - **`secrets.integration.test.ts`**, the secrecy matrix (guest, other guest,
-  outsider signed in, anon, host):
-  - a guest reads 0 rows of `game_settings`, `game_states`, `event_log`,
-    `player_transfers` (permission denied), other players' `game_player_views`
-    and `game_submissions`, targeted feed rows for others, unpublished
-    `session_recaps`;
-  - the quiz's `public_state` has no right answer before its reveal; the
-    fusion key isn't in any public row before its reveal;
+  paired screen, outsider signed in, anon, host):
+  - a guest and a screen read 0 rows of `game_settings`, `game_states`,
+    `event_log`, `player_transfers` and `screen_codes` (permission denied),
+    other players' `game_player_views` and `game_submissions`, targeted feed
+    rows for others, unpublished `session_recaps`;
+  - `session_snapshot` as a guest or a screen passing `'host'` or `'tv'`: no
+    `states`, no `screens`, no other player's views or answers, no targeted
+    feed rows; `me.views` covers the shown games and `me.answers` active games
+    only (2.7);
+  - `session_recap` as a guest or a screen: `PT403`;
+  - the quiz's `public_state` and prompt specs have no right answer before
+    its reveal; the fusion key isn't in any public row before its reveal;
   - an outsider reads 0 rows of the party (sessions, players, games, feed,
     scores, prompts) but finds it with `session_by_code`;
-  - anon can execute only `keep_alive`;
+  - anon can execute only `keep_alive`, and has no privilege on any table;
   - a guest can't execute `game_load`, `game_commit`, `ping` or
     `check_answer`; can't write `sessions`, `session_games`, `score_events`,
-    `session_feed`, `event_log`; can't set engine columns as a host either.
+    `session_feed`, `event_log`, `session_screens`; can't set engine columns
+    as a host either;
+  - `host_issue_transfer` and `host_issue_screen_code` by a guest: `PT403`;
+    `claim_player` and `claim_screen` with a wrong code and an expired one
+    (`PT404`); `claim_player` by a phone that already has a player in that
+    party (`PT409`); after Unpair, the screen's snapshot says `member: false`;
+  - `join_session` on an archived party: `PT409` `archived`;
+  - `game-media`: a guest and anon can't upload, update, delete or list; a
+    host can do all four;
+  - deleting a whole party with games, prompts, submissions, awards, a
+    transfer code, a paired screen and log rows succeeds, leaves no rows
+    behind, writes no log rows for its parts, and sends one `deleted` ping.
 - **`realtime.integration.test.ts`**: private channels with real tokens. A
   member joins `room:<party>`; an outsider is refused; a guest is refused on
-  `stage:`; a guest gets only their own `player:` topic; a host write sends one
-  `changed`; an answer sends one `tally` to the host; a rolled-back save sends
-  nothing; `moved` reaches the old phone.
+  `stage:`; a paired screen joins `room:` and `stage:` but not a `player:`
+  topic; a guest gets only their own `player:` topic; a guest's broadcast on
+  `room:` or `stage:` reaches nobody; a host write sends one `changed`; a
+  save that opens a prompt sends `prompt: true`; an answer sends one `tally`
+  to the host; a rolled-back save sends nothing; `moved` reaches the old
+  phone; a recap Update (data only) sends a `changed` and a later
+  `published_at`.
 
-### 9.3 The local end-to-end party test
+### 9.3 The end-to-end party test (`npm run rehearse`)
 
-`npm run rehearse` (`scripts/rehearse.ts`, local stack only; it refuses any
-URL that isn't localhost or 127.0.0.1):
+**How it runs.** `npm run rehearse -- <flags>` runs `node
+scripts/rehearse.ts`: a small Node script (type stripping, Node built-ins only)
+that parses the flags, applies the guards, and starts the party run,
+`scripts/rehearse/party.run.ts`, through **vitest** with its own config
+(`scripts/rehearse/vitest.config.ts`, no file parallelism, no timeout). Vitest
+gives the run TypeScript and the module resolution of `src/`, so it imports the
+app's real client code: every bot has its own Supabase client, its own
+`createLiveSession` (live.ts) and its own `createGameApi` (gameApi.ts), so the
+jitter, settle, ping health and rejoin logic run 45 times, not only on the
+human phones. The run knows no game: every guest move and every scripted host
+action comes from the games' bots (`src/games/bots.ts`, 3.6), and awards,
+transfers, removals and the recap go through the generic paths.
 
-- **Scripted** (`npm run rehearse`): a host and 45 guests (users created with
-  the local secret key, so no Auth rate limits), each guest on a private
-  channel counting deliveries. The program: Last one standing in the
-  background with a knockout every few seconds; a 10-question quiz on the
-  stage with 45 answers per question at random delays; fusion with 4 pictures
+**Flags**: `--party <join code>` (join a party a person runs on the real host
+page), `--bots N` (default 45 scripted, 42 with `--party`), `--target local`
+(default) or `production`, `--confirm <project ref>`, `--site <url>` (where
+`/api/game` lives; default `http://localhost:5173`), `--cleanup <file>`.
+
+**Guards.** Every script that uses the secret key (`rehearse`, `dev-setup`,
+`db-smoke`) refuses a Supabase URL that isn't localhost or 127.0.0.1. The one
+exception is `rehearse --target production`, which:
+
+- needs `--confirm <project ref>` equal to the ref in `VITE_SUPABASE_URL`;
+- takes the URL and the keys from the shell's environment, never from a file;
+- never creates users with the secret key (its bots sign in anonymously) and
+  uses the secret key only for `--cleanup`.
+
+**Modes.**
+
+- **Scripted** (local, `npm run rehearse`): a host and 45 guests (users created
+  with the local secret key, so no Auth rate limits), each guest on its own
+  private channels counting deliveries. The program: Last one standing in the
+  background with knockouts from its bot; a 10-question quiz on the stage
+  played by its bot's settings, moves and host moves; fusion with 4 pictures
   (votes, lock, 4 reveals, finish); an in-person round with 10 host awards;
-  one guest moved to a new phone; one removed; the recap built and published.
-- **Pass**: 0 lost answers (tallies and the reveal agree), 0 HTTP 5xx, every
-  guest's snapshot catches up within 2 s of each ping, no 5 s bucket over 60
-  Realtime events per second (well under the 100 limit), engine p95 under
-  400 ms locally, the TV scene and phone layouts as expected at each step.
-- **With people** (`npm run rehearse -- --party <join code> --bots 42`): the
-  bots join a party a person runs from the real host page, answer and vote at
-  random delays, and make random knockouts. The team watches the real TV page
-  and 3 real phones on the LAN through the whole program. Camera scanning needs
+  one guest moved to a new phone; one removed; the recap built with
+  `buildRecapDoc` and published.
+- **With people** (local, `npm run rehearse -- --party <join code> --bots
+  42`): the bots join a party a person runs from the real host page and play
+  every live game through their `move`. The team watches the real TV page and
+  3 real phones on the LAN through the whole program. Camera scanning needs
   HTTPS, so on the LAN use typed codes; the camera is checked in the
   production smoke test.
-- Run it only when no other package is testing: the local stack has one
-  Realtime tenant with the same 100 per second limit for everyone.
+- **Production** (owner-run, Sat 21 Nov, after the party-week Auth settings
+  are live): `npm run rehearse -- --target production --confirm <project ref>
+  --site <site url> --party <join code> --bots 40`, against a throwaway party
+  the owner runs from the real host page, next to the real TV and 8 to 12
+  real phones. The bots sign in anonymously spread over 60 s with jitter
+  (the real Auth path, through the per-IP limits, from one IP like the
+  venue), join and play. The run writes the bot user ids to a file in the
+  system temp folder and prints its path. Afterwards the owner runs
+  `npm run rehearse -- --target production --confirm <project ref> --cleanup
+  <that file>` with the secret key exported in the shell: it deletes those
+  users, and their players go with them. Then the owner deletes the
+  throwaway party.
+
+**Pass**: 0 lost answers (tallies and the reveal agree), 0 HTTP 5xx, every
+guest's snapshot catches up within 2 s of each ping, no screen marks its pings
+unhealthy, no 5 s bucket over 60 Realtime events per second (well under the
+100 limit), engine p95 under 400 ms locally, the TV scene and phone layouts as
+expected at each step. In production also: the Supabase dashboard's Realtime
+report shows no errors and a peak well under the limits (events per second,
+200 connections), and the engine p95 from the `Server-Timing` headers the run
+records stays under 1.5 s from Ohio.
+
+Run it locally only when no other package is testing: the local stack has one
+Realtime tenant with the same 100 per second limit for everyone.
+
+### 9.4 The phase-0 gate (`npm run db:smoke`)
+
+The design round's SQL ran on top of the six v1 migrations against stand-ins
+for `realtime.send`, `realtime.authorize` and a non-partitioned
+`realtime.messages`; none of it has run as a fresh init on the real local
+stack, and local Storage was down (`/storage/v1` answered 503). So before DATA
+builds on the SQL, CORE-DB passes this gate on Monday:
+
+1. `supabase stop`, then `supabase start` with every service (no `-x`), and
+   `supabase status` lists Storage as running.
+2. `supabase db reset` (local) applies the init file alone, self-checks
+   included.
+3. `npm run db:smoke` (`scripts/db-smoke.ts`, local only): with the local
+   secret key it creates a host and a guest; as the host, creates a party and
+   a game; as the guest, joins with `join_session`; with the secret key opens a
+   prompt on that game (a `game_states` and a `game_prompts` row, as
+   `game_commit` would); subscribes the host to the private `stage:<party>`
+   channel through the real local Realtime; submits an answer as the guest; and
+   expects the `tally` with count 1 within 5 s. It also uploads, reads and
+   deletes a small JPEG in `game-media` as the host. Then it deletes all it
+   made and prints PASS, or the step that failed.
+
+Until the gate passes, DATA and the screens work against the fixtures (5.11).
 
 ## 10. Work packages and file ownership
 
@@ -2637,14 +3353,15 @@ URL that isn't localhost or 127.0.0.1):
 
 | When | What |
 | --- | --- |
-| Mon 9 Nov | **Phase 0, contracts.** CORE lands the init SQL (complete, ported from the tested sketches), deletes the six old migrations, applies it locally with `supabase db reset` (local only), and lands `Game.ts`, `context.ts`, `types.ts`, `logic.ts`, `registry.ts` and the placeholder quiz and fusion modules. DATA lands `src/lib/types.ts` and every function and hook signature in section 5 (bodies may throw "Not built yet" for a day). One commit each, CORE first. |
-| Tue 10 to Sun 15 Nov | **Phase 1, build**, all eight packages in parallel. |
+| Mon 9 Nov | **Phase 0, contracts and the gate.** First the main engineer sets up (10.5): the worktrees, the shadcn components `dialog`, `sheet`, `radio-group` and `progress` in `src/components/ui`, and the `package.json` scripts (10.2). Then three commits. (1) **CORE-SDK** lands the shared types, which compile together, so there is no cycle to break: `src/games/core/Game.ts`, `context.ts` (new signatures), a working `testing.ts` (`testInfo`, `seededRandom`, `jsonbRoundTrip`, `answersOf`), `bot.ts`; `src/games/types.ts`; `src/lib/types.ts` (handed to DATA right after); `src/games/logic.ts`, `registry.ts` and `bots.ts`; the placeholder quiz and fusion modules; placeholder `bot.ts` files for all four games; `scripts/**/*.test.ts` added to the vitest `include`, so REHEARSE's tests run in `npm test`. (2) **DATA** lands every function and hook signature in section 5 (bodies may throw "Not built yet" for a few days), `fixtures.ts` and the provider's `fixture` prop. (3) **CORE-DB** lands the init SQL (complete, ported from the tested sketches), deletes the six old migrations and passes the phase-0 gate (9.4). (1) merges first; (2) and (3) in either order after it. |
+| Tue 10 Nov | Phase 1 starts. CORE-SDK's first deliverable, by the end of the day: working `runtime.ts`, `simulate.ts` (`simulateParty`), `contract.ts` and `probe.ts`. Until then the GAME packages start with plain unit tests (`testInfo`, `createGameContext`) and add the `simulateParty` and contract tests once those land. |
+| Tue 10 to Sun 15 Nov | **Phase 1, build**, all eleven packages in parallel. The screens build against the fixtures (5.11) until the live data works. |
 | Mon 16 Nov | Everything merged on main; `npm run check` and `npm run test:integration` green; the first scripted rehearsal. |
 | Tue 17 Nov | Fixes; the rehearsal with people on the LAN. |
-| Wed 18 Nov | The second rehearsal must pass (9.3); the release candidate. Cut list decision (12.2). |
+| Wed 18 Nov | The second rehearsal must pass (9.3); the release candidate; the wipe rehearsed on the local stack (section 11). Cut list decision (12.2). |
 | Thu 19 Nov | The main engineer switches production over (section 11). |
 | Fri 20 Nov | Production settings and the production smoke test. |
-| Sat 21 Nov | The live test with 8 to 12 people and the real TV. |
+| Sat 21 Nov | The live test with 8 to 12 people and the real TV, plus the owner's run of 40 bots against production (9.3). |
 | Sun 22 to Tue 24 Nov | Fixes only. |
 | Wed 25 Nov | Freeze. |
 | Thu 26 Nov | Content only: quiz questions, fusion pictures and images, printing. |
@@ -2662,80 +3379,146 @@ a new shadcn component in `src/components/ui`, or a new npm dependency).
 
 | Package | Owns (edit or create) |
 | --- | --- |
-| **CORE** | `supabase/` (the new `migrations/20261109000000_hurra_v2.sql`; deletes the six old migration files; `config.toml` only if needed, never its auth settings). `netlify/` (`functions/game.mts`, `functions/keep-alive.mts`, `lib/engine.ts`, `lib/engine.integration.test.ts`, new `lib/prompts.integration.test.ts`, `lib/secrets.integration.test.ts`, `lib/realtime.integration.test.ts`, `lib/testUsers.ts`). `src/games/core/` (all files, new `runtime.ts`, `contract.ts`, `simulate.ts` and their tests; `sounds.ts` unchanged). `src/games/types.ts`, `src/games/logic.ts`, `src/games/registry.ts`, `src/games/registry.test.ts`. `scripts/` (new `rehearse.ts`, `dev-setup.ts`; `generate-sounds.ts` untouched). `package.json` scripts (`rehearse`, `dev:setup`), `eslint.config.js` (the logic lint rule), the tsconfig, vite and vitest configs if needed, `README.md`. **Phase 0 only**, then handed over: the placeholder `src/games/quiz/{logic.ts,index.ts,PlayerView.tsx}` and `src/games/fusion/{logic.ts,index.ts,PlayerView.tsx}`. |
-| **DATA** | `src/lib/types.ts`, `supabase.ts`, `auth.ts`, `gameApi.ts`, `queries.ts`, `useLiveQuery.ts`, and new `live.ts`, `useLive.tsx`, `stage.ts`, `recap.ts`, `media.ts` with their tests. |
-| **GAME-elimination** | `src/games/elimination/**` (logic, tests, index and every view, new `PlayerCard.tsx`, `ResultView.tsx`, `TvStatus.tsx`). |
-| **GAME-inperson** | `src/games/in-person/**` (new `logic.test.ts`, `PlayerCard.tsx`, `ResultView.tsx`, `TvStatus.tsx`). |
+| **CORE-DB** | `supabase/` (the new `migrations/20261109000000_hurra_v2.sql`; deletes the six old migration files; `config.toml` only if needed, never its auth settings). `netlify/lib/engine.integration.test.ts`, new `netlify/lib/prompts.integration.test.ts`, `netlify/lib/secrets.integration.test.ts`, `netlify/lib/realtime.integration.test.ts` and `netlify/lib/testUsers.ts`. New `scripts/dev-setup.ts` and `scripts/db-smoke.ts`. `.env.example` (adds empty `DEV_HOST_EMAIL` and `DEV_HOST_PASSWORD`). |
+| **CORE-SDK** | `src/games/core/` (all files, new `runtime.ts`, `contract.ts`, `simulate.ts`, `probe.ts` and `bot.ts` with their tests; `sounds.ts` unchanged). `src/games/types.ts`, `src/games/logic.ts`, `src/games/registry.ts`, `src/games/registry.test.ts`, new `src/games/bots.ts`. `netlify/functions/game.mts`, `netlify/functions/keep-alive.mts`, `netlify/lib/engine.ts` and a new unit test beside it (`netlify/lib/engine.test.ts`). `eslint.config.js` (the logic lint rule), the tsconfig, vite and vitest configs if needed, `README.md`. **Phase 0 only**, then handed over: `src/lib/types.ts` (to DATA); the placeholder `src/games/quiz/{logic.ts,index.ts,PlayerView.tsx,bot.ts}` and `src/games/fusion/{logic.ts,index.ts,PlayerView.tsx,bot.ts}` (to GAME-quiz and GAME-fusion); the placeholder `src/games/elimination/bot.ts` and `src/games/in-person/bot.ts` (to their GAME packages). |
+| **REHEARSE** | New `scripts/rehearse.ts` and `scripts/rehearse/**` (its vitest config, the party run, the bot driver, `rehearse.test.ts`). |
+| **DATA** | `src/lib/types.ts` (from the end of phase 0), `supabase.ts`, `auth.ts`, `gameApi.ts`, `queries.ts`, `useLiveQuery.ts`, and new `live.ts`, `useLive.tsx`, `stage.ts`, `recap.ts`, `media.ts`, `wakeSync.ts` and `fixtures.ts`, with their tests. |
+| **GAME-elimination** | `src/games/elimination/**` (logic, tests, index, bot and every view, new `PlayerCard.tsx`, `ResultView.tsx`, `TvStatus.tsx`). `src/components/SecretCard.tsx` for the build: additive changes only (the `compact` prop), the default look unchanged. |
+| **GAME-inperson** | `src/games/in-person/**` (new `logic.test.ts`, `PlayerCard.tsx`, `ResultView.tsx`, `TvStatus.tsx`; the bot). |
 | **GAME-quiz** | `src/games/quiz/**`, from the end of phase 0. |
 | **GAME-fusion** | `src/games/fusion/**`, from the end of phase 0. |
-| **PHONE** | `src/pages/Play.tsx`, `src/pages/Join.tsx`, `src/pages/Home.tsx`, `src/pages/PlayerCard.tsx`, `src/components/Standings.tsx`, new `src/components/phone/**` (the game card shell, the sheet, Your night, the claim code form). |
-| **TV** | `src/pages/host/Scoreboard.tsx`, new `src/components/tv/**` (scene switcher, rail, status card fallback, final screen fallback, title card, ticker, recap scene, live dot). |
-| **HOST** | `src/router.tsx`; `src/pages/host/HostSession.tsx`, `HostHome.tsx`, `HostLayout.tsx`, `HostLogin.tsx`, `RequireHost.tsx`, `Scan.tsx`, `SessionMenu.tsx`, `AwardPoints.tsx`, `LazyScoreboard.tsx`; new `src/pages/host/Recap.tsx`; `src/components/Confirm.tsx`, `ConfirmByTyping.tsx`, `StatusBadge.tsx`; new `src/components/host/**` (stage panel, live game card, start split button, move player dialog, recap preview); `docs/user-flows.md` (at the end: close G1, G4, G6; section 7 is built). |
-| **Main engineer** | `docs/engine-v2.md`, deploys, production, `git push`. |
+| **PHONE** | `src/pages/Play.tsx`, `src/pages/Join.tsx`, `src/pages/Home.tsx`, `src/pages/PlayerCard.tsx`, `src/components/Standings.tsx`, new `src/components/phone/**` (the game card shell, the sheet, Your night, the claim code form, the busy state). |
+| **TV** | `src/pages/host/Scoreboard.tsx` (the whole TV page, pairing included), new `src/components/tv/**` (scene switcher, rail, status card fallback, final screen fallback, title card, ticker, recap scene, live dot, pairing screen). |
+| **HOST** | `src/router.tsx`; `src/pages/host/HostSession.tsx`, `HostHome.tsx`, `HostLayout.tsx`, `HostLogin.tsx`, `RequireHost.tsx`, `Scan.tsx`, `SessionMenu.tsx`, `AwardPoints.tsx`, `LazyScoreboard.tsx`; new `src/pages/host/Recap.tsx`; `src/components/Confirm.tsx`, `ConfirmByTyping.tsx`, `StatusBadge.tsx`; new `src/components/host/**` (stage panel, live game card, start split button, move player dialog, pair a TV dialog, recap preview); `docs/user-flows.md` (at the end: close G1, G4, G6; section 7 is built). |
+| **Main engineer** | `docs/engine-v2.md`; `package.json` and `package-lock.json` (scripts and dependencies); `.gitignore`; the shadcn components added in phase 0 (`src/components/ui/dialog.tsx`, `sheet.tsx`, `radio-group.tsx`, `progress.tsx`); the worktrees and `.design/`; the merges; the local wipe rehearsal; deploys, production, `git push`. |
+
+The scripts the main engineer adds to `package.json` in phase 0:
+
+```json
+"dev:setup": "node scripts/dev-setup.ts",
+"db:smoke": "node scripts/db-smoke.ts",
+"rehearse": "node scripts/rehearse.ts",
+"test:integration": "INTEGRATION=1 vitest run integration --no-file-parallelism"
+```
+
+`dev-setup.ts`, `db-smoke.ts` and `rehearse.ts` run under plain Node (type
+stripping): Node built-ins, npm packages and relative imports with their `.ts`
+extension only. `dev-setup` and `db-smoke` read `.env.development.local` with
+`process.loadEnvFile`; `rehearse` does so only for `--target local`.
 
 Frozen for every package: `src/components/*` not listed above (Avatar,
 AvatarBadge, AnnouncementIconView, Callout, EditableList, Logo, PlayerQr,
-ProfileBadges, Qr, QrScanner, QueryGate, RankBadge, ScanSheet, SecretCard,
-SoundToggle, layout), `src/components/ui/*`, the UI-only helpers in
-`src/lib` (5.1), `src/pages/NotFound.tsx`, `src/App.tsx`, `src/main.tsx`,
-`src/index.css`, `index.html`, `public/**`, `sound-takes/**`.
+ProfileBadges, Qr, QrScanner, QueryGate, RankBadge, ScanSheet, SoundToggle,
+layout), `src/components/ui/*` (after the main engineer's phase-0 additions),
+the UI-only helpers in `src/lib` (5.1), `src/pages/NotFound.tsx`,
+`src/App.tsx`, `src/main.tsx`, `src/index.css`, `index.html`, `public/**`,
+`sound-takes/**`, `scripts/generate-sounds.ts`.
 
 ### 10.3 Interfaces between packages
 
 | From | To | Interface | Where specified |
 | --- | --- | --- | --- |
-| CORE | DATA | RPCs `session_by_code`, `join_session`, `submit_answer`, `session_snapshot`, `session_recap`, `host_issue_transfer`, `claim_player`; table access for hosts (2.5); topics, events and payloads (2.10); the bucket (2.11) | 2.5 to 2.11 |
-| CORE | DATA | `POST /api/game`: body, responses, `code` values | 4.1, 4.4 |
-| CORE | GAME-* | `Game`, `GameContext`, `GameInfo`, `PromptSpec`, `AnswerPayload`, `RecapRound`, `Highlight`; `createGameContext`, `shuffle`; `testInfo`, `seededRandom`, `jsonbRoundTrip`, `answersOf`, `checkGameContract`, `simulateParty` | 3.1 to 3.4 |
-| CORE | GAME-*, PHONE, TV, HOST | `GameModule` and every props type; `defineGameModule`; `gameModules`, `getGameModule` (registry); `gameLogic` (logic.ts) | 6 |
-| DATA | PHONE, TV, HOST | `LiveSessionProvider`, `useLive`, `useServerNow`, the adapted hooks and selectors; `stage.ts`; `queries.ts`; `callGame`, `submitAnswer`, `GameCallError`; `recap.ts`; `media.ts`; `auth.ts` | 5 |
-| DATA | CORE | `src/lib/types.ts` row types used by `src/games/types.ts` | 5.2 |
+| CORE-DB | DATA | RPCs `session_by_code`, `join_session`, `submit_answer`, `prompt_tallies`, `session_snapshot`, `session_recap`, `host_issue_transfer`, `claim_player`, `host_issue_screen_code`, `claim_screen`; table access for hosts (2.5); topics, events and payloads (2.10); the bucket and its paths (2.11) | 2.5 to 2.11 |
+| CORE-DB | CORE-SDK | `game_load` and `game_commit`: arguments, the `Loaded` JSON, the `CommitPayload`, the errors | 2.8, 3.3 |
+| CORE-SDK | DATA, REHEARSE | `POST /api/game`: body, responses, `code` values | 4.1, 4.4 |
+| CORE-SDK | GAME-* | `Game`, `GameContext`, `GameInfo`, `PromptSpec`, `AnswerPayload`, `RecapRound`, `Highlight`, `GameBot`; `createGameContext`, `shuffle`; `testInfo`, `seededRandom`, `jsonbRoundTrip`, `answersOf`, `checkGameContract`, `simulateParty` | 3.1 to 3.4, 3.6 |
+| CORE-SDK | GAME-*, PHONE, TV, HOST | `GameModule` and every props type; `defineGameModule`; `gameModules`, `getGameModule` (registry); `gameLogic` (logic.ts) | 6 |
+| CORE-SDK | CORE-DB, REHEARSE | `handleGameRequest` with `logicFor`, `ProbeGame` and `simulateParty` (the conformance test); `gameBots` (bots.ts) | 3.4, 3.6, 4.2 |
+| CORE-SDK | DATA | `src/lib/types.ts` as landed in phase 0; DATA owns it from then on | 5.2 |
+| DATA | PHONE, TV, HOST | `LiveSessionProvider` (with `fixture`), `useLive`, `useServerNow`, the adapted hooks and selectors; `stage.ts`; `queries.ts` (with `callGame`, `submitAnswer`, `claimScreen`, `issueScreenCode`, `unpairScreens` and the recap calls); `GameCallError`; `recap.ts`; `media.ts`; `auth.ts`; `useWakeSync`; `fixtureSnapshot` | 5 |
+| DATA | REHEARSE | `createLiveSession`, `createGameApi`, `buildRecapDoc` and the types, all safe under Node | 5.1, 5.3, 5.4, 5.7 |
 | GAME-* | PHONE, TV, HOST | Their modules through the registry only: `PlayerView`, `PlayerCard`, `ResultView`, `HostView`, `TvView`, `FinalTvView`, `TvStatus`, `ConfigEditor`, `acceptsScans`, `stageBanners`, `profileBadges`, `icon` | 6, 8 |
-| GAME-* | CORE | The names the registry imports, which never change: `elimination`, `inPerson`, `quiz`, `fusion` from `src/games/<folder>/index.ts`, and `EliminationGame`, `InPersonGame`, `QuizGame`, `FusionGame` from `src/games/<folder>/logic.ts` (folders `elimination`, `in-person`, `quiz`, `fusion`) | 10.4 |
-| HOST | PHONE | `AwardPoints({ player, session })` rendered by `PlayerCard` for hosts: the props stay as they are | 7.3 |
-| HOST | TV | The route `/host/s/:sessionId/scoreboard` renders `LazyScoreboard`, which renders the default export of `Scoreboard.tsx` | 7.2 |
+| GAME-* | CORE-SDK | The names the registries import, which never change: `elimination`, `inPerson`, `quiz`, `fusion` from `src/games/<folder>/index.ts`; `EliminationGame`, `InPersonGame`, `QuizGame`, `FusionGame` from `src/games/<folder>/logic.ts`; `bot` from `src/games/<folder>/bot.ts` (folders `elimination`, `in-person`, `quiz`, `fusion`) | 10.4 |
+| HOST | PHONE | `AwardPoints({ playerId, sessionId })`, the default export of `src/pages/host/AwardPoints.tsx`, rendered by `PlayerCard` for hosts; it mounts its own `LiveSessionProvider` | 7.1, 7.3 |
+| HOST | TV | The public route `/tv/:joinCode` (outside `RequireHost`) renders `LazyScoreboard`, which renders the default export of `Scoreboard.tsx`. The old `/host/s/:sessionId/scoreboard` route is removed | 7.2 |
+| Main engineer | everyone | `dialog`, `sheet`, `radio-group` and `progress` in `src/components/ui`; the `package.json` scripts; the worktrees | 10.2, 10.5 |
 
 ### 10.4 Package briefs
 
 Each package is done when its own tests pass, `tsc -b` and `eslint` are clean
 for its files, and the behaviour in its sections works on the local stack.
 
-- **CORE** (about 6 agent-days): the init SQL (2), the SDK (3), the engine
-  (4), the four integration test files (9.2), `simulateParty` and the contract
-  runner, the rehearsal script and `dev-setup` (a local host user and a demo
-  party with 6 bot guests), the lint rule, the README ("Writing a game" v2, the
-  data model, the pages, the local host setup). Port from the tested sketches
-  (12.3): `game_commit`, `game_load`, `submit_answer`, `check_answer`, the ping
-  functions and `can_listen` from realtime-native; the log triggers' coverage
-  and `session_recap` ideas from evolve; `jsonbRoundTrip` key order from
-  event-first. **The phase 0 placeholders**: `QuizGame` (type `'quiz'`) and
-  `FusionGame` (type `'fusion'`) with the default configs from 8.3 and 8.4,
-  a `setup` that throws `GameError` "This game isn't ready yet", a
-  `parseAction` that throws, empty scores and views; `index.ts` exports
-  `quiz` and `fusion` through `defineGameModule` with a `PlayerView` that says
-  "Coming soon". `src/games/logic.ts` lists all four logic classes and
-  `src/games/registry.ts` all four modules, in the order in-person,
-  elimination, quiz, fusion.
-- **DATA** (about 4 agent-days): section 5 in full, with its unit tests.
-- **GAME-elimination** (about 1.5 agent-days): 8.1.
-- **GAME-inperson** (about 0.5 agent-days): 8.2.
-- **GAME-quiz** (about 3 agent-days): 8.3, every screen.
-- **GAME-fusion** (about 2.5 agent-days): 8.4, every screen.
-- **PHONE** (about 3 agent-days): 7.1.
-- **TV** (about 3 agent-days): 7.2, with the fit checks at 8, 24 and 45
-  players at 1920 by 1080 and 1440 by 900, with and without the rail.
-- **HOST** (about 3.5 agent-days): 7.3, 7.4, the router, and the user-flows
-  update at the end.
+- **CORE-DB** (about 3.5 agent-days): the init SQL (2), with the screen
+  tables and RPCs, the explicit grants and the extended self-checks; the
+  phase-0 gate and `db-smoke` (9.4); the four integration test files with
+  every case in 9.2, the conformance test included; `testUsers.ts`;
+  `dev-setup` (a local host user from `DEV_HOST_EMAIL` and
+  `DEV_HOST_PASSWORD`, and a demo party with 6 bot guests). Port from the
+  tested sketches (12.3): `game_commit`, `game_load`, `submit_answer`,
+  `check_answer`, the ping functions and `can_listen` from realtime-native;
+  the log triggers' coverage and `session_recap` ideas from evolve. Those
+  sketches ran against stand-ins (9.4), so the gate comes first.
+- **CORE-SDK** (about 3.5 agent-days): phase 0's shared types and
+  placeholders (10.1); then the SDK (3), with `runtime.ts`, `simulate.ts`,
+  `contract.ts` and `probe.ts` working on day 1 of phase 1; the engine (4);
+  `bots.ts`; the lint rule; the README ("Writing a game" v2 with the rules of
+  3.5, the data model, the pages, the local host setup, the worktree setup).
+  `jsonbRoundTrip` key order from event-first. **The phase 0 placeholders**:
+  `QuizGame` (type `'quiz'`) and `FusionGame` (type `'fusion'`) with the
+  default configs from 8.3 and 8.4, a `setup` that throws `GameError` "This
+  game isn't ready yet", a `parseAction` that throws, empty scores and views;
+  `index.ts` exports `quiz` and `fusion` through `defineGameModule` with a
+  `PlayerView` that says "Coming soon"; each placeholder `bot.ts` exports a
+  `bot` whose `move` returns null. `src/games/logic.ts` lists all four logic
+  classes, `src/games/registry.ts` all four modules and `src/games/bots.ts`
+  all four bots, in the order in-person, elimination, quiz, fusion.
+- **REHEARSE** (about 1.5 agent-days): 9.3 in full: the CLI and its guards,
+  the vitest-run party, the bot driver over `gameBots`, the scripted program,
+  the people and production modes, `--cleanup`, the pass report. It builds
+  against fakes until DATA's `createLiveSession` and `createGameApi` and the
+  games' bots land, and runs for real from Mon 16 Nov.
+- **DATA** (about 5 agent-days): section 5 in full, with its unit tests;
+  phase 0's signatures and `fixtures.ts`.
+- **GAME-elimination** (about 1.5 agent-days): 8.1, its bot, and
+  `SecretCard`'s `compact` prop.
+- **GAME-inperson** (about 0.5 agent-days): 8.2 and its bot.
+- **GAME-quiz** (about 3 agent-days): 8.3, every screen, its bot.
+- **GAME-fusion** (about 2.5 agent-days): 8.4, every screen, its bot.
+- **PHONE** (about 3 agent-days): 7.1, against the fixtures first.
+- **TV** (about 3.5 agent-days): 7.2 with pairing, against the fixtures
+  first, with the fit checks at 8, 24 and 45 players at 1920 by 1080 and 1440
+  by 900, with and without the rail.
+- **HOST** (about 4 agent-days): 7.3 with Pair a TV, 7.4, the router,
+  `AwardPoints` with its own provider, and the user-flows update at the end.
+
+The single CORE package of the first version carried about 6 agent-days in a
+6-day phase, with every other package waiting on it. Split three ways, the
+longest package is DATA at about 5, and nobody waits past Tuesday for the SDK.
 
 ### 10.5 Working agreements
 
-- Work on a branch per package (`v2/core`, `v2/data`, `v2/game-quiz` and so
-  on). CORE's phase 0 commit merges first, then DATA's, then the rest as they
-  are ready. File ownership is disjoint, so merges don't conflict.
+- **One git worktree per package**, because a `git checkout` by one agent
+  would rewrite files under the others. In phase 0 the main engineer creates
+  them from the main checkout:
+
+  ```sh
+  git worktree add ../hurra-<pkg> -b v2/<pkg>
+  cp .env.development.local ../hurra-<pkg>/   # local values only
+  cp -R .design ../hurra-<pkg>/               # the design sources (12.3)
+  (cd ../hurra-<pkg> && npm ci)
+  ```
+
+  `<pkg>` is `core-db`, `core-sdk`, `rehearse`, `data`, `game-elimination`,
+  `game-inperson`, `game-quiz`, `game-fusion`, `phone`, `tv` or `host`. Each
+  package works only in its own worktree, and never runs `git checkout` or
+  `git switch` anywhere else.
+- **Dev server ports**: `npm run dev -- --port <port>`: core-db 5174,
+  core-sdk 5175, rehearse 5176, data 5177, game-elimination 5178,
+  game-inperson 5179, game-quiz 5180, game-fusion 5181, phone 5182, tv 5183,
+  host 5184. The main checkout keeps 5173.
+- **Merges**: the main engineer merges each branch into main from the main
+  checkout. Phase 0: CORE-SDK first, then DATA and CORE-DB; then the rest as
+  they are ready. File ownership is disjoint, so merges don't conflict; each
+  package rebases on main daily.
+- **The local stack is shared.** Only CORE-DB and the main engineer run
+  Supabase CLI commands, and only local ones (`start`, `stop`, `status`,
+  `db reset`, `migration up`). CORE-DB runs `supabase db reset` from its own
+  worktree (where its newest SQL is), only in phase 0 or after announcing it,
+  because it wipes every package's test data. Worktrees have no
+  `supabase/.temp`, so they aren't linked to production: never copy it in.
+  Tests create and delete their own data. Never delete data you didn't
+  create.
 - Commit messages say what changed and end with the attribution lines in use.
-- The local stack is shared. Only CORE runs `supabase db reset` (local), and
-  only in phase 0 or after announcing it. Tests create and delete their own
-  data. Never delete data you didn't create.
 - Use the Mobbin references (12.3) for layout patterns only: borrow the
   pattern, never the look.
 
@@ -2745,6 +3528,43 @@ For the main engineer. Production holds only test data, so it is wiped and
 rebuilt from the init file. Everyone reloads and rejoins by QR afterwards.
 Never put ids, keys, emails or URLs of production into a committed file.
 
+**The wipe**, used in steps 4 and 6. It drops every v1 object but keeps
+the `public` schema itself, so the schema's grants survive (the init file
+states them again anyway, 2.1). No `cascade`: if anything unexpected depends
+on these objects, the transaction fails and nothing is dropped.
+
+```sql
+begin;
+drop view if exists public.scoreboard;
+-- join_session returns the players row type, so it goes before the tables.
+drop function if exists public.join_session(text, text);
+drop function if exists public.apply_game_state(uuid, int, jsonb, jsonb, jsonb, jsonb, jsonb, text);
+drop table if exists
+  public.session_feed, public.game_scores, public.game_player_views,
+  public.game_states, public.score_events, public.session_games,
+  public.players, public.sessions, public.hosts;
+-- The tables' policies use is_host and their defaults use random_code, so these go last.
+drop function if exists public.is_host();
+drop function if exists public.random_code(int);
+delete from supabase_migrations.schema_migrations
+where version in ('20261025120000', '20261108120000', '20261108130000',
+                  '20261108140000', '20261108150000', '20261108160000');
+commit;
+
+-- Then, read-only: each must return 0.
+select count(*) from pg_class where relnamespace = 'public'::regnamespace;
+select count(*) from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e');
+select count(*) from supabase_migrations.schema_migrations;
+```
+
+Dropping the tables also takes them out of the `supabase_realtime`
+publication, and their policies, indexes and sequences go with them. v1 made
+no Storage or `realtime.messages` policies. This exact block was dry-run
+against the local v1 schema on 9 November inside a rolled-back transaction:
+every object dropped and the three counts were 0.
+
 **Before (Wed 18 Nov)**
 
 1. The release candidate is on main: `npm run check`, `npm run
@@ -2753,71 +3573,104 @@ Never put ids, keys, emails or URLs of production into a committed file.
    candidate `v2-rc1`.
 3. Netlify continuous deployment and the Supabase GitHub integration stay off
    until 29 Nov, so nothing deploys or migrates on a push.
+4. **Rehearse the switch on the local stack**, when no package is testing:
+   - `git worktree add ../hurra-v1 v1-final`, copy `.env.development.local`
+     into it, and run `supabase db reset` there: the local database now holds
+     the v1 schema and its six history rows, as production does. Add a host,
+     a party and two players with the v1 app or SQL.
+   - From the main checkout (the release candidate): run the wipe above with `psql`
+     against the local database URL that `supabase status` prints, then
+     `supabase migration up` (local), which applies the one pending file and
+     records it, as `db push` will in production.
+   - Run the read-only checks of step 7 and `npm run test:integration`.
+   - `supabase db reset` from the main checkout to return to the normal local
+     state, and `git worktree remove ../hurra-v1`.
 
 **Rebuild (Thu 19 Nov)**
 
-4. Back up production (schema, data and the auth users) to a private place
+5. Back up production (schema, data and the auth users) to a private place
    outside the repo.
-5. Wipe the production database and apply `20261109000000_hurra_v2.sql` as its
-   only migration, so the migration history lists exactly that file. The file
-   aborts by itself if a privilege or policy check fails (2.12).
-6. Check, read-only: one migration in the history; RLS on for every public
-   table; the `realtime.messages` policy "Hurra screens receive their pings"
-   exists; the `game-media` bucket exists and is public; anonymous sign-ins
-   are still on; the host's auth user still exists.
-7. **Re-add the host** in the SQL editor:
+6. With the owner's go-ahead: run the wipe above in the production SQL editor,
+   check that its three counts are 0, then `supabase migration list --linked`
+   (the local file only, nothing remote) and `supabase db push --linked` from a
+   clean checkout of `v2-rc1`. It applies `20261109000000_hurra_v2.sql` as the
+   only migration, in one transaction; the file aborts by itself if a
+   privilege or policy check fails (2.12), and then nothing is applied.
+7. Check, read-only: one migration in the history; RLS on for every public
+   table; schema usage for anon, authenticated and service_role; the
+   `realtime.messages` policy "Hurra screens receive their pings" exists; the
+   `game-media` bucket is public with a 2 MB limit and `image/jpeg` only, and
+   has its four policies; anonymous sign-ins are still on; the host's auth
+   user still exists.
+8. **Re-add the host** in the SQL editor:
    `insert into public.hosts (user_id) select id from auth.users where email = '<host email>';`
    then `select count(*) from public.hosts` returns 1. If the auth user is
    gone, create it under Authentication, Users, Add user (Auto confirm) first.
 
 **Settings (dashboard only, never `supabase config push`)**
 
-8. Auth: Site URL is the production Netlify URL; redirect URLs include it and
+9. Auth: Site URL is the production Netlify URL; redirect URLs include it and
    `http://localhost:5173`; anonymous sign-ins on. Asymmetric JWT signing keys
    on (the JWKS endpoint serves an ES256 key), so the engine verifies tokens
    without an Auth call.
-9. Party-week limits (guests share the venue's one IP), from Fri 20 Nov to
-   Sun 29 Nov: anonymous sign-ins 3,600 per hour; token refreshes 1,000 per 5
-   minutes; sign-ups and sign-ins 300 per 5 minutes; access token lifetime 12
-   hours (43,200 s), so nobody needs a refresh during the party. A refused
-   refresh after a token expired deletes an anonymous guest's session and
-   their player with it. Revert all of these on Sun 29 Nov (lifetime back to
-   3,600 s).
-10. Netlify environment: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
+10. Party-week limits (guests share the venue's one IP), from Fri 20 Nov to
+    Sun 29 Nov: anonymous sign-ins 3,600 per hour; token refreshes 1,000 per 5
+    minutes; sign-ups and sign-ins 300 per 5 minutes; access token lifetime 12
+    hours (43,200 s), so nobody needs a refresh during the party. A refused
+    refresh after a token expired deletes an anonymous guest's session and
+    their player with it. Revert all of these on Sun 29 Nov (lifetime back to
+    3,600 s).
+11. Realtime: turn off "Allow public access" (Realtime settings). v2 uses only
+    private channels, so nothing can listen without passing `can_listen`.
+12. Netlify environment: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
     and `SUPABASE_SECRET_KEY` as a secret. A database wipe doesn't rotate
     keys; check they still match the project. Functions stay in the default
     region on the Free plan.
 
 **Deploy**
 
-11. Build from a clean checkout of the tag (with `node_modules` as a real
+13. Build from a clean checkout of the tag (with `node_modules` as a real
     directory, never a symlink), deploy as a draft, check that the draft's
     `/api/game` answers 401 without a token, then publish it.
-12. Keep-alive: run the scheduled function once from the Netlify UI and check
+14. Keep-alive: run the scheduled function once from the Netlify UI and check
     it logs HTTP 200 from `rpc/keep_alive`.
 
 **Smoke test (Fri 20 Nov, owner-approved, throwaway party)**
 
-13. Sign in as host on the real site; create a party "Smoke"; join with one
-    real phone and one browser; open the TV page on the TV laptop (live dot
-    teal).
-14. Last one standing in the background: one knockout by camera scan. The quiz
+15. Sign in as host on the real site; create a party "Smoke"; join with one
+    real phone and one browser. On the TV laptop, in a browser that has never
+    signed in as the host, open the link from Pair a TV and type the code: the
+    TV shows the party, the host page says "1 TV paired", and the live dot is
+    teal.
+16. Rename the party on the host page: the phone shows the new name within
+    2 s, without a reload. This proves pings arrive, not only polls.
+17. Last one standing in the background: one knockout by camera scan. The quiz
     on the stage with 2 questions: answer from both phones; the timer reveals
     by itself; the leaderboard follows; Crown the winner; the final screen
     shows; Back to standings works, and the 3-minute rule by waiting once.
-15. Fusion with 1 picture and an uploaded image: set its key, vote from both
-    phones, lock, reveal on the TV, finish.
-16. Move the browser's player to a new browser with a host code. Build and
-    publish the recap; show it on the TV.
-17. Delete the smoke party while no guests are connected.
+18. Fusion with 1 picture: upload a phone photo taken with location on; the
+    stored file is a JPEG under 400 KB with no EXIF or GPS data (download it
+    and check with `exiftool`). Set its key, vote from both phones, lock,
+    reveal on the TV, finish.
+19. Move the browser's player to a new browser with a host code. Build and
+    publish the recap; show it on the TV; Update it once, and the TV and the
+    phone show the new version.
+20. Unpair the TV: it falls back to its pairing screen by itself.
+21. Delete the smoke party while no guests are connected.
+
+**Live test (Sat 21 Nov)**: 8 to 12 people, the real TV, and the owner's run
+of 40 bots against production next to them (9.3), then `--cleanup`.
 
 **Rollback** (only before the party): v1 can't run on the v2 schema. Rolling
-back means wiping again, rebuilding from the six v1 migrations at
+back means dropping the v2 objects the same way (every table, view and
+function the init file made, its Storage and `realtime.messages` policies, and
+its history row), then `supabase db push --linked` from a checkout of
 `v1-final`, restoring the backup if wanted, and publishing the v1 deploy.
 
 **After the party (Sun 29 Nov)**: publish the recap if not done; download the
 night (the recap page); revert the Auth settings; then delete or anonymise the
-guests (the repo is public, the data never goes in it).
+guests, and delete the TV's anonymous user (the repo is public, the data
+never goes in it).
 
 ## 12. Appendix
 
@@ -2831,29 +3684,43 @@ send and once per delivery.
 | A knockout | 329 (measured) | 48 |
 | One quiz answer | 49, and about a quarter of answers lost | 3 |
 | 45 answers within 5 s | about 2,200 | 135 (27 per second for that bucket) |
-| A reveal changing 30 scores and 45 views | 1,549 (measured) | 48 |
-| A whole quiz question | about 3,750 | about 280 |
+| A reveal changing 30 scores and 45 views | 1,549 (measured) | 96 (the close in `game_load`, then the reveal: one room ping each) |
+| A whole quiz question | about 3,750 | about 330 |
 | A guest joins | 94 | 3 |
 | A host award | about 94 | 5 |
+| Pairing a TV | not in v1 | 3 |
 | Deleting a 45-player party | about 6,900 | 48 |
-| The worst plausible 5 s bucket | over the limit | about 37 per second |
+| The worst plausible 5 s bucket (45 answers and a reveal) | over the limit | about 46 per second |
+
+Channel joins: each phone joins 2 topics. After a Wi-Fi blip the 47 `room:`
+channels rejoin at once and the 45 `player:` channels over the next 3 s, well
+under the Free plan's 100 joins a second.
 
 Reads: 47 `session_snapshot` reads per room ping, about 5 ms each in SQL and
-16 KB before compression.
+16 KB before compression. While a game has an open prompt or a timer, phones
+also poll every 10 s (about 4.5 reads a second) and read once after each
+deadline; none of it costs Realtime events.
+
+Images: 12 fusion pictures cost about 16 MB of thumbnails across 45 phones and
+3.6 MB on the TV, instead of 1.6 to 5.4 GB raw.
 
 ### 12.2 Risks and the cut list
 
 | Risk | Mitigation |
 | --- | --- |
-| Private channels misconfigured: no pings | Tested through `realtime.authorize` in integration; the 5 s poll fallback after 3 failed joins; the live dot on the TV and host page; a check in the smoke test. |
-| `realtime.send` fails silently (a missing daily partition, an outage) | Polls (60 s phones, 30 s TV and host), reads on rejoin, visibility and online. |
-| Engine latency from Ohio, 0.4 to 0.9 s, plus cold starts | Fine for knockouts and host taps; answers and votes never go through it. |
-| A host-signed TV can read secrets with devtools | A dedicated laptop away from guests; its snapshot carries no host-only data. |
+| Private channels misconfigured: no pings | Tested through `realtime.authorize` in integration; the 5 s poll fallback after 3 failed joins; ping health and the live dot on the TV and host page; smoke test step 16. |
+| `realtime.send` fails silently (a missing daily partition, an outage, a half-open socket after Wi-Fi roaming) | Ping health notices changes no ping announced, turns the dot grey and polls every 5 s; phones poll every 10 s while a prompt or timer is live and read after each deadline; reads on rejoin, visibility and online. |
+| Engine latency from Ohio, 0.4 to 0.9 s, plus cold starts | Fine for knockouts and host taps; answers and votes never go through it. Host actions name their step, so an impatient second tap does nothing. |
+| The TV sits in the room all night | A paired screen with a guest's read access, never a host session: no control room, no secrets, even with devtools. The host page's answers sit behind Show answers. |
+| A recap published mid-party | Only finished rounds reach a game's `recap()`; a running round gets a generic chapter; tested with live tasks and an early-ended quiz. |
+| Fusion images over the venue's one connection | Re-encoded in the browser without metadata, a 2 MB bucket limit, thumbnails on phones. |
+| A timer loop from a buggy `onWake` | One scheduler with a 2 s limit and backoff; the stuck guard clears `wake_at`; the contract checks that wakes move forward. |
 | Two games saving at once deadlock on the same players' profiles (40P01) | Retried like 40001. |
 | Determinism: a hook reading `Date` or `Math.random` | The lint rule and the contract test. |
 | Cheating by player id with devtools | Close joining once everyone is in. |
-| Shared venue Wi-Fi and Auth limits | The party-week settings (section 11), and joins retried with jitter for up to 30 s. |
-| The schedule | The cut list below, decided on Wed 18 Nov. |
+| Shared venue Wi-Fi and Auth limits | The party-week settings (section 11); the sign-in's jittered retries for up to 30 s with a calm busy state; the staggered rejoin; the 40-bot run against production on Sat 21 Nov. |
+| The fresh init works locally but not on the wiped production database | Explicit schema and service_role grants; the extended self-checks; the exact wipe, rehearsed on the local stack on Wed 18 Nov. |
+| The schedule | CORE split three ways; fixtures from day 1; the cut list below, decided on Wed 18 Nov. |
 
 **Cut list**, in this order, if behind on Wed 18 Nov:
 
@@ -2864,35 +3731,41 @@ Reads: 47 `session_snapshot` reads per room ping, about 5 ms each in SQL and
 5. The Move to a new phone UI: re-award points by hand before removing the
    old player.
 6. "Your night" on phones: the TV recap only.
+7. TV pairing: the TV runs the host-signed page in Chrome's kiosk mode (no
+   URL bar), out of the guests' reach, and the Show answers toggle stays.
 
 Never cut: the init SQL, the engine, the quiz, the prompts, the live data
-layer, the final screen and spotlight rule, the party-week Auth settings, the
-live test.
+layer with ping health, the step names on host actions, the final screen and
+spotlight rule, the party-week Auth settings, the live test and the bot run
+against production.
 
 ### 12.3 Sources from the design round
 
-Kept outside the repo, for the build agents. These are temporary paths under
-`<root>` =
-`/private/tmp/claude-501/-Users-nicolailassen-Desktop-personlig-session-game-app/766ecad9-888e-4720-a267-a170dab2027c`:
+In the gitignored `.design/` folder of the main checkout, copied into each
+worktree (10.5). Never commit it, and never copy a path from it into a
+committed file.
 
-- The three designs: `<root>/scratchpad/engine-v2/designs/{evolve,event-first,realtime-native}.md`.
+- The requirements: `.design/engine-v2/requirements.md`.
+- The three designs: `.design/engine-v2/designs/{evolve,event-first,realtime-native}.md`.
 - Tested SQL and checks:
-  `<root>/scratchpad/engine-v2/realtime-native/sql/m1_event_log_and_live.sql`
-  (with `run.sh` and `out/run.out.txt`), `<root>/scratchpad/engine-v2/evolve/sql/`
-  and `<root>/scratchpad/engine-v2/event-first/` (`e1_event_log.sql`,
-  `e2_live_together.sql`, `run.out.txt`).
-- SDK sketches: `<root>/scratchpad/engine-v2/realtime-native/sdk/` (core,
-  engine with `simulate.ts`, client `live.ts` and `gameApi.ts`, games),
-  `<root>/scratchpad/engine-v2/evolve/ts/src/` (runtime, quiz and fusion
-  logic, tests) and `<root>/scratchpad/engine-v2/event-first/sdk/`
-  (`runtime.ts` for jsonb key order).
-- The verified review and plan: `<root>/tasks/wcsaqxcpu.output`
+  `.design/engine-v2/realtime-native/sql/m1_event_log_and_live.sql` (with
+  `run.sh`, `out/run.out.txt` and `prelude.sql`, the stand-ins that 9.4 is
+  about), `.design/engine-v2/evolve/sql/` and `.design/engine-v2/event-first/`
+  (`e1_event_log.sql`, `e2_live_together.sql`, `run.out.txt`).
+- SDK sketches: `.design/engine-v2/realtime-native/sdk/` (core, engine with
+  `simulate.ts`, client `live.ts` and `gameApi.ts`, games),
+  `.design/engine-v2/evolve/ts/src/` (runtime, quiz and fusion logic, tests),
+  `.design/engine-v2/event-first/sdk/` (`runtime.ts` for jsonb key order) and
+  the judges' copy in `.design/engine-v2/judge-sdk/`.
+- The verified review and plan: `.design/engine-v2/review.json`
   (`result.verification`, `result.critique`).
 - Layout references: the private Mobbin collection "Hurra inspiration" (25
-  screens; board at `<root>/scratchpad/brand/mobbin/board/`): the Deezer quiz
-  timer, the Runna spotlight moment, the Transit podium, the Vimeo live studio
-  for the control room, the Luma guest list, the Lapse show-and-scan code
-  screen.
+  screens; board and screens in `.design/brand/mobbin/`): the Runna spotlight
+  moment, the Transit podium, the Vimeo live studio for the control room, the
+  Luma guest list, the Lapse show-and-scan code screen, the Xbox TV code
+  screen for pairing the TV, and the Deezer quiz timer for the idea of time
+  draining (the quiz draws it as a bar). More in `.design/brand/online/` and
+  `.design/brand/audit/`.
 
 ### 12.4 Glossary
 
@@ -2905,6 +3778,43 @@ Kept outside the repo, for the build agents. These are temporary paths under
 - **Claim**: the first log row of a request, unique per user and request id,
   so a resent tap counts once.
 - **Ping**: a tiny Broadcast message meaning "something changed"; screens then
-  read a **snapshot**.
+  read a **snapshot**. **Ping health** is a screen noticing changes that no
+  ping announced.
+- **Shown games**: the games whose public state, points and views the
+  snapshot carries (2.7).
+- **Screen**: a TV paired by the host: an anonymous user with a guest's read
+  access that may send timer syncs.
 - **Members**: the players a game knows about, kept to notice who joined or
   left.
+- **Fixture**: a typed sample snapshot for building a screen before the live
+  data works (5.11).
+
+### 12.5 Revision 2: the critic's findings and where they are fixed
+
+| Finding | Fix |
+| --- | --- |
+| The phase-0 type cycle; no SDK test helpers in phase 0 | CORE-SDK lands every shared type in one commit, `src/lib/types.ts` included; `testing.ts` works in phase 0, the runtime, simulator and contract on Tue 10 Nov (10.1) |
+| CORE as the only critical path | Split into CORE-DB, CORE-SDK and REHEARSE; the phase-0 gate (9.4, 10) |
+| Eight agents in one checkout | One worktree each, with env, design sources and ports (10.5) |
+| Grants and the wipe for the fresh init | Explicit schema and service_role grants, default privileges off, the extended self-checks, the exact wipe rehearsed locally, Realtime public access off (2.1, 2.5, 2.12, 11) |
+| The host-signed TV in the room | Paired screens: `session_screens`, `claim_screen`, `/tv/:joinCode`; Show answers on the host page (0, 2, 3.3, 7.2, 7.3) |
+| A mid-party recap leaking live tasks and keys | `recap()` for finished rounds only; generic running chapters; tests (3.1, 3.5, 5.7) |
+| Raw fusion images | Browser re-encoding, thumbnails, a 2 MB JPEG-only bucket, the select policy (2.11, 5.8) |
+| Lost pings nobody notices | 10 s polls while live, deadline reads, ping health, smoke test step 16 (5.4, 11) |
+| Double taps skipping quiz steps | Host actions name their step; stale ones skip; buttons disabled while pending (3.5, 8.3, 8.4) |
+| Two timer schedulers, no failure rule | One `useWakeSync` with limits and backoff; the stuck guard; the contract check (4.5, 5.10, 3.3) |
+| Missing security tests | The new cases, the `join` contract step, the conformance test, `--no-file-parallelism` (3.4, 9.2) |
+| No 45-client run against production | The owner's 40-bot run on Sat 21 Nov (9.3) |
+| The `me.views` scope | The shown games (2.7) |
+| Recap Update reaching no screen | `touch_recap` sets `published_at` on every publish (2.9, 5.7) |
+| The 429 retry on the wrong call | Retries around the anonymous sign-in, with a calm busy state (5.9) |
+| Unowned cross-package pieces | `AwardPoints({ playerId, sessionId })`; `SecretCard` to GAME-elimination; the phase-0 shadcn components (7.3, 10.2) |
+| Nothing to render for days | `fixtures.ts` and the provider's `fixture` prop (5.11) |
+| Channel reuse and mass rejoins | Ref-counted channels; the staggered `player:` rejoin (5.4) |
+| The rehearsal hard-coding games | Game bots; Node-safe client code; vitest; the secret-key guards; no password in the repo (2.13, 3.6, 9.3) |
+| Pings missing after `game_load` closes; retries across a restart | `game_load` pings the room; `env.round` (2.8, 3.3, 4.3) |
+| Wrong default winners | This round's points with awards; nobody when the top is 0 (3.3, 8) |
+| The quiz looking like Kahoot | Stacked option rows, a draining gold bar, counting circles, one title card (8.3) |
+| Jittered speed points; unclear sound triggers | `prompt: true` pings skip the jitter; sounds from views, once per moment (2.8, 3.5, 5.4) |
+| Small contradictions | The result card stays until the next game; member hooks run as system; `game.start` data aligned; prompt specs are public; the `interrupt` flag (2.14, 3.3, 3.5, 5.5, 7.2) |
+| Sources only under a temp folder | `.design/`, relative paths (12.3) |
