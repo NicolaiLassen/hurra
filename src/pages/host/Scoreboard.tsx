@@ -483,7 +483,9 @@ function FeedBanner({ sessionId, gameTitle }: { sessionId: string; gameTitle: (i
   // Above the corner gutter, centred, as wide as the text needs up to 4xl (5xl on big screens).
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-20 z-20 flex justify-center px-8">
-      <AnimatePresence>
+      {/* popLayout: a banner on its way out leaves the row and fades where it is
+          (pinned by its bottom edge), so the next one rises in the centre. */}
+      <AnimatePresence mode="popLayout" anchorY="bottom">
         {showing && (
           <motion.div
             key={showing.id}

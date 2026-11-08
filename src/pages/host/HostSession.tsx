@@ -15,7 +15,7 @@ import {
   StopIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from '@/lib/toast'
 import Avatar from '@/components/Avatar'
@@ -434,13 +434,18 @@ function GameRow({
 
 /** Start, restart or end: the one thing the host most likely wants to do with a game. */
 function PrimaryGameAction({ game }: { game: SessionGame }) {
-  // In flight: disabled, so a double tap can't deal the game twice.
+  // In flight: disabled, so a double tap can't deal the game twice. The ref also
+  // covers the Restart confirm, whose button stays clickable while it fades out.
   const [pending, setPending] = useState(false)
+  const inFlight = useRef(false)
   async function send(request: (game: SessionGame) => Promise<void>) {
+    if (inFlight.current) return
+    inFlight.current = true
     setPending(true)
     try {
       await request(game)
     } finally {
+      inFlight.current = false
       setPending(false)
     }
   }

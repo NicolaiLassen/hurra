@@ -8,6 +8,9 @@ export type GameEffects = {
   announcements: ({ message: string } & AnnouncementOptions)[]
 }
 
+/** Cuts by code points, which is what Postgres char_length() counts, so an emoji is never split in half. */
+const clip = (text: string, max: number) => Array.from(text).slice(0, max).join('')
+
 /**
  * A context that records effects instead of applying them. The engine saves
  * them with the new state; tests inspect them directly.
@@ -29,7 +32,7 @@ export function createGameContext<Config>(
     awardPoints(playerId, points, reason) {
       assertPlayer(playerId)
       if (!Number.isInteger(points)) throw new Error(`Points must be whole numbers, got ${points}`)
-      effects.points.push({ player_id: playerId, points, reason: reason.slice(0, 200) })
+      effects.points.push({ player_id: playerId, points, reason: clip(reason, 200) })
     },
     updateProfile(playerId, patch) {
       assertPlayer(playerId)
@@ -41,8 +44,8 @@ export function createGameContext<Config>(
     announce(message, { detail, ...options } = {}) {
       options.to?.forEach(assertPlayer)
       effects.announcements.push({
-        message: message.slice(0, 280),
-        ...(detail ? { detail: detail.slice(0, 280) } : {}),
+        message: clip(message, 280),
+        ...(detail ? { detail: clip(detail, 280) } : {}),
         ...options,
       })
     },

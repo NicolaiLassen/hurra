@@ -99,6 +99,10 @@ const TILE_SIZES = [
 ] as const
 
 type TileSize = (typeof TILE_SIZES)[number]['size']
+/** The narrowest a squeezed tile column gets (rem), so a name keeps a few letters. */
+const SQUEEZED_MIN_REM = 6
+/** Below this column width (rem) a squeezed tile drops its avatar to give the name room. */
+const AVATAR_MIN_REM = 8
 
 // Heights match TILE_SIZES, so the fit maths holds.
 const TILE_STYLE: Record<
@@ -129,11 +133,16 @@ function PlayerTiles({
     TILE_SIZES.map((t) => ({ ...t, minWidth: t.minWidth * rem, height: t.height * rem, gap: t.gap * rem })),
   )
   // Even the smallest tiles don't fit: keep the rows that do and spread everyone
-  // over more, narrower columns, so nobody still in drops off the screen. Those
-  // squeezed tiles drop the avatar, so the names keep their room.
+  // over more, narrower columns, so nobody still in drops off the screen. But
+  // never narrower than SQUEEZED_MIN_REM, or the names have no room left: past
+  // that the last tiles are cut, and those are the players who are out (sorted
+  // last). Once a column is too narrow for an avatar beside the name, the avatar
+  // goes, so the name keeps its room.
   const rowsThatFit = Math.max(1, Math.floor((height + fit.option.gap) / (fit.option.height + fit.option.gap)))
-  const columns = fit.fits ? fit.columns : Math.ceil(players.length / rowsThatFit)
-  const squeezed = columns > fit.columns
+  const maxColumns = Math.max(1, Math.floor((width + fit.option.gap) / (SQUEEZED_MIN_REM * rem + fit.option.gap)))
+  const columns = fit.fits ? fit.columns : Math.min(maxColumns, Math.ceil(players.length / rowsThatFit))
+  const columnWidth = (width - (columns - 1) * fit.option.gap) / columns
+  const squeezed = !fit.fits && columnWidth < AVATAR_MIN_REM * rem
   const { outBy, winner, feed } = publicState
   // Players still in first, then those who are out, latest first: each knockout
   // moves one tile (animated) from the end of the first group to the start of the
