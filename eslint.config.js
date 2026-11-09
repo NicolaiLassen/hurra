@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint'
 
 export default defineConfig([
   // .design holds the design round's sources (gitignored, copied into each checkout).
-  globalIgnores(['dist', 'supabase', '.design']),
+  globalIgnores(['dist', 'supabase', '.design', '.claude']),
   {
     files: ['**/*.{ts,tsx,mts}'],
     extends: [

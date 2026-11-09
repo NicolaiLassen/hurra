@@ -32,7 +32,10 @@ describe('buildRecapDoc on a recorded party', () => {
       { title: 'Still running', detail: 'Leading so far: Bo with 3', players: [idOf('Bo')], weight: 'headline' },
     ])
     expect(doc.chapters[1].winners).toEqual([{ id: idOf('Ana'), name: 'Ana' }])
-    expect(doc.chapters[1].highlights[0]).toMatchObject({ title: 'Ana won Beer pong', players: [idOf('Ana')] })
+    // In-person rounds have a recap() hook, so its headline replaces the generic "Ana won Beer pong".
+    expect(doc.chapters[1].highlights).toEqual([
+      { title: 'Top scorer in Beer pong: Ana', detail: '3 points', players: [idOf('Ana')], icon: 'trophy', tone: 'gold', weight: 'headline' },
+    ])
     expect(doc.chapters[2].highlights[0].title).toBe('Ana, Dee and Finn won Lab quiz')
     expect(doc.chapters[3].highlights[0].detail).toBe('Leading so far: Bo with 4')
   })
@@ -68,7 +71,7 @@ describe('buildRecapDoc on a recorded party', () => {
       ['Last one standing', 2],
       ['Lab quiz', 1],
     ])
-    expect(ana.moments.map((m) => m.title)).toEqual(['Ana won Beer pong', 'Ana, Dee and Finn won Lab quiz', 'Your best game: Beer pong'])
+    expect(ana.moments.map((m) => m.title)).toEqual(['Top scorer in Beer pong: Ana', 'Ana, Dee and Finn won Lab quiz', 'Your best game: Beer pong'])
     expect(doc.players[idOf('Bo')].byGame.map((g) => [g.title, g.points])).toEqual([
       ['Beer pong', 4],
       ['Last one standing', 3],

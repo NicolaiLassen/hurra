@@ -2656,6 +2656,24 @@ everything comes through props. Views may use `sessionStorage` (in a
 try/catch) to play a moment's sound only once (3.5). Every button that calls
 `act` or `submit` is disabled while that call is pending.
 
+**Changed during build** (the merge of the game packages): the packages read
+the card contract three ways, so it is fixed here, and the comments in
+`src/games/types.ts` say the same.
+
+- `PlayerCard` and `TvStatus` each draw a **whole card** in place of the
+  generic one: the chrome (the phone's `Card`; on the TV a `section` with
+  `rounded-3xl bg-card/80 p-5 ring-1 ring-foreground/10`), the game's icon and
+  title, and on the phone the Live badge and a header that calls `open` when
+  there is more to see. The phone's Also running list and the TV's rail stack
+  them as they are: no wrapper and no second title. The generic cards look the
+  same.
+- `PlayerView` and `ResultView` draw their content only (7.1).
+- A refused `act` or `submit` on a phone is the **view's** toast: the view
+  catches the rejection and shows its message. The phone's wrappers reject
+  with the message, show no toast of their own, and call `refresh()` after a
+  success. On the host page it is the other way round (7.3): HOST's wrapper
+  shows the toast, and the views catch the rejection and stay quiet.
+
 ## 7. Screens and behaviour
 
 ### 7.1 Phone (`/play/:joinCode`)
@@ -2681,7 +2699,9 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
    - `over`: "That's a wrap!", plus "Your night" once a recap is published.
 3. **Also running**: one compact card per other live game: the module's
    `PlayerCard`, or the generic card (title, "Live", Open). Open shows the full
-   `PlayerView` in a full-screen sheet with a close button.
+   `PlayerView` in a full-screen sheet with a close button. **Changed during
+   build:** a module's `PlayerCard` is the whole card (6), so the phone stacks
+   it without a wrapper.
 4. **Finished lately**: a slim row per other recently finished game ("Mads
    won Last one standing"); tap shows its `ResultView` in the sheet.
 5. **Your night** (when a recap is published): the player's rank, points by
@@ -2704,6 +2724,9 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
   a toast with the database's words.
 - **Moves**: `act()` calls `callGame`. A `replayed` answer is treated as
   success. A `GameCallError` is a toast with its message.
+- **Changed during build:** the game view shows both toasts (6). The phone's
+  `act` and `submit` reject with the message, show no toast themselves, and
+  call `refresh()` after a success.
 
 **Join** (`/join/:joinCode`): as today, but through `sessionByCode` and
 `joinSession`, with the calm busy state while the sign-in waits out a 429.
@@ -2770,7 +2793,9 @@ even with devtools: it reads exactly what a guest reads.
   module's `TvStatus` for each background game (or the generic card), then
   "Finished" chips for `recentlyFinished()`. When the main area shows the
   standings, the status cards and chips sit in a strip under the header
-  instead, and the rail is gone.
+  instead, and the rail is gone. **Changed during build:** a module's
+  `TvStatus` is the whole card (6), so the rail and the strip stack it as it
+  is.
 - **Banner** (bottom, as today: 8 s, one sound): announcements from the stage
   game, or from any game while the standings show. A stage game with
   `stageBanners: 'sound-only'` plays only the sound. Announcements from
@@ -2893,7 +2918,10 @@ game if live, else the newest live game. New: Move to a new phone.
     reorders keys); **changed during build:** done in the core's port, since
     the contract test over every registered game failed without it;
   - `handleAction` refuses a target who left the party ("{name} left the
-    party");
+    party"); **changed during build:** it reads "That player left the party",
+    because the engine keeps no name for a player who left. The phone's
+    knockout flow checks the scanned player first and names them ("Bo is
+    already out", "Bo joined after this round started");
   - `onPlayerLeave`: drops the leaver's task; if exactly one player is left
     standing, announces "{name} is the last one standing!" (crown, fanfare,
     `interrupt`) and the personal one;
@@ -2907,7 +2935,11 @@ game if live, else the newest live game. New: Move to a new phone.
     standing" (headline); "Top hunter: {name}" with N knockouts; "First out:
     {name}" with how many minutes in and by whom; "Deadliest task" when one
     task knocked out more than one player. Spent tasks only: they were public
-    once used.
+    once used. **Changed during build:** a round the host ended adds "N
+    still standing when it ended" with their names, since it has no headline;
+  - **changed during build:** a removal that crowns the winner also adds
+    `wins + 1` to their profile, like the deciding knockout; End with nobody
+    standing says "Nobody is left standing";
 - **Scoring**: unchanged (points per tag and per catch).
 - **Views**:
   - `PlayerView`: as today, minus its own "Now playing" header.
@@ -2921,6 +2953,8 @@ game if live, else the newest live game. New: Move to a new phone.
     got you with 'hum a tune'. Ana won.", or "Ana won" for spectators.
   - `HostView`: as today, using `standing` and `winnerOf`.
   - `TvView`: as today; with `finished`, the winner header and "Final result".
+    No `FinalTvView`: the TV's default (`TvView` with `finished`) is the final
+    screen.
   - `TvStatus` (new): a slim `SurvivorMeter` ("17 of 45 still standing"), the
     top hunter, the latest knockout.
   - `ConfigEditor`: points capped at 100, the task limits.
@@ -2939,6 +2973,13 @@ game if live, else the newest live game. New: Move to a new phone.
   "Ana won beer pong" shows after End, and nobody when no points were given.
   New `recap` (finished rounds only): "Top scorer in {title}: {name}" from
   `round.points`.
+- **Changed during build:** `presentation` is set to `'stage'` explicitly, and
+  `parseConfig` always returns `{}`, so a stray `game_settings` row never
+  becomes frozen config. The recap's headline carries "7 points" as its
+  detail; ties read "Top scorers in Beer pong: Ana and Cy" with "4 points
+  each"; nothing when nobody scored. End makes no announcement: `GameInfo` has
+  no awards, so `onEnd` can't name the winner; the TV's generic final screen
+  and the phones' result card show who won.
 - **Views**: `PlayerView` without its own header ("Played in person. When you
   score, show your code to the host."); `PlayerCard`: the same in one line;
   `HostView`: unchanged (Scan a player); `TvStatus` (new): "Played in person,
@@ -3019,7 +3060,12 @@ questions; the host crowns the winner.
   `game_load` has closed the prompt) and `revealedAt + REVEAL_HOLD_MS` in
   reveal; else null. `onWake`: question goes to the reveal (same scoring);
   reveal goes to the leaderboard. So the host only taps Next, and Crown at the
-  end.
+  end. **Changed during build:** in question, `wakeAt` is `endsAt + GRACE_MS +
+  WAKE_MARGIN_MS` (250 ms). `game_load` closes due prompts with one clock
+  reading and reports `now` from a later one, so a sync landing exactly on the
+  deadline could count as due while the prompt is still open. If `onWake`
+  ever finds the answers missing, it closes the prompt and leaves the state
+  unchanged, so Reveal now still works; it never scores an empty answer list.
 - **Scoring** at the reveal, from each answer's `ms` (database clock):
   right: `round(1000 * (1 - min(1, ms / (seconds * 1000)) / 2))`, so 500 to
   1,000 quiz points; wrong or none: 0. `right[player] += 1` for a right
@@ -3027,7 +3073,11 @@ questions; the host crowns the winner.
   `winners`: the top `quizPoints` (all tied ones), and nobody when the top is
   0 (a quiz ended before anyone scored).
 - **isFinished**: phase `done`. `onEnd('host')`: "The quiz is over" with the
-  leader (trophy). `onEnd('game')`: quiet.
+  leader (trophy). `onEnd('game')`: quiet. **Changed during build:**
+  `onEnd('host')` crowns like Crown the winner: "The quiz is over" with
+  "{names} won with N quiz points" (trophy, fanfare, `interrupt`), "You won
+  the quiz!" to the winners and the Quiz champion badge; an open question
+  stays unscored. With no scorer: "Nobody scored this time" (gong).
 - **publicState** (never the right answer before its reveal):
 
   ```ts
@@ -3043,6 +3093,14 @@ questions; the host crowns the winner.
 
 - **playerView**: `{ quizPoints, rank, right, last: { index, choice, correct, points } | null }`.
   The player's own pick during a question comes from `myAnswers`.
+- **Changed during build:** in the public state, `question` is null in the
+  lobby and once done, and `reveal` is filled during the reveal and the
+  leaderboard after it; `leaderboard` holds players still in the party with
+  points, ties broken by join order and sharing a rank. In the player view,
+  `rank` is null until the player scores and `last.correct` is the index of
+  the right option. Each reveal writes a `revealed` log record (`index`,
+  `key`, `answered`, `right`, `fastest`), which the recap uses for its
+  fastest answer and hardest question.
 - **recap** (finished rounds only, [] otherwise; asked and revealed questions
   only, never one the host didn't get to, which a later quiz round may still
   use): "{name} won the quiz" (headline, quiz points); "Fastest right answer:
@@ -3127,7 +3185,12 @@ prints one by one on the TV. A point per right person.
   `image` an optional game-media path; `people`, when given, two different
   players; `pointsPerPerson` a whole number from 0 to 10. People can be set
   here before the start (needs those guests to have joined) or later with
-  `setKey`.
+  `setKey`. **Changed during build:** `bonusForBoth` (a whole number from 0
+  to 10, default 0) adds points for getting both people of a picture right,
+  so `defaultConfig` is `{ pictures: [], pointsPerPerson: 1, bonusForBoth: 0 }`;
+  with the default, scoring is exactly a point per right person.
+  `parseConfig` treats a blank label as `#n`, refuses a pair with one person,
+  and takes only plain `.jpg` game-media paths.
 - **State**:
 
   ```ts
@@ -3141,6 +3204,8 @@ prints one by one on the TV. A point per right person.
   }
   ```
 
+  **Changed during build:** `names` (player id to name) keeps the names of the
+  people in the key, so a reveal still names someone who has left.
 - **Setup**: checks that everyone in a preset key is in the party; opens
   `p1` to `pN`, each `{ kind: 'choice', options: 'players', min: 2, max: 2,
   exclude_self: true }` with no deadline and changeable votes; announces "Who
@@ -3181,6 +3246,11 @@ prints one by one on the TV. A point per right person.
   }
   ```
 
+- **Changed during build:** a revealed picture also carries `names: [string,
+  string]`, and `scoring: { perPerson, bothBonus }` lets phones show "+N"; both
+  are optional in the type. The host view and the bot send each reveal with
+  `close: ['p' + n]`. Lock, and Crown while pictures are unrevealed, ask for a
+  confirm.
 - **playerView**: `{ points, hits: Record<string, number> }` (own guesses come
   from `myAnswers`).
 - **recap** (finished rounds only, [] otherwise; revealed pictures only, so a
@@ -3208,6 +3278,8 @@ prints one by one on the TV. A point per right person.
   number) for 2 s, then the two avatars and names spring in with confetti and
   the counts. `TvStatus` (background): "Who is fused? 12 pictures, 214 votes"
   (the sum of `tallies`). `FinalTvView`: the top 3 face detectives.
+  **Changed during build:** under the game's title the rail card reads "Vote
+  on your phone" with "12 pictures, 214 votes", then the reveal's progress.
 - **Host** (`HostView`): per picture: label, thumbnail, "Who is it?" with two
   player selects (sends `setKey`), the vote count, and Reveal (after the lock).
   Buttons, each disabled while its `act` is pending: Lock voting (before),
@@ -3938,3 +4010,58 @@ and `npm run test:integration` (60 tests in 4 files) pass.
 Not in this package: REHEARSE (`scripts/rehearse.ts` and its `npm run
 rehearse` script), DATA, the game packages (the quiz and fusion modules and
 all four bots are placeholders), and the PHONE, TV and HOST screens.
+
+### 12.7 Build notes: DATA and the four games, Monday 9 November
+
+The main engineer merged DATA, GAME-elimination, GAME-inperson, GAME-quiz and
+GAME-fusion into main, in that order. Ownership is disjoint, so nothing
+conflicted. What the merge changed or settled, each also marked "Changed
+during build" in place:
+
+- **The card contract** (6, 7.1, 7.2): `PlayerCard` and `TvStatus` are whole
+  cards, drawn in place of the generic ones. In-person's and fusion's were
+  brought in line with elimination's and the quiz's, and fusion's rail card
+  says "Vote on your phone" under its title. Refusal toasts belong to the game
+  view on phones and to HOST's wrapper on the host page.
+- **The games' own changes**: elimination (8.1), in-person (8.2), the quiz's
+  wake margin, End and shapes (8.3), fusion's `bonusForBoth`, `names` and
+  `scoring` (8.4).
+- **A test over the fixtures**: `src/games/views.test.ts` renders every
+  registered game's views against every fixture scene (5.11), on the phone,
+  the TV and the host page, lazy views included, and each settings editor with
+  its defaults. The screens build against those fixtures, so a view that can't
+  read them fails here first.
+- **The recap test** expects in-person's own headline ("Top scorer in Beer
+  pong: Ana") where the hook-less v1 logic gave the generic "Ana won Beer
+  pong": a game's hook replaces the generic line (5.7). The recorded raw recap
+  stays as DATA recorded it.
+- **The phase-0 shadcn components** `dialog`, `sheet`, `radio-group` and
+  `progress` are in `src/components/ui` now (10.1), as the shadcn CLI writes
+  them for this project's style; `button.tsx` keeps its own sizes. The stock
+  sheet sets `data-[side=bottom]:h-auto`, so a taller bottom sheet needs the
+  same variant (for example `data-[side=bottom]:h-[90dvh]`).
+- **Lint ignores `.claude`, git ignores `.claude/worktrees/`**: the build
+  worktrees live inside the main checkout, and ESLint 10 linted each one with
+  its own config, which failed every file.
+- **DATA's v1 bridges stay until PHONE, TV and HOST merge**, then go: the
+  deprecated `callGame` in `gameApi.ts`; `getSessionByCode`, `getOwnPlayer`,
+  `sessionExists` and the `V1<...>` types in `queries.ts`; the watches overload
+  of `useLiveQuery`. Until then the v1 pages compile, but throw "needs a
+  <LiveSessionProvider>" at runtime (5.6).
+- **DATA's settled details** (5): `setSpotlight(id, gameId)` also sets
+  `tv_scene: 'live'`, so Show on the TV leaves the recap; `issuePlayerTransfer`
+  and `issueScreenCode` return `expiresAt` by the device clock; every
+  `queries.ts` error is a `GameCallError` (`code` is the DETAIL for `PT4xx`,
+  else the SQLSTATE); the server clock comes from the read with the shortest
+  round trip of the last 8; phones leave games' `archived_at` out of the ping
+  health fingerprint; the TV mounts `useWakeSync({ delayMs: 250 })` and the
+  host page `useWakeSync({ delayMs: 1500 })`.
+- **For HOST**: wire `media.upload` to `uploadGameMedia` (the v1 host page
+  still refuses uploads, so fusion's settings can't take images); lazy-load
+  the routes (the main chunk is 549 kB, `motion` already stays in the TV's lazy
+  chunks); with two in-person rounds live, AwardPoints' "For game" needs the
+  right game picked by hand, which a game id carried from a HostView's Scan a
+  player would fix.
+
+Results on the local stack: `npm run check` (591 unit tests in 28 files) and
+`npm run test:integration` (65 tests in 5 files) pass.

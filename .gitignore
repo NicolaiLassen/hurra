@@ -13,3 +13,6 @@ sound-takes
 
 # Design-round sources for the build agents (local only, never committed)
 .design
+
+# The build worktrees live inside the main checkout (local only, never committed)
+.claude/worktrees/

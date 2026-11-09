@@ -37,9 +37,15 @@ export type PlayerViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & 
   myAnswers: Readonly<Record<string, AnswerPayload>>
   /** Whether this game is on the TV. */
   onStage: boolean
-  /** Sends a move to the engine; rejects with the game's message. */
+  /**
+   * Sends a move to the engine; rejects with the game's message. The view
+   * shows a refusal as a toast: the phone's wrapper doesn't.
+   */
   act: (action: Parts<G>['action']) => Promise<void>
-  /** Answers a prompt straight to the database; rejects with the reason ("Too late, answers are closed"). */
+  /**
+   * Answers a prompt straight to the database; rejects with the reason ("Too
+   * late, answers are closed"), which the view shows as a toast.
+   */
   submit: (key: string, answer: AnswerPayload) => Promise<SubmitResult>
   /** For games with acceptsScans: a player code scanned with the camera app. Call onScanHandled once used. */
   scannedCode?: string
@@ -119,7 +125,12 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   icon?: Icon
   /** The full game on a phone. Draws its content only: the phone draws the card and its header. */
   PlayerView: ComponentType<PlayerViewProps<G>>
-  /** The compact card while another game holds the main card. Default: title, Live and Open. */
+  /**
+   * The compact card while another game holds the main card. Default: title,
+   * Live and Open. A whole card, drawn in place of the default: its chrome
+   * (`Card`), icon, title and Live badge, and a header that calls `open` when
+   * there is more to see. The phone stacks it as it is.
+   */
   PlayerCard?: ComponentType<PlayerCardProps<G>>
   /** The phone's result card once finished. Default: "Mads won X" and my points. */
   ResultView?: ComponentType<ResultViewProps<G>>
@@ -129,7 +140,11 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   TvView?: ComponentType<TvViewProps<G>>
   /** The TV's final screen (lazily). Default: TvView with finished, else a generic winners screen. */
   FinalTvView?: ComponentType<TvViewProps<G>>
-  /** The TV rail card while in the background. Default: title, live time, this game's leader. */
+  /**
+   * The TV rail card while in the background. Default: title, live time, this
+   * game's leader. A whole card, drawn in place of the default: its chrome, icon
+   * and title. The TV stacks it as it is, in the rail or the strip.
+   */
   TvStatus?: ComponentType<TvStatusProps<G>>
   /** The settings editor; saves to game_settings (hosts only). */
   ConfigEditor?: ComponentType<ConfigEditorProps<G>>

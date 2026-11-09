@@ -8,7 +8,8 @@ import type { TvStatusProps } from '@/games/types'
 /**
  * The round's card in the TV rail while another game holds the stage: its
  * title, how long it has run, "Played in person" and who leads this round
- * ("Ana leads with 7"), from this game's own points.
+ * ("Ana leads with 7"), from this game's own points. A whole card, title
+ * included, like the other games' rail cards.
  */
 export default function TvStatus({ game, players, gamePoints, serverNow }: TvStatusProps<InPersonGame>) {
   const now = useNow(serverNow, 30_000)
@@ -20,19 +21,19 @@ export default function TvStatus({ game, players, gamePoints, serverNow }: TvSta
   return (
     // min-w-0 and grid-cols-1: as wide as the rail gives it, so a long title or
     // name truncates instead of widening the card.
-    <div className="grid min-w-0 grid-cols-1 gap-1.5">
-      <div className="flex items-center gap-2.5">
+    <section className="grid min-w-0 grid-cols-1 gap-3 rounded-3xl bg-card/80 p-5 ring-1 ring-foreground/10 backdrop-blur short:gap-2 short:p-4">
+      <header className="flex min-w-0 items-center gap-2.5">
         <UsersThreeIcon weight="duotone" className="size-7 shrink-0 text-confetti-teal short:size-6" />
-        <p className="min-w-0 flex-1 truncate text-2xl font-bold short:text-xl">{game.title}</p>
+        <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>
         {game.started_at !== null && (
           <span className="shrink-0 text-lg text-muted-foreground tabular-nums short:text-base">
             {runningFor(now - game.started_at)}
           </span>
         )}
-      </div>
+      </header>
       <p className="text-lg text-muted-foreground short:text-base">Played in person</p>
       {leaders ? (
-        <div className="mt-1 flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <Faces names={names} size="lg" />
           <p className="flex min-w-0 items-baseline gap-1.5 text-xl short:text-lg">
             <span className="truncate font-semibold">{who}</span>
@@ -41,9 +42,9 @@ export default function TvStatus({ game, players, gamePoints, serverNow }: TvSta
           </p>
         </div>
       ) : (
-        <p className="mt-1 text-xl text-muted-foreground short:text-lg">No points yet</p>
+        <p className="text-xl text-muted-foreground short:text-lg">No points yet</p>
       )}
-    </div>
+    </section>
   )
 }
 
