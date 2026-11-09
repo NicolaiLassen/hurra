@@ -1,9 +1,14 @@
-import { ArrowCounterClockwiseIcon, ArrowLeftIcon, ScanIcon } from '@phosphor-icons/react'
+import { ArrowCounterClockwiseIcon, ArrowLeftIcon, ArrowsLeftRightIcon, ScanIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
-import { Link } from 'react-router'
-import { toast } from '@/lib/toast'
+import { Link, useSearchParams } from 'react-router'
 import Avatar from '@/components/Avatar'
-import { Screen } from '@/components/layout'
+import { errorMessage } from '@/components/host/hostCalls'
+import MovePlayerDialog, { type MovingPlayer } from '@/components/host/MovePlayerDialog'
+import { defaultAwardGame } from '@/components/host/scene'
+import { useDialogTarget } from '@/components/host/useDialogTarget'
+import { Notice, Screen } from '@/components/layout'
+import ProfileBadges from '@/components/ProfileBadges'
+import QueryGate from '@/components/QueryGate'
 import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,56 +16,118 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatPoints } from '@/lib/format'
-import { usePlayerEvents, usePlayerPoints, useSessionGames } from '@/lib/queries'
-import { supabase } from '@/lib/supabase'
-import type { Player, Session } from '@/lib/types'
+import { awardPoints, undoPoints, usePlayerEvents } from '@/lib/queries'
+import { toast } from '@/lib/toast'
+import type { Player, Session, Snapshot } from '@/lib/types'
+import { LiveSessionProvider, useLive } from '@/lib/useLive'
+import { SessionNotFound, WayBack } from '@/pages/NotFound'
 
 const QUICK_POINTS = [1, 2, 3, 5, 10]
 const NO_GAME = 'none'
 
-export default function AwardPoints({
-  player,
-  session,
-}: {
-  player: Pick<Player, 'id' | 'name' | 'code'>
-  session: Pick<Session, 'id' | 'name'>
-}) {
-  const { data: points } = usePlayerPoints(player.id)
-  const { data: games } = useSessionGames(session.id)
-  const { data: events } = usePlayerEvents(player.id)
-  // Points go to the live game unless the host picks another one.
+type AwardPointsProps =
+  | { playerId: string; sessionId: string }
+  /**
+   * @deprecated The v1 props, kept only while src/pages/PlayerCard.tsx still
+   * passes them (docs/engine-v2.md, 10.1); the spec's props are { playerId, sessionId }.
+   */
+  | { player: Pick<Player, 'id'>; session: Pick<Session, 'id'> }
+
+/**
+ * The award page (docs/engine-v2.md, 7.3): give or take points from one guest,
+ * with their history and Undo, and Move to a new phone. It mounts its own live
+ * session on the host's screen, so it works wherever the player QR page (/p/:code)
+ * renders it. `?game=<id>` (from a game's Scan a player) picks the game the
+ * points go to.
+ */
+export default function AwardPoints(props: AwardPointsProps) {
+  const playerId = 'playerId' in props ? props.playerId : props.player.id
+  const sessionId = 'sessionId' in props ? props.sessionId : props.session.id
+  return (
+    <LiveSessionProvider sessionId={sessionId} screen="host">
+      <AwardGate playerId={playerId} />
+    </LiveSessionProvider>
+  )
+}
+
+function AwardGate({ playerId }: { playerId: string }) {
+  const { query } = useLive()
+  return (
+    <QueryGate query={query} notFound={<SessionNotFound />}>
+      {(snapshot) => {
+        const player = snapshot.session ? snapshot.players.find((p) => p.id === playerId) : undefined
+        return player ? <AwardPage snapshot={snapshot} player={player} /> : <PlayerGone />
+      }}
+    </QueryGate>
+  )
+}
+
+/** The player left the party (or was removed) while this page was open. */
+function PlayerGone() {
+  return (
+    <Notice
+      title="Unknown player"
+      actions={
+        <>
+          <Button asChild size="xl">
+            <Link to="/host/scan">
+              <ScanIcon />
+              Scan again
+            </Link>
+          </Button>
+          <WayBack back="host" variant="secondary" />
+        </>
+      }
+    >
+      This player isn't in the party anymore. They may have been removed.
+    </Notice>
+  )
+}
+
+function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player }) {
+  const session = snapshot.session!
+  const { refresh } = useLive()
+  const [params] = useSearchParams()
+  const points = snapshot.standings.find((row) => row.player_id === player.id)?.points ?? 0
+  const games = snapshot.games.filter((g) => g.archived_at === null)
+  const { data: events } = usePlayerEvents(player.id, snapshot.now)
+  // Points go to the game the host came from, the stage game or the newest live game, unless the host picks another.
   const [pickedGameId, setPickedGameId] = useState<string>()
-  const gameId = pickedGameId ?? games?.find((g) => g.status === 'active')?.id ?? NO_GAME
+  // A picked game that was archived or deleted meanwhile falls back to the default.
+  const picked = pickedGameId === NO_GAME || games.some((g) => g.id === pickedGameId) ? pickedGameId : undefined
+  const gameId = picked ?? defaultAwardGame(snapshot, params.get('game')) ?? NO_GAME
   const [reason, setReason] = useState('')
   const [custom, setCustom] = useState('')
   const [busy, setBusy] = useState(false)
+  const moving = useDialogTarget<MovingPlayer>()
+  const scanNext = gameId === NO_GAME ? '/host/scan' : `/host/scan?game=${gameId}`
 
   async function award(amount: number) {
-    if (!Number.isInteger(amount) || amount === 0) return
+    if (!Number.isInteger(amount) || amount === 0 || busy) return
     setBusy(true)
-    const { error } = await supabase.from('score_events').insert({
-      session_id: session.id,
-      player_id: player.id,
-      game_id: gameId === NO_GAME ? null : gameId,
-      points: amount,
-      reason: reason.trim() || null,
-    })
-    setBusy(false)
-    if (error) {
-      toast.error(error.message)
-      return
+    try {
+      await awardPoints({ sessionId: session.id, playerId: player.id, gameId: gameId === NO_GAME ? null : gameId, points: amount, reason })
+      toast.success(`${formatPoints(amount)} to ${player.name}`)
+      setCustom('')
+      refresh()
+    } catch (error) {
+      toast.error(errorMessage(error))
+    } finally {
+      setBusy(false)
     }
-    toast.success(`${formatPoints(amount)} to ${player.name}`)
-    setCustom('')
   }
 
   async function undo(eventId: number) {
-    const { error } = await supabase.from('score_events').delete().eq('id', eventId)
-    if (error) toast.error(error.message)
-    else toast('Undone')
+    try {
+      await undoPoints(eventId)
+      toast('Undone')
+      refresh()
+    } catch (error) {
+      toast.error(errorMessage(error))
+    }
   }
 
-  const gameTitle = (id: string | null) => games?.find((g) => g.id === id)?.title
+  const gameTitle = (id: string | null) => snapshot.games.find((g) => g.id === id)?.title
 
   return (
     <Screen>
@@ -72,7 +139,7 @@ export default function AwardPoints({
           </Link>
         </Button>
         <Button asChild variant="ghost" size="lg" className="-mr-3 text-primary">
-          <Link to="/host/scan">
+          <Link to={scanNext}>
             <ScanIcon />
             Scan next
           </Link>
@@ -84,8 +151,9 @@ export default function AwardPoints({
         <div className="min-w-0 flex-1">
           <p className="font-mono text-sm text-muted-foreground">{player.code}</p>
           <h1 className="truncate text-3xl font-bold">{player.name}</h1>
+          <ProfileBadges profile={player.profile} className="mt-1" />
         </div>
-        <p className="text-4xl font-black text-primary tabular-nums">{points ?? 0}</p>
+        <p className="text-4xl font-black text-primary tabular-nums">{points}</p>
       </header>
 
       <Card className="mt-6">
@@ -98,7 +166,7 @@ export default function AwardPoints({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_GAME}>No specific game</SelectItem>
-                {games?.map((g) => (
+                {games.map((g) => (
                   <SelectItem key={g.id} value={g.id}>
                     {g.title}
                     {g.status === 'active' && <StatusBadge status="active" />}
@@ -109,13 +177,7 @@ export default function AwardPoints({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="reason">Reason (optional)</Label>
-            <Input
-              id="reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Won the round"
-              maxLength={200}
-            />
+            <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Won the round" maxLength={200} />
           </div>
           <div className="grid grid-cols-5 gap-2">
             {QUICK_POINTS.map((n) => (
@@ -157,7 +219,7 @@ export default function AwardPoints({
                 {formatPoints(ev.points)}
               </span>
               <span className="flex-1 truncate text-sm text-muted-foreground">
-                {[gameTitle(ev.game_id), ev.reason].filter(Boolean).join(' · ') || 'No reason given'}
+                {[gameTitle(ev.game_id), ev.reason].filter(Boolean).join(' · ') || (ev.awarded_by ? 'No reason given' : 'A game bonus')}
               </span>
               <Button variant="ghost" className="text-muted-foreground" onClick={() => void undo(ev.id)}>
                 <ArrowCounterClockwiseIcon />
@@ -167,6 +229,19 @@ export default function AwardPoints({
           ))}
         </ul>
       </section>
+
+      <section className="mt-8 border-t pt-6">
+        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">New phone?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          If {player.name} lost their phone or changed browser, move their player to the new one. Their points stay.
+        </p>
+        <Button variant="secondary" size="lg" className="mt-3" onClick={() => moving.show({ id: player.id, name: player.name })}>
+          <ArrowsLeftRightIcon />
+          Move to a new phone
+        </Button>
+      </section>
+
+      <MovePlayerDialog player={moving.target} open={moving.open} onOpenChange={moving.onOpenChange} joinCode={session.join_code} />
     </Screen>
   )
 }

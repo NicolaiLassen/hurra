@@ -1,7 +1,8 @@
-import { ArchiveIcon, ArrowCounterClockwiseIcon, DotsThreeIcon, TrashIcon } from '@phosphor-icons/react'
+import { ArchiveIcon, ArrowCounterClockwiseIcon, DotsThreeIcon, PencilSimpleIcon, TrashIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
-import { toast } from '@/lib/toast'
 import ConfirmByTyping from '@/components/ConfirmByTyping'
+import { errorMessage } from '@/components/host/hostCalls'
+import RenameDialog from '@/components/host/RenameDialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -10,58 +11,71 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { supabase } from '@/lib/supabase'
-import type { Session } from '@/lib/types'
+import { archiveSession, deleteSession, renameSession, setJoining } from '@/lib/queries'
+import { toast } from '@/lib/toast'
 
-/** Archive, unarchive or delete a whole session (party). */
+/** What the menu needs of a party: the live snapshot's session or a row of the host's list. */
+export type MenuSession = { id: string; name: string; status: 'open' | 'closed'; archived_at: number | string | null }
+
+/** A change the menu made, so a list can show it before its next read. */
+export type SessionChange = { name?: string; status?: 'open' | 'closed'; archived?: boolean; deleted?: true }
+
+/** Rename, archive, unarchive or delete a whole session (party). */
 export default function SessionMenu({
   session,
   size = 'icon',
   variant = 'ghost',
-  onDeleted,
+  onChanged,
 }: {
-  session: Session
+  session: MenuSession
   size?: 'icon' | 'icon-lg'
   /** 'secondary' when it sits next to other filled buttons. */
   variant?: 'ghost' | 'secondary'
-  onDeleted?: () => void
+  onChanged?: (change: SessionChange) => void
 }) {
+  const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const archived = session.archived_at !== null
 
   async function archive() {
-    const previousStatus = session.status
-    // The party is over: nobody new should be able to join it.
-    const { error } = await supabase
-      .from('sessions')
-      .update({ archived_at: new Date().toISOString(), status: 'closed' })
-      .eq('id', session.id)
-    if (error) return toast.error(error.message)
+    const reopen = session.status === 'open'
+    try {
+      // The party is over: archiving also closes joining.
+      await archiveSession(session.id, true)
+    } catch (error) {
+      return toast.error(errorMessage(error))
+    }
+    onChanged?.({ archived: true, status: 'closed' })
     toast(`Archived ${session.name}`, {
       description: 'Joining is closed and everything is kept.',
-      action: { label: 'Undo', onClick: () => void unarchive(previousStatus) },
+      action: { label: 'Undo', onClick: () => void unarchive(reopen) },
     })
   }
 
-  async function unarchive(status?: Session['status']) {
-    const { error } = await supabase
-      .from('sessions')
-      .update({ archived_at: null, ...(status ? { status } : {}) })
-      .eq('id', session.id)
-    if (error) return toast.error(error.message)
+  async function unarchive(reopen = false) {
+    try {
+      await archiveSession(session.id, false)
+      if (reopen) await setJoining(session.id, true)
+    } catch (error) {
+      return toast.error(errorMessage(error))
+    }
+    onChanged?.({ archived: false, ...(reopen ? { status: 'open' as const } : {}) })
     toast(`${session.name} is back in your sessions`)
   }
 
   async function remove() {
-    const { error } = await supabase.from('sessions').delete().eq('id', session.id)
-    if (error) return toast.error(error.message)
+    try {
+      await deleteSession(session.id)
+    } catch (error) {
+      return toast.error(errorMessage(error))
+    }
     toast(`Deleted ${session.name}`)
-    onDeleted?.()
+    onChanged?.({ deleted: true })
   }
 
   return (
     <>
-      {/* Not modal, so the delete dialog it opens doesn't fight it for focus. */}
+      {/* Not modal, so the dialogs it opens don't fight it for focus. */}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant={variant} size={size} aria-label={`More actions for ${session.name}`}>
@@ -69,6 +83,10 @@ export default function SessionMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+            <PencilSimpleIcon />
+            Rename…
+          </DropdownMenuItem>
           {archived ? (
             <DropdownMenuItem onSelect={() => void unarchive()}>
               <ArrowCounterClockwiseIcon />
@@ -88,6 +106,19 @@ export default function SessionMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <RenameDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        title="Rename the session"
+        description="Every phone and the TV show the new name."
+        initial={session.name}
+        maxLength={80}
+        onSave={async (name) => {
+          await renameSession(session.id, name)
+          onChanged?.({ name })
+        }}
+      />
+
       <ConfirmByTyping
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -97,8 +128,8 @@ export default function SessionMenu({
         onConfirm={() => void remove()}
       >
         <p>
-          This permanently deletes the session with all its players, games, points and announcements. Guests' phones
-          won't find it anymore.
+          This permanently deletes the session with all its players, games, points, announcements and the story of the
+          night. Guests' phones won't find it anymore.
         </p>
         <p>To put it away and keep everything, archive it instead.</p>
       </ConfirmByTyping>
