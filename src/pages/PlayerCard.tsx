@@ -1,25 +1,37 @@
 import { ScanIcon } from '@phosphor-icons/react'
-import { useCallback } from 'react'
+import { useCallback, type ComponentType } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { ErrorNotice, Loading, Notice } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { currentUser, isHost } from '@/lib/auth'
-import { getOwnPlayer, getPlayerByCode } from '@/lib/queries'
+import { getPlayerByCode, loadMembership } from '@/lib/queries'
 import { lastJoinCode } from '@/lib/storage'
 import { useLiveQuery } from '@/lib/useLiveQuery'
 import AwardPoints from '@/pages/host/AwardPoints'
 import { WayBack } from '@/pages/NotFound'
 
-// Target of every player QR code. The host gets the scoring screen. A player
-// of the same party goes into their game with the code (games that take codes
-// use it, e.g. to knock that player out); anyone else sees whose code it is.
+/**
+ * HOST's award page (docs/engine-v2.md, 7.3 and 10.3): `AwardPoints({ playerId,
+ * sessionId })` mounts its own live session. Typed here by that contract, so
+ * this page keeps compiling against the award page before and after HOST's
+ * version lands; the cast can go once it has.
+ */
+const HostAwardPoints = AwardPoints as unknown as ComponentType<{ playerId: string; sessionId: string }>
+
+// Target of every player QR code (docs/engine-v2.md, 7.1). The host gets the
+// scoring screen. A player of the same party goes into their game with the
+// code (games that take codes use it, e.g. to knock that player out); anyone
+// else sees whose code it is.
 export default function PlayerCard() {
   const code = (useParams().playerCode ?? '').toUpperCase()
   const load = useCallback(async () => {
     const user = await currentUser()
     if (!user) return { userId: null, host: false, player: null, inSameParty: false }
     const [host, player] = await Promise.all([isHost(), getPlayerByCode(code)])
-    const inSameParty = !host && player !== null && (await getOwnPlayer(player.session_id, user.id)) !== null
+    // Guests read players of their own parties only, so a found code is from a
+    // party this browser is in: as a player, or as a paired TV.
+    const inSameParty =
+      !host && player !== null && player.user_id !== user.id && (await loadMembership(player.session.join_code))?.player != null
     return { userId: user.id, host, player, inSameParty }
   }, [code])
   const { data, error, retry } = useLiveQuery(load)
@@ -51,7 +63,7 @@ export default function PlayerCard() {
   }
   if (host) {
     return player ? (
-      <AwardPoints player={player} session={player.session} />
+      <HostAwardPoints playerId={player.id} sessionId={player.session_id} />
     ) : (
       <Notice
         title="Unknown player"
@@ -72,7 +84,7 @@ export default function PlayerCard() {
     )
   }
 
-  if (player && inSameParty && player.user_id !== userId) {
+  if (player && inSameParty) {
     return <Navigate to={`/play/${player.session.join_code}?scanned=${player.code}`} replace />
   }
 
@@ -96,7 +108,7 @@ export default function PlayerCard() {
   if (!player) {
     return (
       <Notice title="Unknown code" actions={back}>
-        There's no player with the code {code}. They may have left the party, or the code is wrong.
+        This code isn't from your party, or it is wrong.
       </Notice>
     )
   }
