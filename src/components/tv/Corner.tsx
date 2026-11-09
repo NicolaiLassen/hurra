@@ -1,8 +1,17 @@
 import { CornersInIcon, CornersOutIcon } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import SoundToggle from '@/components/SoundToggle'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
+}
 
 /**
  * The bottom-left corner, in the gutter below every scene so it never covers
@@ -10,11 +19,14 @@ import { cn } from '@/lib/utils'
  * grey while the TV polls instead). A host's own browser says "Host preview".
  */
 export default function Corner({ live, hostPreview }: { live: boolean; hostPreview: boolean }) {
+  // The browser knows at once when the network drops; the realtime socket can take
+  // up to a minute to notice, so the dot doesn't wait for it.
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true)
   return (
     <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
       <FullscreenButton />
       <SoundToggle prompt className="opacity-60 hover:opacity-100" />
-      <LiveDot live={live} />
+      <LiveDot live={live && online} />
       {hostPreview && (
         <span className="ml-2 rounded-full bg-card/80 px-3 py-1 text-sm font-semibold text-muted-foreground ring-1 ring-foreground/10">
           Host preview
