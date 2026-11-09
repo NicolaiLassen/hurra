@@ -190,13 +190,3 @@ export function createGameApi(
 
   return { callGame, submitAnswer }
 }
-
-/**
- * @deprecated The app's callGame is in @/lib/queries (docs/engine-v2.md, 5.3):
- * this module never imports the app's client, so the rehearsal can run it under
- * Node. Kept only so the v1 pages that PHONE and HOST replace still compile
- * (10.1); those pages need a LiveSessionProvider before they run anyway.
- */
-export function callGame(request: EngineRequest): Promise<EngineResponse> {
-  return Promise.reject(new Error(`callGame(${request.type}) moved to @/lib/queries`))
-}

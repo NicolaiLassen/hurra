@@ -128,7 +128,7 @@ describe('session_snapshot', () => {
 
   it('says member: false to an outsider, and exists: false for a party that is gone', async () => {
     const { data } = await outsider.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'phone' })
-    expect(data).toMatchObject({ member: false, exists: true, session: null, games: [], players: [], me: null })
+    expect(data).toMatchObject({ member: false, exists: true, session: null, games: [], players: [], me: null, moved: false })
     const gone = await outsider.client.rpc('session_snapshot', { p_session_id: crypto.randomUUID(), p_screen: 'tv' })
     expect(gone.data).toMatchObject({ member: false, exists: false })
   })
@@ -245,7 +245,10 @@ describe('codes and joining', () => {
     expect(error).toBeNull()
     expect(moved).toMatchObject({ id: cy.playerId, name: 'Cy', user_id: newPhone.userId })
     const old = await cy.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'phone' })
-    expect(old.data).toMatchObject({ member: false, exists: true })
+    // moved: an old phone that slept through the ping still learns why it is out.
+    expect(old.data).toMatchObject({ member: false, exists: true, moved: true })
+    const now = await newPhone.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'phone' })
+    expect(now.data).toMatchObject({ member: true, moved: false, me: { player_id: cy.playerId } })
     // The code was used up.
     expect((await (await world.user()).client.rpc('claim_player', { p_code: code })).error).toMatchObject({ code: 'PT404' })
   })

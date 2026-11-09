@@ -286,9 +286,10 @@ so there is no data migration.
 | `my_player_ids() returns uuid[]` | stable, definer | The caller's player ids (one per party joined). |
 | `my_session_ids() returns uuid[]` | stable, definer | The sessions the caller is a player in, or a paired screen of (`session_screens`). Every "member" rule below therefore covers paired TVs too; anything tied to a player (`my_player_ids`) does not. |
 | `session_exists(p_session_id uuid) returns boolean` | stable, definer | Whether the party exists, whoever asks. Lets a removed guest tell "removed" from "party deleted". |
+| `moved_away(p_session_id uuid) returns boolean` | stable, definer | **Added during integration.** Whether the caller's player in the party moved to another phone: a `player.moved` row with the caller as `data.from_user`. Feeds the snapshot's `moved` (2.7). |
 
 Policies call these wrapped in `(select ...)` so Postgres evaluates them once
-per query. All seven are granted to `authenticated` (policies and the
+per query. All eight are granted to `authenticated` (policies and the
 invoker function `session_snapshot` run as the caller) and to `service_role`;
 none to anon.
 
@@ -706,6 +707,14 @@ When the caller is not a member (a removed guest, an old phone after "Move to
 a new phone", an unpaired TV), it returns `{ now, member: false, exists,
 session: null }` with empty lists. A deleted party returns `exists: false`.
 
+**Changed during build (integration):** the snapshot also carries `moved`:
+true for a `'phone'` caller that is not a member because its player moved to
+another phone, false otherwise. `moved_away(p_session_id)` (stable, definer,
+executable by authenticated) looks for a `player.moved` row whose `data` holds
+the caller as `from_user`, which the `players` trigger now writes. So an old
+phone that slept through its `moved` ping still shows "Your player moved to
+another phone" when it wakes, not "You're no longer in X" (5.4, 7.1).
+
 **`session_recap(p_session_id uuid) returns jsonb`**, stable, plpgsql,
 invoker. Hosts only: anyone else gets `PT403` "Only hosts can read this". The
 raw material for the recap builder (section 5.7):
@@ -918,7 +927,7 @@ one save sort together.
 | `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`. Pings room. |
 | `sessions` | `after delete` | `ping('room:' \|\| id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
 | `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll). |
-| `players` | `after update of name, user_id` | Name: logs `player.renamed`, pings room. User: logs `player.moved`, sends `moved` on `player:<id>` (the old phone hears it), pings stage. |
+| `players` | `after update of name, user_id` | Name: logs `player.renamed`, pings room. User: logs `player.moved` (with the old user as `data.from_user`, for `moved_away`), sends `moved` on `player:<id>` (the old phone hears it), pings stage. |
 | `players` | `after delete` | Skipped when the party itself is being deleted. Logs `player.removed` (`data.name`), pings room. |
 | `score_events` | `after insert or delete` | Skipped while `hurra.engine` is on (the engine logs its own points). Logs `points.awarded` or `points.undone` (`player_id`, `points`, `reason`, `game_id`, `score_event_id`); skipped when the player is being removed. Pings stage and that player. |
 | `session_games` | `before update of archived_at` | Guard, not fail open: archiving an active game raises `PT409` "End the game before archiving it". |
@@ -1077,7 +1086,7 @@ so no password ever sits in the repo.
 | `stage.changed` | game_commit or trigger | game or host | `{ game_id, title, reason }` |
 | `prompt.answered` | submit_answer (the claim) | player | `{ key, answer, ms, round }` |
 | `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene` | triggers | host or system | the changed values |
-| `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }` |
+| `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }`; `player.moved` also `from_user` (the old phone's user, hosts only like every log row) |
 | `points.awarded`, `points.undone` | trigger (host awards only) | host | `{ player_id, points, reason, game_id, score_event_id }` |
 | `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted`, `game.settings_changed` | triggers | host | `{ title, game_type }` |
 | `screen.paired`, `screen.unpaired` | trigger | system or host | `{ user_id }` |
@@ -2114,7 +2123,8 @@ How it behaves:
 - **On `changed`**: read again; phones wait a random 0 to 300 ms first, except
   for a ping with `prompt: true` (a question just opened), which every phone
   reads at once so the countdowns start together; the TV and host page never
-  wait. **On `moved`**: set `moved` and read at once. **On `tally`**: keep the
+  wait. **On `moved`**: set `moved` and read at once (a read whose snapshot
+  says `moved` sets it too, for a phone that slept through the ping). **On `tally`**: keep the
   highest count per game and key, and read once 400 ms after the last tally
   (pinged counts can undercount when answers arrive together).
 - **Healing.** Read on channel join and rejoin, when the tab becomes visible,
@@ -2743,6 +2753,23 @@ component mounts its own provider, 7.3). A guest of another party, or an
 unknown code, now reads "Unknown code: this code isn't from your party, or it
 is wrong."
 
+**Changed during build (PHONE):**
+
+- Toasts: a row aimed at this phone replaces only the room-wide row of the
+  same moment (same game, within 5 s), not every room-wide row of the batch.
+  Rows more than 2 minutes older than `snapshot.now` (a phone waking up) are
+  skipped, and at most 3 room-wide toasts show per batch.
+- "Got a code from the host?" is also on the start page, and on Join's Party
+  not found when the typed code has 6 characters (a host code typed as a party
+  code). The party is found from the claimed player.
+- The main card scrolls into view when a new game or a new question opens,
+  never while the sheet is open.
+- The moved notice offers "Join with a new name"; the removed notice keeps
+  "Join again". It also shows after a sleep, from the snapshot's `moved` (2.7).
+- "The host removed X" also covers a game deleted while its sheet is open.
+- Dev builds: `/play/<any>?fixture=<scene>` renders a fixture through a lazy
+  chunk, so production bundles carry none of it.
+
 ### 7.2 TV (`/tv/:joinCode`)
 
 A public route, outside `RequireHost`. The TV laptop is a paired screen, never
@@ -2816,6 +2843,41 @@ race: an animated bar race of the top 8 over the night, about 12 s,
 changes, (5) the final podium with confetti. Reduced motion: no bar race
 animation, fades only.
 
+**Changed during build (TV):**
+
+- **The strip.** While the standings show, the status cards and Finished
+  chips sit in a strip beside the podium, in the band right under the header,
+  not in a full-width row: a full-width row left 1440 by 900 too short for 45
+  guests. The podium narrows while the strip shows, and cards that don't fit
+  become small Live chips.
+- **The rail.** Game cards stack from the top, oldest start first (the
+  evening-long game stays on top), as many as fit by measurement; the rest
+  become Live chips on the "Also running" line. At most 3 Finished chips sit
+  at the rail's bottom.
+- **The ticker** is one line in the bottom gutter under the rail's column,
+  shown without sound for 20 s.
+- **Announcements:** one with no game (`game_id` null) gets the banner even
+  while a game holds the stage; during the recap only `interrupt` ones show;
+  the banner's winner glow follows `interrupt`, never the icon.
+- **The recap:** every slide 8 s, the race 12 s (10 s of animation, then it
+  holds); the podium's fanfare plays once per published version; the TV reads
+  the recap only while its scene is on, and shows the scene underneath while
+  it loads.
+- **The title card** shows when the stage was taken in the last 10 s (the
+  later of `spotlight_at` and `started_at`), once per round on each TV, under
+  the banner.
+- **Pairing** with another party's code pairs the browser with that party;
+  the TV then says "That code pairs a TV for another party. Get a new code
+  from this party's host page."
+- **The live dot** is also grey while the browser itself is offline:
+  realtime-js took 45 s or more to notice a dropped network.
+- A host's own preview tab also sends the TV's timer syncs: harmless
+  duplicates, which the engine skips.
+- Dev builds: `?fixture=` takes any fixture scene, plus `recap`, `standings`,
+  `between`, `pong`, `pong-final` and `empty`, with `&players=8|24|45`,
+  `&fresh=1`, `&later=<seconds>`, `&news=banner|ticker|interrupt|stage|points`,
+  `&host=1` and `&slide=<n>`.
+
 ### 7.3 Host control room (`/host/s/:sessionId`)
 
 `<LiveSessionProvider screen="host">`. From the top:
@@ -2885,6 +2947,31 @@ game if live, else the newest live game. New: Move to a new phone.
    screen each time; Unpublish; Show on the TV and Back to the party
    (`setTvScene`); Download the night (the raw recap as JSON, hosts only, for
    memories before guests are anonymised).
+
+**Changed during build (HOST), 7.3 and 7.4:**
+
+- **The award page** takes `?game=<id>` to pick "For game", which `/host/scan`
+  carries through to `/p/:code`. In-person's Scan a player sends its own game
+  id, so two live in-person rounds each get their own points (G9 in
+  user-flows.md, closed during integration).
+- **HostViewProps.act** sends `close` only when it isn't empty, treats
+  `skipped` and `replayed` as success, reads the snapshot again after a
+  success, and on a refusal shows the server's words as a toast, then rejects
+  (the views catch it).
+- **Settings** upload images through `uploadGameMedia`; a problem `parseConfig`
+  would refuse at start shows when the settings are saved ("Before you start:
+  ...").
+- **Rename** for the party, a game and a player, from their menus. `SessionMenu`
+  reports `onChanged(change)` with the name, status, archived or deleted.
+- `Confirm` gains `open`, `onOpenChange`, `variant` and `cancelLabel`; its
+  trigger is optional.
+- The recap page's chart is a step line of the top 8 with a legend, a
+  crosshair readout on pointer or arrow keys, and a table view. It says when
+  more has happened since the last publish, ignoring its own publish and TV
+  switches.
+- The router loads the host pages on demand (React Router `lazy`), with the
+  loader as `hydrateFallbackElement`. Dev builds: `/host/s/<id>?fixture=<scene>`
+  and `/host/s/<id>/recap?fixture=<scene>` render fixtures.
 
 ### 7.5 From the winning move to the next game, with several games
 
@@ -3398,6 +3485,14 @@ file's pings. **Changed during build:** an answer is held in flight with
 
 ### 9.3 The end-to-end party test (`npm run rehearse`)
 
+**State on 9 November:** REHEARSE has not landed, so there is no `npm run
+rehearse` yet. Until it does, two things stand in (12.8): the main engineer's
+local party run through the real screens (a host page, a paired TV and 5
+phones in headless Chrome, plus 45 scripted guests running the app's own
+`createLiveSession` and `createGameApi` under Node), and `npm run smoke`
+(`scripts/smoke.mjs`), a short scripted round through the real API that runs
+against any deployment and cleans up after itself (11).
+
 **How it runs.** `npm run rehearse -- <flags>` runs `node
 scripts/rehearse.ts`: a small Node script (type stripping, Node built-ins only)
 that parses the flags, applies the guards, and starts the party run,
@@ -3790,6 +3885,16 @@ every object dropped and the three counts were 0.
 
 **Smoke test (Fri 20 Nov, owner-approved, throwaway party)**
 
+First the scripted round, from a checkout of the tag with the production
+values exported in the shell (never from a file): `API_URL=<project URL>
+PUBLISHABLE_KEY=... SECRET_KEY=... SITE=<site URL> CONFIRM=<project ref> npm
+run smoke`. It makes a throwaway host, party, 3 guests and a TV, checks the
+site, the engine's 401, joining, pairing, pings, the secrets, Last one
+standing, a quiz to its crown with the final-screen spotlight, fusion, an
+award and its undo, moving a player, the recap, an image upload and
+unpairing, and deletes everything it made, even after a failed step; PASS
+or FAIL. Then by hand, with people:
+
 15. Sign in as host on the real site; create a party "Smoke"; join with one
     real phone and one browser. On the TV laptop, in a browser that has never
     signed in as the host, open the link from Pair a TV and type the code: the
@@ -4065,3 +4170,130 @@ during build" in place:
 
 Results on the local stack: `npm run check` (591 unit tests in 28 files) and
 `npm run test:integration` (65 tests in 5 files) pass.
+
+### 12.8 Build notes: the screens and the integration, Monday 9 November
+
+The main engineer merged PHONE, TV and HOST into main, in that order.
+Ownership was disjoint, so nothing conflicted, and `tsc -b`, eslint and the
+unit tests passed on the first merged tree. Then, in files no package owns
+any more:
+
+- **The transition code is gone.** `PlayerCard` renders `AwardPoints({
+  playerId, sessionId })` without a cast, and `AwardPoints` takes only those
+  props (10.3). DATA's v1 bridges (12.7) are deleted: the deprecated
+  `callGame` in `gameApi.ts`, `getSessionByCode`, `getOwnPlayer`,
+  `sessionExists` and the `V1<...>` types in `queries.ts`, and the watches
+  overload of `useLiveQuery`.
+- **G9 closed:** in-person's Scan a player links to `/host/scan?game=<id>`
+  (7.3).
+- **The moved notice after a sleep** (PHONE's open issue): the snapshot's
+  `moved` and `moved_away()` (2.3, 2.7), set by a read in `live.ts` as well
+  as by the ping (5.4), so an old phone that slept through the move still
+  says "Your player moved to another phone". The fixture provider passes a
+  fixture's `moved` through. Unit and integration tests cover it.
+- **Worktrees serve the Geist font:** `vite.config.ts` allows the real path of
+  a linked `node_modules`, which PHONE and TV hit (a 403 on the font).
+- **`npm run smoke`** (`scripts/smoke.mjs`, 9.3, 11).
+- README (the four games, the pages, "Writing a game" for SDK v2, fresh
+  screenshots from the party run below) and user-flows.md (C24, C25, P2-11
+  done, P2-12 and P2-13 added).
+
+**Results on the local stack**, after `supabase db reset` from the init file
+with the change above: `npm run check` (726 unit tests in 40 files),
+`npm run test:integration` (65 tests in 5 files), `npm run db:smoke` and
+`npm run smoke` pass, and `npm run build` builds. A build with placeholder
+`VITE_` values (needed for a real bundle, see below) has a 980 kB main chunk
+(277 kB gzipped) and carries no fixture code or data.
+
+**The party, end to end** (the dev server with `/api/game`, headless Chrome,
+every step through the real screens, nothing seeded in the database):
+
+- The host signed in and created the party on the host pages, added Last one
+  standing, the quiz and fusion with Add game, and saved the quiz's 8 sample
+  questions and fusion's 2 pictures through their settings editors.
+- One TV at 1920 by 1080 in a browser that never signed in paired with the
+  code from Pair a TV; the dialog closed by itself and the page said 1 TV
+  paired.
+- 5 phones at 390 px joined through the join page. 45 scripted guests signed
+  in anonymously with supabase-js and joined through `join_session` in 0.2 s,
+  each running the app's own `createLiveSession` (phone) and `createGameApi`
+  under Node, on its own `room:` and `player:` topics.
+- Last one standing started in the background from the split button. A tag
+  (Sofie's camera scan of Lars, They did my task) and a catch (Ana's scan of a
+  scripted guest during the quiz's lobby, which opened the game's sheet)
+  went through the phones' knockout dialog.
+- The quiz started on the TV ("Hurra presents", then its lobby with Last one
+  standing in the rail). Question 1: the 45 scripted guests answered within
+  1.3 s of the question opening (each after a random wait up to 1.2 s from
+  its own read of the open prompt): 45 of 45 accepted, 0 errors, a round trip
+  of 5 ms at the median and 36 ms at most; the 5 phones tapped theirs: 50
+  rows in `game_submissions`. The TV's own timer sync revealed it ("34 of 50
+  got it right", all 50 counted), and the leaderboard followed 7.3 s later by
+  itself. Question 2: 30 scripted and 3 phone answers, Reveal now (all 33
+  counted), Show the leaderboard, then Crown the winner now: finished by the
+  game, the final screen on the TV and its countdown on the host page
+  ("The TV goes back in ..."); phones showed Finished lately.
+- Fusion started in the background: 90 scripted votes and 3 from phones
+  through the picker, picture 2's people set on the night (setKey from the
+  host's Show who), Lock voting, Show on the TV, Reveal next twice (48 and 45
+  voters), Crown the face detective: finished, its final screen on the TV.
+- Back to standings ("Last game: ... won Who is fused?"), then one scripted
+  hunter knocked out 46 guests, one a second (engine 18 ms at the median,
+  21 ms at p95 locally), and Sofie's camera scan of the hunter was the winning
+  knockout: Last one standing finished by itself (`finished_by` game, Sofie
+  the winner) and took the free stage: "Final result: Last one standing" on
+  the TV, the countdown on the host page, "You're the last one standing!" on
+  Sofie's phone and the result card ("You're out ... Sofie won.") on the
+  others.
+- The recap page built the night (50 guests, 3 games, 176 answers, 49 moves),
+  published it and showed it on the TV (the numbers, then the race); Sofie's
+  phone showed Your night (#2 of 50). The published doc names no unasked quiz
+  question.
+- No page error or console error on any screen. Everything the run made (the
+  party, 52 users) was deleted afterwards.
+
+**Realtime, counted on every screen** (frames received through the browser's
+devtools protocol, and through a counting WebSocket for the scripted guests;
+sends read from `realtime.messages` for the party's topics), 52 screens:
+
+| Moment | Host page | TV | Each phone | All deliveries | Database sends | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| 50 guests join | 50 | 50 | 0 | 100 | 50 | 150 |
+| Last one standing starts | 2 | 2 | 2 | 104 | 2 | 106 |
+| The quiz takes the TV, and a catch | 2 | 2 | 2 | 104 | 2 | 106 |
+| Question 1: open, 50 answers, timer reveal, leaderboard | 54 | 54 | 4 | 308 | 54 | 362 |
+| Question 2: 33 answers, Reveal now, leaderboard | 37 | 37 | 4 | 274 | 37 | 311 |
+| Crown the winner | 1 | 1 | 1 | 52 | 1 | 53 |
+| Fusion: start, 93 votes, setKey | 95 | 95 | 1 | 240 | 95 | 335 |
+| Fusion: lock, on the TV, 2 reveals, crown | 5 | 5 | 5 | 260 | 5 | 265 |
+| 46 knockouts, one a second | 47 | 47 | 47 | 2,444 | 47 | 2,491 |
+| The winning knockout | 1 | 1 | 1 | 52 | 1 | 53 |
+| The recap published and shown | 2 | 2 | 2 | 104 | 2 | 106 |
+
+"Each phone" holds for the 5 real phones and the 45 scripted guests alike.
+In all: 4,046 deliveries and 300 sends (4,346 events) in about 3 minutes of
+play, and 3,825 snapshot reads. A knockout costs 53 events and a whole quiz
+question 362 with 52 screens, in line with 12.1 (48 and about 330 with 47).
+The busiest 5 s averaged 65.8 events a second: the 90 scripted fusion votes
+sent within 4 s right after a crown (each vote is a tally to the TV and the
+host page). The quiz's 50-answer burst peaked at 40.6 a second and the
+knockouts at 53. All stay under the Free plan's 100; at the party, votes
+spread over minutes and knockouts over the evening.
+
+**Building a bundle locally**: without the production `VITE_` values a
+`vite build` succeeds but `supabase.ts` throws while loading, and the
+minifier drops everything that depends on it (the bundle looks half the
+size). Netlify sets the values; to check a bundle locally, build with
+placeholder values.
+
+**Still open**:
+
+- REHEARSE has not landed (`npm run rehearse`, 9.3); the party run above and
+  `npm run smoke` stand in.
+- user-flows.md P2-12 (Last one standing's final screen beside the rail at
+  1440 by 900 with 45 guests is tight) and P2-13 (phones download every
+  game's host controls: lazy `HostView` and `ConfigEditor`).
+- Real Auth 429s (the busy state) were only forced in a browser; the
+  production rehearsal on Sat 21 Nov checks the real limits.
+- While a phone's sheet is open, Radix's modal makes toasts untappable; no
+  phone toast has an action today.

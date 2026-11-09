@@ -470,6 +470,22 @@ describe('pings', () => {
     live.close()
   })
 
+  it('moved: a phone that slept through the ping learns it from its next read', async () => {
+    const client = new FakeClient()
+    const { live, last } = open(client, 'phone', PLAYER)
+    await answer(client, snapshot({ member: false, session: null, moved: true }))
+    expect(last().moved).toBe(true)
+    live.close()
+  })
+
+  it('moved: a removed phone (moved false) is not marked moved', async () => {
+    const client = new FakeClient()
+    const { live, last } = open(client, 'phone', PLAYER)
+    await answer(client, snapshot({ member: false, session: null, moved: false }))
+    expect(last().moved).toBe(false)
+    live.close()
+  })
+
   it('keeps the highest pinged tally, and reads once 400 ms after the last one', async () => {
     const client = new FakeClient()
     const { live, last } = open(client, 'host')

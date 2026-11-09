@@ -123,4 +123,6 @@ export type Snapshot = {
   /** Paired screens of this party: the host screen only, else null. */
   screens: number | null
   recap: { published_at: number } | null
+  /** A phone that is no longer a member because its player moved to another phone (claim_player). */
+  moved?: boolean
 }

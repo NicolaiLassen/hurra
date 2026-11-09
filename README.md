@@ -12,15 +12,15 @@
 <p align="center"><em>Named after the Danish birthday cheer: Hurra, hurra, hurra!</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/tv-game.png" alt="The TV during Last one standing: 4 of 5 still standing, the player tiles, top hunters and a banner saying Mads got Anna" width="900">
+  <img src="docs/screenshots/tv-game.png" alt="The TV during the quiz: question 1 revealed with 34 of 50 right, the day's top 5 and Last one standing running beside it" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/phone-game.png" alt="A guest's phone with their secret task card and the scan button" width="240">
+  <img src="docs/screenshots/phone-game.png" alt="A guest's phone during the quiz, with their answer locked in and the countdown bar" width="240">
   &nbsp;
-  <img src="docs/screenshots/phone-scan.png" alt="The knockout dialog after scanning another guest's code" width="240">
+  <img src="docs/screenshots/phone-scan.png" alt="The knockout dialog after scanning another guest's code: they did my task, or I caught them trying theirs" width="240">
   &nbsp;
-  <img src="docs/screenshots/host-session.png" alt="The host's session page with the join QR, the games and the players" width="320">
+  <img src="docs/screenshots/host-session.png" alt="The host control room: what is on the TV, the live quiz with its answered count, Last one standing in the background and the players" width="320">
 </p>
 
 Built for one particular night: a 30th birthday party on 28 November 2026,
@@ -32,26 +32,40 @@ scan a QR code, pick a name and they're in.
 - **Guests** scan the join QR on the TV and pick a name. Their phone remembers
   them, so closing the tab is fine: they come back as the same player. Every
   guest also has a personal QR code, used for scoring things that happen in
-  the room.
+  the room. A guest on a new phone gets their player back with a code from
+  the host.
 - **The host** runs the party from a laptop or a phone: opens joining, adds and
-  starts games, and gives points by scanning a guest's code.
-- **The TV** shows the day's leaderboard and the join QR. While a game runs, it
-  can take over the screen, with announcements and sound effects for the room.
+  starts games (on the TV or in the background), moves the night along, and
+  gives points by scanning a guest's code. At the end, the host publishes a
+  recap of the night.
+- **The TV** is a laptop the host pairs with a code: it reads what a guest
+  reads, never more. It shows the day's leaderboard and the join QR. A game
+  started on the TV takes the stage, with the games running in the background
+  as cards beside it. A game that finishes gets a final screen for 3 minutes,
+  and at the end the TV plays the recap.
 
 ## Games
 
-- **Last one standing**, all night long. Everyone gets a secret task and one
-  life. Get someone to do your task and they're out (their task becomes
-  yours), or catch someone trying theirs on you. Scan their code to knock them
-  out; the TV keeps count of who is still standing.
+Several games run at once: a long one in the background while short ones
+take the TV. A game finishes by itself in the moment it has its winner; the
+host can always end one early.
+
+- **Last one standing**, all night long, in the background. Everyone gets a
+  secret task and one life. Get someone to do your task and they're out (their
+  task becomes yours), or catch someone trying theirs on you. Scan their code
+  to knock them out; the TV keeps count of who is still standing, and the last
+  one standing wins.
+- **Quiz**, on the TV. The host runs the questions, everyone answers on their
+  phone, and right answers score more the faster they come. Time's up reveals
+  the answer, a leaderboard follows, and the host crowns the winner.
+- **Participant fusion.** AI images fuse two guests into one portrait, printed
+  and hung on the wall. Guests vote on their phones for who is in each picture;
+  the host locks voting and reveals the pictures one by one on the TV.
 - **In-person round.** The host gives points by hand for anything that happens
-  in the room.
-- **Coming next:** a live quiz on the TV with the answers on everyone's phone,
-  and *Participant fusion*, where guests guess who was fused together in AI
-  images printed around the room.
+  in the room, by scanning the guest's code.
 
 <p align="center">
-  <img src="docs/screenshots/tv-45-guests.png" alt="The TV fitting 45 guests during Last one standing" width="900">
+  <img src="docs/screenshots/tv-45-guests.png" alt="The TV's standings with 50 guests: the podium, Last one standing running beside it, and the finished quiz and fusion as chips" width="900">
 </p>
 
 How every screen connects, for guests, the host and the TV:
@@ -66,7 +80,8 @@ How every screen connects, for guests, the host and the TV:
   CSS variables in [src/index.css](src/index.css).
   Icons are [Phosphor](https://phosphoricons.com) (`@phosphor-icons/react`,
   bold by default via `IconContext` in [src/main.tsx](src/main.tsx)). The
-  scoreboard animates with `motion`, loaded only on that page. The app icon is
+  TV animates with `motion`, loaded only on the TV page and the games' TV
+  screens, so phones never download it. The app icon is
   [public/favicon.svg](public/favicon.svg); the PNGs next to it are rendered from it.
 - **Backend:** Supabase, plus one Netlify Function for game logic. The design
   doc is [docs/engine-v2.md](docs/engine-v2.md).
@@ -123,32 +138,38 @@ public `game-media` bucket (hosts upload; JPEG only).
 
 ### Pages
 
-| Path                     | Who    | What                                           |
-| ------------------------ | ------ | ---------------------------------------------- |
-| `/join/:code`            | Guest  | Join QR target: pick a name                    |
-| `/play/:code`            | Guest  | Points, the live game, and their own QR code   |
-| `/p/:playerCode`         | Anyone | Player QR target: the scoring screen for hosts |
-| `/host`                  | Host   | Sessions                                       |
-| `/host/s/:id`            | Host   | Join QR, open/close joining, games, players    |
-| `/host/s/:id/scoreboard` | Host   | Full-screen live scoreboard for the TV         |
-| `/host/scan`             | Host   | Camera scanner for player QR codes             |
+| Path                | Who    | What                                                                  |
+| ------------------- | ------ | --------------------------------------------------------------------- |
+| `/`                 | Anyone | Start page: type a party code, continue, or use a code from the host  |
+| `/join/:code`       | Guest  | Join QR target: pick a name                                           |
+| `/play/:code`       | Guest  | Points, the games (main card, Also running), Your night, their QR     |
+| `/p/:playerCode`    | Anyone | Player QR target: the award page for hosts, into the game for guests  |
+| `/tv/:code`         | TV     | The TV: pairs with a code from the host page, then shows the party    |
+| `/host`             | Host   | Sessions                                                              |
+| `/host/s/:id`       | Host   | Control room: on the TV now, live games, the program, players, join   |
+| `/host/s/:id/recap` | Host   | The recap of the night: preview, publish, show on the TV, download    |
+| `/host/scan`        | Host   | Camera scanner for player QR codes                                    |
 
 ## Writing a game
 
 A game is a folder in `src/games/<name>/`. The core never changes for a new
 game: everything goes through the SDK in [src/games/core](src/games/core).
-[elimination](src/games/elimination) (*Last one standing*) is the full example;
+[elimination](src/games/elimination) (*Last one standing*) is the full example
+of a move-based game, [quiz](src/games/quiz) of one played with prompts, and
 [in-person](src/games/in-person) is the smallest.
 
 **`logic.ts`**: a class extending `Game` from
-[src/games/core/Game.ts](src/games/core/Game.ts). It runs on the server, as pure
-functions of the state:
+[src/games/core/Game.ts](src/games/core/Game.ts). It runs on the server, inside
+the engine's one save per request, as pure functions of the state:
 
-| Method | What it does |
+| Member | What it does |
 | ------ | ------------ |
+| `type`, `defaultConfig` | The game's key, and its default settings (public: they ship in the app). |
+| `presentation` | `'stage'` (default): Start takes the TV. `'background'`: it runs beside the game on the TV. |
+| `parseConfig(input)` | Optional: checks the settings once, at start. Throw `GameError` to refuse. |
 | `setup(ctx)` | Deals the initial state when the host starts (or restarts) the game. |
 | `parseAction(input)`, `handleAction(state, action, playerId, ctx)` | Checks a move from a phone and applies it. Throw `GameError` to refuse; the message is shown as is. |
-| `parseHostAction`, `handleHostAction` | Optional host controls (Next, Reveal). |
+| `parseHostAction`, `handleHostAction` | Optional host controls (Next, Reveal, Lock voting). |
 | `wakeAt(state, info)`, `onWake(state, ctx)` | Optional timers: when the state wants a sync, and what happens then. |
 | `onPlayerJoin`, `onPlayerLeave` | Optional: someone joined or left while the round runs. |
 | `isFinished`, `winners`, `onEnd(state, ctx, by)` | Optional: the game finishes itself in the same save; the default winners are the top of this round's points. |
@@ -175,33 +196,48 @@ The rules:
   Keep order in arrays.
 - `publicState` and prompt specs are public: never put a secret or an answer
   in them. Show each player theirs in `playerView`.
-- Big inputs from everyone (answers, votes) are prompts, never actions.
+- Big inputs from everyone (answers, votes) are prompts, never actions: phones
+  answer them straight to the database, and the game reads every final answer
+  in `info.answers` when it scores them.
 - Host actions carry the step they were made for; one whose step has passed
   returns the state unchanged, which the engine answers as skipped.
 - `onWake` must move `wakeAt` forward or to null.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
 - `recap()` reveals only what the finished round showed the room.
 
-**Screens**, typed against the logic in [src/games/types.ts](src/games/types.ts):
-`PlayerView` (with the player's `view`, `myAnswers`, `act(action)` and
-`submit(key, answer)`), and optionally a `PlayerCard`, a `ResultView`, a
-`HostView` (the full `state`, the `config` and host `act`), a `TvView`, a
-`FinalTvView`, a `TvStatus` for the TV rail and a `ConfigEditor`. A game that
-sets `acceptsScans` also receives guest QR codes scanned with the phone's own
-camera. Shared building blocks: `QrScanner`, `ScanSheet`, `SecretCard` and
-`PlayerQr` in [src/components](src/components).
+**Screens**, typed against the logic in [src/games/types.ts](src/games/types.ts),
+each optional but the first:
+
+| Screen | Where it shows |
+| ------ | -------------- |
+| `PlayerView` | The phone's main card: the player's `view`, `myAnswers`, `act(action)` for moves and `submit(key, answer)` for prompts. A game that sets `acceptsScans` also gets guest QR codes scanned with the phone's own camera. |
+| `PlayerCard` | A whole compact card while another game holds the main card ("Also running"); `open()` shows the full `PlayerView` in a sheet. |
+| `ResultView` | The phone's result card once the game finishes. |
+| `HostView` | The game's controls in the host control room, with the full `state`, the `config` and host `act`. |
+| `TvView`, `FinalTvView` | The TV stage while live, and its final screen (load them lazily). Without them the TV shows the standings or a generic winners screen. |
+| `TvStatus` | A whole card for the TV's rail while the game runs in the background. |
+| `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. |
+
+Shared building blocks: `QrScanner`, `ScanSheet`, `SecretCard` and `PlayerQr`
+in [src/components](src/components).
 
 **`index.ts`**: `defineGameModule({ logic, name, description, icon, PlayerView, ... })`,
-with `profileBadges` to show the game's profile data as badges. **`bot.ts`**:
+with `stageBanners: 'sound-only'` when the `TvView` shows each moment itself,
+and `profileBadges` to show the game's profile data as badges. **`bot.ts`**:
 the game's rehearsal bot ([src/games/core/bot.ts](src/games/core/bot.ts)).
 
 **Register** the logic in [src/games/logic.ts](src/games/logic.ts), the module
 in [src/games/registry.ts](src/games/registry.ts) and the bot in
 [src/games/bots.ts](src/games/bots.ts); `registry.test.ts` checks the lists
-match and runs the contract over every game, played by its bot. Unit-test the
-rules with `createGameContext`, `testInfo` and `answersOf`, play whole rounds
-through the real engine step with `simulateParty`, and check the game's own
-example with `checkGameContract` (it must include a join and a leave).
+match and runs the contract over every game, played by its bot, and
+`views.test.ts` renders every view against the sample parties in
+[src/lib/fixtures.ts](src/lib/fixtures.ts). Unit-test the rules with
+`createGameContext`, `testInfo` and `answersOf`, play whole rounds through the
+real engine step with `simulateParty`, and check the game's own example with
+`checkGameContract` (it must include a join and a leave). In dev builds every
+screen also opens on a sample party: `/play/x?fixture=<scene>`,
+`/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
+(the scenes are listed in `fixtures.ts`).
 
 ## Local development
 
@@ -215,11 +251,24 @@ npm run dev                   # also serves netlify/functions/* at /api/*
 ```
 
 ```sh
-npm test                      # unit tests: the SDK, the engine step and the game rules
+npm test                      # unit tests: the SDK, the engine, the game rules and every screen on sample parties
 npm run check                 # types, lint and unit tests
 npm run test:integration      # the engine, prompts, secrecy and Realtime against the local stack
 npm run db:smoke              # a quick check that the schema, private Realtime and Storage work together
 ```
+
+`npm run smoke` plays a short round through the real API of any deployment:
+a throwaway host, party, three guests and a TV; joining, pairing, pings,
+secrets, Last one standing, a quiz to its crown, fusion, an award, moving a
+player, the recap, an image upload and unpairing. It deletes everything it
+made, even when a step fails. It takes the deployment from the shell, never
+from a file:
+
+```sh
+API_URL=http://127.0.0.1:54321 PUBLISHABLE_KEY=... SECRET_KEY=... SITE=http://localhost:5173 npm run smoke
+```
+
+Against anything but a local stack it also needs `CONFIRM=<project ref>`.
 
 Make yourself a local host: set `DEV_HOST_EMAIL` and `DEV_HOST_PASSWORD` in
 `.env.development.local` (local values only) and run `npm run dev:setup`. It
@@ -238,7 +287,12 @@ game engine.
 
 The database is built from the one init file. Moving production from v1 to v2
 is a wipe and rebuild, with its exact steps and checks in
-[docs/engine-v2.md](docs/engine-v2.md), section 11.
+[docs/engine-v2.md](docs/engine-v2.md), section 11. After a deploy, the owner
+can run `npm run smoke` against it, with the production values exported in the
+shell and `CONFIRM=<project ref>`; it cleans up after itself.
+
+The TV laptop opens `/tv/<join code>` in a browser that has never signed in as
+the host, and pairs with the code from Pair a TV on the host page.
 
 Auth settings were set in the Supabase dashboard (Authentication), not from
 `config.toml`: anonymous sign-ins on, anonymous sign-in limit 300/hour

@@ -430,12 +430,12 @@ the same way: three row sizes, and a compact podium once a party has more than
 | C21 | G4: a guest on a new phone or browser couldn't get their player back | The host's Move to a new phone (player menu or award page) shows a 6-character code for 15 minutes; on the new phone, Got a code from the host moves the player there with their points and badges, and the old phone says so |
 | C22 | G1: no result on the phones or the TV once a game finished | A result card on every phone until the next game starts (the game's own `ResultView` or a generic one), a final screen on the TV for 3 minutes, and Finished lately rows for the others |
 | C23 | G6: a decided game stayed Live until the host pressed End | A game finishes itself (`isFinished`) in the same save as the deciding move; End is still there for ending early |
+| C24 | G9: with two in-person rounds live, a round's Scan a player opened the award page with the stage game or the newest live game picked | The round's Scan a player sends its own game id (`?game=<id>`), which the scanner carries to the award page |
+| C25 | An old phone that slept through its player's move woke to "You're no longer in X" | The snapshot says the player moved, so it shows "Your player moved to another phone" with Join with a new name |
 
 ### Open, in priority order
 
-| ID | Gap | Where | Section 8 item |
-| --- | --- | --- | --- |
-| G9 | With two in-person rounds live, scanning from one round's Scan a player opens the award page with the stage game or the newest live game picked, not that round, so the host picks it by hand | In-person round's host controls | P2-11 |
+None. What is left is in section 8.
 
 ## 7. Winner decided, then finished
 
@@ -579,7 +579,9 @@ Every item is frontend only unless it says otherwise.
 | P2-8 (done) | Host forms: a taken join code shows a toast instead of an error under the field; the "RANDOM" placeholder looks like a typed value; the add-game title field repeats the select's text and has no label | Inline error on the field; placeholder styling as in the scanner's code field; placeholder "Title (optional)" | `src/pages/host/HostHome.tsx`, `src/components/host/GamesPanel.tsx` | XS |
 | P2-9 (done) | G8: the start page says "Continue in session G52513" and only finds out the party is gone after the tap; guest copy mixes "session" and "party" | Look the party up on the start page: "Continue in Nicolai's 30th", forget it if it's gone; say "party" to guests | `src/pages/Home.tsx` | S |
 | P2-10 (done) | The host scanner is a black box until the camera starts, and its heading is smaller than on other host pages | "Starting camera" state over the video; same heading size as the other host pages | `src/components/QrScanner.tsx`, `src/pages/host/Scan.tsx` | XS |
-| P2-11 | G9: with two in-person rounds live, the award page can't tell which one the host scanned from | The award page and Scan player already take `?game=<id>`; the round's Scan a player link sends its own game id | `src/games/in-person/HostView.tsx` | XS |
+| P2-11 (done) | G9: with two in-person rounds live, the award page can't tell which one the host scanned from | The award page and Scan player take `?game=<id>`; the round's Scan a player link sends its own game id | `src/games/in-person/HostView.tsx` | XS |
+| P2-12 | On the TV at 1440x900 with 45 guests, Last one standing's final screen beside the rail squeezes its tiles into small chips without avatars, because its own Top hunters column keeps its 24rem | Move that column under the tiles when the game's area is narrower than about 1100 px, or slim the rail on final screens | `src/games/elimination/TvView.tsx` | S |
+| P2-13 | Phones download every game's host controls and settings editors with the app: the main chunk is 980 kB (277 kB gzipped) | Load each game's `HostView` and `ConfigEditor` lazily, as the TV views already are, with a Suspense fallback in the host's game card and settings | the four `src/games/*/index.ts`, `src/components/host/LiveGameCard.tsx`, `src/components/host/GameSettings.tsx` | S |
 
 ### Smaller polish (P3, done)
 

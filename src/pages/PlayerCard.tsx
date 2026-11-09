@@ -1,5 +1,5 @@
 import { ScanIcon } from '@phosphor-icons/react'
-import { useCallback, type ComponentType } from 'react'
+import { useCallback } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { ErrorNotice, Loading, Notice } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -9,14 +9,6 @@ import { lastJoinCode } from '@/lib/storage'
 import { useLiveQuery } from '@/lib/useLiveQuery'
 import AwardPoints from '@/pages/host/AwardPoints'
 import { WayBack } from '@/pages/NotFound'
-
-/**
- * HOST's award page (docs/engine-v2.md, 7.3 and 10.3): `AwardPoints({ playerId,
- * sessionId })` mounts its own live session. Typed here by that contract, so
- * this page keeps compiling against the award page before and after HOST's
- * version lands; the cast can go once it has.
- */
-const HostAwardPoints = AwardPoints as unknown as ComponentType<{ playerId: string; sessionId: string }>
 
 // Target of every player QR code (docs/engine-v2.md, 7.1). The host gets the
 // scoring screen. A player of the same party goes into their game with the
@@ -63,7 +55,8 @@ export default function PlayerCard() {
   }
   if (host) {
     return player ? (
-      <HostAwardPoints playerId={player.id} sessionId={player.session_id} />
+      // HOST's award page mounts its own live session (docs/engine-v2.md, 7.3).
+      <AwardPoints playerId={player.id} sessionId={player.session_id} />
     ) : (
       <Notice
         title="Unknown player"

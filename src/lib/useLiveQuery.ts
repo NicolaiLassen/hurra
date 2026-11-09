@@ -16,13 +16,6 @@ export type LiveQueryOptions = {
   revision?: string | number | null
 }
 
-/**
- * @deprecated v1's Postgres Changes watches. v2 publishes no table to
- * Realtime (docs/engine-v2.md, 2.10), so they are ignored; kept only so v1
- * pages compile until their owners port them (10.1).
- */
-export type Watch = { table: string; filter?: string }
-
 /** Waits before retrying a failed load: 1s, 2s, 5s, then every 10s. */
 const BACKOFF_MS = [1000, 2000, 5000, 10_000]
 
@@ -40,11 +33,7 @@ const BACKOFF_MS = [1000, 2000, 5000, 10_000]
  * `fetcher` must be memoised with useCallback: a new function means a new
  * query, which starts empty, so one party's data never shows for another.
  */
-export function useLiveQuery<T>(fetcher: () => Promise<T>, options?: LiveQueryOptions): LiveQuery<T>
-/** @deprecated The watches are ignored: pass `{ pollMs }` instead. */
-export function useLiveQuery<T>(fetcher: () => Promise<T>, legacyWatches: readonly Watch[]): LiveQuery<T>
-export function useLiveQuery<T>(fetcher: () => Promise<T>, second?: LiveQueryOptions | readonly Watch[]): LiveQuery<T> {
-  const options: LiveQueryOptions = second === undefined || Array.isArray(second) ? {} : (second as LiveQueryOptions)
+export function useLiveQuery<T>(fetcher: () => Promise<T>, options: LiveQueryOptions = {}): LiveQuery<T> {
   const pollMs = options.pollMs
   const revision = options.revision ?? null
   const [attempt, setAttempt] = useState(0)

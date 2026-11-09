@@ -12,8 +12,8 @@ import { withRanks } from '@/lib/format'
 const SHOWN = 5
 
 /**
- * The round in the host control room: Scan a player (as in v1), and who leads
- * this round so far, so the host knows how it stands before ending it.
+ * The round in the host control room: Scan a player (for this round), and who
+ * leads this round so far, so the host knows how it stands before ending it.
  */
 export default function HostView({ game, players, gamePoints }: HostViewProps<InPersonGame>) {
   const rows = withRanks(scorers(gamePoints, players))
@@ -24,7 +24,8 @@ export default function HostView({ game, players, gamePoints }: HostViewProps<In
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground">Scan players' QR codes to give points for {game.title}.</p>
         <Button asChild>
-          <Link to="/host/scan">
+          {/* The game id goes along, so the points land in this round even with two rounds live. */}
+          <Link to={`/host/scan?game=${game.id}`}>
             <ScanIcon />
             Scan a player
           </Link>

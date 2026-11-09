@@ -470,7 +470,9 @@ export function createLiveSession(
     // Ping health: a safety poll found a change, and no ping arrived since the read before it.
     if (poll && previous && fingerprint !== previous.fingerprint && lastPingAt < previous.sentAt) suspectPings()
     previous = { fingerprint, sentAt }
-    emit({ snapshot, error: undefined, tallies: settleTallies(snapshot, tallySeqAtSend) })
+    // A phone that slept through its "moved" ping learns it from the read.
+    const moved = !state.moved && phone && !snapshot.member && snapshot.moved === true
+    emit({ snapshot, error: undefined, tallies: settleTallies(snapshot, tallySeqAtSend), ...(moved ? { moved: true } : {}) })
     syncTopics(snapshot)
     planDeadlines(snapshot)
   }

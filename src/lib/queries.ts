@@ -11,16 +11,7 @@ import { ensureSignedIn } from '@/lib/auth'
 import { createGameApi, GameCallError, type EngineRequest, type EngineResponse } from '@/lib/gameApi'
 import type { RawRecap, RecapDoc } from '@/lib/recap'
 import { supabase } from '@/lib/supabase'
-import type {
-  AnswerPayload,
-  HostSessionRow,
-  Player,
-  PlayerRow,
-  PublicSession,
-  ScoreEvent,
-  Session,
-  SubmitResult,
-} from '@/lib/types'
+import type { AnswerPayload, HostSessionRow, PlayerRow, PublicSession, ScoreEvent, SubmitResult } from '@/lib/types'
 import { isJoinCode, isPlayerCode, isUuid } from '@/lib/urls'
 import { useLiveQuery, type LiveQuery } from '@/lib/useLiveQuery'
 
@@ -34,14 +25,6 @@ export {
   useSession,
   useSessionGames,
 } from '@/lib/useLive'
-
-/**
- * Transitional (docs/engine-v2.md, 10.1). The v1 pages that PHONE and HOST
- * replace still read some results as v1 shapes. Intersecting the spec's type
- * with the v1 one keeps both compiling; the values are always the spec's. Drop
- * the `& V1<...>` parts once Play.tsx, Join.tsx and HostHome.tsx are ported.
- */
-type V1<T> = T
 
 const PLAYER_COLUMNS = 'id, session_id, user_id, name, code, profile, created_at'
 const TRANSFER_MS = 15 * 60_000
@@ -93,16 +76,13 @@ export async function sessionByCode(joinCode: string): Promise<PublicSession | n
   return unwrap<PublicSession | null>(await supabase.rpc('session_by_code', { p_join_code: code }))
 }
 
-/** @deprecated v1 name of sessionByCode. */
-export const getSessionByCode = sessionByCode
-
 export async function partyExists(joinCode: string): Promise<boolean> {
   return (await sessionByCode(joinCode)) !== null
 }
 
 export type Membership = {
-  session: PublicSession & V1<Session>
-  player: (PlayerRow & V1<Player>) | null
+  session: PublicSession
+  player: PlayerRow | null
 }
 
 /** Signs this browser in (anonymously if needed) and finds its player in the party; null if there's no such party. */
@@ -113,7 +93,7 @@ export async function loadMembership(joinCode: string): Promise<Membership | nul
   const player = unwrap<PlayerRow | null>(
     await supabase.from('players').select(PLAYER_COLUMNS).eq('session_id', session.id).eq('user_id', user.id).maybeSingle(),
   )
-  return { session, player } as Membership
+  return { session, player }
 }
 
 /**
@@ -154,27 +134,13 @@ export async function getPlayerByCode(code: string): Promise<(PlayerRow & { sess
   return { ...row, session: { ...row.session, archived_at: epochMs(row.session.archived_at) } }
 }
 
-/** @deprecated v1 helper (PlayerCard): the signed-in user's player in a party, if any. */
-export async function getOwnPlayer(sessionId: string, userId: string): Promise<PlayerRow | null> {
-  if (!isUuid(sessionId) || !isUuid(userId)) return null
-  return unwrap<PlayerRow | null>(
-    await supabase.from('players').select(PLAYER_COLUMNS).eq('session_id', sessionId).eq('user_id', userId).maybeSingle(),
-  )
-}
-
-/** @deprecated Use snapshot.exists (or partyExists). Whether the party exists, whoever asks. */
-export async function sessionExists(sessionId: string): Promise<boolean> {
-  if (!isUuid(sessionId)) return false
-  return unwrap<boolean>(await supabase.rpc('session_exists', { p_session_id: sessionId })) === true
-}
-
 // Host: parties ---------------------------------------------------------------------------
 
 /** The host's parties, newest first: a 30 s poll, and on returning to the tab. */
-export function useSessions(): LiveQuery<(HostSessionRow & V1<Session>)[]> {
+export function useSessions(): LiveQuery<HostSessionRow[]> {
   const fetcher = useCallback(
     async () =>
-      unwrap<(HostSessionRow & V1<Session>)[]>(
+      unwrap<HostSessionRow[]>(
         await supabase
           .from('sessions')
           .select('id, name, join_code, status, archived_at, created_at')

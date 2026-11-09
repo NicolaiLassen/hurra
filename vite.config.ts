@@ -1,17 +1,32 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { realpathSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { defineConfig, loadEnv, searchForWorkspaceRoot, type Plugin } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), netlifyFunctions()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  // Expose the dev server on the LAN so it can be opened from a phone.
-  server: { host: true },
+  server: {
+    // Expose the dev server on the LAN so it can be opened from a phone.
+    host: true,
+    // A git worktree may link node_modules to the main checkout's; its real
+    // path is then outside this folder, and the dev server would refuse the
+    // Geist font from it (403).
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), ...nodeModulesRealPath()] },
+  },
 })
+
+function nodeModulesRealPath(): string[] {
+  try {
+    return [realpathSync(fileURLToPath(new URL('./node_modules', import.meta.url)))]
+  } catch {
+    return []
+  }
+}
 
 /**
  * Serves netlify/functions/<name>.mts at /api/<name> during `npm run dev`, as

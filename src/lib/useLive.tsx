@@ -101,7 +101,7 @@ export function LiveSessionProvider({
   const refresh = useCallback(() => session.current?.refresh(), [])
 
   const fixtureState = useMemo<LiveState | null>(
-    () => (fixture ? { snapshot: fixture, tallies: fixture.tallies, connected: true, pings: 'ok', moved: false } : null),
+    () => (fixture ? { snapshot: fixture, tallies: fixture.tallies, connected: true, pings: 'ok', moved: fixture.moved === true } : null),
     [fixture],
   )
   const state = fixtureState ?? (live?.key === key ? live.state : IDLE)

@@ -110,6 +110,12 @@ describe('the phone home', () => {
     expect(text).not.toContain('Show my code')
   })
 
+  it('a guest whose player moved to another phone: the moved notice, also after a sleep (snapshot.moved)', async () => {
+    const text = await phone({ ...fixtureSnapshot('removed', 'phone'), moved: true })
+    expect(text).toContain('Your player moved to another phone')
+    expect(text).not.toContain("You're no longer in")
+  })
+
   it('the party is over: that is a wrap, Your night from the published recap, no code bar', async () => {
     const text = await phone('archived')
     expect(text).toContain("That's a wrap!")

@@ -302,6 +302,14 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.sessions where id = p_session_id)
 $$;
 
+-- Whether the caller's player in the party moved to another phone (claim_player),
+-- so an old phone that slept through the "moved" ping still says so when it wakes.
+create function public.moved_away(p_session_id uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.event_log e
+    where e.session_id = p_session_id and e.kind = 'player.moved' and e.data ->> 'from_user' = auth.uid()::text)
+$$;
+
 -- 5. Row level security, policies and grants -----------------------------------------
 -- "Member" means session_id = any ((select public.my_session_ids())::uuid[]); "host"
 -- means (select public.is_host()).
@@ -696,7 +704,7 @@ begin
       if new.user_id is distinct from old.user_id then
         insert into public.event_log (session_id, kind, actor, player_id, user_id, about, data)
         values (new.session_id, 'player.moved', v_actor, new.id, v_uid, array[new.id],
-          jsonb_build_object('name', new.name, 'player_id', new.id));
+          jsonb_build_object('name', new.name, 'player_id', new.id, 'from_user', old.user_id));
         -- The old phone is still joined on player:<id>, so it hears this.
         perform public.ping_player(new.session_id, new.id, 'moved');
         perform public.ping_session(new.session_id, 'stage');
@@ -1217,7 +1225,8 @@ begin
     return jsonb_build_object('now', public.epoch_ms(v_now), 'member', false, 'exists', v_exists, 'session', null,
       'games', '[]'::jsonb, 'prompts', '[]'::jsonb, 'tallies', '{}'::jsonb, 'game_points', '{}'::jsonb,
       'players', '[]'::jsonb, 'standings', '[]'::jsonb, 'feed', '[]'::jsonb,
-      'me', null, 'states', null, 'screens', null, 'recap', null);
+      'me', null, 'states', null, 'screens', null, 'recap', null,
+      'moved', v_exists and p_screen = 'phone' and public.moved_away(p_session_id));
   end if;
 
   select coalesce(array_agg(g.id), '{}') into v_active
@@ -1243,6 +1252,7 @@ begin
     'now', public.epoch_ms(v_now),
     'member', true,
     'exists', true,
+    'moved', false,
     'session', jsonb_build_object('id', v_session.id, 'name', v_session.name, 'join_code', v_session.join_code,
       'status', v_session.status, 'data', v_session.data, 'spotlight_game_id', v_session.spotlight_game_id,
       'spotlight_at', public.epoch_ms(v_session.spotlight_at), 'tv_scene', v_session.tv_scene,
@@ -2019,6 +2029,7 @@ create policy "Hosts delete game media" on storage.objects
 revoke execute on function
   public.random_code(int), public.epoch_ms(timestamptz), public.try_uuid(text),
   public.is_host(), public.my_player_ids(), public.my_session_ids(), public.session_exists(uuid),
+  public.moved_away(uuid),
   public.ping(text, text, jsonb), public.ping_session(uuid, text, jsonb), public.ping_player(uuid, uuid, text),
   public.can_listen(text),
   public.touch_spotlight(), public.log_session_change(), public.ping_session_deleted(), public.log_player_change(),
@@ -2034,7 +2045,8 @@ from public, anon, authenticated;
 -- Helpers: policies and the invoker functions run as the caller.
 grant execute on function
   public.random_code(int), public.epoch_ms(timestamptz), public.try_uuid(text),
-  public.is_host(), public.my_player_ids(), public.my_session_ids(), public.session_exists(uuid)
+  public.is_host(), public.my_player_ids(), public.my_session_ids(), public.session_exists(uuid),
+  public.moved_away(uuid)
 to authenticated, service_role;
 
 -- What the app calls.

@@ -18,20 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatPoints } from '@/lib/format'
 import { awardPoints, undoPoints, usePlayerEvents } from '@/lib/queries'
 import { toast } from '@/lib/toast'
-import type { Player, Session, Snapshot } from '@/lib/types'
+import type { Player, Snapshot } from '@/lib/types'
 import { LiveSessionProvider, useLive } from '@/lib/useLive'
 import { SessionNotFound, WayBack } from '@/pages/NotFound'
 
 const QUICK_POINTS = [1, 2, 3, 5, 10]
 const NO_GAME = 'none'
-
-type AwardPointsProps =
-  | { playerId: string; sessionId: string }
-  /**
-   * @deprecated The v1 props, kept only while src/pages/PlayerCard.tsx still
-   * passes them (docs/engine-v2.md, 10.1); the spec's props are { playerId, sessionId }.
-   */
-  | { player: Pick<Player, 'id'>; session: Pick<Session, 'id'> }
 
 /**
  * The award page (docs/engine-v2.md, 7.3): give or take points from one guest,
@@ -40,9 +32,7 @@ type AwardPointsProps =
  * renders it. `?game=<id>` (from a game's Scan a player) picks the game the
  * points go to.
  */
-export default function AwardPoints(props: AwardPointsProps) {
-  const playerId = 'playerId' in props ? props.playerId : props.player.id
-  const sessionId = 'sessionId' in props ? props.sessionId : props.session.id
+export default function AwardPoints({ playerId, sessionId }: { playerId: string; sessionId: string }) {
   return (
     <LiveSessionProvider sessionId={sessionId} screen="host">
       <AwardGate playerId={playerId} />
