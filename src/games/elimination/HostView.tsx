@@ -12,6 +12,9 @@ export default function HostView({ players, state }: HostViewProps<EliminationGa
   if (!state) return <p className="text-muted-foreground">Dealing tasks…</p>
 
   const nameOf = nameFrom(players)
+  // Tasks repeat when there are more guests than tasks: a knockout's task stays
+  // hidden while someone still holds the same one, as in the room's feed (publicState).
+  const live = new Set(Object.values(state.tasks))
   // Only players still in the party: a removed guest's task left with them.
   const party = { players }
   const alive = standing(state, party).map((id) => [id, state.tasks[id]] as const)
@@ -68,7 +71,7 @@ export default function HostView({ players, state }: HostViewProps<EliminationGa
                     <p className="font-medium">
                       {nameOf(k.by)} {k.method === 'catch' ? 'caught' : 'tagged'} {nameOf(k.target)}
                     </p>
-                    <p className="truncate text-sm text-muted-foreground">“{k.task}”</p>
+                    {(showTasks || !live.has(k.task)) && <p className="truncate text-sm text-muted-foreground">“{k.task}”</p>}
                   </div>
                 </li>
               ))}

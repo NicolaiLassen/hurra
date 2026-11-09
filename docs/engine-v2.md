@@ -3059,7 +3059,12 @@ game if live, else the newest live game. New: Move to a new phone.
     pending.
   - `ResultView` (new): "You're the last one standing!", or "You're out: Mads
     got you with 'hum a tune'. Ana won.", or "Ana won" for spectators.
-  - `HostView`: as today, using `standing` and `winnerOf`.
+  - `HostView`: as today, using `standing` and `winnerOf`. **Changed during
+    review:** with Show tasks off, Latest knockouts shows a knockout's task
+    only once nobody still holds the same text, the rule of the room's feed
+    (`publicState.feed`): tasks repeat when there are more guests than tasks
+    (with 45 guests and the 30 default tasks, 30 hold a doubled one), and the
+    host's phone is out in the room.
   - `TvView`: as today; with `finished`, the winner header and "Final result".
     No `FinalTvView`: the TV's default (`TvView` with `finished`) is the final
     screen.
