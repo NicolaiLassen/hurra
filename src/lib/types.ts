@@ -52,6 +52,16 @@ export type SessionGame = {
   created_at: number
 }
 
+/** A row of the host's party list (useSessions): read directly, so its times are ISO strings. */
+export type HostSessionRow = {
+  id: string
+  name: string
+  join_code: string
+  status: 'open' | 'closed'
+  archived_at: string | null
+  created_at: string
+}
+
 export type ScoreRow = { player_id: string; name: string; code: string; points: number; profile: GameData }
 export type ScoreEvent = {
   id: number
