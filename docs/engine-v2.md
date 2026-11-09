@@ -1068,11 +1068,23 @@ migration) when:
   `game_scores`, `game_prompts`; insert on `score_events`, `session_feed` and
   `event_log`; update on `sessions`, `players` and `session_games`;
 - authenticated or service_role can update, delete or truncate `event_log`;
-- the `realtime.messages` policy is missing;
+- the `realtime.messages` policy is missing, or `realtime.messages` has any
+  other policy;
 - any `public` table is in the `supabase_realtime` publication;
 - the `game-media` bucket is missing, isn't public, or its limit or types
-  differ from 2.11, or one of its four policies is missing;
+  differ from 2.11, or one of its four policies is missing, or
+  `storage.objects` has any other policy;
 - there is not exactly one foreign key between `sessions` and `session_games`.
+
+**Changed during review:** the wipe (11) drops only what is in `public`, so
+the `storage` and `realtime` schemas keep any policy a project already has,
+and permissive policies OR together: a leftover dashboard template such as
+"Authenticated users can upload", or an insert policy on `realtime.messages`
+(any guest could then send fake pings on the private topics), would quietly
+widen access while the checks for the file's own policies passed. Checking
+names is enough, since the file has just recreated its own five. If it trips
+on production: drop the named policy and run the file again (it runs in one
+transaction, so nothing was applied).
 
 ### 2.13 Host bootstrap
 
@@ -3899,8 +3911,10 @@ every object dropped and the three counts were 0.
    table; schema usage for anon, authenticated and service_role; the
    `realtime.messages` policy "Hurra screens receive their pings" exists; the
    `game-media` bucket is public with a 2 MB limit and `image/jpeg` only, and
-   has its four policies; anonymous sign-ins are still on; the host's auth
-   user still exists.
+   has its four policies; `select schemaname, tablename, policyname, cmd from
+   pg_policies where (schemaname, tablename) in (('storage', 'objects'),
+   ('realtime', 'messages'))` lists exactly those four and the one, nothing
+   else; anonymous sign-ins are still on; the host's auth user still exists.
 8. **Re-add the host** in the SQL editor:
    `insert into public.hosts (user_id) select id from auth.users where email = '<host email>';`
    then `select count(*) from public.hosts` returns 1. If the auth user is

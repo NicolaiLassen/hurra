@@ -2266,6 +2266,15 @@ begin
                  and policyname = 'Hurra screens receive their pings') then
     v_problems := v_problems || 'the realtime.messages policy is missing'::text;
   end if;
+  -- A wipe keeps the realtime and storage schemas, and permissive policies OR
+  -- together, so any policy this file didn't make would widen access (an
+  -- insert policy here would let any guest send pings on the private topics).
+  for r in
+    select policyname from pg_policies
+    where schemaname = 'realtime' and tablename = 'messages' and policyname <> 'Hurra screens receive their pings'
+  loop
+    v_problems := v_problems || format('realtime.messages has a policy this file didn''t make: %s', r.policyname);
+  end loop;
   for r in
     select tablename from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public'
   loop
@@ -2282,6 +2291,15 @@ begin
                          'Hosts delete game media')) <> 4 then
     v_problems := v_problems || 'a game-media storage policy is missing'::text;
   end if;
+  -- Checking names is enough: the file has just recreated its own four.
+  for r in
+    select policyname from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname not in ('Hosts read game media', 'Hosts upload game media', 'Hosts change game media',
+                             'Hosts delete game media')
+  loop
+    v_problems := v_problems || format('storage.objects has a policy this file didn''t make: %s', r.policyname);
+  end loop;
 
   -- Exactly one relationship between parties and games, so PostgREST embeds stay unambiguous.
   if (select count(*) from pg_constraint c
