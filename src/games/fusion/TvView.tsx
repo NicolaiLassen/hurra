@@ -12,9 +12,11 @@ import type { Player } from '@/lib/types'
 import { useElementSize } from '@/lib/useElementSize'
 import { cn } from '@/lib/utils'
 
-/** The picture alone fills the stage this long... */
-const PICTURE_MS = 2000
-/** ...then the two people stay up this long before the wall comes back. */
+/**
+ * A new reveal holds the stage this long, its two people with it from the
+ * start: phones get the reveal in the same ping and show it at once, so a
+ * picture-only beat here would only trail their toasts and cards.
+ */
 const PEOPLE_MS = 9000
 /** A reveal older than this doesn't replay (a TV that reloads or reconnects). */
 const FRESH_MS = 15_000
@@ -24,7 +26,7 @@ const spring: Transition = { type: 'spring', stiffness: 220, damping: 26 }
 /**
  * The TV while fusion holds the stage: the wall of numbered pictures, the
  * revealed ones with their two people, and each new reveal as a moment of its
- * own (the picture fills the stage, then the two names spring in).
+ * own (the picture fills the stage and the two names spring in beside it).
  */
 export default function TvView({ players, publicState, tallies, serverNow, mediaUrl, finished }: TvViewProps<FusionGame>) {
   const pub = publicOf(publicState)
@@ -198,9 +200,9 @@ function Tile({
 }
 
 /**
- * A new reveal takes the stage: the picture alone for 2 s, then the two
- * people spring in beside it with confetti and the counts, then the wall.
- * The reveal's sound comes with its announcement (stageBanners 'sound-only').
+ * A new reveal takes the stage: the picture, with the two people springing in
+ * beside it with confetti and the counts, then the wall. The reveal's sound
+ * comes with its announcement (stageBanners 'sound-only').
  */
 function RevealMoment({
   pub,
@@ -214,7 +216,7 @@ function RevealMoment({
   mediaUrl: TvViewProps['mediaUrl']
 }) {
   const reduce = useReducedMotion()
-  const [moment, setMoment] = useState<{ n: number; at: number; stage: 'picture' | 'people' } | null>(null)
+  const [moment, setMoment] = useState<{ n: number; at: number } | null>(null)
   // The clock is read when a reveal arrives, not on every render.
   const clock = useRef(serverNow)
   useEffect(() => {
@@ -226,9 +228,8 @@ function RevealMoment({
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = []
     if (n !== undefined && at !== undefined && clock.current() - at <= FRESH_MS) {
-      timers.push(setTimeout(() => setMoment({ n, at, stage: 'picture' }), 0))
-      timers.push(setTimeout(() => setMoment({ n, at, stage: 'people' }), PICTURE_MS))
-      timers.push(setTimeout(() => setMoment(null), PICTURE_MS + PEOPLE_MS))
+      timers.push(setTimeout(() => setMoment({ n, at }), 0))
+      timers.push(setTimeout(() => setMoment(null), PEOPLE_MS))
     } else {
       timers.push(setTimeout(() => setMoment(null), 0))
     }
@@ -237,7 +238,6 @@ function RevealMoment({
 
   const picture = moment ? pub.pictures.find((p) => p.n === moment.n) : undefined
   const revealed = picture?.revealed
-  const people = moment?.stage === 'people'
 
   return (
     <AnimatePresence>
@@ -260,9 +260,10 @@ function RevealMoment({
           />
           <div className="relative flex size-full items-center justify-center gap-[4vw] p-[3vw]">
             <motion.div
-              layout={!reduce}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={spring}
-              className={cn('relative aspect-[4/5] shrink-0', people ? 'h-[80%]' : 'h-full')}
+              className="relative aspect-[4/5] h-[80%] shrink-0"
             >
               <PictureArt
                 picture={picture}
@@ -276,46 +277,44 @@ function RevealMoment({
               </span>
             </motion.div>
 
-            {people && (
-              <div className="grid min-w-0 gap-[3vh]">
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-4xl font-semibold text-muted-foreground short:text-3xl"
+            <div className="grid min-w-0 gap-[3vh]">
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-4xl font-semibold text-muted-foreground short:text-3xl"
+              >
+                {picture.label} was
+              </motion.p>
+              {revealed.people.map((id, i) => (
+                <motion.div
+                  key={id}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 80, scale: 0.5 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={
+                    reduce ? { duration: 0.4, delay: i * 0.3 } : { type: 'spring', stiffness: 240, damping: 16, delay: 0.25 + i * 0.45 }
+                  }
+                  className="flex min-w-0 items-center gap-6"
                 >
-                  {picture.label} was
-                </motion.p>
-                {revealed.people.map((id, i) => (
-                  <motion.div
-                    key={id}
-                    initial={reduce ? { opacity: 0 } : { opacity: 0, y: 80, scale: 0.5 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={
-                      reduce ? { duration: 0.4, delay: i * 0.3 } : { type: 'spring', stiffness: 240, damping: 16, delay: 0.25 + i * 0.45 }
-                    }
-                    className="flex min-w-0 items-center gap-6"
-                  >
-                    <Avatar
-                      name={nameOf(players, id, revealed.names?.[i])}
-                      className="size-36 text-5xl ring-4 ring-confetti-violet/60 short:size-28 short:text-4xl"
-                    />
-                    <span className="min-w-0 truncate text-8xl font-black short:text-7xl">
-                      {nameOf(players, id, revealed.names?.[i])}
-                    </span>
-                  </motion.div>
-                ))}
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 1.4 }}
-                  className="text-4xl text-muted-foreground tabular-nums short:text-3xl"
-                >
-                  {countsLine(revealed)}
-                </motion.p>
-              </div>
-            )}
+                  <Avatar
+                    name={nameOf(players, id, revealed.names?.[i])}
+                    className="size-36 text-5xl ring-4 ring-confetti-violet/60 short:size-28 short:text-4xl"
+                  />
+                  <span className="min-w-0 truncate text-8xl font-black short:text-7xl">
+                    {nameOf(players, id, revealed.names?.[i])}
+                  </span>
+                </motion.div>
+              ))}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1.4 }}
+                className="text-4xl text-muted-foreground tabular-nums short:text-3xl"
+              >
+                {countsLine(revealed)}
+              </motion.p>
+            </div>
           </div>
-          {people && <ConfettiBurst />}
+          <ConfettiBurst />
         </motion.div>
       )}
     </AnimatePresence>

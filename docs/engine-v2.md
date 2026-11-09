@@ -3379,8 +3379,11 @@ prints one by one on the TV. A point per right person.
 - **TV** (`TvView`, on the stage for the reveal): a grid of the pictures with
   their numbers; revealed ones show the two faces and names. On a new
   `lastReveal`: the picture fills the stage (its full image, or its large
-  number) for 2 s, then the two avatars and names spring in with confetti and
-  the counts. `TvStatus` (background): "Who is fused? 12 pictures, 214 votes"
+  number) and the two avatars and names spring in beside it with confetti and
+  the counts. **Changed during review:** the picture showed alone for 2 s
+  first, but phones get the reveal in the same ping (the toast and their
+  card), so they were about 1.8 s ahead of the TV, and the names were
+  readable on the TV's wall through the fading overlay. `TvStatus` (background): "Who is fused? 12 pictures, 214 votes"
   (the sum of `tallies`). `FinalTvView`: the top 3 face detectives.
   **Changed during build:** under the game's title the rail card reads "Vote
   on your phone" with "12 pictures, 214 votes", then the reveal's progress.
