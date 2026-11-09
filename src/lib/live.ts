@@ -445,7 +445,7 @@ export function createLiveSession(
       clearTimeout(timeout)
       inFlight = null
       if (!closed) {
-        planPoll()
+        planPoll(true)
         if (queued) {
           const asPoll = queuedPoll
           queued = false
@@ -592,17 +592,31 @@ export function createLiveSession(
     if (connected !== state.connected) emit({ connected })
   }
 
-  // Safety polls.
+  // Safety polls: `interval` after the last read, whatever caused it. A change
+  // of interval (a live prompt, failing joins, unhealthy pings) replans from
+  // that read, so status changes never postpone a poll.
   let pollTimer: Timer | undefined
+  let plannedInterval = 0
+  let lastReadAt = Date.now()
   function pollInterval(): number {
     if (state.pings === 'unhealthy' || [...topics.values()].some((t) => t.failures >= FAILED_JOINS)) return FAST_POLL_MS
     if (!phone) return POLL_MS[screen]
     return hasLiveDeadline(state.snapshot) ? PHONE_LIVE_POLL_MS : POLL_MS.phone
   }
-  function planPoll() {
+  function planPoll(afterRead = false) {
     if (closed) return
+    if (afterRead) lastReadAt = Date.now()
+    const interval = pollInterval()
+    if (!afterRead && pollTimer !== undefined && interval === plannedInterval) return
     clearTimeout(pollTimer)
-    pollTimer = setTimeout(() => schedule(0, true), pollInterval())
+    plannedInterval = interval
+    pollTimer = setTimeout(
+      () => {
+        pollTimer = undefined
+        schedule(0, true)
+      },
+      Math.max(0, lastReadAt + interval - Date.now()),
+    )
   }
 
   // Phones read once 2 s after each wake_at and closes_at they know of (plus up

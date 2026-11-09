@@ -51,7 +51,9 @@ const RETRY_STATUSES = new Set([502, 503, 504])
  * plain-http LAN dev URL (and iOS before 15.4) builds one from getRandomValues.
  */
 export function newRequestId(): string {
-  const webCrypto = globalThis.crypto as Crypto | undefined
+  // Typed by hand: the rehearsal type-checks this file with Node's libs, which have no DOM `Crypto`.
+  const webCrypto = (globalThis as { crypto?: { randomUUID?: () => string; getRandomValues?: (bytes: Uint8Array<ArrayBuffer>) => unknown } })
+    .crypto
   if (typeof webCrypto?.randomUUID === 'function') return webCrypto.randomUUID()
   const bytes = new Uint8Array(16)
   if (typeof webCrypto?.getRandomValues === 'function') webCrypto.getRandomValues(bytes)

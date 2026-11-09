@@ -396,6 +396,20 @@ describe('channels', () => {
     live.close()
   })
 
+  it('a channel that keeps failing never postpones the safety poll', async () => {
+    const client = new FakeClient()
+    const { live } = open(client, 'tv')
+    await answer(client)
+    const stage = client.topic(`stage:${SESSION}`)!
+    await tick(20_000)
+    stage.fail()
+    await tick(9000)
+    stage.fail()
+    await until(1000)
+    expect(client.reads).toHaveLength(2)
+    live.close()
+  })
+
   it('polls every 5 s once a channel has failed to join 3 times in a row', async () => {
     const client = new FakeClient()
     const { live } = open(client, 'tv')
