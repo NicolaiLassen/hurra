@@ -1,14 +1,14 @@
 import { SpinnerIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { errorMessage } from '@/components/host/hostCalls'
 import { Screen } from '@/components/layout'
 import Logo from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { isHost } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { signInHost } from '@/lib/auth'
 
 /**
  * Where to go after signing in: the page that asked for the login, or the
@@ -17,9 +17,7 @@ import { supabase } from '@/lib/supabase'
  */
 function returnPath(state: unknown) {
   const from = (state as { from?: unknown } | null)?.from
-  return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.includes('\\')
-    ? from
-    : '/host'
+  return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.includes('\\') ? from : '/host'
 }
 
 export default function HostLogin() {
@@ -33,14 +31,15 @@ export default function HostLogin() {
   async function signIn() {
     setBusy(true)
     setError(undefined)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (!error && (await isHost())) {
-      navigate(returnPath(location.state), { replace: true })
+    try {
+      // Another account is signed out again: "This account isn't a host".
+      await signInHost(email, password)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      setBusy(false)
       return
     }
-    if (!error) await supabase.auth.signOut()
-    setError(error?.message ?? 'This account is not a host.')
-    setBusy(false)
+    navigate(returnPath(location.state), { replace: true })
   }
 
   return (
@@ -60,14 +59,7 @@ export default function HostLogin() {
           >
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                required
-              />
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
@@ -80,8 +72,12 @@ export default function HostLogin() {
                 required
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" size="xl" disabled={busy}>
+            {error && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+            <Button type="submit" size="xl" isPending={busy}>
               {busy && <SpinnerIcon className="animate-spin" />}
               {busy ? 'Signing in…' : 'Sign in'}
             </Button>

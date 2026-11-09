@@ -1,48 +1,80 @@
-import { CaretDownIcon, CaretRightIcon, PlusIcon, SpinnerIcon } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { CaretDownIcon, CaretRightIcon, PlusIcon } from '@phosphor-icons/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { toast } from '@/lib/toast'
+import { errorMessage } from '@/components/host/hostCalls'
 import { Screen } from '@/components/layout'
 import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useSessions } from '@/lib/queries'
-import { supabase } from '@/lib/supabase'
-import type { Session } from '@/lib/types'
-import SessionMenu from '@/pages/host/SessionMenu'
+import { GameCallError } from '@/lib/gameApi'
+import { createSession, useSessions } from '@/lib/queries'
+import { toast } from '@/lib/toast'
+import type { HostSessionRow } from '@/lib/types'
+import SessionMenu, { type SessionChange } from '@/pages/host/SessionMenu'
 
+/** The host's sessions: a new one, the current ones and the archive. */
 export default function HostHome() {
   const navigate = useNavigate()
   const { data: sessions, error } = useSessions()
+  // The list reads every 30 s; a change made here shows at once, until the next read has it.
+  const [changes, setChanges] = useState<{ rows: HostSessionRow[] | undefined; byId: Record<string, SessionChange> }>({
+    rows: undefined,
+    byId: {},
+  })
   const [name, setName] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [codeError, setCodeError] = useState<string>()
   const [showArchived, setShowArchived] = useState(false)
-  const current = sessions?.filter((s) => !s.archived_at) ?? []
-  const archived = sessions?.filter((s) => s.archived_at) ?? []
+
+  const rows = useMemo(() => {
+    // Changes made before the last read are in it already.
+    const byId = changes.rows === sessions ? changes.byId : {}
+    return (sessions ?? []).flatMap((row) => {
+      const change = byId[row.id]
+      if (!change) return [row]
+      if (change.deleted) return []
+      return [
+        {
+          ...row,
+          ...(change.name !== undefined ? { name: change.name } : {}),
+          ...(change.status !== undefined ? { status: change.status } : {}),
+          ...(change.archived !== undefined ? { archived_at: change.archived ? (row.archived_at ?? new Date(0).toISOString()) : null } : {}),
+        },
+      ]
+    })
+  }, [sessions, changes])
+  const current = rows.filter((s) => !s.archived_at)
+  const archived = rows.filter((s) => s.archived_at)
+
+  // The list as last read, for a change made later from a toast's Undo, after another read landed.
+  const latest = useRef(sessions)
+  useEffect(() => {
+    latest.current = sessions
+  })
+
+  function changed(id: string, change: SessionChange) {
+    setChanges((now) => {
+      const rows = latest.current
+      const base = now.rows === rows ? now.byId : {}
+      return { rows, byId: { ...base, [id]: { ...base[id], ...change } } }
+    })
+  }
 
   async function create() {
     setBusy(true)
-    const code = joinCode.trim().toUpperCase()
-    const { data, error } = await supabase
-      .from('sessions')
-      .insert({ name: name.trim(), ...(code ? { join_code: code } : {}) })
-      .select('id')
-      .single()
-    setBusy(false)
-    if (error?.code === '23505') {
-      // The join code field is the one to fix, so say it there.
-      setCodeError(`${code} is already taken. Try another code, or leave it empty.`)
-      return
+    setCodeError(undefined)
+    try {
+      const { id } = await createSession(name, joinCode)
+      navigate(`/host/s/${id}`)
+    } catch (caught) {
+      // A taken or malformed join code is the field to fix, so it says so there.
+      if (caught instanceof GameCallError && (caught.code === 'join_code_taken' || caught.code === 'bad_code')) setCodeError(caught.message)
+      else toast.error(errorMessage(caught))
+      setBusy(false)
     }
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-    navigate(`/host/s/${data.id}`)
   }
 
   return (
@@ -63,14 +95,7 @@ export default function HostHome() {
           >
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Birthday party"
-                maxLength={80}
-                required
-              />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Birthday party" maxLength={80} required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="join-code">Join code (optional)</Label>
@@ -95,27 +120,20 @@ export default function HostHome() {
                 {codeError}
               </p>
             )}
-            <Button
-              type="submit"
-              size="lg"
-              className="sm:col-start-3 sm:row-start-1"
-              disabled={busy || !name.trim()}
-            >
-              {busy ? <SpinnerIcon className="animate-spin" /> : <PlusIcon />}
+            <Button type="submit" size="lg" className="sm:col-start-3 sm:row-start-1" disabled={!name.trim()} isPending={busy}>
+              <PlusIcon />
               Create
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {error && <p className="mt-6 text-destructive">{error.message}</p>}
-      {sessions && current.length === 0 && (
-        <p className="mt-6 text-muted-foreground">No sessions yet. Create one above.</p>
-      )}
+      {error && !sessions && <p className="mt-6 text-destructive">{error.message}</p>}
+      {sessions && current.length === 0 && <p className="mt-6 text-muted-foreground">No sessions yet. Create one above.</p>}
       {/* grid-cols-1: one column as wide as the page, so a long party name truncates instead of widening it. */}
       <ul className="mt-6 grid grid-cols-1 gap-2">
         {current.map((s) => (
-          <SessionCard key={s.id} session={s} />
+          <SessionCard key={s.id} session={s} onChanged={(change) => changed(s.id, change)} />
         ))}
       </ul>
 
@@ -133,7 +151,7 @@ export default function HostHome() {
           {showArchived && (
             <ul className="mt-2 grid grid-cols-1 gap-2 opacity-80">
               {archived.map((s) => (
-                <SessionCard key={s.id} session={s} />
+                <SessionCard key={s.id} session={s} onChanged={(change) => changed(s.id, change)} />
               ))}
             </ul>
           )}
@@ -143,7 +161,7 @@ export default function HostHome() {
   )
 }
 
-function SessionCard({ session }: { session: Session }) {
+function SessionCard({ session, onChanged }: { session: HostSessionRow; onChanged: (change: SessionChange) => void }) {
   return (
     <li>
       <Card size="sm" className="transition-colors has-[a:hover]:ring-primary/50">
@@ -155,7 +173,7 @@ function SessionCard({ session }: { session: Session }) {
               <StatusBadge status={session.archived_at ? 'archived' : session.status} />
             </span>
           </Link>
-          <SessionMenu session={session} />
+          <SessionMenu session={session} onChanged={onChanged} />
         </CardContent>
       </Card>
     </li>

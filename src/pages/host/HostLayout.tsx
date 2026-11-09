@@ -1,14 +1,24 @@
 import { ScanIcon, SignOutIcon } from '@phosphor-icons/react'
-import { Link, Outlet, useNavigate } from 'react-router'
+import { Link, Outlet, useNavigate, useNavigation } from 'react-router'
+import { errorMessage } from '@/components/host/hostCalls'
 import Logo from '@/components/Logo'
 import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase'
+import { signOut } from '@/lib/auth'
+import { useLoaderHold } from '@/lib/loader'
+import { toast } from '@/lib/toast'
 
 export default function HostLayout() {
   const navigate = useNavigate()
+  // The host pages load on demand: a slow one shows the loader instead of nothing happening.
+  useLoaderHold(useNavigation().state === 'loading')
 
-  async function signOut() {
-    await supabase.auth.signOut()
+  async function leave() {
+    try {
+      await signOut()
+    } catch (error) {
+      toast.error(errorMessage(error))
+      return
+    }
     navigate('/host/login', { replace: true })
   }
 
@@ -28,7 +38,7 @@ export default function HostLayout() {
               Scan player
             </Link>
           </Button>
-          <Button variant="ghost" size="lg" className="ml-auto text-muted-foreground" onClick={() => void signOut()}>
+          <Button variant="ghost" size="lg" className="ml-auto text-muted-foreground" onClick={() => void leave()}>
             <SignOutIcon />
             {/* Icon only on small phones, so the nav fits in one row at 320 to 375px. */}
             <span className="max-sm:sr-only">Sign out</span>
