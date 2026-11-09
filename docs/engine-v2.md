@@ -3303,7 +3303,11 @@ no circular countdown, no music. Instead:
   host's phone is out in the room.
 - **Settings** (`ConfigEditor`): a list of questions (text, 2 to 4 options, a
   radio for the right one, optional seconds), the default seconds, points per
-  right answer. Paste-friendly: one question per block.
+  right answer. Paste-friendly: one question per block. **Changed during
+  review:** Add 8 sample questions adds them without their right answers
+  (`correct: -1`), since `samples.ts` ships in the bundle every phone
+  downloads; the host picks each answer, and until then the editor lists
+  "Pick the right answer for question n" and the quiz won't start.
 - **Bot** (`bot.ts`): `settings` makes 10 rehearsal questions of 10 s with 4
   options; `move` answers an open, unanswered question with a random option,
   at a random moment inside its countdown; `hostMove`: Next from the lobby and

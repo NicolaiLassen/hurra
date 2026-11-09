@@ -48,23 +48,25 @@ describe('pasting questions', () => {
   })
 
   it('copies questions out in the same format, so they paste back as they were', () => {
-    const text = questionsToText(SAMPLE_QUESTIONS)
+    // The samples once the host has picked their answers.
+    const answered = SAMPLE_QUESTIONS.map((q, i) => ({ ...q, correct: i % q.options.length }))
+    const text = questionsToText(answered)
     expect(text.split('\n\n')).toHaveLength(8)
-    expect(text).toContain('True or false: honey can keep for thousands of years. [10 s]\n*True\nFalse')
-    expect(parseQuestionsText(text)).toEqual({ questions: SAMPLE_QUESTIONS, problems: [] })
+    expect(text).toContain('True or false: honey can keep for thousands of years. [10 s]\nTrue\n*False')
+    expect(parseQuestionsText(text)).toEqual({ questions: answered, problems: [] })
   })
 })
 
 describe('the sample questions', () => {
-  it('are eight that the quiz accepts, with the right answer in different places', () => {
+  it('are eight that ship without their right answers, so the quiz waits for the host to pick them', () => {
     const quiz = new QuizGame()
     expect(SAMPLE_QUESTIONS).toHaveLength(8)
-    expect(quiz.parseConfig!({ ...quiz.defaultConfig, questions: SAMPLE_QUESTIONS })).toEqual({
-      questions: SAMPLE_QUESTIONS,
-      seconds: 20,
-      pointsPerRight: 1,
-    })
-    expect(new Set(SAMPLE_QUESTIONS.map((q) => q.correct)).size).toBe(4)
+    // Every phone downloads them: no right answer may ship with them.
+    expect(SAMPLE_QUESTIONS.every((q) => q.correct === -1)).toBe(true)
+    expect(() => quiz.parseConfig!({ ...quiz.defaultConfig, questions: SAMPLE_QUESTIONS })).toThrow('Pick the right answer for question 1')
+    // Once the host picks them, the quiz takes them as they are.
+    const answered = SAMPLE_QUESTIONS.map((q) => ({ ...q, correct: 0 }))
+    expect(quiz.parseConfig!({ ...quiz.defaultConfig, questions: answered })).toEqual({ questions: answered, seconds: 20, pointsPerRight: 1 })
     // No dashes in copy, and no emoji.
     for (const q of SAMPLE_QUESTIONS) expect(JSON.stringify(q)).not.toMatch(/[–—]|\p{Extended_Pictographic}/u)
   })

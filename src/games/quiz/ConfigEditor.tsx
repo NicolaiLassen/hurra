@@ -46,7 +46,8 @@ False`
 /**
  * The quiz's settings: the time per question, the party points per right
  * answer, and the questions, each with 2 to 4 options and the right one
- * picked. Paste a whole list at once, or start from 8 sample questions.
+ * picked. Paste a whole list at once, or start from 8 sample questions, whose
+ * right answers the host picks (they ship without them).
  */
 export default function ConfigEditor({ config, onChange, game }: ConfigEditorProps<QuizGame>) {
   const questions = readQuestions(config.questions)
@@ -155,7 +156,9 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
         {questions.length === 0 && !pasting && (
           <div className="grid justify-items-center gap-3 rounded-2xl border border-dashed border-input p-6 text-center">
             <p className="font-semibold">No questions yet</p>
-            <p className="text-sm text-muted-foreground">Write your own, paste a list, or start from 8 party questions.</p>
+            <p className="text-sm text-muted-foreground">
+              Write your own, paste a list, or start from 8 party questions and pick their right answers.
+            </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button type="button" onClick={() => setQuestions(SAMPLE_QUESTIONS)}>
                 <SparkleIcon />
