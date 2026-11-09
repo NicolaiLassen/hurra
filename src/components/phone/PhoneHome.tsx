@@ -87,6 +87,10 @@ function Home({
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
   const over = main.kind === 'over'
+  // A timed question is open on the main card (a quiz question): the Show my
+  // code bar steps aside for it, so it covers none of the answers.
+  const timed =
+    main.kind === 'game' && snapshot.prompts.some((p) => p.game_id === main.game.id && p.closes_at !== null && p.closed_at === null)
   const points = snapshot.standings.find((row) => row.player_id === player.id)?.points ?? 0
   const status = (game: SessionGame): GameStatus => (game.status === 'finished' ? 'finished' : game.id === stageId ? 'stage' : 'running')
 
@@ -192,7 +196,7 @@ function Home({
 
       {snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} className="mt-6" />}
 
-      {!over && <ShowMyCode player={player} />}
+      {!over && <ShowMyCode player={player} hidden={timed} />}
 
       <GameSheet
         open={sheetOpen}
@@ -407,8 +411,10 @@ function useScanToast(
 
 /**
  * When a new game takes the main card, or the main game opens a new question,
- * brings the card into view for a guest who scrolled down to the standings.
- * Not while a sheet covers the page.
+ * brings the card into view when it isn't all on screen: for a guest who
+ * scrolled down to the standings, and for one at the top of a small phone,
+ * where the last answers would sit below the fold. Not while a sheet covers
+ * the page.
  */
 function useBringIntoView(card: RefObject<HTMLDivElement | null>, snapshot: Snapshot, layout: PhoneLayout, covered: boolean) {
   const game = layout.main.kind === 'game' ? layout.main.game : null
@@ -426,7 +432,8 @@ function useBringIntoView(card: RefObject<HTMLDivElement | null>, snapshot: Snap
     if (!before || covered) return
     const news = (gameId !== null && gameId !== before.gameId) || (questionKey !== null && questionKey !== before.questionKey)
     const element = card.current
-    if (!news || !element || element.getBoundingClientRect().top >= 0) return
+    const box = element?.getBoundingClientRect()
+    if (!news || !element || !box || (box.top >= 0 && box.bottom <= window.innerHeight)) return
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     element.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
   }, [gameId, questionKey, covered, card])

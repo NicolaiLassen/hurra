@@ -68,10 +68,14 @@ describe('the phone home', () => {
     expect(text).toContain('What is the capital of Denmark?')
     expect(text).toContain('Copenhagen')
     expect(text).not.toContain('Locked in')
+    // The code bar steps aside while the timed question is open, so it covers no answer.
+    expect(text).not.toContain('Show my code')
   })
 
-  it('the quiz reveal and leaderboard stay on the main card', async () => {
-    expect(await phone('quiz-reveal')).toContain('On the TV Quiz')
+  it('the quiz reveal and leaderboard stay on the main card, with the code bar back', async () => {
+    const reveal = await phone('quiz-reveal')
+    expect(reveal).toContain('On the TV Quiz')
+    expect(reveal).toContain('Show my code')
     expect(await phone('quiz-leaderboard')).toContain('Leaderboard after question 3 of 10')
   })
 

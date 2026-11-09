@@ -2735,6 +2735,10 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
    game and moments.
 6. **Standings** card (as today).
 7. **Show my code** bar (as today), hidden once the party is archived.
+   **Changed during review:** also hidden while the main card's game has a
+   timed question open (a prompt with a `closes_at`), so it covers none of the
+   answers on a small phone; a new question also scrolls the main card into
+   view when it doesn't fit on screen, not only when its top is above it.
 
 **Behaviour.**
 
