@@ -112,15 +112,19 @@ export function phoneLayout(s: Snapshot, now: number): PhoneLayout {
   if (s.session?.archived_at != null) return { main: { kind: 'over' }, alsoRunning: [], finishedLately: [] }
   const live = liveGames(s)
   const stage = spotlit(s)
+  // The result stays until the next game starts (user-flows 7.4), also while
+  // games that started before it run in the background: those stay compact
+  // cards, so Last one standing's task and Scan are still in reach.
+  const last = lastResult(s)
   let main: PhoneLayout['main']
   if (stage && isLive(stage)) {
     main = { kind: 'game', game: stage, onStage: true }
+  } else if (last) {
+    main = { kind: 'result', game: last }
   } else if (live.length > 0) {
     main = { kind: 'game', game: live[0], onStage: false }
   } else {
-    // The result stays until the next game starts (user-flows 7.4).
-    const last = lastResult(s)
-    main = last ? { kind: 'result', game: last } : { kind: 'lobby' }
+    main = { kind: 'lobby' }
   }
   const mainId = main.kind === 'game' || main.kind === 'result' ? main.game.id : null
   return {

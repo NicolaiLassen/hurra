@@ -108,8 +108,8 @@ flowchart TD
   PH --> S{"The main card"}:::gate
   S -- "no game live, none finished lately" --> LOBBY["Lobby: You're in!<br/>faces of the latest joiners"]:::screen
   S -- "a game on the TV" --> LIVE["On the TV: the game's own screen"]:::screen
-  S -- "a game live off the TV" --> LIVE2["Now playing: the newest live game"]:::screen
-  S -- "the last game finished, none started since" --> RES["Finished: the game's result for me<br/>Waiting for the next game"]:::closed
+  S -- "a game live off the TV, no result to show" --> LIVE2["Now playing: the newest live game"]:::screen
+  S -- "the last game finished, none started since<br/>(background games stay compact cards)" --> RES["Finished: the game's result for me<br/>Waiting for the next game"]:::closed
   S -- "party archived" --> WRAP["That's a wrap!<br/>Your night once the recap is published"]:::closed
   PH --> ALSO["Also running: a compact card per other live game<br/>Open shows the whole game in a sheet"]:::screen
   PH --> LATE["Finished lately: a row per other finished game<br/>tap shows its result in a sheet"]:::screen
@@ -515,7 +515,7 @@ sequenceDiagram
 | Moment | Host page | TV | Phones that played | Others |
 | --- | --- | --- | --- | --- |
 | The winning move | The card shows the winner | The game's screen shows the winner; banner and one fanfare | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
-| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card, unless another game is main; then a Finished lately row | The generic result card or row |
+| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished lately row | The generic result card or row |
 | Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | No change: the result stays until the next game | No change |
 | The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main | Same |
 | The host restarts the finished game | Live again, a new round | Its screen if it takes the TV | Dealt in again | Dealt in |

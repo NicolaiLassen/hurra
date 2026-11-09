@@ -2259,12 +2259,16 @@ Rules:
   `lastGame` is the most recently finished game that finished after the newest
   start of any other game.
 - **`phoneLayout`**: `over` when archived. Otherwise `main` is the spotlit
-  live game (`onStage: true`), else the newest live game, else a `result` card
-  for the most recently finished game (not archived) when no other game has
-  started since it finished, else `lobby`. So the result stays until the next
-  game starts, as in user-flows 7.4, and the snapshot always carries its data
-  (the shown games, 2.7). `alsoRunning` is every other live game, newest start
-  first. `finishedLately` is every other game finished in the last 30 minutes.
+  live game (`onStage: true`), else a `result` card for the most recently
+  finished game (not archived) when no other game has started since it
+  finished, else the newest live game, else `lobby`. So the result stays until
+  the next game starts, as in user-flows 7.4, also while games that started
+  before it run in the background (they stay compact cards), and the snapshot
+  always carries its data (the shown games, 2.7). `alsoRunning` is every other
+  live game, newest start first. `finishedLately` is every other game finished
+  in the last 30 minutes. **Changed during review:** the newest live game came
+  before the result card, so with Last one standing running all evening no
+  short game's result ever reached the main card.
 
 ### 5.6 queries.ts and the adapted hooks
 
@@ -2991,7 +2995,7 @@ game if live, else the newest live game. New: Move to a new phone.
 | Moment | Host | TV | Phones that played | Others |
 | --- | --- | --- | --- | --- |
 | The winning move | The card shows the winner chip | The game's screen shows the winner; banner and one fanfare | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
-| Finished, a moment later | The card moves to Games as Finished, with Show on the TV; On the TV shows Back to standings with the countdown | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card, unless another game is main; then a Finished row | The generic result card or row |
+| Finished, a moment later | The card moves to Games as Finished, with Show on the TV; On the TV shows Back to standings with the countdown | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished row | The generic result card or row |
 | Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | No change | No change |
 | The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main | Same |
 | The host restarts the finished game | Live again, a new round | Its screen if started on the TV | Dealt in again | Dealt in |
@@ -4246,7 +4250,9 @@ every step through the real screens, nothing seeded in the database):
   itself. Question 2: 30 scripted and 3 phone answers, Reveal now (all 33
   counted), Show the leaderboard, then Crown the winner now: finished by the
   game, the final screen on the TV and its countdown on the host page
-  ("The TV goes back in ..."); phones showed Finished lately.
+  ("The TV goes back in ..."); phones showed Finished lately (since the
+  review fix in 12.9 they show the quiz's result card, with Last one standing
+  as a compact card).
 - Fusion started in the background: 90 scripted votes and 3 from phones
   through the picker, picture 2's people set on the night (setKey from the
   host's Show who), Lock voting, Show on the TV, Reveal next twice (48 and 45

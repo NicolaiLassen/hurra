@@ -178,6 +178,29 @@ describe('phoneLayout', () => {
     expect(phoneLayout(snap([game('quiz')]), NOW).main).toEqual({ kind: 'lobby' })
   })
 
+  it('keeps the result card while a game that started before it runs in the background', () => {
+    const elim = live('elim', 50, { game_type: 'elimination' })
+    const quiz = finished('quiz', 10, 0.5, { winners: ['sofie'] })
+    // The quiz just finished on the TV, with Last one standing running all evening.
+    const layout = phoneLayout(snap([elim, quiz], { spotlight_game_id: 'quiz', spotlight_at: NOW - 10 * MIN }), NOW)
+    expect(layout.main).toEqual({ kind: 'result', game: quiz })
+    expect(layout.alsoRunning.map((g) => g.id)).toEqual(['elim'])
+    expect(layout.finishedLately).toEqual([])
+    // Back to standings changes nothing on the phones.
+    expect(phoneLayout(snap([elim, quiz]), NOW).main).toEqual({ kind: 'result', game: quiz })
+    // A camera scan still reaches the background game, through its sheet.
+    expect(scanTarget(snap([elim, quiz]), (type) => type === 'elimination', NOW)).toBe(elim)
+    // The next game starts: its card becomes main.
+    expect(phoneLayout(snap([elim, quiz, live('fusion', 0.1)]), NOW).main).toMatchObject({ kind: 'game', game: { id: 'fusion' }, onStage: false })
+  })
+
+  it('makes a background game that finishes while another game is live on the TV a Finished lately row', () => {
+    const quiz = live('quiz', 10)
+    const layout = phoneLayout(snap([finished('elim', 50, 0.2, { game_type: 'elimination' }), quiz], { spotlight_game_id: 'quiz' }), NOW)
+    expect(layout.main).toEqual({ kind: 'game', game: quiz, onStage: true })
+    expect(layout.finishedLately.map((g) => g.id)).toEqual(['elim'])
+  })
+
   it('lists other games finished in the last 30 minutes', () => {
     const layout = phoneLayout(snap([finished('a', 60, 40), finished('b', 60, 20), finished('c', 30, 5), live('d', 1)]), NOW)
     expect(layout.main).toMatchObject({ kind: 'game', game: { id: 'd' } })
