@@ -29,4 +29,9 @@ function signedInFetch(input: RequestInfo | URL, init?: RequestInit) {
 
 // supabase-js persists the auth session in localStorage. For players that's an
 // anonymous user, which is what keeps a phone tied to its player across visits.
-export const supabase = createClient(url, key, { global: { fetch: signedInFetch } })
+//
+// A socket that dies without a close event (a Wi-Fi blip, iOS waking up) is only
+// noticed when a heartbeat goes unanswered for one interval: 10 s instead of
+// the default 25 s heals it within 10 to 20 s. Heartbeats are not billed as
+// Realtime messages (only database changes, Broadcast and Presence are).
+export const supabase = createClient(url, key, { global: { fetch: signedInFetch }, realtime: { heartbeatIntervalMs: 10_000 } })

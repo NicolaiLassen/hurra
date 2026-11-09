@@ -574,6 +574,34 @@ describe('safety polls', () => {
     live.close()
   })
 
+  it('while a live game holds the stage, phones poll every 10 s and the TV and the host page every 5 s', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    // Last one standing in the background, with no prompt and no timer: on its own it changes nothing.
+    const background = liveGame({ id: 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f', game_type: 'elimination', public_state: {} })
+    const stage = (game: SessionGame) => snapshot({ session: { ...snapshot().session!, spotlight_game_id: GAME }, games: [game, background] })
+    for (const screen of ['phone', 'tv', 'host'] as const) {
+      const client = new FakeClient()
+      const { live } = open(client, screen, screen === 'phone' ? PLAYER : null)
+      const fast = screen === 'phone' ? 10_000 : 5000
+      // The quiz's leaderboard between two questions: the next one opens with a single ping.
+      const leaderboard = stage(liveGame({ public_state: { phase: 'leaderboard' } }))
+      await answer(client, leaderboard)
+      await tick(fast - 1)
+      expect(client.reads, screen).toHaveLength(1)
+      await until(1)
+      expect(client.reads, screen).toHaveLength(2)
+      await answer(client, leaderboard)
+      // Finished, as its ping says: its final screen holds the stage, but nothing opens on it any more.
+      client.topic(`room:${SESSION}`)!.send('changed', { session: SESSION, game: GAME })
+      await until(0)
+      await answer(client, stage(liveGame({ status: 'finished', finished_at: START })))
+      const reads = client.reads.length
+      await until(fast)
+      expect(client.reads, screen).toHaveLength(reads)
+      live.close()
+    }
+  })
+
   it('phones read once 2 s after each wake_at and closes_at they know of (plus up to 1 s)', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
     const client = new FakeClient()

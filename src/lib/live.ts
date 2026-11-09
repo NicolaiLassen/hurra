@@ -48,8 +48,10 @@ const PHONE_JITTER_MS = 300
 /** Pinged tallies undercount when answers arrive together: read the exact counts once they settle. */
 const TALLY_SETTLE_MS = 400
 const POLL_MS: Record<Screen, number> = { phone: 60_000, tv: 30_000, host: 30_000 }
-/** Phones, while a live game has an open prompt or a timer. */
+/** Phones, while a live game has an open prompt or a timer, or holds the stage. */
 const PHONE_LIVE_POLL_MS = 10_000
+/** The TV and the host page, while a live game holds the stage. */
+const STAGE_LIVE_POLL_MS = 5000
 /** While a channel keeps failing to join, or pings are unhealthy. */
 const FAST_POLL_MS = 5000
 const FAILED_JOINS = 3
@@ -285,6 +287,17 @@ function hasLiveDeadline(s: Snapshot | undefined): boolean {
   if (!s) return false
   const live = liveIds(s)
   return s.games.some((g) => live.has(g.id) && g.wake_at !== null) || s.prompts.some((p) => live.has(p.game_id) && p.closed_at === null)
+}
+
+/**
+ * Whether a live game holds the TV stage. Between its steps (the quiz's lobby
+ * and leaderboard) it has no prompt and no timer, and its next question opens
+ * with one ping: a socket that died without a close event would miss it, so
+ * phones poll every 10 s and the TV and the host page every 5 s meanwhile.
+ */
+function holdsStage(s: Snapshot | undefined): boolean {
+  const id = s?.session?.spotlight_game_id
+  return s !== undefined && !!id && liveIds(s).has(id)
 }
 
 /** Whether a pinged tally still counts: not for a game that is over, nor a prompt already revealed. */
@@ -602,8 +615,8 @@ export function createLiveSession(
   let lastReadAt = Date.now()
   function pollInterval(): number {
     if (state.pings === 'unhealthy' || [...topics.values()].some((t) => t.failures >= FAILED_JOINS)) return FAST_POLL_MS
-    if (!phone) return POLL_MS[screen]
-    return hasLiveDeadline(state.snapshot) ? PHONE_LIVE_POLL_MS : POLL_MS.phone
+    if (!phone) return holdsStage(state.snapshot) ? STAGE_LIVE_POLL_MS : POLL_MS[screen]
+    return hasLiveDeadline(state.snapshot) || holdsStage(state.snapshot) ? PHONE_LIVE_POLL_MS : POLL_MS.phone
   }
   function planPoll(afterRead = false) {
     if (closed) return
