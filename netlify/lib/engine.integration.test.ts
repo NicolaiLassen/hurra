@@ -7,8 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ProbeGame, type ProbePublicState, type ProbeState, type ProbeView } from '../../src/games/core/probe'
 import { simulateParty } from '../../src/games/core/simulate'
 import type { EliminationPublicState } from '../../src/games/elimination/logic'
+import { MAX_QUESTIONS } from '../../src/games/quiz/logic'
 import { handleGameRequest, parseGameRequest } from './engine'
-import { admin, call, engine, rows, sleep, testLogic, World, type Guest, type Party, type Person } from './testUsers'
+import { admin, call, engine, rows, sleep, sql, testLogic, World, type Guest, type Party, type Person } from './testUsers'
 
 const world = new World()
 let host: Person
@@ -486,5 +487,93 @@ describe('conformance: the in-memory party matches the database', () => {
         byIndex(Object.entries(fakeGame.views).map(([id, view]) => [fakeIndex(id), view])),
       )
     }
+  })
+})
+
+describe('a quiz as long as its editor allows', () => {
+  // MAX_QUESTIONS questions with 60 guests answering every one: the round's
+  // state holds every answer, about 330 KB, and game.finished copies it into
+  // the log. Neither Crown nor End may fail on the size of that row.
+  const QUESTIONS = MAX_QUESTIONS
+  const GUESTS = 60
+  const users: string[] = []
+  let crowd: Party
+  let players: string[] = []
+
+  beforeAll(async () => {
+    crowd = await world.party(host, 'Long quiz')
+    // Made through the admin API and added straight to the party: 60
+    // anonymous sign-ins would eat into the local stack's hourly limit.
+    for (let i = 0; i < GUESTS; i++) {
+      const { data, error } = await admin.auth.admin.createUser({ email: `quiz-${crypto.randomUUID()}@example.com`, email_confirm: true })
+      if (error || !data.user) throw error ?? new Error('createUser failed')
+      users.push(data.user.id)
+    }
+    const { data, error } = await admin
+      .from('players')
+      .insert(users.map((user_id, i) => ({ session_id: crowd.id, user_id, name: `Guest ${i + 1}` })))
+      .select('id')
+    if (error) throw error
+    players = data.map((p) => p.id)
+  })
+
+  afterAll(async () => {
+    for (const id of users) await admin.auth.admin.deleteUser(id)
+  })
+
+  /** Starts a full-length quiz and plays every question to its reveal, with every guest answering. */
+  async function playToTheEnd(title: string): Promise<string> {
+    const questions = Array.from({ length: QUESTIONS }, (_, i) => ({
+      text: `Question ${i + 1}: which one is right?`,
+      options: ['Alpha', 'Bravo', 'Charlie', 'Delta'],
+      correct: i % 4,
+    }))
+    const gameId = await world.game(host, crowd, 'quiz', title, { questions, seconds: 20, pointsPerRight: 1 })
+    expect((await call(host, { type: 'start', gameId })).status).toBe(200)
+    for (let i = 0; i < QUESTIONS; i++) {
+      expect((await call(host, { type: 'host-action', gameId, action: { type: 'next', from: i - 1 } })).status).toBe(200)
+      const key = `q${i + 1}`
+      const [prompt] = await rows<{ key: string; opened_at: string }>('game_prompts', 'game_id', gameId).then((all) => all.filter((p) => p.key === key))
+      const opened = Date.parse(prompt.opened_at)
+      // Straight into game_submissions, spread over the 20 s like real taps:
+      // this is about the size of the answers, not the answering path.
+      const answers = players.map((player_id, j) => {
+        const at = new Date(opened + 400 + ((i * 7919 + j * 104_729) % 20_500)).toISOString()
+        return { game_id: gameId, key, player_id, payload: { choice: [String((i + j) % 4)] }, first_at: at, at }
+      })
+      const { error } = await admin.from('game_submissions').insert(answers)
+      if (error) throw error
+      expect((await call(host, { type: 'host-action', gameId, action: { type: 'reveal', index: i }, close: [key] })).status).toBe(200)
+    }
+    return gameId
+  }
+
+  /** The game.finished rows of a game: how many, whether they carry the state, and the largest one's raw size. */
+  const finishedRows = async (gameId: string) =>
+    (
+      await sql<{ n: number; with_state: boolean; raw: number }>(
+        `select count(*)::int as n, coalesce(bool_and(data ? 'state' and data -> 'state' <> 'null'::jsonb), false) as with_state,
+           coalesce(max(pg_column_size(data::text::jsonb)), 0)::int as raw
+         from public.event_log where game_id = '${gameId}' and kind = 'game.finished'`,
+      )
+    )[0]
+
+  it('finishes by Crown the winner, its whole state in the log', async () => {
+    const gameId = await playToTheEnd('Long quiz, crowned')
+    expect(await call(host, { type: 'host-action', gameId, action: { type: 'finish' } })).toMatchObject({ status: 200 })
+    expect(await gameRow(gameId)).toMatchObject({ status: 'finished', finished_by: 'game' })
+    const finished = await finishedRows(gameId)
+    expect(finished).toMatchObject({ n: 1, with_state: true })
+    // Over the 256 KB every other log row keeps to, so this is the case that used to fail.
+    expect(finished.raw).toBeGreaterThan(262_144)
+  })
+
+  it('finishes by End too, and can then be archived', async () => {
+    const gameId = await playToTheEnd('Long quiz, ended')
+    expect(await call(host, { type: 'end', gameId })).toMatchObject({ status: 200 })
+    expect(await gameRow(gameId)).toMatchObject({ status: 'finished', finished_by: 'host' })
+    expect(await finishedRows(gameId)).toMatchObject({ n: 1, with_state: true })
+    const { error } = await host.client.from('session_games').update({ archived_at: new Date().toISOString() }).eq('id', gameId)
+    expect(error).toBeNull()
   })
 })

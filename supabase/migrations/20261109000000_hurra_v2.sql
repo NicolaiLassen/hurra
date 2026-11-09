@@ -230,8 +230,13 @@ create table public.event_log (
   request_id uuid,                          -- the tap's id: the claim
   cause_id bigint,                          -- the row this one follows from
   about uuid[] not null default '{}',       -- players it is about
+  -- 256 KB a row, except the two snapshots a round writes once (game.started,
+  -- game.finished): they copy game_states.state, which has no cap, and a log
+  -- row must never stop a game from starting or finishing (a 50-question quiz
+  -- with 45 guests holds about 270 KB of answers).
   data jsonb not null default '{}'
-    check (jsonb_typeof(data) = 'object' and pg_column_size(data) < 262144)
+    check (jsonb_typeof(data) = 'object'
+      and (kind in ('game.started', 'game.finished') or pg_column_size(data) < 262144))
 );
 create index event_log_session_idx on public.event_log (session_id, id);
 create index event_log_game_idx on public.event_log (game_id, id) where game_id is not null;
