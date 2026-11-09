@@ -1,192 +1,224 @@
-// The game engine. It knows nothing about specific games: it loads the plugin
-// for a game's type, gives it a context and saves what it produces through
-// apply_game_state(). Runs with the secret key, so it checks permissions itself.
+// The game engine (docs/engine-v2.md, section 4). It knows nothing about
+// specific games: the decisions are the pure step() in src/games/core/runtime.ts,
+// and this file only does the I/O around it, two database round trips per
+// request: game_load, then game_commit. Runs with the secret key, so it never
+// trusts the client: step() checks who may do what.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createGameContext, type GameEffects } from '../../src/games/core/context'
-import type { AnyGame, GameData, GameInfo, PlayerId } from '../../src/games/core/Game'
+import type { AnyGame } from '../../src/games/core/Game'
+import { step, type EngineRequest, type ErrorCode, type Loaded } from '../../src/games/core/runtime'
 import { gameLogic } from '../../src/games/logic'
-
-export type GameRequest =
-  | { gameId: string; type: 'start' }
-  | { gameId: string; type: 'end' }
-  | { gameId: string; type: 'action'; action: unknown }
 
 export class HttpError extends Error {
   status: number
+  code: ErrorCode
 
-  constructor(status: number, message: string) {
+  constructor(status: number, code: ErrorCode, message: string) {
     super(message)
+    this.name = 'HttpError'
     this.status = status
+    this.code = code
   }
 }
 
-type GameRow = {
-  id: string
-  session_id: string
-  game_type: string
-  status: string
-  config: Record<string, unknown>
-  archived_at: string | null
+export type GameResponse = { view?: unknown; replayed?: true; skipped?: true }
+
+/** Durations in ms for the Server-Timing header (the rehearsal records them). */
+export type Timing = { load: number; step: number; commit: number; attempts: number }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const TYPES = ['start', 'end', 'action', 'host-action', 'sync'] as const
+/** A move's JSON beyond this is refused before it reaches the log. */
+const MAX_ACTION_BYTES = 16_384
+const MAX_CLOSE = 50
+
+/** At most this many attempts within BUDGET_MS when saves race (a stale version, or a deadlock). */
+const MAX_ATTEMPTS = 6
+const BUDGET_MS = 4000
+
+export function parseGameRequest(input: unknown): EngineRequest {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new HttpError(400, 'bad_request', 'The request body must be a JSON object')
+  }
+  const body = input as Record<string, unknown>
+  if (!TYPES.includes(body.type as (typeof TYPES)[number])) {
+    throw new HttpError(400, 'bad_request', 'type must be "start", "end", "action", "host-action" or "sync"')
+  }
+  if (body.gameId === undefined || body.gameId === null || body.gameId === '') {
+    throw new HttpError(400, 'bad_request', 'gameId is required')
+  }
+  if (typeof body.gameId !== 'string' || !UUID.test(body.gameId)) throw new HttpError(400, 'bad_request', 'gameId must be a UUID')
+  if (body.requestId !== undefined && (typeof body.requestId !== 'string' || !UUID.test(body.requestId))) {
+    throw new HttpError(400, 'bad_request', 'requestId must be a UUID')
+  }
+  const gameId = body.gameId.toLowerCase()
+  // Every app call sends one; a request without (a test, a script) gets one made here,
+  // which still protects this request's own retries.
+  const requestId = ((body.requestId as string | undefined) ?? crypto.randomUUID()).toLowerCase()
+
+  switch (body.type as (typeof TYPES)[number]) {
+    case 'start':
+      if (body.stage !== undefined && typeof body.stage !== 'boolean') {
+        throw new HttpError(400, 'bad_request', 'stage must be true or false')
+      }
+      return { type: 'start', gameId, requestId, ...(typeof body.stage === 'boolean' ? { stage: body.stage } : {}) }
+    case 'end':
+      return { type: 'end', gameId, requestId }
+    case 'sync':
+      return { type: 'sync', gameId, requestId }
+    case 'action':
+      return { type: 'action', gameId, requestId, action: checkedAction(body.action) }
+    case 'host-action': {
+      if (body.close !== undefined && !(Array.isArray(body.close) && body.close.every((k) => typeof k === 'string'))) {
+        throw new HttpError(400, 'bad_request', 'close must be a list of prompt keys')
+      }
+      const close = (body.close as string[] | undefined) ?? []
+      if (close.length > MAX_CLOSE) throw new HttpError(400, 'bad_request', `close holds at most ${MAX_CLOSE} prompt keys`)
+      return { type: 'host-action', gameId, requestId, action: checkedAction(body.action), close }
+    }
+  }
 }
 
-const MAX_ATTEMPTS = 4
-
-export function parseGameRequest(input: unknown): GameRequest {
-  const body = input as Partial<{ gameId: unknown; type: unknown; action: unknown }> | null
-  if (typeof body?.gameId !== 'string') throw new HttpError(400, 'gameId is required')
-  if (body.type === 'start') return { gameId: body.gameId, type: 'start' }
-  if (body.type === 'end') return { gameId: body.gameId, type: 'end' }
-  if (body.type === 'action') return { gameId: body.gameId, type: 'action', action: body.action }
-  throw new HttpError(400, 'type must be "start", "end" or "action"')
+function checkedAction(action: unknown): unknown {
+  const json = JSON.stringify(action ?? null)
+  if (json.length > MAX_ACTION_BYTES) throw new HttpError(400, 'bad_request', 'That action is too big')
+  return action ?? null
 }
 
-/** Runs a start, end or action request for the signed-in user and returns what their phone needs. */
+/**
+ * Runs one request for the signed-in user: game_load, step(), game_commit,
+ * with retries when another save of the same game landed first. Resolves with
+ * what the caller's screen needs; throws HttpError for refusals.
+ */
 export async function handleGameRequest(
   db: SupabaseClient,
   userId: string,
-  request: GameRequest,
-  random: () => number = Math.random,
-): Promise<{ view?: unknown }> {
-  const game = await maybeOne<GameRow>(
-    db.from('session_games').select('id, session_id, game_type, status, config, archived_at').eq('id', request.gameId),
-  )
-  if (!game) throw new HttpError(404, 'Game not found')
-  const logic = gameLogic.get(game.game_type)
-  if (!logic) throw new HttpError(400, `No logic for game type “${game.game_type}”`)
-
-  if (request.type !== 'action' && !(await maybeOne(db.from('hosts').select('user_id').eq('user_id', userId)))) {
-    throw new HttpError(403, `Only hosts can ${request.type} games`)
-  }
-
-  if (request.type === 'start') {
-    if (game.archived_at) throw new HttpError(409, 'Unarchive this game before starting it')
-    // A second tap (or a retried request) must not deal a running game again.
-    if (game.status === 'active') throw new HttpError(409, 'This game is already running')
-    const { info } = await loadInfo(db, game, logic)
-    const { ctx, effects } = createGameContext(info, random)
-    await save(db, logic, info, logic.setup(ctx), null, effects, 'active')
-    return {}
-  }
-
-  if (game.status !== 'active') throw new HttpError(409, 'This game is not running')
-
-  if (request.type === 'end') return endGame(db, logic, game, random)
+  request: EngineRequest,
+  options: {
+    random?: () => number
+    now?: number
+    /** Tests only (the conformance test's probe game). Default: the registry in src/games/logic.ts. */
+    logicFor?: (gameType: string) => AnyGame | undefined
+    /** Filled in with this request's durations, for the Server-Timing header. */
+    timing?: Timing
+  } = {},
+): Promise<GameResponse> {
+  const random = options.random ?? Math.random
+  const logicFor = options.logicFor ?? ((type: string) => gameLogic.get(type))
+  const timing = options.timing ?? { load: 0, step: 0, commit: 0, attempts: 0 }
+  const started = Date.now()
+  let firstNow: number | undefined
+  let firstRound: number | null = null
 
   for (let attempt = 1; ; attempt++) {
-    const { info, playerIdByUser } = await loadInfo(db, game, logic)
-    const playerId = playerIdByUser.get(userId)
-    if (!playerId) throw new HttpError(403, "You're not a player in this session")
+    timing.attempts = attempt
+    let t = performance.now()
+    const loaded = await rpc<Loaded | null>(db, 'game_load', {
+      p_game_id: request.gameId,
+      p_user_id: userId,
+      p_close: request.type === 'host-action' ? (request.close ?? []) : [],
+      p_request_id: request.requestId,
+    })
+    timing.load += performance.now() - t
+    if (!loaded) throw new HttpError(404, 'not_found', 'Game not found')
+    // A resent copy of a tap that was saved: never run the game again, which
+    // would refuse it ("Bo is already out").
+    if (loaded.claimed) return { replayed: true }
 
-    const current = await maybeOne<{ state: unknown; version: number }>(
-      db.from('game_states').select('state, version').eq('game_id', game.id),
-    )
-    if (!current) throw new HttpError(409, 'This game has not started')
+    const logic = logicFor(loaded.game.game_type)
+    if (!logic) {
+      throw new HttpError(409, 'unknown_game_type', `This app doesn't know the game type ${loaded.game.game_type}`)
+    }
+    // The first attempt's clock and round, kept for every retry.
+    firstNow ??= options.now ?? loaded.now
+    if (attempt === 1 && request.type !== 'start') firstRound = loaded.current?.round ?? null
 
-    const { ctx, effects } = createGameContext(info, random)
-    const state = logic.handleAction(current.state, logic.parseAction(request.action), playerId, ctx)
+    t = performance.now()
+    const result = step(logic, loaded, request, {
+      userId,
+      now: firstNow,
+      random,
+      round: attempt === 1 ? null : firstRound,
+    })
+    timing.step += performance.now() - t
+    if (result.kind === 'refuse') throw new HttpError(result.status, result.code, result.message)
+    if (result.kind === 'skip') return { skipped: true, ...(result.view !== undefined ? { view: result.view } : {}) }
+
+    t = performance.now()
     try {
-      await save(db, logic, info, state, current.version, effects, null)
-      return { view: logic.playerView(state, playerId, info) }
+      const saved = await rpc<{ replayed: boolean }>(db, 'game_commit', { p: result.commit })
+      timing.commit += performance.now() - t
+      // A copy that raced its original: the original's ping updates the screen.
+      if (saved.replayed) return { replayed: true }
+      return result.view !== undefined ? { view: result.view } : {}
     } catch (error) {
-      // Someone else's action landed first: rerun ours against the new state.
-      if ((error as { code?: string }).code === '40001' && attempt < MAX_ATTEMPTS) continue
-      throw error
+      timing.commit += performance.now() - t
+      if (!lostRace(error as RpcError)) throw error
+      if (attempt >= MAX_ATTEMPTS || Date.now() - started > BUDGET_MS) {
+        throw new HttpError(409, 'busy', 'The game is busy. Try again.')
+      }
+      // Another save of this game landed first: load and step again.
+      await sleep(10 + random() * Math.min(160, 20 * 2 ** attempt))
     }
   }
 }
 
-/** Ends a game through its onEnd callback, so it can wrap up (e.g. announce the result). */
-async function endGame(db: SupabaseClient, logic: AnyGame, game: GameRow, random: () => number) {
-  for (let attempt = 1; ; attempt++) {
-    const { info } = await loadInfo(db, game, logic)
-    const current = await maybeOne<{ state: unknown; version: number }>(
-      db.from('game_states').select('state, version').eq('game_id', game.id),
-    )
-    if (!current) throw new HttpError(409, 'This game has not started')
-    const { ctx, effects } = createGameContext(info, random)
-    const state = logic.onEnd ? logic.onEnd(current.state, ctx) : current.state
-    try {
-      await save(db, logic, info, state, current.version, effects, 'finished')
-      return {}
-    } catch (error) {
-      if ((error as { code?: string }).code === '40001' && attempt < MAX_ATTEMPTS) continue
-      throw error
-    }
+/**
+ * Another save of this game landed first. game_commit raises PT409 'stale'
+ * for a version conflict (never 40001, which PostgREST would retry forever);
+ * Postgres raises 40P01 for a deadlock, e.g. two games updating the same
+ * players' profiles at once.
+ */
+export function lostRace(error: RpcError): boolean {
+  return (error.code === 'PT409' && error.details === 'stale') || error.code === '40P01' || error.code === '40001'
+}
+
+/** An error from PostgREST, or from the network on the way there. */
+export type RpcError = Error & { code?: string; details?: string; status?: number }
+
+/** One RPC with the service client. PostgREST RPCs are POSTs, which postgrest-js never retries. */
+async function rpc<T>(db: SupabaseClient, name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error, status } = await db.rpc(name, args)
+  if (error) {
+    throw Object.assign(new Error(error.message), {
+      code: error.code,
+      details: error.details,
+      status,
+    }) as RpcError
   }
+  return data as T
 }
 
-/** Everything a game may read about the party, plus who each signed-in user is. */
-async function loadInfo(db: SupabaseClient, game: GameRow, logic: AnyGame) {
-  const [session, players, scoreboard] = await Promise.all([
-    maybeOne<{ id: string; name: string; data: GameData }>(
-      db.from('sessions').select('id, name, data').eq('id', game.session_id),
-    ),
-    many<{ id: PlayerId; name: string; profile: GameData; user_id: string }>(
-      db.from('players').select('id, name, profile, user_id').eq('session_id', game.session_id).order('created_at'),
-    ),
-    many<{ player_id: PlayerId; points: number }>(
-      db.from('scoreboard').select('player_id, points').eq('session_id', game.session_id),
-    ),
-  ])
-  if (!session) throw new HttpError(404, 'Session not found')
+const CODES: readonly string[] = [
+  'bad_request', 'rule', 'not_signed_in', 'not_host', 'not_player', 'not_found', 'already_running',
+  'not_running', 'archived', 'restarted', 'busy', 'unknown_game_type', 'unavailable', 'internal',
+]
 
-  const info: GameInfo<unknown> = {
-    gameId: game.id,
-    session,
-    players: players.map(({ id, name, profile }) => ({ id, name, profile })),
-    scoreboard: Object.fromEntries(scoreboard.map((row) => [row.player_id, row.points])),
-    config: { ...(logic.defaultConfig as object), ...game.config },
-    now: Date.now(),
+/** The error mapping of section 4.4: what the phone gets for any failure. */
+export function errorResponse(error: unknown): { status: number; body: { error: string; code: string } } {
+  if (error instanceof HttpError) return { status: error.status, body: { error: error.message, code: error.code } }
+  const { code, details, message, status } = (error ?? {}) as RpcError
+  if (lostRace((error ?? {}) as RpcError)) return { status: 409, body: { error: 'The game is busy. Try again.', code: 'busy' } }
+  // game_commit's own refusals: PT409 "This game is not running" with the code in DETAIL.
+  const custom = /^PT(\d{3})$/.exec(code ?? '')
+  if (custom) {
+    const httpStatus = Number(custom[1])
+    const errorCode = details && CODES.includes(details) ? details : defaultCode(httpStatus)
+    return { status: httpStatus, body: { error: message, code: errorCode } }
   }
-  return { info, playerIdByUser: new Map(players.map((p) => [p.user_id, p.id])) }
-}
-
-/** What the database stores for a state: its projections for every audience. */
-export function project(logic: AnyGame, info: GameInfo<unknown>, state: unknown) {
-  const scores = Object.entries(logic.scores(state, info)).filter(([, points]) => points !== 0)
-  for (const [playerId, points] of scores) {
-    if (!Number.isInteger(points)) throw new Error(`${logic.type}: score for ${playerId} isn't a whole number`)
+  // The database couldn't be reached: no answer at all, or a gateway in between gave up.
+  if (status === 0 || status === 502 || status === 503 || status === 504 || /fetch failed|ECONNREFUSED|network/i.test(message ?? '')) {
+    return { status: 503, body: { error: "The party database didn't answer. Try again.", code: 'unavailable' } }
   }
-  return {
-    publicState: logic.publicState(state, info),
-    playerViews: Object.fromEntries(info.players.map((p) => [p.id, logic.playerView(state, p.id, info)])),
-    scores: Object.fromEntries(scores),
-  }
+  return { status: 500, body: { error: 'Something went wrong', code: 'internal' } }
 }
 
-async function save(
-  db: SupabaseClient,
-  logic: AnyGame,
-  info: GameInfo<unknown>,
-  state: unknown,
-  expectedVersion: number | null,
-  effects: GameEffects,
-  status: 'active' | 'finished' | null,
-) {
-  const { publicState, playerViews, scores } = project(logic, info, state)
-  const { error } = await db.rpc('apply_game_state', {
-    p_game_id: info.gameId,
-    p_expected_version: expectedVersion,
-    p_state: state,
-    p_public_state: publicState,
-    p_player_views: playerViews,
-    p_scores: scores,
-    p_effects: effects,
-    p_status: status,
-  })
-  if (error) throw error
+function defaultCode(status: number): ErrorCode {
+  if (status === 400) return 'bad_request'
+  if (status === 401) return 'not_signed_in'
+  if (status === 403) return 'not_host'
+  if (status === 404) return 'not_found'
+  if (status === 409) return 'not_running'
+  return 'internal'
 }
 
-type Query = PromiseLike<{ data: unknown; error: unknown }>
-
-async function maybeOne<T>(query: { maybeSingle(): Query }) {
-  const { data, error } = await query.maybeSingle()
-  if (error) throw error
-  return data as T | null
-}
-
-async function many<T>(query: Query) {
-  const { data, error } = await query
-  if (error) throw error
-  return (data ?? []) as T[]
-}
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

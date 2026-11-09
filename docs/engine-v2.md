@@ -227,7 +227,12 @@ so there is no data migration.
 - **Errors** for clients use custom SQLSTATEs that PostgREST maps to HTTP
   status codes: `PT400`, `PT401`, `PT403`, `PT404`, `PT409`. The machine code
   goes in `DETAIL` (for example `using errcode = 'PT409', detail = 'not_running'`).
-  Version conflicts use `40001`.
+  Version conflicts use `PT409` with detail `stale`. **Changed during build:**
+  not `40001`. PostgREST retries a transaction that fails with SQLSTATE 40001,
+  and a version conflict fails the same way on every retry, so on the local
+  stack a lost race looped about 3,500 times a second and the request never
+  answered. No function may raise 40001. Postgres still raises `40P01` for a
+  real deadlock, which the engine retries too (4.3).
 - **The engine flag.** `game_commit` runs `set_config('hurra.engine', 'on',
   true)` first. The logging triggers stay quiet while it is on, because the
   engine logs and pings exactly once itself.
@@ -507,8 +512,10 @@ create table public.session_recaps (
 
 Every table: `alter table ... enable row level security;` then
 `revoke all on ... from anon, authenticated;` then the grants below. "Member"
-means `session_id = any ((select public.my_session_ids()))`; "host" means
-`(select public.is_host())`.
+means `session_id = any ((select public.my_session_ids())::uuid[])`; "host" means
+`(select public.is_host())`. **Changed during build:** the `::uuid[]` cast is
+needed. Without it Postgres reads `= any ((select ...))` as a subquery whose
+rows are `uuid[]` and refuses the policy (`operator does not exist: uuid = uuid[]`).
 
 | Table | Grants to authenticated | Policies |
 | --- | --- | --- |
@@ -518,12 +525,12 @@ means `session_id = any ((select public.my_session_ids()))`; "host" means
 | `session_games` | `select, delete`; `insert (session_id, game_type, title, position)`; `update (title, position, archived_at)` | select: host or member. insert, update, delete: host. |
 | `game_settings` | `select, insert, update, delete` | all: host. |
 | `game_states` | `select` | select: host. |
-| `game_player_views` | `select` | `player_id = any ((select public.my_player_ids()))` or host. |
+| `game_player_views` | `select` | `player_id = any ((select public.my_player_ids())::uuid[])` or host. |
 | `game_scores` | `select` | host or member. |
 | `score_events` | `select, delete`; `insert (session_id, player_id, game_id, points, reason)` | select: host or member. insert, delete: host. (`awarded_by` keeps its default, so it can't be spoofed.) |
 | `session_feed` | `select` | host, or member and (`audience is null` or `audience && (select public.my_player_ids())`). |
-| `game_prompts` | `select` | host, or `game_id in (select id from public.session_games where session_id = any ((select public.my_session_ids())))`. |
-| `game_submissions` | `select` | `player_id = any ((select public.my_player_ids()))` or host. |
+| `game_prompts` | `select` | host, or `game_id in (select id from public.session_games where session_id = any ((select public.my_session_ids())::uuid[]))`. |
+| `game_submissions` | `select` | `player_id = any ((select public.my_player_ids())::uuid[])` or host. |
 | `event_log` | `select` | select: host. |
 | `player_transfers` | none | none. |
 | `session_screens` | `select, delete` | select, delete: host. Inserts only through `claim_screen`. |
@@ -635,6 +642,14 @@ volatile, definer. The hot path, in this order:
 
 Any refusal rolls back the claim row with it.
 
+**Changed during build:** two checks run earlier. Right after step 2, a
+request id this user already saved returns the stored submission as
+`{ accepted: true, replayed: true, ... }` before the closed check, so a retry
+after a lost reply never says "Too late" for an answer that counted. And just
+before the claim, the same normalised answer already saved returns replayed
+without claiming, so a repeat with a new request id adds no `prompt.answered`
+row and the recap's answer count stays true.
+
 **`prompt_tallies(p_session_id uuid) returns jsonb`**, stable, definer.
 `{ "<game id>": { "<key>": count } }` for prompts of the party's active games
 that are not revealed yet. Empty unless the caller is a host or a member.
@@ -679,6 +694,13 @@ last 60 minutes, and the most recently finished game (not archived), so the
 phone's result card always has its data however long ago it finished (5.5).
 `public_state`, `game_points` and `me.views` cover exactly these games;
 `prompts` and `me.answers` cover active games only.
+
+**Changed during build:** `game_points` counts this round only: a game's
+`score_events` created at or after its `started_at`, the same rule as `awards`
+in `game_load`, so the TV's "this game's top 5" and the default winners agree
+after a restart. A `'phone'` screen's feed holds the caller's own targeted rows
+only (also for a host who joined as a guest), and an unknown `p_screen` is
+`PT400` (`bad_request`).
 
 When the caller is not a member (a removed guest, an old phone after "Move to
 a new phone", an unpaired TV), it returns `{ now, member: false, exists,
@@ -737,6 +759,13 @@ answer, vote or move.
 
 **`keep_alive() returns boolean`**, stable, invoker: `select true`. Granted to
 `anon` and `authenticated`: the one function anon may run.
+
+**Changed during build:** the DETAIL codes the spec left open. `join_session`:
+`not_signed_in`, `not_found`, `archived`, `closed`, `bad_name`, `name_taken`
+(it also retries a clash on the random player code). `host_issue_transfer` and
+`host_issue_screen_code`: `not_host`, and `not_found` for a missing player or
+party. `claim_player` and `claim_screen`: `not_signed_in`, `bad_code` (PT404),
+`already_player` (PT409). The archive guard (2.9): `active`.
 
 ### 2.8 Engine RPCs
 
@@ -810,7 +839,8 @@ In order, in one transaction:
      game is not running" (`not_running`);
    - `expected_round` differs from the state's round: `PT409` "The game was
      restarted" (`restarted`);
-   - `expected_version` differs: `40001` "Game state changed concurrently".
+   - `expected_version` differs: `PT409` "Game state changed concurrently"
+     (`stale`). **Changed during build:** not `40001` (2.1).
 6. **State.** Start: upsert `game_states` with the new round, `version + 1`
    (or 1), `config`, `members`, and delete the game's old prompts (their
    submissions cascade; the log keeps every answer). Otherwise: update `state`,
@@ -857,7 +887,9 @@ In order, in one transaction:
       screen is up): clear the spotlight.
     - Finish: take the stage when it is free or already this game's. Free
       means no spotlight, or the spotlit game is missing or archived, or it is
-      finished and `now > max(finished_at, spotlight_at) + 3 minutes`. Taking it
+      finished and `now > max(finished_at, spotlight_at) + 3 minutes`, or
+      (**changed during build**, the spec didn't say) it is pending, since the
+      TV then shows the standings. Taking it
       logs `stage.changed` (`reason: 'finish'`). Otherwise (another game is
       live on the stage) leave it: the TV rail shows a "Finished" chip and the
       host can put it on the TV.
@@ -871,6 +903,11 @@ In order, in one transaction:
     instead when more than 10), plus `ping_session(session, 'stage')` for the
     host's view of the full state.
 14. Return `{ "replayed": false, "version", "round", "now" }`.
+
+**Changed during build:** every log row and every bonus `score_events` row of
+one save carries the save's own clock (`clock_timestamp()` at its start), so a
+round's points include bonuses awarded in its own start save, and all rows of
+one save sort together.
 
 ### 2.9 Triggers
 
@@ -889,7 +926,7 @@ In order, in one transaction:
 | `game_settings` | `after insert or update` | Logs `game.settings_changed` (never the values). No ping. |
 | `session_screens` | `after insert or delete` | Skipped when the party itself is being deleted. Logs `screen.paired` or `screen.unpaired` (`data.user_id`). Pings stage: the host page counts screens, and an unpaired TV reads `member: false` (on this ping, or at its next poll) and shows its pairing screen. |
 | `session_recaps` | `before insert or update` | `touch_recap()`: `updated_at = now()`, and `published_at = now()` whenever the new value isn't null. So every Publish and every Update carries the database clock, and the revision screens follow (`snapshot.recap.published_at`) changes each time. |
-| `session_recaps` | `after insert or update of published_at` | Logs `recap.published` (every Publish and Update) or `recap.unpublished`. Pings room. |
+| `session_recaps` | `after insert or update` (**changed during build:** any update, comparing `published_at`, so an Update that sent only `data` still counts) | Logs `recap.published` (every Publish and Update) or `recap.unpublished` when `published_at` changed. Pings room. |
 
 Trigger functions: `touch_spotlight`, `log_session_change`,
 `ping_session_deleted`, `log_player_change`, `log_score_change`,
@@ -1480,7 +1517,12 @@ What `step()` does, in order:
    `wakeAt(state) <= now`, at most `MAX_WAKES` times. If `wakeAt(state)` is
    still at or before now after the loop, commit `wake_at` null and set
    `log.wake_stuck`: the game stops asking for syncs until a later save gives
-   it a new `wakeAt`, and screens never loop on it.
+   it a new `wakeAt`, and screens never loop on it. **Changed during build:**
+   a sync never re-arms a wake that is already past. `wakeAt` is a function of
+   the state, so after a stuck wake the next sync computed the same past time
+   and stored it again; now a sync that computes a `wakeAt` at or before now
+   keeps `wake_at` null (a skip when nothing else changed). A move or a host
+   action may still set a past `wakeAt`, which the next sync runs.
 8. **Self-finish.** If the status is still unchanged and `isFinished(state,
    info)`, run `onEnd(state, ctx, 'game')` and finish by game. If `onEnd`
    throws, the game still finishes: keep the state from before it and drop
@@ -1592,7 +1634,21 @@ export class FakeParty {
 ```
 
 Every save in `FakeParty` stores the state and projections through
-`jsonbRoundTrip`, so games meet Postgres-shaped data in tests. `FakeParty`
+`jsonbRoundTrip`, so games meet Postgres-shaped data in tests.
+
+**Changed during build** (additive): `FakeParty` also hands every hook
+deep-frozen input, so a hook that mutates its input throws at once, and gives
+players uuid-shaped ids from a seeded source, so jsonb key order differs from
+join order as it does in Postgres. Extra members: `sessionId`, `feed`,
+`sessionData`, `spotlightAt`, `tvScene`, `codeOf`, `setSettings`,
+`archiveGame`, `setSpotlight`, `award` (a host award), `stateOf`, `promptsOf`,
+`answersOf`, `talliesOf` and `infoOf`. A tally ping is `stage <prompt key>`.
+`simulate.ts` also exports `FakeDbError` (what `submit` throws), `checkAnswer`
+(`check_answer` in TypeScript) and `deepFreeze`. `contract.ts` also exports
+`botExample(logic, bot)`, which records a round a game's bot plays (with a join
+and a leave) as a `ContractExample`, and `botSight` and `hostBotSight`.
+`runtime.ts` also exports `defaultWinners`, `context.ts` `PROMPT_KEY` and
+`testing.ts` `jsonbKeyOrder`. `FakeParty`
 re-implements `game_load` and `game_commit` in memory, so a conformance test
 (9.2) checks it against the SQL.
 
@@ -1716,6 +1772,9 @@ type Body =
   missing `requestId` gets one made by the engine (tests); every app call
   sends one.
 - `close` holds at most 50 prompt keys.
+- **Changed during build** (additive): an `action` whose JSON passes 16 KB is
+  refused (400 `bad_request` "That action is too big"), before it reaches the
+  log.
 - Success: `200 { view?: unknown, replayed?: true, skipped?: true }`. `view`
   is the caller's own new player view, when they have one. `skipped` covers an
   early sync and a stale host action; clients treat it as success.
@@ -1777,9 +1836,12 @@ export async function handleGameRequest(
 
 ### 4.3 Retries and timing
 
-- `40001` and `40P01` from `game_commit`: wait `10 + random() * min(160, 20 *
-  2^attempt)` ms, then load and step again. At most 6 attempts within 4 s,
-  then 409 `busy` "The game is busy. Try again."
+- `PT409` `stale` (a version conflict) and `40P01` (a deadlock) from
+  `game_commit`: wait `10 + random() * min(160, 20 * 2^attempt)` ms, then load
+  and step again. At most 6 attempts within 4 s, then 409 `busy` "The game is
+  busy. Try again." **Changed during build:** the version conflict is
+  `PT409` `stale`, not `40001` (2.1); `lostRace()` in `engine.ts` is the one
+  test for both.
 - A retry keeps the first attempt's round (`env.round`). If a restart came in
   between, `step()` refuses with 409 `restarted` "The game was restarted"
   before anything is saved, so a knockout from round 1 never lands in round 2.
@@ -1837,7 +1899,8 @@ error's `details`.
   and skips.
 - **No loops.** A sync whose wake loop leaves `wakeAt` at or before now commits
   `wake_at` null and logs `game.wake_stuck` (3.3, step 7), so the screens stop
-  asking. A buggy `onWake` costs one extra commit, and with the 2 s limit per
+  asking; a later sync never re-arms that past time (changed during build,
+  3.3). A buggy `onWake` costs one extra commit, and with the 2 s limit per
   screen it can never become a stream of room pings.
 
 ### 4.6 Keep-alive
@@ -2827,7 +2890,8 @@ game if live, else the newest live game. New: Move to a new phone.
     are still in the party) and `winnerOf(state, info)`; the host view uses
     them;
   - `publicState.alive` follows `playerIds` order, not object keys (jsonb
-    reorders keys);
+    reorders keys); **changed during build:** done in the core's port, since
+    the contract test over every registered game failed without it;
   - `handleAction` refuses a target who left the party ("{name} left the
     party");
   - `onPlayerLeave`: drops the leaver's task; if exactly one player is left
@@ -3165,7 +3229,7 @@ prints one by one on the TV. A point per right person.
 
 | Package | Tests |
 | --- | --- |
-| CORE-SDK | `context.test.ts`: clipping, skip mode, prompt key rules, shared effects. `runtime.test.ts`: permissions (a screen may only sync), status rules, frozen config, the member hooks with actor system and their fail-open, self-finish with a throwing `onEnd`, End's fail-open, skip on a no-op and on a stale host action, the wake loop cap and the stuck guard (`wake_at` null, `log.wake_stuck`), `env.round` refusing a request held across a restart, default winners from scores plus awards (an in-person round; nobody when the top is 0), stage defaults. `contract.test.ts`: the contract runner on the probe game, with its join, wake and recap checks. `simulate.test.ts`: claims, versions, prompts, the stage rules, `jsonbRoundTrip` on saves, the screen's sync. `testing.test.ts`: `jsonbRoundTrip` key order and strict refusals. `registry.test.ts`: four game types, and logic, modules and bots match. |
+| CORE-SDK | `context.test.ts`: clipping, skip mode, prompt key rules, shared effects. `runtime.test.ts`: permissions (a screen may only sync), status rules, frozen config, the member hooks with actor system and their fail-open, self-finish with a throwing `onEnd`, End's fail-open, skip on a no-op and on a stale host action, the wake loop cap and the stuck guard (`wake_at` null, `log.wake_stuck`), `env.round` refusing a request held across a restart, default winners from scores plus awards (an in-person round; nobody when the top is 0), stage defaults. `contract.test.ts`: the contract runner on the probe game, with its join, wake and recap checks. `simulate.test.ts`: claims, versions, prompts, the stage rules, `jsonbRoundTrip` on saves, the screen's sync. `testing.test.ts`: `jsonbRoundTrip` key order and strict refusals. `registry.test.ts`: four game types, and logic, modules and bots match. **Changed during build:** `registry.test.ts` is also the jsonb round-trip contract over every registered game: default settings survive a strict round trip, `parseAction` refuses garbage with `GameError`, and `checkGameContract` passes on a round the game's own bot plays (`botExample`). A placeholder whose setup says "This game isn't ready yet" is skipped until its game lands. `netlify/lib/engine.test.ts` covers parsing, retries, the replay and skip paths and the error mapping with a fake client. |
 | REHEARSE | `rehearse.test.ts`: flag parsing and every guard: a non-local URL refused without `--target production`; a `--confirm` that doesn't match the URL's project ref refused; no secret key use in production except `--cleanup`. |
 | DATA | `gameApi.test.ts` (a mocked fetch): one id per call, the same id on retries, no retry on 4xx or 500, the offline message, an injected client and endpoint. `live.test.ts` (a fake client): one read in flight, the tally settle, jitter, no jitter for `prompt: true`, the 10 s poll while a prompt or timer is live, the deadline reads, the offset, polling fallback, ping health (an unannounced change turns it unhealthy, a ping heals it, and none of the stage-only changes alters a phone's fingerprint), two sessions on one topic with one closed, the delayed `player:` rejoin. `wakeSync.test.ts` (fake timers): the rules of 4.5 (5.10). `stage.test.ts`: every `tvScene` and `phoneLayout` case, the 3-minute window from `max(finished_at, spotlight_at)`, the result card staying until the next start. `recap.test.ts`: `buildRecapDoc` on a recorded raw recap; a raw recap with a running elimination round and a quiz ended after 3 of 10 questions: no task text, unasked question or answer key appears anywhere in the doc. `media.test.ts`: `fitWithin`, the quality steps with a fake encoder, `jpegHasMetadata` on JPEG bytes built with an EXIF and a comment segment; plus one check in a real browser on the local stack (canvas needs one): a JPEG with an EXIF comment, uploaded through `uploadGameMedia`, downloads again without it (`jpegHasMetadata` false) and under 400 KB. `auth.test.ts` (a mocked client): the 429 retries and `onBusy`. `queries.test.ts` (a mocked client): `publishRecap` always sends `published_at`; `joinSession` doesn't retry. |
 | GAME-elimination | Today's tests on v2, plus: removal drops the task and finishes the game with one left; `isFinished`; `onEnd` quiet for game; the winner's announcement is `interrupt`; alive order after a round trip; `recap` on a finished round; the contract (with a join and a leave); the bot playing a round to its end through `simulateParty`. |
@@ -3182,12 +3246,14 @@ creates its own party and users and deletes them afterwards.
 `npm run test:integration` runs the files one at a time
 (`--no-file-parallelism`): the local stack has one Realtime tenant capped at
 100 events a second, and the 45-answer burst must not starve the realtime
-file's pings.
+file's pings. **Changed during build:** an answer is held in flight with
+`sql()` in `testUsers.ts`, which runs one transaction on the local meta API
+(`/pg/query`, local only), and the integration run gets a 30 s test timeout.
 
 - **`engine.integration.test.ts`**: start on stage and in the background; two
   and three live games at once; a move, a copy of it with the same request id
   (`replayed`, one feed row), a copy racing its original; a different move on a
-  stale version (`40001`, then success); End twice (one "is over"); End with a
+  stale version (`PT409` `stale`, then success); End twice (one "is over"); End with a
   throwing `onEnd` still ends; a move after End (409); start twice at once (one
   deal); restart and a move held across it (409 restarted); a restart between
   two attempts of one request (the retry is refused, nothing lands in the new
@@ -3200,6 +3266,11 @@ file's pings.
   its action, host-action and start refused (403); a prompt closed by its
   deadline pings the room even when the request then skips; error codes and
   statuses; the event log rows of each path; the `session_recap` shape.
+  **Changed during build:** races and restarts are interleaved
+  deterministically (a client wrapper runs the other request between one
+  request's load and its commit), and `testUsers.ts` also holds two test-only
+  plugins served through `logicFor`: `lab` (opens any prompt spec, reveals it,
+  keeps a secret setting) and `stuck` (an `onWake` that never moves forward).
   **Conformance**: one scripted round (a probe game started on the stage, a
   second one in the background that finishes by itself, a removal, a timer
   reveal) runs through `FakeParty` and through `handleGameRequest` (with
@@ -3368,7 +3439,17 @@ Until the gate passes, DATA and the screens work against the fixtures (5.11).
 | Sat 28 Nov | The party. |
 
 In phase 1, main may fail to type-check in page files whose owner hasn't
-ported them to v2 yet. Judge `tsc -b` by your own files; each UI package ports
+ported them to v2 yet. **Changed during build:** it doesn't: the core build
+kept main compiling with small edits in files other packages own, which they
+replace when they port them: `src/pages/Play.tsx`,
+`src/pages/host/Scoreboard.tsx` and `src/pages/host/HostSession.tsx` pass the
+new props with neutral values (no prompts, `Date.now` as the clock), the host
+page's settings editor reads and saves `game_settings`, `AwardPoints` takes
+`Pick<Player, 'id' | 'name' | 'code'>`, `queries.ts` reads a player by code as
+a `PlayerRow` and finds a party by code through `session_by_code`, and the
+v1 `gameApi.ts` accepts `host-action` and `sync`. The
+v1 pages still read through Postgres Changes, which v2 no longer publishes,
+so they show data but don't update live until DATA, PHONE, TV and HOST land. Judge `tsc -b` by your own files; each UI package ports
 its files to compile against v2 first (on day 1 of phase 1).
 
 ### 10.2 Ownership
@@ -3715,7 +3796,7 @@ Images: 12 fusion pictures cost about 16 MB of thumbnails across 45 phones and
 | A recap published mid-party | Only finished rounds reach a game's `recap()`; a running round gets a generic chapter; tested with live tasks and an early-ended quiz. |
 | Fusion images over the venue's one connection | Re-encoded in the browser without metadata, a 2 MB bucket limit, thumbnails on phones. |
 | A timer loop from a buggy `onWake` | One scheduler with a 2 s limit and backoff; the stuck guard clears `wake_at`; the contract checks that wakes move forward. |
-| Two games saving at once deadlock on the same players' profiles (40P01) | Retried like 40001. |
+| Two games saving at once deadlock on the same players' profiles (40P01) | Retried like a stale version (changed during build: `PT409` `stale`, never 40001, 2.1). |
 | Determinism: a hook reading `Date` or `Math.random` | The lint rule and the contract test. |
 | Cheating by player id with devtools | Close joining once everyone is in. |
 | Shared venue Wi-Fi and Auth limits | The party-week settings (section 11); the sign-in's jittered retries for up to 30 s with a calm busy state; the staggered rejoin; the 40-bot run against production on Sat 21 Nov. |
@@ -3818,3 +3899,42 @@ committed file.
 | Jittered speed points; unclear sound triggers | `prompt: true` pings skip the jitter; sounds from views, once per moment (2.8, 3.5, 5.4) |
 | Small contradictions | The result card stays until the next game; member hooks run as system; `game.start` data aligned; prompt specs are public; the `interrupt` flag (2.14, 3.3, 3.5, 5.5, 7.2) |
 | Sources only under a temp folder | `.design/`, relative paths (12.3) |
+
+### 12.6 Build notes: the core package, Monday 9 November
+
+What building CORE-DB and CORE-SDK changed or settled, with where it lives.
+Each spot is also marked "Changed during build" in place.
+
+- **Version conflicts are `PT409` `stale`, never `40001`** (2.1, 2.8, 4.3,
+  12.2). Found on the local stack: PostgREST retries a transaction that fails
+  with SQLSTATE 40001, so the spec's version conflict looped about 3,500 times
+  a second and the request never answered. No function may raise 40001.
+- **The policies cast the helpers**: `= any ((select public.my_session_ids())::uuid[])`
+  (2.5). Without the cast the init file doesn't apply.
+- **`submit_answer` checks a saved request id before the closed check**, and an
+  identical answer before the claim (2.7), so a retry after a lost reply is
+  success and the log counts real answers.
+- **`game_points` counts this round only**, a phone's feed holds only its own
+  targeted rows, and the DETAIL codes the spec left open are named (2.7).
+- **A pending spotlit game leaves the stage free** for a finishing game (2.8).
+- **One clock per save** for log rows and bonus points (2.8).
+- **The recap trigger fires on any update** that changes `published_at` (2.9).
+- **A sync never re-arms a past wake**, so the stuck guard holds (3.3, 4.5).
+- **Additive SDK helpers** (3.4) and a 16 KB cap on an action (4.1).
+- **Elimination's `alive` order** was fixed in the core's port (8.1).
+- **The contract over every registered game** is `registry.test.ts`, played by
+  each game's bot (9.1); the integration helpers hold answers in flight and
+  interleave races deterministically (9.2).
+- **main compiles**: small edits in v1 pages and `src/lib` that the UI and DATA
+  packages replace (10.1).
+
+Results on the local stack: `supabase db reset` applies the init file alone
+from empty, self-checks included, and each deliberate hole tried against the
+self-checks in a rolled-back transaction aborts it; `npm run db:smoke` passes
+(the gate, 9.4); 45 answers at once: 45 accepted, 0 errors, about 40 ms;
+`npm run check` (115 unit tests, 2 skipped for the placeholder quiz and fusion)
+and `npm run test:integration` (60 tests in 4 files) pass.
+
+Not in this package: REHEARSE (`scripts/rehearse.ts` and its `npm run
+rehearse` script), DATA, the game packages (the quiz and fusion modules and
+all four bots are placeholders), and the PHONE, TV and HOST screens.

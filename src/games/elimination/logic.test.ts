@@ -152,7 +152,7 @@ describe('ending', () => {
     const { state } = start()
     const info = testInfo(config, state.playerIds)
     const { ctx, effects } = createGameContext(info, seededRandom())
-    expect(game.onEnd(state, ctx)).toBe(state)
+    expect(game.onEnd(state, ctx, 'host')).toBe(state)
     expect(effects.announcements).toEqual([
       expect.objectContaining({ message: 'Last one standing is over', detail: '4 still standing' }),
     ])
@@ -162,7 +162,7 @@ describe('ending', () => {
     const { state } = start(['ana', 'bo'])
     const end = tag(state, 'ana', 'bo').state
     const { ctx, effects } = createGameContext(testInfo(config, end.playerIds), seededRandom())
-    game.onEnd(end, ctx)
+    game.onEnd(end, ctx, 'host')
     expect(effects.announcements).toEqual([])
   })
 })

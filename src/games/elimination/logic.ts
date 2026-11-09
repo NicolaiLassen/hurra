@@ -235,8 +235,8 @@ export class EliminationGame extends Game<
   }
 
   /** When the host ends the game early, say how it stood. */
-  onEnd(state: EliminationState, ctx: GameContext<EliminationConfig>): EliminationState {
-    if (!winnerOf(state)) {
+  onEnd(state: EliminationState, ctx: GameContext<EliminationConfig>, by: 'game' | 'host'): EliminationState {
+    if (by === 'host' && !winnerOf(state)) {
       const left = Object.keys(state.tasks).length
       ctx.announce('Last one standing is over', { detail: `${left} still standing`, icon: 'trophy', sound: 'gong' })
     }
@@ -257,7 +257,8 @@ export class EliminationGame extends Game<
     const knockoutCounts: Record<PlayerId, number> = {}
     for (const knockout of state.knockouts) knockoutCounts[knockout.by] = (knockoutCounts[knockout.by] ?? 0) + 1
     return {
-      alive: Object.keys(state.tasks),
+      // In deal order: jsonb reorders object keys, so Object.keys(state.tasks) isn't stable.
+      alive: state.playerIds.filter((id) => id in state.tasks),
       out: state.playerIds.filter((id) => !(id in state.tasks)),
       winner: winnerOf(state),
       outBy: Object.fromEntries(state.knockouts.map((k) => [k.target, { by: k.by, method: k.method }])),

@@ -18,7 +18,13 @@ import type { Player, Session } from '@/lib/types'
 const QUICK_POINTS = [1, 2, 3, 5, 10]
 const NO_GAME = 'none'
 
-export default function AwardPoints({ player, session }: { player: Player; session: Session }) {
+export default function AwardPoints({
+  player,
+  session,
+}: {
+  player: Pick<Player, 'id' | 'name' | 'code'>
+  session: Pick<Session, 'id' | 'name'>
+}) {
   const { data: points } = usePlayerPoints(player.id)
   const { data: games } = useSessionGames(session.id)
   const { data: events } = usePlayerEvents(player.id)

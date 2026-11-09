@@ -28,7 +28,8 @@ import {
 import { playSound } from '@/lib/sound'
 import { strongestSound } from '@/lib/soundPolicy'
 import { rememberJoinCode } from '@/lib/storage'
-import type { Player, Session, SessionGame } from '@/lib/types'
+import { supabase } from '@/lib/supabase'
+import type { Player, PromptState, Session, SessionGame, SubmitResult } from '@/lib/types'
 import { playerUrl } from '@/lib/urls'
 import { useLiveQuery } from '@/lib/useLiveQuery'
 import { PartyNotFound } from '@/pages/NotFound'
@@ -176,6 +177,15 @@ function PlayerHome({ session: joinedSession, player: joined }: { session: Sessi
   )
 }
 
+// Until this page moves to the live session (docs/engine-v2.md, 7.1), games get
+// no prompts, answers or server clock of their own here.
+const NO_PROMPTS: PromptState[] = []
+const NO_ANSWERS = {}
+const submitNotReady = (): Promise<SubmitResult> => Promise.reject(new Error("Answers aren't open on this screen yet"))
+const gameMediaUrl = (path: string, size: 'full' | 'thumb' = 'full') =>
+  supabase.storage.from('game-media').getPublicUrl(size === 'thumb' ? path.replace(/\.jpg$/, '.thumb.jpg') : path).data
+    .publicUrl
+
 function ActiveGame({
   session,
   game,
@@ -216,6 +226,12 @@ function ActiveGame({
       publicState={game.public_state}
       view={view}
       act={act}
+      prompts={NO_PROMPTS}
+      myAnswers={NO_ANSWERS}
+      onStage={false}
+      submit={submitNotReady}
+      serverNow={Date.now}
+      mediaUrl={gameMediaUrl}
       scannedCode={scannedCode}
       onScanHandled={onScanHandled}
     />

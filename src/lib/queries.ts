@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { ensureSignedIn } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
-import type { FeedItem, Player, ScoreEvent, ScoreRow, Session, SessionGame } from '@/lib/types'
+import type { FeedItem, Player, PlayerRow, ScoreEvent, ScoreRow, Session, SessionGame } from '@/lib/types'
 import { isJoinCode, isPlayerCode, isUuid } from '@/lib/urls'
 import { useLiveQuery, type Watch } from '@/lib/useLiveQuery'
 
@@ -15,7 +15,9 @@ const sessionWatches = (sessionId: string, watches: Watch[]) => (isUuid(sessionI
 
 export async function getSessionByCode(joinCode: string) {
   if (!isJoinCode(joinCode)) return null
-  return unwrap<Session | null>(await supabase.from('sessions').select('*').eq('join_code', joinCode).maybeSingle())
+  // v2: someone who hasn't joined can't read the party; session_by_code finds it
+  // (docs/engine-v2.md, 2.7). DATA replaces this with sessionByCode.
+  return unwrap<Session | null>(await supabase.rpc('session_by_code', { p_join_code: joinCode }))
 }
 
 /** The player a signed-in user is in a session, if any. */
@@ -35,7 +37,7 @@ export async function loadMembership(joinCode: string): Promise<{ session: Sessi
 
 export async function getPlayerByCode(code: string) {
   if (!isPlayerCode(code)) return null
-  return unwrap<(Player & { session: Session }) | null>(
+  return unwrap<(PlayerRow & { session: Session }) | null>(
     await supabase.from('players').select('*, session:sessions(*)').eq('code', code).maybeSingle(),
   )
 }

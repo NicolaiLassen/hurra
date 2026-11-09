@@ -1,80 +1,143 @@
+// The game module API (docs/engine-v2.md, section 6): a game's screens, paired
+// with its logic (src/games/core/Game.ts). Game views import only React,
+// Phosphor, motion, @/components/*, @/games/core/*, @/games/types, their own
+// folder, @/lib/types (types only) and the UI-only helpers in src/lib.
+// Everything else comes through props.
 import type { Icon } from '@phosphor-icons/react'
 import type { ComponentType } from 'react'
-import type { AnyGame, Game } from '@/games/core/Game'
-import type { Player, ScoreRow, Session, SessionGame } from '@/lib/types'
+import type { AnswerPayload, AnyGame, Game, PlayerId } from '@/games/core/Game'
+import type { FeedItem, Player, PromptState, ScoreRow, Session, SessionGame, SubmitResult } from '@/lib/types'
 
-/** The types a game plugin declares: its state, actions, views and config. */
+/** The types a game declares. */
 type Parts<G> =
-  G extends Game<infer State, infer Action, infer PublicState, infer PlayerView, infer Config>
-    ? { state: State; action: Action; publicState: PublicState; playerView: PlayerView; config: Config }
+  G extends Game<infer State, infer Action, infer PublicState, infer PlayerView, infer Config, infer HostAction>
+    ? { state: State; action: Action; publicState: PublicState; playerView: PlayerView; config: Config; hostAction: HostAction }
     : never
 
-export type PlayerViewProps<G extends AnyGame = AnyGame> = {
+/** What every screen of a game gets. */
+export type GameScreenProps<G extends AnyGame = AnyGame> = {
   session: Session
   game: SessionGame
-  /** The player holding this phone. */
-  player: Player
   players: Player[]
   publicState: Parts<G>['publicState']
-  /** This player's private view: undefined while loading, null if they have none (e.g. joined later). */
+  /** This game's prompts (this round). */
+  prompts: PromptState[]
+  /** Now by the database clock: use it for every countdown. */
+  serverNow: () => number
+  /** The public URL of a game-media path. Phones use 'thumb' (with loading="lazy"); the TV uses 'full'. */
+  mediaUrl: (path: string, size?: 'full' | 'thumb') => string
+}
+
+export type PlayerViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
+  /** The player holding this phone. */
+  player: Player
+  /** Their private view: undefined while loading, null if they have none (e.g. joined later). */
   view: Parts<G>['playerView'] | null | undefined
-  /** Sends an action to the game's server logic; rejects with the game's message if it breaks a rule. */
+  /** Their own answers this round, by prompt key, read back after a reload. */
+  myAnswers: Readonly<Record<string, AnswerPayload>>
+  /** Whether this game is on the TV. */
+  onStage: boolean
+  /** Sends a move to the engine; rejects with the game's message. */
   act: (action: Parts<G>['action']) => Promise<void>
-  /**
-   * For games with `acceptsScans`: a player code this phone scanned with its
-   * camera app (the QR opened /p/<code>). Treat it like a scan inside the game,
-   * then call `onScanHandled` so it's only used once.
-   */
+  /** Answers a prompt straight to the database; rejects with the reason ("Too late, answers are closed"). */
+  submit: (key: string, answer: AnswerPayload) => Promise<SubmitResult>
+  /** For games with acceptsScans: a player code scanned with the camera app. Call onScanHandled once used. */
   scannedCode?: string
   onScanHandled?: () => void
 }
 
-export type HostViewProps<G extends AnyGame = AnyGame> = {
+/** A compact card for a game that runs while another holds the main card. `open` shows the full PlayerView. */
+export type PlayerCardProps<G extends AnyGame = AnyGame> = PlayerViewProps<G> & { open: () => void }
+
+/** A finished game's result on a phone: "You won", "Mads won. Sofie caught you". */
+export type ResultViewProps<G extends AnyGame = AnyGame> = {
   session: Session
   game: SessionGame
+  player: Player
   players: Player[]
-  /** The game's full state (hosts only): undefined while loading, null before the game starts. */
+  publicState: Parts<G>['publicState']
+  view: Parts<G>['playerView'] | null | undefined
+  gamePoints: Readonly<Record<PlayerId, number>>
+}
+
+export type HostViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
+  /** The full state (hosts only): undefined while loading, null before the first start. */
   state: Parts<G>['state'] | null | undefined
+  /** The settings this round started with (hosts only), e.g. the quiz's right answers. */
+  config: Parts<G>['config'] | null | undefined
+  /** Answers in so far, by unrevealed prompt key. */
+  tallies: Readonly<Record<string, number>>
+  gamePoints: Readonly<Record<PlayerId, number>>
+  /**
+   * Sends a host action. `close` names prompts to close first, so the action
+   * sees their final answers. Resolves on success and on a skip (a stale
+   * action); disable the button while it is pending.
+   */
+  act: (action: Parts<G>['hostAction'], options?: { close?: string[] }) => Promise<void>
+}
+
+export type TvViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
+  /** The day's standings. */
+  scores: ScoreRow[]
+  gamePoints: Readonly<Record<PlayerId, number>>
+  tallies: Readonly<Record<string, number>>
+  /** This game's newest room-wide announcements. */
+  feed: FeedItem[]
+  /** True while the TV shows this game's final screen. */
+  finished: boolean
+}
+
+/** A small card in the TV rail for a game running in the background. */
+export type TvStatusProps<G extends AnyGame = AnyGame> = {
+  game: SessionGame
+  players: Player[]
+  publicState: Parts<G>['publicState']
+  gamePoints: Readonly<Record<PlayerId, number>>
+  tallies: Readonly<Record<string, number>>
+  serverNow: () => number
 }
 
 export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   config: Parts<G>['config']
   onChange: (config: Parts<G>['config']) => void
-}
-
-export type TvViewProps<G extends AnyGame = AnyGame> = {
   session: Session
   game: SessionGame
+  /** The party's players, e.g. to pick who is in a picture. */
   players: Player[]
-  /** Public data only: the TV is in the room for everyone to see. */
-  publicState: Parts<G>['publicState']
-  /** The day's scoreboard. */
-  scores: ScoreRow[]
+  /** Re-encodes and uploads to the public game-media bucket (hosts only, 5.8). */
+  media: { upload: (file: File) => Promise<string>; url: (path: string, size?: 'full' | 'thumb') => string }
 }
 
 /** A badge on a player's profile, shown on phones, the host page and the TV. */
 export type ProfileBadge = { icon: Icon; label: string; tone?: 'gold' | 'pink' | 'teal' | 'violet' }
 
-/** A game plugin's screens, paired with its server logic (see src/games/core/Game.ts). */
 export type GameModule<G extends AnyGame = AnyGame> = {
   logic: G
   name: string
   description: string
-  /** Shown on each player's phone while the game is live. */
+  /** A Phosphor icon for lists, title cards and recap chapters. Default: GameControllerIcon. */
+  icon?: Icon
+  /** The full game on a phone. Draws its content only: the phone draws the card and its header. */
   PlayerView: ComponentType<PlayerViewProps<G>>
-  /** Shown on the host's session page while the game is live. */
+  /** The compact card while another game holds the main card. Default: title, Live and Open. */
+  PlayerCard?: ComponentType<PlayerCardProps<G>>
+  /** The phone's result card once finished. Default: "Mads won X" and my points. */
+  ResultView?: ComponentType<ResultViewProps<G>>
+  /** The game's panel in the host control room. */
   HostView?: ComponentType<HostViewProps<G>>
-  /** Takes over the TV scoreboard while the game is live; the header, join card and announcements stay. */
+  /** The TV stage while live (load it lazily). Default: the standings with "Now playing". */
   TvView?: ComponentType<TvViewProps<G>>
-  /** Lets the host edit the game's settings (session_games.config) before starting it. */
+  /** The TV's final screen (lazily). Default: TvView with finished, else a generic winners screen. */
+  FinalTvView?: ComponentType<TvViewProps<G>>
+  /** The TV rail card while in the background. Default: title, live time, this game's leader. */
+  TvStatus?: ComponentType<TvStatusProps<G>>
+  /** The settings editor; saves to game_settings (hosts only). */
   ConfigEditor?: ComponentType<ConfigEditorProps<G>>
-  /**
-   * The PlayerView takes player codes (e.g. to knock someone out). Then a guest
-   * who scans another player's QR with the phone's camera app lands in the
-   * live game with that code (`scannedCode`), instead of on the player card.
-   */
+  /** The PlayerView takes player codes; camera scans of player QR codes land here. */
   acceptsScans?: boolean
-  /** Turns this game's section of a player's profile into badges. */
+  /** How this game's announcements show while it is live on the TV stage. 'sound-only' when its TvView shows the moment itself. Default 'banner'. */
+  stageBanners?: 'banner' | 'sound-only'
+  /** Turns this game's section of a profile into badges. */
   profileBadges?: (data: Record<string, unknown>) => ProfileBadge[]
 }
 

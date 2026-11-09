@@ -20,12 +20,22 @@ import { useFeed, usePlayers, useScoreboard, useSession, useSessionGames } from 
 import { playSoftSound, playSound } from '@/lib/sound'
 import { useElementSize } from '@/lib/useElementSize'
 import { useLoaderHold } from '@/lib/loader'
-import type { FeedItem, ScoreRow, Session } from '@/lib/types'
+import { supabase } from '@/lib/supabase'
+import type { FeedItem, PromptState, ScoreRow, Session } from '@/lib/types'
 import { joinUrl } from '@/lib/urls'
 import { cn } from '@/lib/utils'
 import { SessionNotFound } from '@/pages/NotFound'
 
 type Ranked = ScoreRow & { rank: number }
+
+// Until the TV moves to the live session (docs/engine-v2.md, 7.2), games get no
+// prompts, tallies, points or feed of their own here.
+const NO_PROMPTS: PromptState[] = []
+const NOTHING = {}
+const NO_FEED: FeedItem[] = []
+const gameMediaUrl = (path: string, size: 'full' | 'thumb' = 'full') =>
+  supabase.storage.from('game-media').getPublicUrl(size === 'thumb' ? path.replace(/\.jpg$/, '.thumb.jpg') : path).data
+    .publicUrl
 type Gains = Record<string, { amount: number; seq: number }>
 
 const spring: Transition = { type: 'spring', stiffness: 260, damping: 28 }
@@ -103,6 +113,13 @@ function Board({ session }: { session: Session }) {
             players={players ?? []}
             publicState={activeGame.public_state}
             scores={scores}
+            prompts={NO_PROMPTS}
+            gamePoints={NOTHING}
+            tallies={NOTHING}
+            feed={NO_FEED}
+            finished={false}
+            serverNow={Date.now}
+            mediaUrl={gameMediaUrl}
           />
         </Suspense>
       ) : ranked.length === 0 ? (

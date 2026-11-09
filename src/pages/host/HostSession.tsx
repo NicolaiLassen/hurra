@@ -15,7 +15,7 @@ import {
   StopIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from '@/lib/toast'
 import Avatar from '@/components/Avatar'
@@ -44,7 +44,8 @@ import { withRanks } from '@/lib/format'
 import { callGame } from '@/lib/gameApi'
 import { useGameState, usePlayers, useScoreboard, useSession, useSessionGames } from '@/lib/queries'
 import { supabase } from '@/lib/supabase'
-import type { Session, SessionGame } from '@/lib/types'
+import type { PromptState, Session, SessionGame } from '@/lib/types'
+import { useLiveQuery } from '@/lib/useLiveQuery'
 import { useLoaderHold } from '@/lib/loader'
 import { joinUrl } from '@/lib/urls'
 import SessionMenu from '@/pages/host/SessionMenu'
@@ -285,6 +286,7 @@ function GamesPanel({ session, games }: { session: Session; games: SessionGame[]
             {current.map((game) => (
               <GameRow
                 key={game.id}
+                session={session}
                 game={game}
                 settingsOpen={settingsFor === game.id}
                 onToggleSettings={() => setSettingsFor(settingsFor === game.id ? undefined : game.id)}
@@ -308,7 +310,7 @@ function GamesPanel({ session, games }: { session: Session; games: SessionGame[]
             {showArchived && (
               <ul className="divide-y opacity-80">
                 {archived.map((game) => (
-                  <GameRow key={game.id} game={game} onDelete={() => askToDelete(game)} />
+                  <GameRow key={game.id} session={session} game={game} onDelete={() => askToDelete(game)} />
                 ))}
               </ul>
             )}
@@ -367,11 +369,13 @@ function GamesPanel({ session, games }: { session: Session; games: SessionGame[]
 }
 
 function GameRow({
+  session,
   game,
   settingsOpen = false,
   onToggleSettings,
   onDelete,
 }: {
+  session: Session
   game: SessionGame
   settingsOpen?: boolean
   onToggleSettings?: () => void
@@ -426,7 +430,7 @@ function GameRow({
         </DropdownMenuContent>
       </DropdownMenu>
       {gameModule && settingsOpen && canEditSettings && onToggleSettings && (
-        <GameSettings game={game} gameModule={gameModule} onClose={onToggleSettings} />
+        <GameSettings session={session} game={game} gameModule={gameModule} onClose={onToggleSettings} />
       )}
     </li>
   )
@@ -483,34 +487,97 @@ function PrimaryGameAction({ game }: { game: SessionGame }) {
   )
 }
 
+// Until this page moves to the live session (docs/engine-v2.md, 7.3), host views
+// get no prompts, tallies or points of their own here.
+const NO_PROMPTS: PromptState[] = []
+const NOTHING = {}
+const gameMediaUrl = (path: string, size: 'full' | 'thumb' = 'full') =>
+  supabase.storage.from('game-media').getPublicUrl(size === 'thumb' ? path.replace(/\.jpg$/, '.thumb.jpg') : path).data
+    .publicUrl
+const noUploads = {
+  upload: () => Promise.reject(new Error("Uploads aren't open on this page yet")),
+  url: gameMediaUrl,
+}
+
 /** The live game's host screen, fed the full game state (only hosts can read it). */
 function LiveHostView({ session, game }: { session: Session; game: SessionGame }) {
   const gameModule = getGameModule(game.game_type)
   const { data: state } = useGameState(game.id)
   const { data: players } = usePlayers(session.id)
+  const act = useCallback(
+    async (action: unknown, options?: { close?: string[] }) => {
+      try {
+        await callGame({ gameId: game.id, type: 'host-action', action, close: options?.close })
+      } catch (error) {
+        toast.error((error as Error).message)
+      }
+    },
+    [game.id],
+  )
   if (!gameModule?.HostView) return null
-  return <gameModule.HostView session={session} game={game} players={players ?? []} state={state} />
+  return (
+    <gameModule.HostView
+      session={session}
+      game={game}
+      players={players ?? []}
+      state={state}
+      publicState={game.public_state}
+      config={null}
+      tallies={NOTHING}
+      gamePoints={NOTHING}
+      prompts={NO_PROMPTS}
+      serverNow={Date.now}
+      mediaUrl={gameMediaUrl}
+      act={act}
+    />
+  )
 }
 
-/** The game's own settings editor, saved to session_games.config. */
+/** The game's own settings editor, saved to game_settings (hosts only). */
 function GameSettings({
+  session,
   game,
   gameModule,
   onClose,
 }: {
+  session: Session
   game: SessionGame
   gameModule: GameModule
   onClose: () => void
 }) {
-  const [config, setConfig] = useState<unknown>(() => ({
-    ...(gameModule.logic.defaultConfig as object),
-    ...game.config,
-  }))
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('game_settings').select('config').eq('game_id', game.id).maybeSingle()
+    if (error) throw new Error(error.message)
+    return { ...(gameModule.logic.defaultConfig as object), ...((data?.config as object | undefined) ?? {}) }
+  }, [game.id, gameModule])
+  const saved = useLiveQuery(load)
+  if (saved.error) return <p className="w-full text-sm text-destructive">{saved.error.message}</p>
+  if (!saved.data) return <p className="w-full text-sm text-muted-foreground">Loading settings…</p>
+  return <SettingsForm session={session} game={game} gameModule={gameModule} initial={saved.data} onClose={onClose} />
+}
+
+function SettingsForm({
+  session,
+  game,
+  gameModule,
+  initial,
+  onClose,
+}: {
+  session: Session
+  game: SessionGame
+  gameModule: GameModule
+  initial: unknown
+  onClose: () => void
+}) {
+  const [config, setConfig] = useState<unknown>(initial)
+  const { data: players } = usePlayers(session.id)
   const Editor = gameModule.ConfigEditor
   if (!Editor) return null
 
   async function save() {
-    const { error } = await supabase.from('session_games').update({ config }).eq('id', game.id)
+    const { error } = await supabase
+      .from('game_settings')
+      .upsert({ game_id: game.id, config: config as Record<string, unknown> })
     if (error) return toast.error(error.message)
     toast.success('Settings saved')
     onClose()
@@ -518,7 +585,14 @@ function GameSettings({
 
   return (
     <div className="grid w-full gap-4 rounded-xl bg-muted/40 p-4">
-      <Editor config={config} onChange={setConfig} />
+      <Editor
+        config={config}
+        onChange={setConfig}
+        session={session}
+        game={game}
+        players={players ?? []}
+        media={noUploads}
+      />
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel

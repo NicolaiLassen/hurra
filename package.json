@@ -9,9 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:integration": "INTEGRATION=1 vitest run integration",
+    "test:integration": "INTEGRATION=1 vitest run integration --no-file-parallelism",
     "check": "tsc -b && eslint . && vitest run",
-    "sounds": "node scripts/generate-sounds.ts"
+    "sounds": "node scripts/generate-sounds.ts",
+    "dev:setup": "node scripts/dev-setup.ts",
+    "db:smoke": "node scripts/db-smoke.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
