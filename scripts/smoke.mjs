@@ -16,9 +16,9 @@
 // What it checks, in order: the site and the engine's 401; keep_alive for
 // anon; the host's party and games; 3 guests joining with anonymous sign-ins;
 // pairing a TV; pings on private topics (a rename reaches a guest, an answer
-// reaches the host as a tally); secrets (game settings, states and the log
-// stay host-only, the quiz's answer stays out of public state until its
-// reveal); Last one standing in the background with a knockout; a 2-question
+// reaches the host as a tally, a guest's forged broadcast reaches nobody);
+// secrets (game settings, states and the log stay host-only, the quiz's
+// answer stays out of public state until its reveal); Last one standing in the background with a knockout; a 2-question
 // quiz on the stage to its crown, with the final-screen spotlight; fusion
 // with one picture from votes to its reveal; a host award and its undo;
 // moving a player to a new phone; the recap read, published and read back by
@@ -143,6 +143,7 @@ async function listen(who, topic) {
     })
   })
   return {
+    channel,
     events,
     async waitFor(event, since, test = () => true, timeoutMs = 5000) {
       const until = Date.now() + timeoutMs
@@ -281,6 +282,12 @@ try {
       () => true,
     )
     check(stageRefused, 'a guest may not join the stage topic')
+    // No insert policy on realtime.messages: a guest's own broadcast on the room topic reaches nobody.
+    const boRoom = await listen(guests.Bo, `room:${sessionId}`)
+    const forgedAt = Date.now()
+    await anaRoom.channel.send({ type: 'broadcast', event: 'changed', payload: { forged: true } })
+    await sleep(1500)
+    check(!boRoom.events.some((e) => e.at >= forgedAt && e.payload.forged), "a guest's own broadcast never reaches another phone")
     const sentAt = Date.now()
     await data(host.client.from('sessions').update({ name: `Smoke ${stamp} renamed` }).eq('id', sessionId), 'rename')
     const ping = await anaRoom.waitFor('changed', sentAt)
