@@ -2,7 +2,8 @@ import { CrownIcon, DetectiveIcon, EyeIcon, EyeSlashIcon, SwordIcon } from '@pho
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { EliminationGame } from '@/games/elimination/logic'
+import { standing, winnerOf, type EliminationGame } from '@/games/elimination/logic'
+import { nameFrom } from '@/games/elimination/roster'
 import type { HostViewProps } from '@/games/types'
 
 export default function HostView({ players, state }: HostViewProps<EliminationGame>) {
@@ -10,16 +11,19 @@ export default function HostView({ players, state }: HostViewProps<EliminationGa
   const [showTasks, setShowTasks] = useState(false)
   if (!state) return <p className="text-muted-foreground">Dealing tasks…</p>
 
-  const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'Someone'
-  const alive = Object.entries(state.tasks)
-  const winner = alive.length === 1 && state.playerIds.length > 1 ? alive[0][0] : null
+  const nameOf = nameFrom(players)
+  // Only players still in the party: a removed guest's task left with them.
+  const party = { players }
+  const alive = standing(state, party).map((id) => [id, state.tasks[id]] as const)
+  const winner = winnerOf(state, party)
+  const dealtIn = state.playerIds.filter((id) => players.some((p) => p.id === id)).length
 
   return (
     // grid-cols-1: one column as wide as the panel, so a long winner name truncates instead of widening it.
     <div className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-lg font-semibold">
-          {alive.length} of {state.playerIds.length} still in
+          {alive.length} of {dealtIn} still in
         </p>
         {winner && (
           <Badge size="lg" className="max-w-full">

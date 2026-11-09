@@ -3,18 +3,30 @@ import { lazy } from 'react'
 import ConfigEditor from '@/games/elimination/ConfigEditor'
 import HostView from '@/games/elimination/HostView'
 import { EliminationGame, type EliminationProfile } from '@/games/elimination/logic'
+import PlayerCard from '@/games/elimination/PlayerCard'
 import PlayerView from '@/games/elimination/PlayerView'
+import ResultView from '@/games/elimination/ResultView'
+import TvStatus from '@/games/elimination/TvStatus'
 import { defineGameModule, type ProfileBadge } from '@/games/types'
 
+// Runs in the background all evening (its logic's presentation): phones show
+// PlayerCard while another game holds the main card, and the TV its TvStatus
+// card beside the stage game. The last knockout finishes it by itself; the TV's
+// final screen is TvView with `finished`, and phones get ResultView.
 export const elimination = defineGameModule({
   logic: new EliminationGame(),
   name: 'Last one standing',
   description:
     "Everyone gets a secret task and one life. Get someone to do your task, or catch them trying theirs on you, then scan their code: they're out.",
+  icon: SwordIcon,
   PlayerView,
+  PlayerCard,
+  ResultView,
   HostView,
   // Animated with motion; loading it lazily keeps that off guests' phones.
   TvView: lazy(() => import('@/games/elimination/TvView')),
+  // CSS only (no motion), so it can sit in the TV's rail without a lazy load.
+  TvStatus,
   ConfigEditor,
   // Players scan each other's codes to knock them out, also with the camera app.
   acceptsScans: true,

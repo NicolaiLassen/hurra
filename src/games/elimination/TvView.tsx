@@ -1,8 +1,10 @@
-import { CrownIcon, DetectiveIcon, SkullIcon, SwordIcon } from '@phosphor-icons/react'
+import { CrownIcon, DetectiveIcon, SkullIcon, SwordIcon, TrophyIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'motion/react'
+import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
 import type { EliminationGame, EliminationPublicState, PublicKnockout } from '@/games/elimination/logic'
+import { nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
 import SurvivorMeter from '@/games/elimination/SurvivorMeter'
 import type { TvViewProps } from '@/games/types'
 import { fitGrid } from '@/lib/fitGrid'
@@ -12,14 +14,19 @@ import { cn } from '@/lib/utils'
 
 const spring = { type: 'spring', stiffness: 260, damping: 26 } as const
 
-/** The TV while Last one standing is live: who is left, who got whom, the top hunters. */
-export default function TvView({ players, publicState }: TvViewProps<EliminationGame>) {
-  const { alive, out, winner, knockoutCounts, feed } = publicState
-  const dealtIn = players.filter((p) => alive.includes(p.id) || out.includes(p.id))
-  const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'Someone'
-  const hunters = Object.entries(knockoutCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
+/**
+ * The TV while Last one standing holds the stage: who is left, who got whom,
+ * the top hunters. With `finished`, the same board is the final screen: the
+ * winner under "Final result", or how it stood when the host ended it.
+ */
+export default function TvView({ players, publicState, finished }: TvViewProps<EliminationGame>) {
+  const { winner, feed } = publicState
+  // Players still in the party, so the meter and the tiles count the same people.
+  const { standing, total } = roundRoster(players, publicState)
+  const inRound = new Set([...publicState.alive, ...publicState.out])
+  const dealtIn = players.filter((p) => inRound.has(p.id))
+  const nameOf = nameFrom(players)
+  const hunters = topHunters(publicState, players)
 
   return (
     <div className="grid min-h-0 flex-1 gap-8 lg:grid-cols-[1fr_24rem]">
@@ -32,12 +39,19 @@ export default function TvView({ players, publicState }: TvViewProps<Elimination
               className="size-24 shrink-0 text-primary drop-shadow-[0_0_24px_rgb(245_197_66/0.5)] short:size-16"
             />
             <div className="min-w-0">
+              {finished && <FinalResult />}
               <p className="truncate text-6xl font-black short:text-5xl">{nameOf(winner)}</p>
               <p className="text-3xl text-muted-foreground short:text-2xl">is the last one standing!</p>
             </div>
           </div>
+        ) : finished ? (
+          // The host ended it early: how it stood.
+          <div className="grid shrink-0 gap-2">
+            <FinalResult />
+            <SurvivorMeter alive={standing.length} total={total} size="lg" />
+          </div>
         ) : (
-          <SurvivorMeter alive={alive.length} total={dealtIn.length} size="lg" className="shrink-0" />
+          <SurvivorMeter alive={standing.length} total={total} size="lg" className="shrink-0" />
         )}
 
         <PlayerTiles players={dealtIn} publicState={publicState} nameOf={nameOf} />
@@ -223,7 +237,16 @@ function MethodIcon({ method, className }: { method: PublicKnockout['method']; c
   )
 }
 
-function Panel({ title, className, children }: { title: string; className?: string; children: React.ReactNode }) {
+function FinalResult() {
+  return (
+    <p className="flex items-center gap-2 text-xl font-semibold tracking-widest text-primary uppercase short:text-lg">
+      <TrophyIcon weight="fill" />
+      Final result
+    </p>
+  )
+}
+
+function Panel({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
   return (
     <section className={cn('rounded-3xl bg-card/80 p-6 ring-1 ring-foreground/10 backdrop-blur short:p-5', className)}>
       <h2 className="mb-4 text-sm font-semibold tracking-widest text-muted-foreground uppercase short:mb-3">{title}</h2>
