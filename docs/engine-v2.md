@@ -287,11 +287,18 @@ so there is no data migration.
 | `my_session_ids() returns uuid[]` | stable, definer | The sessions the caller is a player in, or a paired screen of (`session_screens`). Every "member" rule below therefore covers paired TVs too; anything tied to a player (`my_player_ids`) does not. |
 | `session_exists(p_session_id uuid) returns boolean` | stable, definer | Whether the party exists, whoever asks. Lets a removed guest tell "removed" from "party deleted". |
 | `moved_away(p_session_id uuid) returns boolean` | stable, definer | **Added during integration.** Whether the caller's player in the party moved to another phone: a `player.moved` row with the caller as `data.from_user`. Feeds the snapshot's `moved` (2.7). |
+| `clean_name(p_name text) returns text` | immutable | **Added during review.** A name as it reads: NFKC (no-break and other odd spaces become plain ones, full-width letters plain ones), control, invisible and direction characters dropped (the emoji joiner, the emoji style selectors and the flag tags stay), every run of white space one space, the ends trimmed. Every `players.name` is stored like this, by a `before insert or update of name` trigger, so a join and the host's rename both get it. |
+| `name_key(p_name text) returns text` | immutable | **Added during review.** What two players of a party may not share: `clean_name` without the emoji joiners, in lower case, with Cyrillic and Greek look-alikes as Latin letters. Empty for a name with nothing to see. The unique index and the name check use it. |
 
 Policies call these wrapped in `(select ...)` so Postgres evaluates them once
-per query. All eight are granted to `authenticated` (policies and the
-invoker function `session_snapshot` run as the caller) and to `service_role`;
-none to anon.
+per query. All ten are granted to `authenticated` (policies and the
+invoker function `session_snapshot` run as the caller, and so do the players'
+name check, index and trigger on a host's rename) and to `service_role`;
+none to anon. **Changed during review:** names were only trimmed of ASCII
+spaces and unique by `lower(name)`, so "Ana" with a no-break space, a
+Cyrillic A or a zero-width space joined next to the real Ana and looked the
+same on every screen, a name starting with a direction override reversed the
+banners naming it, and a zero-width space alone made a blank row.
 
 ### 2.4 Tables
 
@@ -323,14 +330,16 @@ create table public.players (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.sessions (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,
-  name text not null check (char_length(name) between 1 and 40),
+  -- Stored clean (clean_name, by the players_clean_name trigger), with something to see.
+  name text not null check (char_length(name) between 1 and 40 and public.name_key(name) <> ''),
   code text not null unique default public.random_code(5) check (code ~ '^[A-Z0-9]{5}$'),
   profile jsonb not null default '{}' check (jsonb_typeof(profile) = 'object'),
   created_at timestamptz not null default now(),
   unique (session_id, user_id),
   unique (id, session_id)
 );
-create unique index players_session_name_key on public.players (session_id, lower(name));
+-- Look-alike, invisible and differently spaced names count as the same name.
+create unique index players_session_name_key on public.players (session_id, public.name_key(name));
 create index players_user_idx on public.players (user_id);
 
 create table public.session_games (
@@ -591,9 +600,10 @@ ms or null) for `upper(btrim(p_join_code))`, or null. Null when
 definer. As today, plus: refuses an archived party (`PT409` "This party is
 over", detail `archived`). Errors: `PT401` signed out; `PT404` "No party with
 code X"; `PT409` "This party is closed for new players" (detail `closed`);
-`PT400` name length; `PT409` "Someone already joined as "X". Try another
-name." (detail `name_taken`). Returns the caller's existing player when they
-rejoin from the same browser.
+`PT400` name length, or nothing to see once cleaned (`clean_name`, 2.3);
+`PT409` "Someone already joined as "X". Try another name." (detail
+`name_taken`, also for a look-alike of a name in the party). Returns the
+caller's existing player when they rejoin from the same browser.
 
 **`check_answer(p_spec jsonb, p_payload jsonb, p_session_id uuid, p_player_id uuid) returns jsonb`**,
 stable. Internal: revoked from every client role. Validates and normalises an
@@ -938,6 +948,7 @@ one save sort together.
 | `sessions` | `after insert` | Logs `session.created`. No ping. |
 | `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`. Pings room. |
 | `sessions` | `after delete` | `ping('room:' \|\| id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
+| `players` | `before insert or update of name` | **Added during review.** Stores the name clean (`clean_name`, 2.3), whoever writes it. |
 | `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll). |
 | `players` | `after update of name, user_id` | Name: logs `player.renamed`, pings room. User: logs `player.moved` (with the old user as `data.from_user`, for `moved_away`), sends `moved` on `player:<id>` (the old phone hears it), pings stage. |
 | `players` | `after delete` | Skipped when the party itself is being deleted. Logs `player.removed` (`data.name`), pings room. |

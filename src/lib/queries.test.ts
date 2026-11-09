@@ -206,6 +206,12 @@ describe('host writes', () => {
     await expect(renamePlayer(PLAYER, '   ')).rejects.toThrow('Names are 1 to 40 characters')
   })
 
+  it('renamePlayer turns a name with nothing to see (the check) into bad_name', async () => {
+    db.state.respond = () => ({ data: null, error: { message: 'violates check constraint', code: '23514' }, status: 400 })
+    const error = (await renamePlayer(PLAYER, '\u200b\u2060').catch((e: unknown) => e)) as GameCallError
+    expect([error.code, error.message]).toEqual(['bad_name', 'Names are 1 to 40 characters you can see'])
+  })
+
   it('awardPoints takes whole numbers other than 0 only', async () => {
     await expect(awardPoints({ sessionId: SESSION, playerId: PLAYER, gameId: null, points: 0, reason: null })).rejects.toThrow()
     await expect(awardPoints({ sessionId: SESSION, playerId: PLAYER, gameId: null, points: 1.5, reason: null })).rejects.toThrow()

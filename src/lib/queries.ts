@@ -272,11 +272,17 @@ export async function saveGameSettings(gameId: string, config: Record<string, un
 
 // Host: players -----------------------------------------------------------------------------
 
+/**
+ * The database stores the name clean (clean_name: odd spaces made plain,
+ * invisible characters dropped), and counts look-alikes as the same name.
+ */
 export async function renamePlayer(playerId: string, name: string): Promise<void> {
   const trimmed = name.trim()
   if (length(trimmed) < 1 || length(trimmed) > 40) throw new GameCallError('Names are 1 to 40 characters', 400, 'bad_name')
   const result = await supabase.from('players').update({ name: trimmed }).eq('id', playerId).select('id')
   if (result.error?.code === '23505') throw new GameCallError(`Someone is already called "${trimmed}"`, 409, 'name_taken')
+  // Nothing left to see once it is cleaned, or over 40 characters.
+  if (result.error?.code === '23514') throw new GameCallError('Names are 1 to 40 characters you can see', 400, 'bad_name')
   expectRow(result, 'That player is gone')
 }
 

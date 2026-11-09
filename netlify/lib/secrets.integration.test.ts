@@ -289,6 +289,33 @@ describe('codes and joining', () => {
     expect((await extra.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'tv' })).data.member).toBe(false)
   })
 
+  it('counts look-alike, invisible and odd-spaced names as the same name, and stores names clean', async () => {
+    const twins = await world.party(host, 'Twins')
+    await world.guest(twins, 'Ana')
+    const bo = await world.guest(twins, 'Bo')
+    // One browser tries them all: a refused join leaves it without a player.
+    const newcomer = await world.user()
+    const join = (name: string) => newcomer.client.rpc('join_session', { p_join_code: twins.join_code, p_name: name })
+    // A no-break space, a Cyrillic A, a zero-width space, a direction override, odd case and spacing, full-width letters.
+    for (const name of ['Ana\u00a0', '\u0410na', 'An\u200ba', '\u202eAna', ' ana ', '\uff21\uff4e\uff41']) {
+      expect((await join(name)).error, JSON.stringify(name)).toMatchObject({ code: 'PT409', details: 'name_taken' })
+    }
+    // Nothing to see: a zero-width space, a Hangul filler, a lone emoji joiner, only spaces.
+    for (const name of ['\u200b', '\u3164', '\u200d', ' \u00a0\u3000 ']) {
+      expect((await join(name)).error, JSON.stringify(name)).toMatchObject({ code: 'PT400', details: 'bad_name' })
+    }
+    // A name joins as it reads: composed, single spaces, no invisible characters. Emoji stay.
+    const { data: zoe, error } = await join('  Zoe\u0308  Marie\u2060 \u{1F389}')
+    expect(error).toBeNull()
+    expect(zoe.name).toBe('Zo\u00eb Marie \u{1F389}')
+    // The host's rename goes through the same rules: the same name is taken, nothing to see is refused, spaces are cleaned.
+    const rename = (name: string) => host.client.from('players').update({ name }).eq('id', zoe.id).select('name')
+    expect((await rename('Bo\u200b')).error).toMatchObject({ code: '23505' })
+    expect((await rename('\u200b\u2060')).error).toMatchObject({ code: '23514' })
+    expect((await rename('Zoe  B\u00a0')).data).toEqual([{ name: 'Zoe B' }])
+    expect((await rows<{ name: string }>('players', 'id', bo.playerId))[0].name).toBe('Bo')
+  })
+
   it('refuses to join an archived party', async () => {
     const over = await world.party(host, 'Over')
     await host.client.from('sessions').update({ archived_at: new Date().toISOString() }).eq('id', over.id)

@@ -49,6 +49,31 @@ language sql immutable set search_path = '' as $$
   select case when t ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then t::uuid end
 $$;
 
+-- A name as it reads: compatibility forms folded (NFKC turns no-break and
+-- other odd spaces into plain ones, full-width letters into plain ones),
+-- control, invisible and direction characters dropped (the emoji joiner, the
+-- emoji style selectors and the flag tags stay, for emoji), every run of
+-- white space made one space, the ends trimmed. Every players.name is stored
+-- like this (the players_clean_name trigger).
+create function public.clean_name(p_name text) returns text
+language sql immutable parallel safe set search_path = '' as $$
+  select btrim(regexp_replace(regexp_replace(normalize(coalesce(p_name, ''), nfkc),
+    '[\u0001-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0d\ufeff\uffa0\ufff0-\ufffb\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e001f\U000e0080-\U000e0fff]',
+    '', 'g'), '[\s\u0085\u1680\u2028\u2029]+', ' ', 'g'))
+$$;
+
+-- What two players of a party may not share: the clean name without the
+-- emoji joiners, in lower case, with Cyrillic and Greek look-alikes as Latin
+-- letters, so "Ana" with a Cyrillic A is taken when "Ana" is. Empty for a
+-- name with nothing to see.
+create function public.name_key(p_name text) returns text
+language sql immutable parallel safe set search_path = '' as $$
+  select lower(translate(
+    regexp_replace(public.clean_name(p_name), '[\u200d\ufe0e\ufe0f\U000e0020-\U000e007f]', '', 'g'),
+    U&'\0410\0412\0415\0405\0406\0408\041A\041C\041D\041E\0420\0421\0422\0423\0425\0430\0435\0455\0456\0458\043E\0440\0441\0443\0445\0501\04BB\051B\051D\0391\0392\0395\0396\0397\0399\039A\039C\039D\039F\03A1\03A4\03A5\03A7\03B9\03BF\03BD',
+    'ABESIJKMHOPCTYXaesijopcyxdhqwABEZHIKMNOPTYXiov'))
+$$;
+
 -- 3. Tables ---------------------------------------------------------------------
 
 -- Hosts are email and password users listed here by id, so signing up with a
@@ -81,7 +106,8 @@ create table public.players (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.sessions (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,
-  name text not null check (char_length(name) between 1 and 40),
+  -- Stored clean (clean_name, by the players_clean_name trigger), with something to see.
+  name text not null check (char_length(name) between 1 and 40 and public.name_key(name) <> ''),
   -- Encoded in the player's personal QR code.
   code text not null unique default public.random_code(5) check (code ~ '^[A-Z0-9]{5}$'),
   -- Each game type's public data on this player (badges), written through game effects.
@@ -90,7 +116,8 @@ create table public.players (
   unique (session_id, user_id),
   unique (id, session_id)
 );
-create unique index players_session_name_key on public.players (session_id, lower(name));
+-- Look-alike, invisible and differently spaced names count as the same name.
+create unique index players_session_name_key on public.players (session_id, public.name_key(name));
 create index players_user_idx on public.players (user_id);
 
 create table public.session_games (
@@ -736,6 +763,17 @@ $$;
 create trigger players_logged after insert or update of name, user_id or delete on public.players
   for each row execute function public.log_player_change();
 
+-- Every name is stored as it reads, whoever writes it: a join, or the host's rename.
+create function public.clean_player_name() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.name := public.clean_name(new.name);
+  return new;
+end;
+$$;
+create trigger players_clean_name before insert or update of name on public.players
+  for each row execute function public.clean_player_name();
+
 -- Host awards and their Undo. The engine logs its own points.
 create function public.log_score_change() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -958,7 +996,7 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare
   v_uid uuid := auth.uid();
   v_code text := upper(btrim(coalesce(p_join_code, '')));
-  v_name text := btrim(coalesce(p_name, ''));
+  v_name text := public.clean_name(p_name);
   v_session public.sessions;
   v_player public.players;
   v_constraint text;
@@ -980,7 +1018,7 @@ begin
   if v_session.status <> 'open' then
     raise exception 'This party is closed for new players' using errcode = 'PT409', detail = 'closed';
   end if;
-  if v_name = '' or char_length(v_name) > 40 then
+  if public.name_key(v_name) = '' or char_length(v_name) > 40 then
     raise exception 'Names are 1 to 40 characters' using errcode = 'PT400', detail = 'bad_name';
   end if;
   -- A clash on the random player code (rare) is retried; one on the name is the guest's to fix.
@@ -2048,6 +2086,7 @@ create policy "Hosts delete game media" on storage.objects
 
 revoke execute on function
   public.random_code(int), public.epoch_ms(timestamptz), public.try_uuid(text),
+  public.clean_name(text), public.name_key(text), public.clean_player_name(),
   public.is_host(), public.my_player_ids(), public.my_session_ids(), public.session_exists(uuid),
   public.moved_away(uuid),
   public.ping(text, text, jsonb), public.ping_session(uuid, text, jsonb), public.ping_player(uuid, uuid, text),
@@ -2062,9 +2101,12 @@ revoke execute on function
   public.keep_alive(), public.game_load(uuid, uuid, text[], uuid), public.game_commit(jsonb)
 from public, anon, authenticated;
 
--- Helpers: policies and the invoker functions run as the caller.
+-- Helpers: policies and the invoker functions run as the caller (and so do
+-- the players' name check, index and trigger, for a host's rename and the
+-- engine's profile updates).
 grant execute on function
   public.random_code(int), public.epoch_ms(timestamptz), public.try_uuid(text),
+  public.clean_name(text), public.name_key(text),
   public.is_host(), public.my_player_ids(), public.my_session_ids(), public.session_exists(uuid),
   public.moved_away(uuid)
 to authenticated, service_role;
