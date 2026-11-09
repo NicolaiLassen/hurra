@@ -173,7 +173,7 @@ describe('outsiders and anon', () => {
       'session_screens', 'screen_codes', 'session_recaps', 'scoreboard']
     for (const table of tables) expect((await anon.from(table).select('*').limit(1)).error?.code, table).toBe('42501')
     for (const fn of ['join_session', 'submit_answer', 'session_snapshot', 'session_recap', 'prompt_tallies', 'claim_player',
-      'claim_screen', 'host_issue_transfer', 'host_issue_screen_code', 'game_load', 'game_commit', 'is_host']) {
+      'claim_screen', 'host_issue_transfer', 'host_revoke_transfer', 'host_issue_screen_code', 'game_load', 'game_commit', 'is_host']) {
       expect((await anon.rpc(fn, {})).error, fn).not.toBeNull()
     }
   })
@@ -235,6 +235,35 @@ describe('codes and joining', () => {
     // A phone that already has a player in the party can't take another one.
     const { data: code } = await host.client.rpc('host_issue_transfer', { p_player_id: bo.playerId })
     expect((await ana.client.rpc('claim_player', { p_code: code })).error).toMatchObject({ code: 'PT409', details: 'already_player' })
+  })
+
+  it('cancels a move code when the host closes its dialog: nobody can claim it after', async () => {
+    const { data: code } = await host.client.rpc('host_issue_transfer', { p_player_id: bo.playerId })
+    // Only hosts cancel codes.
+    expect((await ana.client.rpc('host_revoke_transfer', { p_code: code })).error).toMatchObject({ code: 'PT403', details: 'not_host' })
+    // Typed as a guest might read it out: lower case, with spaces.
+    expect((await host.client.rpc('host_revoke_transfer', { p_code: ` ${String(code).toLowerCase()} ` })).error).toBeNull()
+    const fresh = await world.user()
+    expect((await fresh.client.rpc('claim_player', { p_code: code })).error).toMatchObject({ code: 'PT404', details: 'bad_code' })
+    // A used or unknown code cancels as a no-op, and another player's code still works.
+    expect((await host.client.rpc('host_revoke_transfer', { p_code: code })).error).toBeNull()
+    const dee = await world.guest(party, 'Dee')
+    const { data: other } = await host.client.rpc('host_issue_transfer', { p_player_id: dee.playerId })
+    await host.client.rpc('host_revoke_transfer', { p_code: 'NOSUCH' })
+    const { data: moved, error } = await fresh.client.rpc('claim_player', { p_code: other })
+    expect(error).toBeNull()
+    expect(moved).toMatchObject({ id: dee.playerId, user_id: fresh.userId })
+  })
+
+  it('gives a move code 5 minutes, and a TV pairing code 15', async () => {
+    const { data: code } = await host.client.rpc('host_issue_transfer', { p_player_id: bo.playerId })
+    const [transfer] = await rows<{ expires_at: string }>('player_transfers', 'code', code)
+    const minutes = (Date.parse(transfer.expires_at) - Date.now()) / 60_000
+    expect(minutes).toBeGreaterThan(4.5)
+    expect(minutes).toBeLessThanOrEqual(5.1)
+    const { data: screenCode } = await host.client.rpc('host_issue_screen_code', { p_session_id: party.id })
+    const [pairing] = await rows<{ expires_at: string }>('screen_codes', 'code', screenCode)
+    expect((Date.parse(pairing.expires_at) - Date.now()) / 60_000).toBeGreaterThan(14.5)
   })
 
   it('moves a player to a new phone; the old phone then reads member: false', async () => {

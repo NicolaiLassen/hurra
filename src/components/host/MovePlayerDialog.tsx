@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { issuePlayerTransfer } from '@/lib/queries'
+import { issuePlayerTransfer, revokePlayerTransfer } from '@/lib/queries'
 import { joinUrl } from '@/lib/urls'
 
 export type MovingPlayer = { id: string; name: string }
@@ -21,7 +21,8 @@ export type MovingPlayer = { id: string; name: string }
  * Move a player to a new phone (gap G4, docs/engine-v2.md 7.3): a one-time code
  * the guest types on the new phone's join page, under "Got a code from the
  * host?". Their points and badges come along; the old phone says the player
- * moved. Opening the dialog issues the code.
+ * moved. Opening the dialog issues the code, and closing it cancels the code,
+ * so nobody who read it over the host's shoulder can use it later.
  */
 export default function MovePlayerDialog({
   player,
@@ -47,7 +48,7 @@ export default function MovePlayerDialog({
 
 function MovePlayer({ player, joinCode }: { player: MovingPlayer; joinCode: string }) {
   const issue = useCallback(() => issuePlayerTransfer(player.id), [player.id])
-  const code = useIssuedCode(issue)
+  const code = useIssuedCode(issue, revokePlayerTransfer)
 
   return (
     <>
@@ -55,7 +56,8 @@ function MovePlayer({ player, joinCode }: { player: MovingPlayer; joinCode: stri
         <DialogTitle className="text-lg font-semibold">Move {player.name} to a new phone</DialogTitle>
         <DialogDescription>
           On the new phone, open the join link, tap <span className="font-semibold text-foreground">Got a code from the host</span>,
-          and type this code. Their points and badges come along.
+          and type this code. Their points and badges come along. Closing this cancels the code, so keep it open until their
+          phone says Welcome back.
         </DialogDescription>
       </DialogHeader>
       <IssuedCodeView code={code} className="py-1" />

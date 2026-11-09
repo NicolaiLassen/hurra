@@ -27,7 +27,10 @@ export {
 } from '@/lib/useLive'
 
 const PLAYER_COLUMNS = 'id, session_id, user_id, name, code, profile, created_at'
-const TRANSFER_MS = 15 * 60_000
+/** How long a code that moves a player works (player_transfers' default). */
+const MOVE_CODE_MS = 5 * 60_000
+/** How long a TV pairing code works (screen_codes' default). */
+const SCREEN_CODE_MS = 15 * 60_000
 
 type DbError = { message: string; details?: string | null; code?: string | null }
 
@@ -291,21 +294,26 @@ export async function removePlayer(sessionId: string, playerId: string): Promise
 }
 
 /**
- * A 6-character code that moves this player to a new phone, valid 15 minutes.
+ * A 6-character code that moves this player to a new phone, valid 5 minutes.
  * `expiresAt` is by this device's clock (Date.now()), taken before the call,
  * so the time left shown is never longer than the real one.
  */
 export async function issuePlayerTransfer(playerId: string): Promise<{ code: string; expiresAt: number }> {
   const sentAt = Date.now()
   const code = unwrap<string>(await supabase.rpc('host_issue_transfer', { p_player_id: playerId }))
-  return { code, expiresAt: sentAt + TRANSFER_MS }
+  return { code, expiresAt: sentAt + MOVE_CODE_MS }
+}
+
+/** host_revoke_transfer: the move code stops working at once (the host closed its dialog). A used code is fine. */
+export async function revokePlayerTransfer(code: string): Promise<void> {
+  unwrap(await supabase.rpc('host_revoke_transfer', { p_code: normalCode(code) }))
 }
 
 /** host_issue_screen_code: a 6-character code for pairing a TV, valid 15 minutes (`expiresAt` as above). */
 export async function issueScreenCode(sessionId: string): Promise<{ code: string; expiresAt: number }> {
   const sentAt = Date.now()
   const code = unwrap<string>(await supabase.rpc('host_issue_screen_code', { p_session_id: sessionId }))
-  return { code, expiresAt: sentAt + TRANSFER_MS }
+  return { code, expiresAt: sentAt + SCREEN_CODE_MS }
 }
 
 /** Deletes every paired screen of the party; each TV falls back to its pairing screen. */

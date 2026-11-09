@@ -478,11 +478,11 @@ create index event_log_game_idx on public.event_log (game_id, id) where game_id 
 create unique index event_log_request_key on public.event_log (user_id, request_id)
   where request_id is not null;
 
--- Move a player to a new phone (gap G4). Only the two RPCs touch it.
+-- Move a player to a new phone (gap G4). Only the three RPCs touch it.
 create table public.player_transfers (
   code text primary key default public.random_code(6),
   player_id uuid not null unique references public.players (id) on delete cascade,
-  expires_at timestamptz not null default now() + interval '15 minutes'
+  expires_at timestamptz not null default now() + interval '5 minutes'
 );
 
 -- TVs the host paired (section 7.2): anonymous users with a guest's read access
@@ -743,7 +743,16 @@ raw material for the recap builder (section 5.7):
 
 **`host_issue_transfer(p_player_id uuid) returns text`**, definer. Hosts only
 (`PT403` otherwise). Deletes the player's old code and every expired code,
-inserts a new 6-character code valid for 15 minutes, returns it.
+inserts a new 6-character code valid for 5 minutes, returns it. **Changed
+during review:** 15 minutes before, and nothing could cancel a code: a guest
+who read it over the host's shoulder could claim the player from a private
+tab long after the host closed the dialog.
+
+**`host_revoke_transfer(p_code text) returns void`**, definer. Hosts only
+(`PT403` otherwise). Deletes that code (`upper(btrim(p_code))`); a used or
+unknown code is a no-op. The move dialog calls it when it closes, and for a
+code that arrives after it closed. By code, not by player, so closing and
+quickly reopening the dialog never cancels the new code.
 
 **`claim_player(p_code text) returns public.players`**, definer. `PT401` when
 signed out. Deletes the matching unexpired code (`upper(btrim(p_code))`);
@@ -2309,6 +2318,8 @@ export async function renamePlayer(playerId: string, name: string): Promise<void
 /** Deletes the player, then sends a sync to every live game of the party. */
 export async function removePlayer(sessionId: string, playerId: string): Promise<void>
 export async function issuePlayerTransfer(playerId: string): Promise<{ code: string; expiresAt: number }>
+/** host_revoke_transfer: the move code stops working at once (the dialog closed). */
+export async function revokePlayerTransfer(code: string): Promise<void>
 /** host_issue_screen_code: a 6-character code for pairing a TV, valid 15 minutes. */
 export async function issueScreenCode(sessionId: string): Promise<{ code: string; expiresAt: number }>
 /** Deletes every paired screen of the party; each TV falls back to its pairing screen. */

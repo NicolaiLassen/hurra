@@ -11,6 +11,7 @@ import {
   publishRecap,
   removePlayer,
   renamePlayer,
+  revokePlayerTransfer,
   setSpotlight,
   unpublishRecap,
 } from './queries'
@@ -244,10 +245,16 @@ describe('host writes', () => {
     await expect(removePlayer(SESSION, PLAYER)).resolves.toBeUndefined()
   })
 
-  it('issuePlayerTransfer gives the code and when it expires, 15 minutes from the call', async () => {
+  it('issuePlayerTransfer gives the code and when it expires, 5 minutes from the call', async () => {
     vi.useFakeTimers({ now: 1_795_900_000_000 })
     db.state.respondRpc = () => ok('K7Q2MX')
-    await expect(issuePlayerTransfer(PLAYER)).resolves.toEqual({ code: 'K7Q2MX', expiresAt: 1_795_900_000_000 + 15 * 60_000 })
+    await expect(issuePlayerTransfer(PLAYER)).resolves.toEqual({ code: 'K7Q2MX', expiresAt: 1_795_900_000_000 + 5 * 60_000 })
     expect(db.state.rpcs).toEqual([{ name: 'host_issue_transfer', args: { p_player_id: PLAYER } }])
+  })
+
+  it('revokePlayerTransfer cancels the code by its text', async () => {
+    db.state.respondRpc = () => ok(null)
+    await expect(revokePlayerTransfer(' k7q2mx ')).resolves.toBeUndefined()
+    expect(db.state.rpcs).toEqual([{ name: 'host_revoke_transfer', args: { p_code: 'K7Q2MX' } }])
   })
 })

@@ -243,11 +243,13 @@ create index event_log_game_idx on public.event_log (game_id, id) where game_id 
 create unique index event_log_request_key on public.event_log (user_id, request_id)
   where request_id is not null;
 
--- Move a player to a new phone (gap G4). Only the two RPCs touch it.
+-- Move a player to a new phone (gap G4). Only the three RPCs touch it. A
+-- code works for 5 minutes: the host shows it to a guest standing beside
+-- them, closing the dialog cancels it, and Get a new code is one tap.
 create table public.player_transfers (
   code text primary key default public.random_code(6),
   player_id uuid not null unique references public.players (id) on delete cascade,
-  expires_at timestamptz not null default now() + interval '15 minutes'
+  expires_at timestamptz not null default now() + interval '5 minutes'
 );
 
 -- TVs the host paired: anonymous users with a guest's read access and the
@@ -1448,6 +1450,19 @@ begin
 end;
 $$;
 
+-- The host closed the move dialog: its code stops working at once, so nobody
+-- who read it over the host's shoulder can claim the player later. By code,
+-- not by player, so closing and reopening the dialog never cancels the new one.
+create function public.host_revoke_transfer(p_code text) returns void
+language plpgsql volatile security definer set search_path = '' as $$
+begin
+  if not public.is_host() then
+    raise exception 'Only hosts can do that' using errcode = 'PT403', detail = 'not_host';
+  end if;
+  delete from public.player_transfers where code = upper(btrim(coalesce(p_code, '')));
+end;
+$$;
+
 -- Pair a TV: the host page shows this code, the TV laptop types it.
 create function public.host_issue_screen_code(p_session_id uuid) returns text
 language plpgsql volatile security definer set search_path = '' as $$
@@ -2043,8 +2058,8 @@ revoke execute on function
   public.session_by_code(text), public.join_session(text, text), public.check_answer(jsonb, jsonb, uuid, uuid),
   public.submit_answer(uuid, text, jsonb, uuid), public.prompt_tallies(uuid), public.session_snapshot(uuid, text),
   public.session_recap(uuid), public.host_issue_transfer(uuid), public.claim_player(text),
-  public.host_issue_screen_code(uuid), public.claim_screen(text), public.keep_alive(),
-  public.game_load(uuid, uuid, text[], uuid), public.game_commit(jsonb)
+  public.host_revoke_transfer(text), public.host_issue_screen_code(uuid), public.claim_screen(text),
+  public.keep_alive(), public.game_load(uuid, uuid, text[], uuid), public.game_commit(jsonb)
 from public, anon, authenticated;
 
 -- Helpers: policies and the invoker functions run as the caller.
@@ -2059,8 +2074,8 @@ grant execute on function
   public.can_listen(text),
   public.session_by_code(text), public.join_session(text, text), public.submit_answer(uuid, text, jsonb, uuid),
   public.prompt_tallies(uuid), public.session_snapshot(uuid, text), public.session_recap(uuid),
-  public.host_issue_transfer(uuid), public.claim_player(text), public.host_issue_screen_code(uuid),
-  public.claim_screen(text), public.keep_alive()
+  public.host_issue_transfer(uuid), public.claim_player(text), public.host_revoke_transfer(text),
+  public.host_issue_screen_code(uuid), public.claim_screen(text), public.keep_alive()
 to authenticated, service_role;
 
 -- The keep-alive is the one function anon may run.
