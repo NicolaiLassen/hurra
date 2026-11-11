@@ -222,6 +222,22 @@ describe('races and restarts', () => {
     })
     await game.end()
   })
+  it('saves a move while the host is removing another guest, without a foreign key error', async () => {
+    const [ana, bo] = guests
+    const xen = await world.guest(party, 'Xen')
+    const gameId = await world.game(host, party, 'elimination', 'Removal in flight', { tasks: ['a', 'b', 'c', 'd', 'e', 'f'] })
+    const game = elimination(gameId)
+    await game.start(false)
+    // The host's removal of Xen stays open for 1.5 s, its cascades already done:
+    // a save that overlaps it must wait for it, not trip over Xen's view row.
+    const removal = sql(`begin; delete from public.players where id = '${xen.playerId}'; select pg_sleep(1.5); commit;`)
+    await sleep(400)
+    expect(await game.tag(ana, bo)).toMatchObject({ status: 200 })
+    await removal
+    expect((await gameRow(gameId)).public_state as EliminationPublicState).toMatchObject({ out: expect.arrayContaining([bo.playerId]) })
+    expect(await rows('game_player_views', 'player_id', xen.playerId)).toEqual([])
+    await game.end()
+  })
 })
 
 describe('several games, the stage and timers', () => {

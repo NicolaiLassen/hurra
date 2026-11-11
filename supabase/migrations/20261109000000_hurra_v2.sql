@@ -1687,6 +1687,11 @@ begin
     raise exception 'Game not found' using errcode = 'PT404', detail = 'not_found';
   end if;
   v_session := v_game.session_id;
+  -- A removal in flight finishes first, and one that starts later waits for
+  -- this save, so every statement below sees the same players: a view row of
+  -- a guest being removed is never written back (a foreign key error), and the
+  -- save and the removal never deadlock over it.
+  perform 1 from public.players where session_id = v_session for key share;
   select * into v_state from public.game_states where game_id = v_game.id for update;
   v_round := case when v_starting then coalesce(v_state.round, 0) + 1 else v_state.round end;
 
