@@ -128,8 +128,10 @@ function Answering({
         <p className="text-xs font-semibold tracking-widest text-primary uppercase">
           Question {pub.index + 1} of {pub.total}
         </p>
-        {/* Once time is up without an answer, the note under the options says so. */}
-        {(locked !== null || !over) && <SecondsLeft endsAt={question.endsAt} serverNow={serverNow} suffix=" s" className="text-lg" />}
+        {/* Once time is up without an answer (none saved or still on its way), the note under the options says so. */}
+        {(locked !== null || sending !== null || !over) && (
+          <SecondsLeft endsAt={question.endsAt} serverNow={serverNow} suffix=" s" className="text-lg" />
+        )}
       </div>
       <p className="text-xl leading-snug font-bold text-balance">{question.text}</p>
       <DrainBar startsAt={prompt?.opened_at ?? null} endsAt={question.endsAt} serverNow={serverNow} className="h-2 rounded-full" />
@@ -170,7 +172,8 @@ function Answering({
           </p>
           <p className="text-sm text-muted-foreground">{onStage ? 'The answer comes up on the TV.' : 'The answer comes up soon.'}</p>
         </div>
-      ) : over ? (
+      ) : over && sending === null ? (
+        // An answer still on its way may yet count (the database takes it until closes_at, a second later): "Sending" until it settles.
         <div className="space-y-1 text-center">
           <p className="flex items-center justify-center gap-2 text-lg font-bold text-confetti-pink">
             <HourglassHighIcon weight="fill" />
