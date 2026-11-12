@@ -9,7 +9,7 @@ import {
   PaperPlaneTiltIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import Callout from '@/components/Callout'
 import Confirm from '@/components/Confirm'
@@ -35,6 +35,9 @@ const recapLogic: ReadonlyMap<string, AnyGame> = new Map(gameModules.map((m) => 
 
 // Dev builds only: with ?fixture=<scene>, the preview is built from a party recorded on the local stack.
 const loadRecorded = import.meta.env.DEV ? () => import('@/lib/recap.recorded') : null
+
+/** How long after the party last changed the open page reads the night again. */
+const REREAD_MS = 5000
 
 /**
  * The recap page (docs/engine-v2.md, 7.4): the night built from the event log
@@ -65,32 +68,39 @@ function RecapGate({ sample }: { sample: boolean }) {
   )
 }
 
-/** The raw night (session_recap(), hosts only), read on arrival and on Rebuild. The last one stays while the next loads. */
+/**
+ * The raw night (session_recap(), hosts only): read on arrival and on Rebuild,
+ * and again by `reread` while the page stays open, quietly: no fade, and a
+ * failed read keeps the last night. The last one stays while the next loads.
+ */
 function useRawNight(sessionId: string, sample: boolean) {
-  const [attempt, setAttempt] = useState(0)
+  const [ask, setAsk] = useState({ attempt: 0, quiet: false })
   const [loaded, setLoaded] = useState<{ attempt: number; raw: RawRecap | null; error: string | null } | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    const { attempt, quiet } = ask
     const read = sample && loadRecorded ? loadRecorded().then((m) => m.recordedRawRecap) : fetchRawRecap(sessionId)
     read.then(
       (raw) => {
         if (!cancelled) setLoaded({ attempt, raw, error: null })
       },
       (error: unknown) => {
-        if (!cancelled) setLoaded((last) => ({ attempt, raw: last?.raw ?? null, error: errorMessage(error) }))
+        if (!cancelled) setLoaded((last) => ({ attempt, raw: last?.raw ?? null, error: quiet ? (last?.error ?? null) : errorMessage(error) }))
       },
     )
     return () => {
       cancelled = true
     }
-  }, [sessionId, sample, attempt])
+  }, [sessionId, sample, ask])
 
+  const reread = useCallback(() => setAsk((last) => ({ attempt: last.attempt + 1, quiet: true })), [])
   return {
     raw: loaded?.raw ?? null,
-    error: loaded?.attempt === attempt ? loaded.error : null,
-    loading: loaded?.attempt !== attempt,
-    rebuild: () => setAttempt((n) => n + 1),
+    error: loaded?.attempt === ask.attempt ? loaded.error : null,
+    loading: loaded?.attempt !== ask.attempt && !ask.quiet,
+    rebuild: () => setAsk((last) => ({ attempt: last.attempt + 1, quiet: false })),
+    reread,
   }
 }
 
@@ -107,7 +117,18 @@ function RecapPage({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }
   const session = snapshot.session!
   const call = useHostCall()
   const night = useRawNight(session.id, sample)
+  const { reread } = night
   const doc = useMemo(() => (night.raw ? buildRecapDoc(night.raw, recapLogic) : null), [night.raw])
+  // The party goes on while this page is open: a few seconds after its games, points or
+  // guests change (not on every poll), the night is read again, so the preview and
+  // "More has happened" follow it. The live snapshot is read again when the tab comes back.
+  const party = JSON.stringify([snapshot.games, snapshot.standings, snapshot.players.length])
+  const opened = useRef(party)
+  useEffect(() => {
+    if (sample || party === opened.current) return
+    const timer = setTimeout(reread, REREAD_MS)
+    return () => clearTimeout(timer)
+  }, [party, reread, sample])
   const publishedAt = snapshot.recap?.published_at ?? null
   const { data: published } = usePublishedRecap(session.id, publishedAt ?? 0)
   const onTv = session.tv_scene === 'recap' && publishedAt !== null
@@ -128,7 +149,12 @@ function RecapPage({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }
     doc &&
     void run(
       'publish',
-      () => publishRecap(session.id, doc),
+      async () => {
+        // Built from a fresh read: every Publish and Update carries the night as it is now,
+        // not as this page last read it. Then the preview catches up with what was sent.
+        await publishRecap(session.id, buildRecapDoc(await fetchRawRecap(session.id), recapLogic))
+        reread()
+      },
       publishedAt === null ? 'Published: every phone shows Your night' : 'Updated on every screen',
     )
 

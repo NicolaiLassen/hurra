@@ -3017,7 +3017,13 @@ game if live, else the newest live game. New: Move to a new phone.
 3. **Actions**: Publish (or Update) with `publishRecap`, which reaches every
    screen each time; Unpublish; Show on the TV and Back to the party
    (`setTvScene`); Download the night (the raw recap as JSON, hosts only, for
-   memories before guests are anonymised).
+   memories before guests are anonymised). **Changed during review:** Publish
+   and Update build the doc from a fresh `fetchRawRecap` at that moment, not
+   from the page's last read, so an Update made after the page was opened
+   carries the night as it is now. And while the page stays open it reads the
+   night again, quietly (no fade), 5 s after the party's games, points or
+   guests change, so the preview and "More has happened since you published"
+   follow the party.
 
 **Changed during build (HOST), 7.3 and 7.4:**
 
