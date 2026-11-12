@@ -1,6 +1,7 @@
 import { SpeakerHighIcon, SpeakerSlashIcon } from '@phosphor-icons/react'
 import { useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
+import type { SoundName } from '@/games/core/sounds'
 import { isAudioUnlocked, playSound, subscribeAudio, unlockAudio, useSoundSetting } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
@@ -9,10 +10,19 @@ import { cn } from '@/lib/utils'
  * every state. Browsers keep audio locked until the page is tapped: while sound
  * is on but still locked, a gold dot marks the icon and tapping it unlocks audio.
  * The TV passes `prompt`, since nobody taps it: there the locked state is a small
- * "Click for sound" pill instead.
+ * "Click for sound" pill instead. `preload` names the sounds to fetch ahead
+ * while sound is on (every sound when left out); phones pass only their own.
  */
-export default function SoundToggle({ prompt = false, className }: { prompt?: boolean; className?: string }) {
-  const [on, setOn] = useSoundSetting()
+export default function SoundToggle({
+  prompt = false,
+  preload,
+  className,
+}: {
+  prompt?: boolean
+  preload?: readonly SoundName[]
+  className?: string
+}) {
+  const [on, setOn] = useSoundSetting(true, preload)
   const unlocked = useSyncExternalStore(subscribeAudio, isAudioUnlocked, () => false)
   const locked = on && !unlocked
 

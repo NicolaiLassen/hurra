@@ -21,6 +21,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { getGameModule } from '@/games/registry'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
+import { PHONE_SOUNDS } from '@/lib/sound'
 import { phoneLayout, scanTarget, tvScene, type PhoneLayout } from '@/lib/stage'
 import { rememberJoinCode } from '@/lib/storage'
 import { toast } from '@/lib/toast'
@@ -237,7 +238,7 @@ function PhoneHeader({ session, player, points }: { session: Session; player: Pl
         <h1 className="truncate text-2xl leading-tight font-bold">{player.name}</h1>
         <ProfileBadges profile={player.profile} className="mt-1" />
       </div>
-      <SoundToggle className="-mr-1 shrink-0" />
+      <SoundToggle preload={PHONE_SOUNDS} className="-mr-1 shrink-0" />
       <div className="shrink-0 rounded-2xl bg-primary px-4 py-2 text-center text-primary-foreground">
         {/* Keyed by the points, so a change pops in. */}
         <p key={points} className="animate-count-pop text-2xl leading-none font-black tabular-nums motion-reduce:animate-none">

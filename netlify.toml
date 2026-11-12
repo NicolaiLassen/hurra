@@ -2,7 +2,7 @@
   command = "npm run build"
   publish = "dist"
 
-# Single-page app: let React Router handle /join/..., /play/..., /admin/... etc.
+# Single-page app: let React Router handle /join/..., /play/..., /host/... etc.
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -12,3 +12,10 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Content-Type = "application/manifest+json"
+
+# Vite puts a hash of its content in every file name under /assets, so a reload
+# or a second scan of the QR code needs nothing from the network for them.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

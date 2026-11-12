@@ -173,14 +173,25 @@ function readSetting(fallback: boolean) {
   }
 }
 
-/** This device's sound on/off setting, remembered across visits. */
-export function useSoundSetting(defaultOn = true) {
+/**
+ * The sounds a phone plays: the toggle's chime, and coin, sad and fanfare for
+ * the feed rows aimed at its player and for quiz and fusion results (room-wide
+ * sounds belong to the TV). Only a preload hint: any other sound still loads
+ * when it first plays, since start() waits for its file.
+ */
+export const PHONE_SOUNDS: readonly SoundName[] = ['chime', 'coin', 'sad', 'fanfare']
+
+/**
+ * This device's sound on/off setting, remembered across visits. While it is
+ * on, `preload` (every sound by default) is fetched and decoded ahead.
+ */
+export function useSoundSetting(defaultOn = true, preload: readonly SoundName[] = SOUND_NAMES) {
   const [on, setOn] = useState(() => readSetting(defaultOn))
 
   useEffect(() => {
     enabled = on
-    if (on) SOUND_NAMES.forEach(load)
-  }, [on])
+    if (on) preload.forEach(load)
+  }, [on, preload])
 
   const change = useCallback((next: boolean) => {
     try {
