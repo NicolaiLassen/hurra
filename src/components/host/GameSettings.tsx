@@ -4,7 +4,7 @@ import Confirm from '@/components/Confirm'
 import { errorMessage } from '@/components/host/hostCalls'
 import { Button } from '@/components/ui/button'
 import type { GameModule } from '@/games/types'
-import { gameMediaUrl, uploadGameMedia } from '@/lib/media'
+import { countingUploads, gameMediaUrl, uploadGameMedia } from '@/lib/media'
 import { readGameSettings, saveGameSettings } from '@/lib/queries'
 import { toast } from '@/lib/toast'
 import type { Player, Session, SessionGame } from '@/lib/types'
@@ -84,11 +84,20 @@ function SettingsForm({
   const [config, setConfig] = useState<unknown>(initial)
   const [saving, setSaving] = useState(false)
   const [discarding, setDiscarding] = useState(false)
+  // Uploads in flight: an image's path reaches the settings only when its upload
+  // ends, so Save waits for them, and Cancel asks first.
+  const [uploads, setUploads] = useState(0)
   const media = useMemo(
-    () => ({ upload: (file: File) => uploadGameMedia(session.id, game.id, file), url: gameMediaUrl }),
+    () => ({
+      upload: countingUploads(
+        (file: File) => uploadGameMedia(session.id, game.id, file),
+        (change) => setUploads((n) => n + change),
+      ),
+      url: gameMediaUrl,
+    }),
     [session.id, game.id],
   )
-  const dirty = useMemo(() => JSON.stringify(config) !== JSON.stringify(initial), [config, initial])
+  const dirty = useMemo(() => JSON.stringify(config) !== JSON.stringify(initial), [config, initial]) || uploads > 0
   const Editor = gameModule.ConfigEditor
   if (!Editor) return null
 
@@ -115,8 +124,8 @@ function SettingsForm({
         <Button variant="ghost" size="lg" disabled={saving} onClick={() => (dirty ? setDiscarding(true) : onClose())}>
           Cancel
         </Button>
-        <Button size="lg" isPending={saving} onClick={() => void save()}>
-          Save settings
+        <Button size="lg" isPending={saving || uploads > 0} onClick={() => void save()}>
+          {uploads > 0 ? 'Uploading…' : 'Save settings'}
         </Button>
       </div>
       <Confirm

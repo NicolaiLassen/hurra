@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { encodeWithin, FULL_QUALITIES, fitWithin, gameMediaUrl, jpegHasMetadata, thumbPath } from './media'
+import { countingUploads, encodeWithin, FULL_QUALITIES, fitWithin, gameMediaUrl, jpegHasMetadata, thumbPath } from './media'
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -98,5 +98,43 @@ describe('paths and URLs', () => {
   it('gives the public URL of the full image, or of its thumbnail', () => {
     expect(gameMediaUrl('s/g/2f1c.jpg')).toBe('http://127.0.0.1:54321/storage/v1/object/public/game-media/s/g/2f1c.jpg')
     expect(gameMediaUrl('s/g/2f1c.jpg', 'thumb')).toBe('http://127.0.0.1:54321/storage/v1/object/public/game-media/s/g/2f1c.thumb.jpg')
+  })
+})
+
+describe('countingUploads', () => {
+  // The settings form keeps Save off while this count is above 0 (an image's path arrives only when its upload ends).
+  it('counts uploads in flight, and each one leaves the count as it ends, whether it worked or not', async () => {
+    let inFlight = 0
+    const counts: number[] = []
+    const pending: { resolve: (path: string) => void; reject: (error: Error) => void }[] = []
+    const upload = countingUploads(
+      () => new Promise<string>((resolve, reject) => void pending.push({ resolve, reject })),
+      (change) => void counts.push((inFlight += change)),
+    )
+    const first = upload(new File(['a'], 'a.jpg', { type: 'image/jpeg' }))
+    const second = upload(new File(['b'], 'b.jpg', { type: 'image/jpeg' }))
+    expect(inFlight).toBe(2)
+
+    pending[0].resolve('s/g/one.jpg')
+    // The count is down by the time the caller has the path, so the form sees both in one go.
+    await expect(first).resolves.toBe('s/g/one.jpg')
+    expect(inFlight).toBe(1)
+
+    pending[1].reject(new Error("That image couldn't be uploaded"))
+    await expect(second).rejects.toThrow("That image couldn't be uploaded")
+    expect(inFlight).toBe(0)
+    expect(counts).toEqual([1, 2, 1, 0])
+  })
+
+  it('leaves the count at 0 when an upload fails at once (an image this browser cannot read)', async () => {
+    let inFlight = 0
+    const upload = countingUploads(
+      async () => {
+        throw new Error("This image can't be read here. Use a JPEG or PNG.")
+      },
+      (change) => void (inFlight += change),
+    )
+    await expect(upload(new File(['x'], 'x.heic'))).rejects.toThrow("can't be read here")
+    expect(inFlight).toBe(0)
   })
 })

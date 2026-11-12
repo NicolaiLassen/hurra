@@ -160,6 +160,22 @@ export async function uploadGameMedia(sessionId: string, gameId: string, file: F
   return path
 }
 
+/**
+ * Wraps an upload so `count` follows the uploads in flight: +1 as one starts,
+ * -1 as it ends, whether it worked or not. An image's path reaches a settings
+ * form only when its upload ends, so the form waits for these.
+ */
+export function countingUploads<T>(upload: (file: File) => Promise<T>, count: (change: 1 | -1) => void): (file: File) => Promise<T> {
+  return async (file) => {
+    count(1)
+    try {
+      return await upload(file)
+    } finally {
+      count(-1)
+    }
+  }
+}
+
 /** The public URL of a game-media path. Phones use 'thumb' (with loading="lazy"); the TV uses 'full'. */
 export function gameMediaUrl(path: string, size: 'full' | 'thumb' = 'full'): string {
   return supabase.storage.from(GAME_MEDIA_BUCKET).getPublicUrl(size === 'thumb' ? thumbPath(path) : path).data.publicUrl
