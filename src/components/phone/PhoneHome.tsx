@@ -87,6 +87,8 @@ function Home({
   const stageId = scene.kind === 'live' ? scene.game.id : null
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
+  const liveMain = main.kind === 'game' ? main.game : null
+  const held = useHeldGame(snapshot, liveMain)
   const over = main.kind === 'over'
   // A timed question is open on the main card (a quiz question): the Show my
   // code bar steps aside for it, so it covers none of the answers.
@@ -138,24 +140,33 @@ function Home({
       <PhoneHeader session={session} player={player} points={points} />
 
       <div className="mt-6">
-        {main.kind === 'game' && (
-          <GameCard
-            ref={mainCard}
-            status={main.game.id === stageId ? 'stage' : 'playing'}
-            icon={gameIconOf(main.game.game_type)}
-            title={main.game.title}
-          >
-            <GameView
-              key={roundKey(main.game)}
-              snapshot={snapshot}
-              session={session}
-              game={main.game}
-              player={player}
-              onStage={main.game.id === stageId}
-              scannedCode={scanInMain ? (scan.code ?? undefined) : undefined}
-              onScanHandled={scan.done}
-            />
-          </GameCard>
+        {/* One keyed list: the game that loses the main card to another keeps
+            its view, out of sight, so a full-screen layer it has open (the
+            fusion picker, the scan sheet, a knockout dialog) stays on top
+            until the guest is done. Game layers are position: fixed (see
+            GameSheet), so the hidden wrapper doesn't clip them. */}
+        {[liveMain, held].map(
+          (game) =>
+            game && (
+              <div key={roundKey(game)} className={game === liveMain ? undefined : 'invisible h-0 overflow-hidden [&_.fixed]:visible'}>
+                <GameCard
+                  ref={game === liveMain ? mainCard : undefined}
+                  status={game.id === stageId ? 'stage' : 'playing'}
+                  icon={gameIconOf(game.game_type)}
+                  title={game.title}
+                >
+                  <GameView
+                    snapshot={snapshot}
+                    session={session}
+                    game={game}
+                    player={player}
+                    onStage={game.id === stageId}
+                    scannedCode={game === liveMain && scanInMain ? (scan.code ?? undefined) : undefined}
+                    onScanHandled={scan.done}
+                  />
+                </GameCard>
+              </div>
+            ),
         )}
         {main.kind === 'result' && (
           <GameCard ref={mainCard} status="finished" icon={gameIconOf(main.game.game_type)} title={main.game.title}>
@@ -375,6 +386,22 @@ function NotInParty({ party, name, moved }: { party: PublicSession; name: string
       The host took you off the player list. Join again to keep playing.
     </Notice>
   )
+}
+
+/**
+ * The game that had the main card until another live game took it (the host
+ * started one on the TV, say), while that round is still live; else null. Home
+ * keeps its view mounted out of sight, so what the guest had open in it (a
+ * vote being picked, a knockout being confirmed) isn't lost.
+ */
+function useHeldGame(snapshot: Snapshot, main: SessionGame | null): SessionGame | null {
+  const key = main ? roundKey(main) : null
+  const [mains, setMains] = useState<{ now: string | null; before: string | null }>({ now: key, before: null })
+  // Remembered while rendering (React's way to follow a prop's previous value), so the hand-over has no gap.
+  if (mains.now !== key) setMains({ now: key, before: mains.now })
+  const before = mains.now !== key ? mains.now : mains.before
+  if (!main || before === null || before === key) return null
+  return snapshot.games.find((g) => roundKey(g) === before && g.status === 'active' && g.archived_at === null) ?? null
 }
 
 /**
