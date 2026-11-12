@@ -48,7 +48,10 @@ const PHONE_JITTER_MS = 300
 /** Pinged tallies undercount when answers arrive together: read the exact counts once they settle. */
 const TALLY_SETTLE_MS = 400
 const POLL_MS: Record<Screen, number> = { phone: 60_000, tv: 30_000, host: 30_000 }
-/** Phones, while a live game has an open prompt or a timer, or holds the stage. */
+/**
+ * Phones, while a live game has a timer or an open prompt with a deadline, or
+ * holds the stage, and in the lobby (a party still on with no live game).
+ */
 const PHONE_LIVE_POLL_MS = 10_000
 /** The TV and the host page, while a live game holds the stage. */
 const STAGE_LIVE_POLL_MS = 5000
@@ -282,11 +285,27 @@ function isSnapshot(value: unknown): value is Snapshot {
 
 const liveIds = (s: Snapshot) => new Set(s.games.filter((g) => g.status === 'active' && g.archived_at === null).map((g) => g.id))
 
-/** Whether a live game has an open prompt or a timer: phones then poll every 10 s. */
+/**
+ * Whether a live game has a timer or an open prompt with a deadline: phones
+ * then poll every 10 s. A prompt with no deadline (fusion's votes, open all
+ * evening) doesn't count: nothing about it is due, so it keeps the 60 s poll.
+ */
 function hasLiveDeadline(s: Snapshot | undefined): boolean {
   if (!s) return false
   const live = liveIds(s)
-  return s.games.some((g) => live.has(g.id) && g.wake_at !== null) || s.prompts.some((p) => live.has(p.game_id) && p.closed_at === null)
+  return (
+    s.games.some((g) => live.has(g.id) && g.wake_at !== null) ||
+    s.prompts.some((p) => live.has(p.game_id) && p.closed_at === null && p.closes_at !== null)
+  )
+}
+
+/**
+ * Whether the party is still on with no live game: the lobby, or between
+ * games. Joins and host awards ping the stage only, which phones don't hear,
+ * so phones poll every 10 s meanwhile and the lobby's players keep up.
+ */
+function inLobby(s: Snapshot | undefined): boolean {
+  return s !== undefined && s.member && s.session !== null && s.session.archived_at === null && liveIds(s).size === 0
 }
 
 /**
@@ -616,7 +635,7 @@ export function createLiveSession(
   function pollInterval(): number {
     if (state.pings === 'unhealthy' || [...topics.values()].some((t) => t.failures >= FAILED_JOINS)) return FAST_POLL_MS
     if (!phone) return holdsStage(state.snapshot) ? STAGE_LIVE_POLL_MS : POLL_MS[screen]
-    return hasLiveDeadline(state.snapshot) || holdsStage(state.snapshot) ? PHONE_LIVE_POLL_MS : POLL_MS.phone
+    return hasLiveDeadline(state.snapshot) || holdsStage(state.snapshot) || inLobby(state.snapshot) ? PHONE_LIVE_POLL_MS : POLL_MS.phone
   }
   function planPoll(afterRead = false) {
     if (closed) return

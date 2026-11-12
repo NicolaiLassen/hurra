@@ -72,7 +72,7 @@ idea comes from.
 | Burst input (quiz answers, fusion votes) | Prompts and sealed submissions: phones call `submit_answer` straight to Postgres. It takes a share lock on the prompt row, never the game state row. | realtime-native |
 | Seeing all answers at a reveal | Closing a prompt is an update that waits for answers in flight. The engine closes prompts in `game_load` (due deadlines always, and the keys a host action names), then the plugin gets the final answers in `info.answers`. | realtime-native |
 | Timers | `wakeAt` and `onWake`. `session_games.wake_at` is public. One shared scheduler, `useWakeSync`, sends a `sync` from the TV 250 ms after it and from the host page 1.5 s after it, at most one per game every 2 s, with backoff after failures. Early or repeated syncs save nothing. A wake that doesn't move `wakeAt` forward is dropped and logged (`game.wake_stuck`). | evolve, critique |
-| Realtime | Broadcast pings on private topics (`room:`, `stage:`, `player:`), then one `session_snapshot` read. No table is in the Postgres Changes publication. Phones also poll every 10 s while a game has an open prompt or a timer or holds the TV stage (the TV and host page every 5 s then), and every screen notices when pings stop arriving. | realtime-native, critique |
+| Realtime | Broadcast pings on private topics (`room:`, `stage:`, `player:`), then one `session_snapshot` read. No table is in the Postgres Changes publication. Phones also poll every 10 s while a game has a timer or an open prompt with a `closes_at` or holds the TV stage (the TV and host page every 5 s then), and in the lobby, and every screen notices when pings stop arriving. | realtime-native, critique |
 | Several live games | No more one-live-game index. A start never ends other games. `stage` on the start request (default from the game's `presentation`) decides whether it takes the TV. | realtime-native, evolve |
 | TV stage | One column, `sessions.spotlight_game_id`, plus `spotlight_at`. A finishing game takes a free stage. The final screen shows for 3 minutes from `max(finished_at, spotlight_at)`. `sessions.tv_scene = 'recap'` plays the recap. | evolve, realtime-native |
 | Secret settings | `game_settings` (hosts only), frozen into `game_states.config` at start. No public config column. | all three |
@@ -959,7 +959,7 @@ one save sort together.
 | `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`. Pings room. |
 | `sessions` | `after delete` | `ping('room:' \|\| id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
 | `players` | `before insert or update of name` | **Added during review.** Stores the name clean (`clean_name`, 2.3), whoever writes it. |
-| `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll). |
+| `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll, which is every 10 s in the lobby, 5.4). |
 | `players` | `after update of name, user_id` | Name: logs `player.renamed`, pings room. User: logs `player.moved` (with the old user as `data.from_user`, for `moved_away`), sends `moved` on `player:<id>` (the old phone hears it), pings stage. |
 | `players` | `after delete` | Skipped when the party itself is being deleted. Logs `player.removed` (`data.name`), pings room. |
 | `score_events` | `after insert or delete` | Skipped while `hurra.engine` is on (the engine logs its own points). Logs `points.awarded` or `points.undone` (`player_id`, `points`, `reason`, `game_id`, `score_event_id`); skipped when the player is being removed. Pings stage and that player. |
@@ -2175,9 +2175,14 @@ How it behaves:
   (pinged counts can undercount when answers arrive together).
 - **Healing.** Read on channel join and rejoin, when the tab becomes visible,
   when the device comes back online, and on a safety poll:
-  - phones every 60 s, or every 10 s while a live game has an open prompt or
-    a `wake_at`, or holds the stage (about 4.5 reads a second for 45 phones,
-    no Realtime cost);
+  - phones every 60 s, or every 10 s while a live game has a `wake_at` or an
+    open prompt with a `closes_at`, or holds the stage, and in the lobby: a
+    party still on (not archived) with no live game (about 4.5 reads a second
+    for 45 phones, no Realtime cost). **Changed during review:** a prompt with
+    no deadline (fusion's votes, open all evening) no longer counts, so it
+    keeps the 60 s poll: nothing about it is due. And joins and host awards
+    ping the stage only, so a lobby on the 60 s poll showed new guests up to a
+    minute late; it now polls every 10 s;
   - phones also read once 2 s after each `wake_at` and `closes_at` they know
     of, by `serverNow()`, plus 0 to 1 s of jitter;
   - the TV and host page every 30 s, or every 5 s while a live game holds the
@@ -3468,7 +3473,7 @@ prints one by one on the TV. A point per right person.
 | --- | --- |
 | CORE-SDK | `context.test.ts`: clipping, skip mode, prompt key rules, shared effects. `runtime.test.ts`: permissions (a screen may only sync), status rules, frozen config, the member hooks with actor system and their fail-open, self-finish with a throwing `onEnd`, End's fail-open, skip on a no-op and on a stale host action, the wake loop cap and the stuck guard (`wake_at` null, `log.wake_stuck`), `env.round` refusing a request held across a restart, default winners from scores plus awards (an in-person round; nobody when the top is 0), stage defaults. `contract.test.ts`: the contract runner on the probe game, with its join, wake and recap checks. `simulate.test.ts`: claims, versions, prompts, the stage rules, `jsonbRoundTrip` on saves, the screen's sync. `testing.test.ts`: `jsonbRoundTrip` key order and strict refusals. `registry.test.ts`: four game types, and logic, modules and bots match. **Changed during build:** `registry.test.ts` is also the jsonb round-trip contract over every registered game: default settings survive a strict round trip, `parseAction` refuses garbage with `GameError`, and `checkGameContract` passes on a round the game's own bot plays (`botExample`). A placeholder whose setup says "This game isn't ready yet" is skipped until its game lands. `netlify/lib/engine.test.ts` covers parsing, retries, the replay and skip paths and the error mapping with a fake client. |
 | REHEARSE | `rehearse.test.ts`: flag parsing and every guard: a non-local URL refused without `--target production`; a `--confirm` that doesn't match the URL's project ref refused; no secret key use in production except `--cleanup`. |
-| DATA | `gameApi.test.ts` (a mocked fetch): one id per call, the same id on retries, no retry on 4xx or 500, the offline message, an injected client and endpoint. `live.test.ts` (a fake client): one read in flight, the tally settle, jitter, no jitter for `prompt: true`, the 10 s poll while a prompt or timer is live or a live game holds the stage (5 s for the TV and host page), the deadline reads, the offset, polling fallback, ping health (an unannounced change turns it unhealthy, a ping heals it, and none of the stage-only changes alters a phone's fingerprint), two sessions on one topic with one closed, the delayed `player:` rejoin. `wakeSync.test.ts` (fake timers): the rules of 4.5 (5.10). `stage.test.ts`: every `tvScene` and `phoneLayout` case, the 3-minute window from `max(finished_at, spotlight_at)`, the result card staying until the next start. `recap.test.ts`: `buildRecapDoc` on a recorded raw recap; a raw recap with a running elimination round and a quiz ended after 3 of 10 questions: no task text, unasked question or answer key appears anywhere in the doc. `media.test.ts`: `fitWithin`, the quality steps with a fake encoder, `jpegHasMetadata` on JPEG bytes built with an EXIF and a comment segment; plus one check in a real browser on the local stack (canvas needs one): a JPEG with an EXIF comment, uploaded through `uploadGameMedia`, downloads again without it (`jpegHasMetadata` false) and under 400 KB. `auth.test.ts` (a mocked client): the 429 retries and `onBusy`. `queries.test.ts` (a mocked client): `publishRecap` always sends `published_at`; `joinSession` doesn't retry. |
+| DATA | `gameApi.test.ts` (a mocked fetch): one id per call, the same id on retries, no retry on 4xx or 500, the offline message, an injected client and endpoint. `live.test.ts` (a fake client): one read in flight, the tally settle, jitter, no jitter for `prompt: true`, the 10 s poll while a timer or a prompt with a deadline is live, a live game holds the stage (5 s for the TV and host page) or the party is in the lobby, and 60 s for a prompt with no deadline and for an archived party, the deadline reads, the offset, polling fallback, ping health (an unannounced change turns it unhealthy, a ping heals it, and none of the stage-only changes alters a phone's fingerprint), two sessions on one topic with one closed, the delayed `player:` rejoin. `wakeSync.test.ts` (fake timers): the rules of 4.5 (5.10). `stage.test.ts`: every `tvScene` and `phoneLayout` case, the 3-minute window from `max(finished_at, spotlight_at)`, the result card staying until the next start. `recap.test.ts`: `buildRecapDoc` on a recorded raw recap; a raw recap with a running elimination round and a quiz ended after 3 of 10 questions: no task text, unasked question or answer key appears anywhere in the doc. `media.test.ts`: `fitWithin`, the quality steps with a fake encoder, `jpegHasMetadata` on JPEG bytes built with an EXIF and a comment segment; plus one check in a real browser on the local stack (canvas needs one): a JPEG with an EXIF comment, uploaded through `uploadGameMedia`, downloads again without it (`jpegHasMetadata` false) and under 400 KB. `auth.test.ts` (a mocked client): the 429 retries and `onBusy`. `queries.test.ts` (a mocked client): `publishRecap` always sends `published_at`; `joinSession` doesn't retry. |
 | GAME-elimination | Today's tests on v2, plus: removal drops the task and finishes the game with one left; `isFinished`; `onEnd` quiet for game; the winner's announcement is `interrupt`; alive order after a round trip; `recap` on a finished round; the contract (with a join and a leave); the bot playing a round to its end through `simulateParty`. |
 | GAME-inperson | The contract; `recap`; the default winners after End (the top of the awards, nobody without awards). |
 | GAME-quiz | `parseConfig` refusals; neither the public state nor a prompt spec holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; a duplicated Next opens one question; Reveal now racing the timer scores once with no error; a stale Show the leaderboard is skipped; 45 answers through `simulateParty`; finish and winners (nobody when nobody scored); the recap of an early-ended quiz names no unasked question; the contract; the bot playing a full quiz through `simulateParty`. |
@@ -4035,10 +4040,13 @@ channels rejoin at once and the 45 `player:` channels over the next 3 s, well
 under the Free plan's 100 joins a second.
 
 Reads: 47 `session_snapshot` reads per room ping, about 5 ms each in SQL and
-16 KB before compression. While a game has an open prompt or a timer or holds
-the stage, phones also poll every 10 s (about 4.5 reads a second) and the TV
-and host page every 5 s (0.4 a second), and phones read once after each
-deadline; none of it costs Realtime events.
+16 KB before compression. While a game has a timer or an open prompt with a
+`closes_at`, or holds the stage, and while the party is in the lobby with no
+live game, phones also poll every 10 s (about 4.5 reads a second); the TV and
+host page poll every 5 s while a game holds the stage (0.4 a second), and
+phones read once after each deadline; none of it costs Realtime events.
+Fusion's votes, open for hours with no deadline, leave phones on the 60 s
+poll.
 
 Images: 12 fusion pictures cost about 16 MB of thumbnails across 45 phones and
 3.6 MB on the TV, instead of 1.6 to 5.4 GB raw.
@@ -4048,7 +4056,7 @@ Images: 12 fusion pictures cost about 16 MB of thumbnails across 45 phones and
 | Risk | Mitigation |
 | --- | --- |
 | Private channels misconfigured: no pings | Tested through `realtime.authorize` in integration; the 5 s poll fallback after 3 failed joins; ping health and the live dot on the TV and host page; smoke test step 16. |
-| `realtime.send` fails silently (a missing daily partition, an outage, a half-open socket after Wi-Fi roaming) | Ping health notices changes no ping announced, turns the dot grey and polls every 5 s; phones poll every 10 s while a prompt or timer is live or a live game holds the stage (the TV and host page every 5 s then), and read after each deadline; a 10 s heartbeat closes a dead socket within 20 s; reads on rejoin, visibility and online. |
+| `realtime.send` fails silently (a missing daily partition, an outage, a half-open socket after Wi-Fi roaming) | Ping health notices changes no ping announced, turns the dot grey and polls every 5 s; phones poll every 10 s while a timer or a prompt with a deadline is live, a live game holds the stage, or the party is in the lobby (the TV and host page every 5 s while a game holds the stage), and read after each deadline; a 10 s heartbeat closes a dead socket within 20 s; reads on rejoin, visibility and online. |
 | Engine latency from Ohio, 0.4 to 0.9 s, plus cold starts | Fine for knockouts and host taps; answers and votes never go through it. Host actions name their step, so an impatient second tap does nothing. |
 | The TV sits in the room all night | A paired screen with a guest's read access, never a host session: no control room, no secrets, even with devtools. The host page's answers sit behind Show answers. |
 | A recap published mid-party | Only finished rounds reach a game's `recap()`; a running round gets a generic chapter; tested with live tasks and an early-ended quiz. |

@@ -524,12 +524,13 @@ describe('pings', () => {
 })
 
 describe('safety polls', () => {
-  it('phones poll every 60 s, and every 10 s while a live game has an open prompt or a timer', async () => {
+  it('phones poll every 10 s in the lobby and while a live game has a timer or an open prompt with a deadline, else every 60 s', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
     const client = new FakeClient()
     const { live } = open(client, 'phone', PLAYER)
+    // The lobby: a party still on with no live game. Joins and host awards ping the stage only, so every 10 s.
     await answer(client)
-    await tick(59_999)
+    await tick(9999)
     expect(client.reads).toHaveLength(1)
     await until(1)
     expect(client.reads).toHaveLength(2)
@@ -542,24 +543,46 @@ describe('safety polls', () => {
       await answer(client, next)
       return client.reads.length
     }
-    const prompt = { game_id: GAME, key: 'q1', spec: { kind: 'choice' as const, options: ['0', '1'] }, opened_at: START, closes_at: null, closed_at: null, revealed_at: null }
+    /** The next safety poll comes `ms` after the last read, and not a moment before. */
+    const pollsAfter = async (ms: number, current: Snapshot) => {
+      const reads = client.reads.length
+      await tick(ms - 1)
+      expect(client.reads, `no poll before ${ms} ms`).toHaveLength(reads)
+      await until(1)
+      expect(client.reads, `a poll at ${ms} ms`).toHaveLength(reads + 1)
+      await answer(client, current)
+    }
+
+    // A live game with no prompt and no timer: every 60 s.
+    const quiet = snapshot({ games: [liveGame()] })
+    await announce(quiet)
+    await pollsAfter(60_000, quiet)
+
+    // An open prompt with a deadline (a quiz question; this one's deadline read falls outside the test): every 10 s.
+    const prompt = { game_id: GAME, key: 'q1', spec: { kind: 'choice' as const, options: ['0', '1'] }, opened_at: START, closes_at: START + 3_600_000, closed_at: null, revealed_at: null }
     const withPrompt = snapshot({ games: [liveGame()], prompts: [prompt] })
-    let reads = await announce(withPrompt)
-    await tick(9999)
-    expect(client.reads).toHaveLength(reads)
-    await until(1)
-    expect(client.reads).toHaveLength(reads + 1)
-    await answer(client, withPrompt)
+    await announce(withPrompt)
+    await pollsAfter(10_000, withPrompt)
 
-    reads = await announce(snapshot({ games: [liveGame({ wake_at: START + 3_600_000 })] }))
-    await until(10_000)
-    expect(client.reads).toHaveLength(reads + 1)
-    await answer(client, snapshot({ games: [liveGame({ wake_at: START + 3_600_000 })] }))
+    // An open prompt with no deadline (fusion's votes, open all evening) keeps the 60 s poll.
+    const votes = snapshot({ games: [liveGame()], prompts: [{ ...prompt, key: 'p1', closes_at: null }] })
+    await announce(votes)
+    await pollsAfter(60_000, votes)
 
-    // Nothing live any more: back to every 60 s.
-    reads = await announce(snapshot({ games: [liveGame({ status: 'finished', finished_at: START })] }))
-    await until(10_000)
-    expect(client.reads).toHaveLength(reads)
+    // A timer: every 10 s.
+    const timer = snapshot({ games: [liveGame({ wake_at: START + 3_600_000 })] })
+    await announce(timer)
+    await pollsAfter(10_000, timer)
+
+    // The game is over and nothing else is live: the lobby again, every 10 s.
+    const between = snapshot({ games: [liveGame({ status: 'finished', finished_at: START })] })
+    await announce(between)
+    await pollsAfter(10_000, between)
+
+    // The party is archived: every 60 s.
+    const archived = snapshot({ session: { ...snapshot().session!, archived_at: START }, games: [liveGame({ status: 'finished', finished_at: START })] })
+    await announce(archived)
+    await pollsAfter(60_000, archived)
     live.close()
   })
 
