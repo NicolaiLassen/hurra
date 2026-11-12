@@ -79,8 +79,15 @@ describe('movedOnSince', () => {
     expect(movedOnSince({ log: [row(10, 'game.started'), row(20, 'points.awarded')] }, 20)).toBe(false)
   })
 
-  it('ignores its own Publish, the TV and the pairing', () => {
-    const log = [row(10, 'game.finished'), row(20, 'recap.published'), row(21, 'session.tv_scene'), row(22, 'stage.changed'), row(23, 'screen.paired')]
+  it('ignores its own Publish, the TV, the pairing and a prompt closing', () => {
+    const log = [
+      row(10, 'game.finished'),
+      row(20, 'recap.published'),
+      row(21, 'session.tv_scene'),
+      row(22, 'stage.changed'),
+      row(23, 'screen.paired'),
+      row(24, 'prompt.closed'),
+    ]
     expect(movedOnSince({ log }, 10)).toBe(false)
   })
 

@@ -75,6 +75,10 @@ describe('prompts', () => {
     expect((game.publicState as ProbePublicState).results).toEqual([{ key: 'q1', yes: 1, no: 1 }])
     expect(game.scores).toEqual({ [bo.id]: 1 })
     expect(p.promptsOf('g')[0]).toMatchObject({ key: 'q1', revealedAt: p.now })
+    // The sync's load closed it at its deadline, and logged that as the timer.
+    const closes = p.log.filter((row) => row.kind === 'prompt.closed')
+    expect(closes).toEqual([expect.objectContaining({ actor: 'timer', round: 1, data: { key: 'q1', round: 1, closed_at: p.promptsOf('g')[0].closedAt } })])
+    expect(closes[0].data.closed_at).toBe(p.promptsOf('g')[0].closesAt)
   })
 
   it("closes the prompts a host action names, so it sees every answer: and only a host's close counts", () => {
@@ -86,9 +90,13 @@ describe('prompts', () => {
     // A guest naming the prompt doesn't close it.
     p.send(p.userOf(ana.id), { type: 'host-action', gameId: 'g', action: { type: 'reveal', step: 1 }, close: ['q1'] })
     expect(p.promptsOf('g')[0].closedAt).toBeNull()
+    expect(p.log.filter((row) => row.kind === 'prompt.closed')).toEqual([])
     const reveal = p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'reveal', step: 1 }, close: ['q1'] })
     expect(reveal.kind).toBe('commit')
     expect((p.game('g').publicState as ProbePublicState).results).toEqual([{ key: 'q1', yes: 1, no: 0 }])
+    expect(p.log.filter((row) => row.kind === 'prompt.closed')).toEqual([
+      expect.objectContaining({ actor: 'host', data: { key: 'q1', round: 1, closed_at: p.now } }),
+    ])
     // A second Reveal now is stale: skipped, no error.
     expect(p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'reveal', step: 1 }, close: ['q1'] })).toEqual({
       kind: 'skip',
@@ -163,6 +171,19 @@ describe('the stage', () => {
     p.send(p.hostUser, { type: 'end', gameId: 'g' })
     p.send(p.hostUser, { type: 'start', gameId: 'g', stage: false })
     expect(p.spotlight).toBeNull()
+  })
+
+  it('logs the TV leaving the recap when a start takes the stage, also for the game already on it', () => {
+    const p = party()
+    const scenes = () => p.log.filter((row) => row.kind === 'session.tv_scene').map((row) => row.data)
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    expect(scenes()).toEqual([])
+    p.send(p.hostUser, { type: 'end', gameId: 'g' })
+    p.tvScene = 'recap'
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    expect(p.tvScene).toBe('live')
+    expect(scenes()).toEqual([{ tv_scene: 'live', reason: 'start' }])
+    expect(p.log.filter((row) => row.kind === 'stage.changed')).toHaveLength(1)
   })
 })
 

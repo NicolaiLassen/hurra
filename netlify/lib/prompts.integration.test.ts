@@ -202,6 +202,71 @@ describe('closing waits for answers in flight', () => {
   })
 })
 
+describe('closes in the log', () => {
+  type LogRow = {
+    kind: string
+    actor: string
+    user_id: string | null
+    request_id: string | null
+    game_type: string | null
+    round: number | null
+    data: Record<string, unknown>
+  }
+  const logRows = () => rows<LogRow>('event_log', 'game_id', gameId)
+  const closesOf = async (key: string) => (await logRows()).filter((r) => r.kind === 'prompt.closed' && r.data.key === key)
+
+  it('logs a deadline close as the timer, even when the request that closed it saves nothing', async () => {
+    await open('log-deadline', { kind: 'choice', options: ['a', 'b'] }, 300)
+    await sleep(400)
+    // Any request for the game closes due deadlines first: here one that changes nothing.
+    expect(await engine(host, { type: 'host-action', gameId, action: { type: 'noop' } })).toEqual({ status: 200, body: { skipped: true } })
+    const [prompt] = (await rows<{ key: string; closes_at: string; closed_at: string | null }>('game_prompts', 'game_id', gameId)).filter(
+      (p) => p.key === 'log-deadline',
+    )
+    expect(prompt.closed_at).toBe(prompt.closes_at)
+    const closes = await closesOf('log-deadline')
+    expect(closes).toEqual([expect.objectContaining({ actor: 'timer', user_id: null, request_id: null, game_type: 'lab', round: 1 })])
+    expect(closes[0].data).toMatchObject({ key: 'log-deadline', round: 1 })
+    // The deadline, not the moment the request found it past.
+    expect(Math.abs((closes[0].data.closed_at as number) - Date.parse(prompt.closes_at))).toBeLessThanOrEqual(1)
+  })
+
+  it("logs a host's close as the host, even when the request is then refused", async () => {
+    await open('log-host', { kind: 'choice', options: ['a', 'b'] })
+    // A close with a host action the game refuses: the close stands, and the log says who made it.
+    expect(await engine(host, { type: 'host-action', gameId, action: null, close: ['log-host'] })).toMatchObject({
+      status: 400,
+      body: { code: 'rule' },
+    })
+    expect(await outcome(answer(guests[0], 'log-host', { choice: 'a' }))).toBe('PT409 closed: Too late, answers are closed')
+    const closes = await closesOf('log-host')
+    expect(closes).toEqual([expect.objectContaining({ actor: 'host', user_id: host.userId, request_id: null, game_type: 'lab', round: 1 })])
+    expect(closes[0].data).toEqual({ key: 'log-host', round: 1, closed_at: expect.any(Number) })
+
+    // A guest's close is ignored, so it logs nothing.
+    await open('log-guest', { kind: 'choice', options: ['a', 'b'] })
+    expect(await engine(guests[0], { type: 'host-action', gameId, action: { type: 'noop' }, close: ['log-guest'] })).toMatchObject({
+      status: 403,
+    })
+    expect(await closesOf('log-guest')).toEqual([])
+  })
+
+  it('logs the close of a Reveal now that saves, and its own claim is still a claim, not a replay', async () => {
+    await open('log-reveal', { kind: 'choice', options: ['a', 'b'] })
+    const requestId = crypto.randomUUID()
+    expect(
+      await engine(host, { type: 'host-action', gameId, requestId, action: { type: 'reveal', key: 'log-reveal' }, close: ['log-reveal'] }),
+    ).toEqual({ status: 200, body: {} })
+    expect(await closesOf('log-reveal')).toEqual([expect.objectContaining({ actor: 'host', user_id: host.userId, request_id: null })])
+    const claim = (await logRows()).filter((r) => r.request_id === requestId)
+    expect(claim).toEqual([expect.objectContaining({ kind: 'game.host_action', data: expect.objectContaining({ close: ['log-reveal'] }) })])
+    const [prompt] = (await rows<{ key: string; revealed_at: string | null }>('game_prompts', 'game_id', gameId)).filter(
+      (p) => p.key === 'log-reveal',
+    )
+    expect(prompt.revealed_at).not.toBeNull()
+  })
+})
+
 describe('tallies', () => {
   it('counts answers for members and hosts, and gives an outsider nothing', async () => {
     await open('count', { kind: 'choice', options: ['a', 'b'] })

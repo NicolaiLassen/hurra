@@ -434,14 +434,18 @@ export class FakeParty {
     let closed = 0
     for (const prompt of this.prompts.get(gameId)?.values() ?? []) {
       if (prompt.closed_at !== null) continue
-      // Only a host's close counts.
+      // Only a host's close counts. Each close is logged here, as game_load does.
+      let by: 'host' | 'timer' | null = null
       if (userId === this.hostUser && close.includes(prompt.key)) {
         prompt.closed_at = this.now
-        closed++
+        by = 'host'
       } else if (prompt.closes_at !== null && prompt.closes_at <= this.now) {
         prompt.closed_at = prompt.closes_at
-        closed++
+        by = 'timer'
       }
+      if (by === null) continue
+      closed++
+      this.write('prompt.closed', gameId, prompt.round, by, null, [], { key: prompt.key, round: prompt.round, closed_at: prompt.closed_at })
     }
     if (closed > 0) this.ping('room')
     const loaded = this.peek(gameId)
@@ -752,6 +756,7 @@ export class FakeParty {
         this.spotlightAt = this.now
         this.write('stage.changed', game.id, round, 'host', null, [], { game_id: game.id, title: game.title, reason: 'start' }, cause)
       }
+      if (this.tvScene !== 'live') this.write('session.tv_scene', null, null, 'host', null, [], { tv_scene: 'live', reason: 'start' }, cause)
       this.tvScene = 'live'
     } else if (starting && p.stage === 'keep' && this.spotlight === game.id) {
       this.spotlight = null

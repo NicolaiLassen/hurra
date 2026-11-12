@@ -809,14 +809,21 @@ volatile.
 1. If `p_close` is not empty **and `p_user_id` is a host**: `update
    public.game_prompts set closed_at = clock_timestamp() where game_id =
    p_game_id and closed_at is null and key = any (p_close)`. Ignored for
-   anyone else, so a guest can never close a question.
+   anyone else, so a guest can never close a question. Each prompt it closes
+   is logged in the same statement: a `prompt.closed` row with actor `host`
+   and the host's `user_id`.
 2. `update public.game_prompts set closed_at = closes_at where game_id =
-   p_game_id and closed_at is null and closes_at <= clock_timestamp()`.
+   p_game_id and closed_at is null and closes_at <= clock_timestamp()`,
+   logging a `prompt.closed` row with actor `timer` for each prompt it closes.
    Both updates wait for answers in flight (they hold share locks), so the
    read below sees every accepted answer, and nothing can be accepted after.
    If either update closed anything, `ping_session(session, 'room', { game })`
    once, so phones learn of the close even when the request then skips or is
-   refused.
+   refused. The close rows are written here for the same reason: game_commit
+   only closes prompts that are still open, so its `game.effects` never lists
+   these keys. They carry no `request_id` (the request's own claim must not
+   look like a replay), and the close time is in `data.closed_at`, since a
+   deadline close is in the past.
 3. One `select` (one statement, so one snapshot) returning, or null when the
    game doesn't exist:
 
@@ -913,7 +920,10 @@ In order, in one transaction:
       (3.3, step 7).
 12. **The stage**:
     - Start with `stage = 'take'`: `spotlight_game_id = this game` and
-      `tv_scene = 'live'`; log `stage.changed` (`reason: 'start'`). Start with
+      `tv_scene = 'live'`; log `stage.changed` (`reason: 'start'`) when the
+      spotlight changes, and `session.tv_scene` (`{ tv_scene: 'live', reason:
+      'start' }`) when the TV leaves the recap. The sessions trigger is quiet
+      while the engine runs (step 1), so both rows are written here. Start with
       `'keep'` while this game is the spotlight (a restart of a game whose final
       screen is up): clear the spotlight.
     - Finish: take the stage when it is free or already this game's. Free
@@ -1120,7 +1130,8 @@ so no password ever sits in the repo.
 | `game.finished` | game_commit | game or host | `{ title, game_type, by, winners, state, public_state, scores, points }` |
 | `stage.changed` | game_commit or trigger | game or host | `{ game_id, title, reason }` |
 | `prompt.answered` | submit_answer (the claim) | player | `{ key, answer, ms, round }` |
-| `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene` | triggers | host or system | the changed values |
+| `prompt.closed` | game_load | host (Reveal now and other closes a host action names) or timer (a deadline) | `{ key, round, closed_at }`: one row per prompt game_load closes; no `request_id` |
+| `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene` | triggers; `session.tv_scene` also game_commit, when a start takes the stage from the recap (`reason: 'start'`) | host or system | the changed values |
 | `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }`; `player.moved` also `from_user` (the old phone's user, hosts only like every log row) |
 | `points.awarded`, `points.undone` | trigger (host awards only) | host | `{ player_id, points, reason, game_id, score_event_id }` |
 | `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted`, `game.settings_changed` | triggers | host | `{ title, game_type }` |

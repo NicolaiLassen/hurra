@@ -373,6 +373,38 @@ describe('several games, the stage and timers', () => {
     expect(result).toEqual({})
     expect(await gameRow(gameId)).toMatchObject({ status: 'finished', finished_by: 'host', winners: [guests[2].playerId] })
   })
+
+  it('logs the TV leaving the recap when a start takes the stage, also for the game already on it', async () => {
+    const gameId = await world.game(host, party, 'probe', 'From the recap', { movesToWin: 50, seconds: 30 })
+    type SceneRow = { id: number; kind: string; actor: string; cause_id: number | null; data: Record<string, unknown> }
+    const sceneRows = async () =>
+      (await admin.from('event_log').select('id, kind, actor, cause_id, data').eq('session_id', party.id).in('kind', ['stage.changed', 'session.tv_scene']).order('id'))
+        .data as SceneRow[]
+    const showRecap = async () => expect((await host.client.from('sessions').update({ tv_scene: 'recap' }).eq('id', party.id)).error).toBeNull()
+    const lastStart = async () => (await logOf(gameId)).filter((r) => r.kind === 'game.start').pop()!
+
+    // Another game's stage: the start takes it and leaves the recap.
+    await showRecap()
+    let seen = (await sceneRows()).length
+    expect(await probe(gameId).start(true)).toMatchObject({ status: 200 })
+    let start = await lastStart()
+    expect((await sceneRows()).slice(seen).map((r) => [r.kind, r.actor, r.cause_id, r.data.reason])).toEqual([
+      ['stage.changed', 'host', start.id, 'start'],
+      ['session.tv_scene', 'host', start.id, 'start'],
+    ])
+    await probe(gameId).end()
+
+    // A restart of the game whose final screen is up: no stage change, but the scene row still comes.
+    await showRecap()
+    seen = (await sceneRows()).length
+    expect(await probe(gameId).start(true)).toMatchObject({ status: 200 })
+    start = await lastStart()
+    const after = (await sceneRows()).slice(seen)
+    expect(after.map((r) => [r.kind, r.cause_id])).toEqual([['session.tv_scene', start.id]])
+    expect(after[0].data).toEqual({ tv_scene: 'live', reason: 'start' })
+    expect((await rows<{ tv_scene: string }>('sessions', 'id', party.id))[0].tv_scene).toBe('live')
+    await probe(gameId).end()
+  })
 })
 
 describe('in-person rounds', () => {

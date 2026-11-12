@@ -1560,25 +1560,46 @@ create function public.game_load(p_game_id uuid, p_user_id uuid, p_close text[] 
 returns jsonb language plpgsql volatile security invoker set search_path = '' as $$
 declare
   v_session uuid;
+  v_type text;
   v_closed int := 0;
   v_n int;
   v jsonb;
 begin
-  select g.session_id into v_session from public.session_games g where g.id = p_game_id;
+  select g.session_id, g.game_type into v_session, v_type from public.session_games g where g.id = p_game_id;
   if v_session is null then
     return null;
   end if;
 
-  -- Only a host's close counts, so a guest can never close a question.
+  -- Only a host's close counts, so a guest can never close a question. Every
+  -- close is logged here, in the same statement, because the request may
+  -- still skip or be refused, and game_commit then finds the prompt closed.
+  -- No request_id on these rows: the request's own claim must not look like
+  -- a replay. The close time is in data, since a deadline close is in the past.
   if coalesce(cardinality(p_close), 0) > 0 and exists (select 1 from public.hosts h where h.user_id = p_user_id) then
-    update public.game_prompts set closed_at = clock_timestamp()
-    where game_id = p_game_id and closed_at is null and key = any (p_close);
-    get diagnostics v_n = row_count;
+    with closed as (
+      update public.game_prompts set closed_at = clock_timestamp()
+      where game_id = p_game_id and closed_at is null and key = any (p_close)
+      returning key, round, closed_at
+    ), logged as (
+      insert into public.event_log (session_id, kind, game_id, game_type, round, actor, user_id, data)
+      select v_session, 'prompt.closed', p_game_id, v_type, c.round, 'host', p_user_id,
+        jsonb_build_object('key', c.key, 'round', c.round, 'closed_at', public.epoch_ms(c.closed_at))
+      from closed c
+      returning 1
+    ) select count(*) into v_n from logged;
     v_closed := v_closed + v_n;
   end if;
-  update public.game_prompts set closed_at = closes_at
-  where game_id = p_game_id and closed_at is null and closes_at <= clock_timestamp();
-  get diagnostics v_n = row_count;
+  with closed as (
+    update public.game_prompts set closed_at = closes_at
+    where game_id = p_game_id and closed_at is null and closes_at <= clock_timestamp()
+    returning key, round, closed_at
+  ), logged as (
+    insert into public.event_log (session_id, kind, game_id, game_type, round, actor, data)
+    select v_session, 'prompt.closed', p_game_id, v_type, c.round, 'timer',
+      jsonb_build_object('key', c.key, 'round', c.round, 'closed_at', public.epoch_ms(c.closed_at))
+    from closed c
+    returning 1
+  ) select count(*) into v_n from logged;
   v_closed := v_closed + v_n;
   -- Phones learn of the close even when the request then skips or is refused.
   if v_closed > 0 then
@@ -2012,6 +2033,12 @@ begin
       insert into public.event_log (session_id, at, kind, game_id, game_type, round, actor, cause_id, data)
       values (v_session, v_now, 'stage.changed', v_game.id, v_game.game_type, v_round, 'host', v_cause,
         jsonb_build_object('game_id', v_game.id, 'title', v_game.title, 'reason', 'start'));
+    end if;
+    -- The sessions trigger is quiet while the engine runs, so leaving the recap is logged here.
+    if v_scene <> 'live' then
+      insert into public.event_log (session_id, at, kind, actor, cause_id, data)
+      values (v_session, v_now, 'session.tv_scene', 'host', v_cause,
+        jsonb_build_object('tv_scene', 'live', 'reason', 'start'));
     end if;
   elsif v_starting and p ->> 'stage' = 'keep' and v_spot = v_game.id then
     -- A restart in the background of the game whose final screen is up.
