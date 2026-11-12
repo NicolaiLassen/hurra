@@ -1,7 +1,7 @@
 import { GameControllerIcon } from '@phosphor-icons/react'
 import { Suspense } from 'react'
 import Avatar from '@/components/Avatar'
-import Contained from '@/components/tv/Contained'
+import Contained from '@/components/Contained'
 import { CARD } from '@/components/tv/look'
 import { runningFor, topOfGame } from '@/components/tv/scene'
 import { getGameModule } from '@/games/registry'

@@ -1,7 +1,7 @@
 import { DeviceMobileIcon, GameControllerIcon } from '@phosphor-icons/react'
 import { memo, Suspense, useMemo } from 'react'
 import { LoadingPart } from '@/components/layout'
-import Contained from '@/components/tv/Contained'
+import Contained from '@/components/Contained'
 import FinalScreen from '@/components/tv/FinalScreen'
 import { getGameModule } from '@/games/registry'
 import type { TvViewProps } from '@/games/types'

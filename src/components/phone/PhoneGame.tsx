@@ -1,5 +1,6 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react'
 import { useMemo } from 'react'
+import Contained from '@/components/Contained'
 import { gameIconOf, usePhoneCalls } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,9 @@ import type { Player, Session, SessionGame, Snapshot } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
 
 // A game's screens on the phone, through the registry only (docs/engine-v2.md,
-// 6 and 7.1): each one fed from the live snapshot, with the phone's calls.
+// 6 and 7.1): each one fed from the live snapshot, with the phone's calls, and
+// each in its own error boundary, so one game's screen can't take the phone
+// home down (the other games, Standings and Show my code keep working).
 
 type GameProps = {
   snapshot: Snapshot
@@ -50,18 +53,27 @@ export function GameView(props: GameProps & { scannedCode?: string; onScanHandle
   const viewProps = usePlayerViewProps(props)
   const module = getGameModule(props.game.game_type)
   if (!module) return <UnknownGame game={props.game} />
-  return <module.PlayerView {...viewProps} scannedCode={props.scannedCode} onScanHandled={props.onScanHandled} />
+  return (
+    <Contained key={roundOf(props.game)} fallback={<ScreenFailed game={props.game} />}>
+      <module.PlayerView {...viewProps} scannedCode={props.scannedCode} onScanHandled={props.onScanHandled} />
+    </Contained>
+  )
 }
 
-/** The compact card while another game holds the main card: the game's own PlayerCard, or the generic one. */
+/** The compact card while another game holds the main card: the game's own PlayerCard, or the generic one (also if its own fails). */
 export function GameCompactCard(props: GameProps & { open: () => void }) {
   const viewProps = usePlayerViewProps(props)
   const module = getGameModule(props.game.game_type)
-  if (module?.PlayerCard) return <module.PlayerCard {...viewProps} open={props.open} />
-  return <GenericPlayerCard game={props.game} icon={gameIconOf(props.game.game_type)} open={props.open} />
+  const generic = <GenericPlayerCard game={props.game} icon={gameIconOf(props.game.game_type)} open={props.open} />
+  if (!module?.PlayerCard) return generic
+  return (
+    <Contained key={roundOf(props.game)} fallback={generic}>
+      <module.PlayerCard {...viewProps} open={props.open} />
+    </Contained>
+  )
 }
 
-/** A finished game's result for this phone: the game's own ResultView, or the generic one. */
+/** A finished game's result for this phone: the game's own ResultView, or the generic one (also if its own fails). */
 export function GameResult({ snapshot, session, game, player }: Omit<GameProps, 'onStage'>) {
   const module = getGameModule(game.game_type)
   const props: ResultViewProps = {
@@ -73,7 +85,30 @@ export function GameResult({ snapshot, session, game, player }: Omit<GameProps, 
     view: snapshot.me?.views[game.id] ?? null,
     gamePoints: gamePointsOf(snapshot, game.id),
   }
-  return module?.ResultView ? <module.ResultView {...props} /> : <GenericResult {...props} />
+  const generic = <GenericResult {...props} />
+  if (!module?.ResultView) return generic
+  // Keyed here: the phone home's result cards aren't, so a failed one never sticks to the next game's result.
+  return (
+    <Contained key={roundOf(game)} fallback={generic}>
+      <module.ResultView {...props} />
+    </Contained>
+  )
+}
+
+/** One round of one game: a new round tries a screen that failed again. */
+const roundOf = (game: SessionGame) => `${game.id}:${game.started_at ?? ''}`
+
+/** A game's own screen threw: the rest of the phone keeps working, and a reload tries it again. */
+function ScreenFailed({ game }: { game: SessionGame }) {
+  return (
+    <div className="grid gap-3">
+      <p className="text-muted-foreground">{game.title} didn't load on this phone. Reload to try again.</p>
+      <Button variant="secondary" size="lg" className="justify-self-start" onClick={() => window.location.reload()}>
+        <ArrowClockwiseIcon />
+        Reload
+      </Button>
+    </div>
+  )
 }
 
 /** A game this phone's app doesn't know yet, e.g. one added by a newer version: a reload fixes it. */
