@@ -103,12 +103,14 @@ export function useLiveQuery<T>(fetcher: () => Promise<T>, options: LiveQueryOpt
   }, [query, pollMs])
 
   // A new revision reloads the same query: what is on screen stays until the answer lands.
-  const loadedRevision = useRef(revision)
+  // A new query already loads the latest revision (the effect above), so it needs no second load:
+  // usePublishedRecap's first publish changes both at once.
+  const loaded = useRef({ query, revision })
   useEffect(() => {
-    if (loadedRevision.current === revision) return
-    loadedRevision.current = revision
-    reload.current()
-  }, [revision])
+    const last = loaded.current
+    loaded.current = { query, revision }
+    if (last.query === query && last.revision !== revision) reload.current()
+  }, [query, revision])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
