@@ -88,7 +88,7 @@ function Home({
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
   const liveMain = main.kind === 'game' ? main.game : null
-  const held = useHeldGame(snapshot, liveMain)
+  const held = useHeldGame(snapshot, mainGame)
   const over = main.kind === 'over'
   // A timed question is open on the main card (a quiz question): the Show my
   // code bar steps aside for it, so it covers none of the answers.
@@ -140,11 +140,12 @@ function Home({
       <PhoneHeader session={session} player={player} points={points} />
 
       <div className="mt-6">
-        {/* One keyed list: the game that loses the main card to another keeps
-            its view, out of sight, so a full-screen layer it has open (the
-            fusion picker, the scan sheet, a knockout dialog) stays on top
-            until the guest is done. Game layers are position: fixed (see
-            GameSheet), so the hidden wrapper doesn't clip them. */}
+        {/* One keyed list: a live game that loses the main card (to another
+            game, or to a result card) keeps its view, out of sight, so a
+            full-screen layer it has open (the fusion picker, the scan sheet, a
+            knockout dialog) stays on top until the guest is done. Game layers
+            are position: fixed (see GameSheet), so the hidden wrapper doesn't
+            clip them. */}
         {[liveMain, held].map(
           (game) =>
             game && (
@@ -389,10 +390,12 @@ function NotInParty({ party, name, moved }: { party: PublicSession; name: string
 }
 
 /**
- * The game that had the main card until another live game took it (the host
- * started one on the TV, say), while that round is still live; else null. Home
- * keeps its view mounted out of sight, so what the guest had open in it (a
- * vote being picked, a knockout being confirmed) isn't lost.
+ * The live game that had the main card until another game or a result card took
+ * it (the host started one on the TV, an older game finished, Back to
+ * standings), while that round is still live; else null. When the main game
+ * finishes, its result keeps the round's key, so a game held behind it stays
+ * held. Home keeps its view mounted out of sight, so what the guest had open in
+ * it (a vote being picked, a knockout being confirmed) isn't lost.
  */
 function useHeldGame(snapshot: Snapshot, main: SessionGame | null): SessionGame | null {
   const key = main ? roundKey(main) : null

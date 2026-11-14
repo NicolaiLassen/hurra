@@ -194,6 +194,21 @@ describe('phoneLayout', () => {
     expect(phoneLayout(snap([elim, quiz, live('fusion', 0.1)]), NOW).main).toMatchObject({ kind: 'game', game: { id: 'fusion' }, onStage: false })
   })
 
+  // PhoneHome's held view (useHeldGame) must follow these too: the live game keeps running, so
+  // what the guest had open in its view (a vote being picked, a knockout dialog) has to survive.
+  it('lets a result card take the main card from a live game that is not on the TV', () => {
+    const fusion = live('fusion', 80, { game_type: 'fusion' })
+    expect(phoneLayout(snap([live('elim', 90, { game_type: 'elimination' }), fusion]), NOW).main).toEqual({ kind: 'game', game: fusion, onStage: false })
+    // Last one standing, started before fusion, ends in the background.
+    const ended = phoneLayout(snap([finished('elim', 90, 0.1, { game_type: 'elimination' }), fusion]), NOW)
+    expect(ended.main).toMatchObject({ kind: 'result', game: { id: 'elim' } })
+    expect(ended.alsoRunning).toEqual([fusion])
+    // Back to standings on fusion, live on the TV, while a game that finished after it started is still the news.
+    const pong = finished('pong', 85, 70, { game_type: 'in-person' })
+    expect(phoneLayout(snap([pong, fusion], { spotlight_game_id: 'fusion' }), NOW).main).toEqual({ kind: 'game', game: fusion, onStage: true })
+    expect(phoneLayout(snap([pong, fusion]), NOW).main).toEqual({ kind: 'result', game: pong })
+  })
+
   it('makes a background game that finishes while another game is live on the TV a Finished lately row', () => {
     const quiz = live('quiz', 10)
     const layout = phoneLayout(snap([finished('elim', 50, 0.2, { game_type: 'elimination' }), quiz], { spotlight_game_id: 'quiz' }), NOW)
