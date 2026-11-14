@@ -49,27 +49,30 @@ language sql immutable set search_path = '' as $$
   select case when t ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then t::uuid end
 $$;
 
--- A name as it reads: compatibility forms folded (NFKC turns no-break and
--- other odd spaces into plain ones, full-width letters into plain ones),
--- control, invisible and direction characters dropped (the emoji joiner, the
--- emoji style selectors and the flag tags stay, for emoji), every run of
--- white space made one space, the ends trimmed. Every players.name is stored
--- like this (the players_clean_name trigger).
+-- A name as it reads: composed (NFC, so an accent typed as its own mark joins
+-- its letter), control, invisible and direction characters dropped (the emoji
+-- joiner, the emoji style selectors and the flag tags stay, for emoji), every
+-- run of white space of any kind (no-break, thin, ideographic, line breaks)
+-- made one plain space, the ends trimmed. Symbols, emoji and full-width letters
+-- stay as typed; name_key folds them. Every players.name is stored like this
+-- (the players_clean_name trigger).
 create function public.clean_name(p_name text) returns text
 language sql immutable parallel safe set search_path = '' as $$
-  select btrim(regexp_replace(regexp_replace(normalize(coalesce(p_name, ''), nfkc),
+  select btrim(regexp_replace(regexp_replace(normalize(coalesce(p_name, ''), nfc),
     '[\u0001-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0d\ufeff\uffa0\ufff0-\ufffb\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e001f\U000e0080-\U000e0fff]',
-    '', 'g'), '[\s\u0085\u1680\u2028\u2029]+', ' ', 'g'))
+    '', 'g'), '[\s\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+', ' ', 'g'))
 $$;
 
--- What two players of a party may not share: the clean name without the
--- emoji joiners, in lower case, with Cyrillic and Greek look-alikes as Latin
--- letters, so "Ana" with a Cyrillic A is taken when "Ana" is. Empty for a
--- name with nothing to see.
+-- What two players of a party may not share: the clean name with its
+-- compatibility forms folded (NFKC: full-width and math letters made plain,
+-- the trade mark sign as TM), without the emoji joiners, in lower case, with
+-- Cyrillic and Greek look-alikes as Latin letters, so "Ana" with a Cyrillic A
+-- is taken when "Ana" is, and "Bo" with a trade mark sign when "BoTM" is.
+-- Empty for a name with nothing to see.
 create function public.name_key(p_name text) returns text
 language sql immutable parallel safe set search_path = '' as $$
   select lower(translate(
-    regexp_replace(public.clean_name(p_name), '[\u200d\ufe0e\ufe0f\U000e0020-\U000e007f]', '', 'g'),
+    regexp_replace(public.clean_name(normalize(public.clean_name(p_name), nfkc)), '[\u200d\ufe0e\ufe0f\U000e0020-\U000e007f]', '', 'g'),
     U&'\0410\0412\0415\0405\0406\0408\041A\041C\041D\041E\0420\0421\0422\0423\0425\0430\0435\0455\0456\0458\043E\0440\0441\0443\0445\0501\04BB\051B\051D\0391\0392\0395\0396\0397\0399\039A\039C\039D\039F\03A1\03A4\03A5\03A7\03B9\03BF\03BD',
     'ABESIJKMHOPCTYXaesijopcyxdhqwABEZHIKMNOPTYXiov'))
 $$;

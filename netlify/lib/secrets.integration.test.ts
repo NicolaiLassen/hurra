@@ -308,10 +308,21 @@ describe('codes and joining', () => {
     const { data: zoe, error } = await join('  Zoe\u0308  Marie\u2060 \u{1F389}')
     expect(error).toBeNull()
     expect(zoe.name).toBe('Zo\u00eb Marie \u{1F389}')
-    // The host's rename goes through the same rules: the same name is taken, nothing to see is refused, spaces are cleaned.
+    // Symbols and emoji are stored as typed (a trade mark sign, a red double exclamation mark), yet their plain look-alikes count as the same name.
+    const tm = await world.guest(twins, 'Bo\u2122')
+    const mia = await world.guest(twins, 'Mia \u203c\ufe0f')
+    expect((await rows<{ name: string }>('players', 'id', tm.playerId))[0].name).toBe('Bo\u2122')
+    expect((await rows<{ name: string }>('players', 'id', mia.playerId))[0].name).toBe('Mia \u203c\ufe0f')
+    const late = await world.user()
+    for (const name of ['BoTM', 'Mia !!']) {
+      const { error: taken } = await late.client.rpc('join_session', { p_join_code: twins.join_code, p_name: name })
+      expect(taken, name).toMatchObject({ code: 'PT409', details: 'name_taken' })
+    }
+    // The host's rename goes through the same rules: the same name is taken, nothing to see is refused, spaces are cleaned, symbols stay.
     const rename = (name: string) => host.client.from('players').update({ name }).eq('id', zoe.id).select('name')
     expect((await rename('Bo\u200b')).error).toMatchObject({ code: '23505' })
     expect((await rename('\u200b\u2060')).error).toMatchObject({ code: '23514' })
+    expect((await rename('Zo\u00eb\u2122')).data).toEqual([{ name: 'Zo\u00eb\u2122' }])
     expect((await rename('Zoe  B\u00a0')).data).toEqual([{ name: 'Zoe B' }])
     expect((await rows<{ name: string }>('players', 'id', bo.playerId))[0].name).toBe('Bo')
   })
