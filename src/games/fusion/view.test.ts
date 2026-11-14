@@ -7,7 +7,6 @@ import {
   countsLine,
   firstTime,
   fitTiles,
-  foldName,
   nameOf,
   outcomeOf,
   pickSignature,
@@ -70,16 +69,6 @@ describe('votes', () => {
 })
 
 describe('finding people', () => {
-  it('folds accents and Nordic letters for search', () => {
-    expect(foldName('Søren')).toBe('soren')
-    expect(foldName('Åse')).toBe('ase')
-    expect(foldName('Æble Ørn')).toBe('aeble orn')
-    expect(foldName('  José ')).toBe('jose')
-    // Names are stored as typed: full-width and math letters still match plain ones.
-    expect(foldName('Ｌｕｋａ')).toBe('luka')
-    expect(foldName('\u{1d400}\u{1d427}\u{1d41a}')).toBe('ana')
-  })
-
   it('lists everyone but yourself, by name, filtered by a search', () => {
     const players = [player('1', 'Mads'), player('2', 'Anna'), player('3', 'Søren'), player('me', 'Me')]
     expect(candidatesFor(players, 'me', '').map((p) => p.name)).toEqual(['Anna', 'Mads', 'Søren'])

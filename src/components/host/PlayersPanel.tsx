@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { withRanks } from '@/lib/format'
+import { foldName, withRanks } from '@/lib/format'
 import { removePlayer, renamePlayer } from '@/lib/queries'
 import type { ScoreRow, Snapshot } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
@@ -50,8 +50,9 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
   const removing = useDialogTarget<ScoreRow>()
 
   const rows = withRanks(snapshot.standings)
-  const needle = search.trim().toLowerCase()
-  const shown = needle ? rows.filter((row) => row.name.toLowerCase().includes(needle)) : rows
+  // Folded like fusion's search: "soren" finds Søren, and plain letters find a full-width name.
+  const needle = foldName(search)
+  const shown = needle ? rows.filter((row) => foldName(row.name).includes(needle)) : rows
 
   return (
     <Card className={className}>

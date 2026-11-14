@@ -3,6 +3,7 @@
 // their props (docs/engine-v2.md, 6).
 import type { AnswerPayload, PlayerId } from '@/games/core/Game'
 import { pointsFor, type FusionPhase, type FusionPublicPicture, type FusionPublicState } from '@/games/fusion/logic'
+import { foldName } from '@/lib/format'
 import type { Player, PromptState } from '@/lib/types'
 
 type Scoring = FusionPublicState['scoring']
@@ -43,21 +44,6 @@ export const pickSignature = (pick: readonly PlayerId[] | null | undefined) => (
 export function togglePick(pick: readonly PlayerId[], id: PlayerId): PlayerId[] {
   if (pick.includes(id)) return pick.filter((p) => p !== id)
   return [...pick, id].slice(-2)
-}
-
-/**
- * Search text: lower case, accents dropped and Nordic letters folded, so "soren" finds Søren and "ase" finds Åse.
- * Compatibility forms too (NFKD), since names are stored as typed: "luka" finds a full-width or math-letter Luka.
- */
-export function foldName(name: string): string {
-  return name
-    .normalize('NFKD')
-    .replace(/\p{Mn}/gu, '')
-    .toLowerCase()
-    .replace(/ø/g, 'o')
-    .replace(/æ/g, 'ae')
-    .replace(/ß/g, 'ss')
-    .trim()
 }
 
 /** The players a guest can vote for: everyone but themselves, by name, filtered by a search. */
