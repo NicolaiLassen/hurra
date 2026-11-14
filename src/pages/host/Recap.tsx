@@ -15,7 +15,7 @@ import Callout from '@/components/Callout'
 import Confirm from '@/components/Confirm'
 import { errorMessage, useHostCall } from '@/components/host/hostCalls'
 import RecapPreview from '@/components/host/RecapPreview'
-import { clockTime, downloadName, movedOnSince } from '@/components/host/recapView'
+import { clockTime, downloadName, failedNightRead, movedOnSince, type NightRead } from '@/components/host/recapView'
 import { useHostFixture } from '@/components/host/useHostFixture'
 import { Loading, LoadingPart, Screen } from '@/components/layout'
 import QueryGate from '@/components/QueryGate'
@@ -71,11 +71,12 @@ function RecapGate({ sample }: { sample: boolean }) {
 /**
  * The raw night (session_recap(), hosts only): read on arrival and on Rebuild,
  * and again by `reread` while the page stays open, quietly: no fade, and a
- * failed read keeps the last night. The last one stays while the next loads.
+ * failed read keeps the last night (with none on screen yet, it shows its
+ * error, see failedNightRead). The last one stays while the next loads.
  */
 function useRawNight(sessionId: string, sample: boolean) {
   const [ask, setAsk] = useState({ attempt: 0, quiet: false })
-  const [loaded, setLoaded] = useState<{ attempt: number; raw: RawRecap | null; error: string | null } | null>(null)
+  const [loaded, setLoaded] = useState<NightRead<RawRecap> | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -86,7 +87,7 @@ function useRawNight(sessionId: string, sample: boolean) {
         if (!cancelled) setLoaded({ attempt, raw, error: null })
       },
       (error: unknown) => {
-        if (!cancelled) setLoaded((last) => ({ attempt, raw: last?.raw ?? null, error: quiet ? (last?.error ?? null) : errorMessage(error) }))
+        if (!cancelled) setLoaded((last) => failedNightRead(last, attempt, quiet, errorMessage(error)))
       },
     )
     return () => {

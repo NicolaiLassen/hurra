@@ -144,3 +144,15 @@ export function downloadName(partyName: string, at: number): string {
 export function formatCount(n: number): string {
   return n.toLocaleString('en-US')
 }
+
+/** The recap page's read of the night, as it stands after its latest answer. */
+export type NightRead<T> = { attempt: number; raw: T | null; error: string | null }
+
+/**
+ * A read that failed: the last night stays. A quiet re-read stays quiet only
+ * while there is a night on screen to keep; one that took over the first read
+ * (or a Try again) shows its error, or the page would wait on the loader forever.
+ */
+export function failedNightRead<T>(last: NightRead<T> | null, attempt: number, quiet: boolean, message: string): NightRead<T> {
+  return { attempt, raw: last?.raw ?? null, error: quiet && last?.raw ? last.error : message }
+}

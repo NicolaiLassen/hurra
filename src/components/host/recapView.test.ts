@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { gameLogic } from '@/games/logic'
 import { buildRecapDoc } from '@/lib/recap'
 import { recordedRawRecap } from '@/lib/recap.recorded'
-import { downloadName, movedOnSince, nearestIndex, RACE_COLORS, raceSeries, timeSpan, timeTicks, valueTicks } from './recapView'
+import {
+  downloadName,
+  failedNightRead,
+  movedOnSince,
+  nearestIndex,
+  RACE_COLORS,
+  raceSeries,
+  timeSpan,
+  timeTicks,
+  valueTicks,
+} from './recapView'
 
 const MIN = 60_000
 
@@ -95,6 +105,27 @@ describe('movedOnSince', () => {
     const last = Math.max(...recordedRawRecap.log.map((e) => e.at))
     expect(movedOnSince(recordedRawRecap, last)).toBe(false)
     expect(movedOnSince(recordedRawRecap, last - 60_000)).toBe(true)
+  })
+})
+
+describe('failedNightRead', () => {
+  const night = { at: 1 }
+
+  it('keeps the night on screen, with no error, when a quiet re-read fails', () => {
+    expect(failedNightRead({ attempt: 0, raw: night, error: null }, 1, true, 'Failed to fetch')).toEqual({ attempt: 1, raw: night, error: null })
+  })
+
+  it('shows the error of a quiet re-read that took over the first read, instead of an endless loader', () => {
+    expect(failedNightRead<typeof night>(null, 1, true, 'Failed to fetch')).toEqual({ attempt: 1, raw: null, error: 'Failed to fetch' })
+    expect(failedNightRead<typeof night>({ attempt: 1, raw: null, error: 'Not signed in' }, 2, true, 'Failed to fetch')).toEqual({
+      attempt: 2,
+      raw: null,
+      error: 'Failed to fetch',
+    })
+  })
+
+  it('shows the error of a Rebuild, over the night it keeps', () => {
+    expect(failedNightRead({ attempt: 0, raw: night, error: null }, 1, false, 'Failed to fetch')).toEqual({ attempt: 1, raw: night, error: 'Failed to fetch' })
   })
 })
 
