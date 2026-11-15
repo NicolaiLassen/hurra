@@ -58,9 +58,9 @@ export function stageWords(scene: TvScene, players: readonly Named[], now: numbe
 }
 
 /** "No TV paired yet", "1 TV paired", "2 TVs paired". */
-export function screensLine(screens: number | null): string {
+export function screensLine(screens: number | null, tabOpen = false): string {
   const count = screens ?? 0
-  if (count <= 0) return 'No TV paired yet'
+  if (count <= 0) return tabOpen ? 'TV open in this browser' : 'No TV paired yet'
   return `${count} TV${count === 1 ? '' : 's'} paired`
 }
 

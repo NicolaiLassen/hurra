@@ -92,6 +92,13 @@ describe('screensLine', () => {
     expect(screensLine(1)).toBe('1 TV paired')
     expect(screensLine(2)).toBe('2 TVs paired')
   })
+
+  it('says when the TV is a tab of this browser (Show the TV here)', () => {
+    expect(screensLine(0, true)).toBe('TV open in this browser')
+    expect(screensLine(null, true)).toBe('TV open in this browser')
+    // A paired TV is the stronger fact: it counts first.
+    expect(screensLine(1, true)).toBe('1 TV paired')
+  })
 })
 
 describe('startChoices', () => {

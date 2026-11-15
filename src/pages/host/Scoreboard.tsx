@@ -7,6 +7,8 @@ import { OTHER_PARTY } from '@/components/tv/pairing'
 import TvScreen from '@/components/tv/TvScreen'
 import { ensureSignedIn, isHost } from '@/lib/auth'
 import { claimScreen, sessionByCode } from '@/lib/queries'
+import { useScreenWakeLock } from '@/lib/screenWakeLock'
+import { useAnnounceTvTab } from '@/lib/tvTab'
 import type { PublicSession } from '@/lib/types'
 import { LiveSessionProvider, useLive } from '@/lib/useLive'
 import { useLiveQuery } from '@/lib/useLiveQuery'
@@ -22,7 +24,9 @@ const DevTv = import.meta.env.DEV ? lazy(() => import('@/components/tv/DevTv')) 
  * by the TV. It signs in anonymously and reads exactly what a guest reads, so
  * nothing in the room can open the control room or read a secret. Until the
  * host pairs it, it shows the pairing screen; a host's own browser skips
- * pairing and says "Host preview".
+ * pairing and says "Host preview", except with ?mirror=1: the host page's "Show
+ * the TV here" for when no second device can be paired, a tab the host casts or
+ * moves to the TV.
  */
 export default function Scoreboard() {
   const joinCode = (useParams().joinCode ?? '').trim().toUpperCase()
@@ -34,10 +38,10 @@ export default function Scoreboard() {
       </Suspense>
     )
   }
-  return <Tv key={joinCode} joinCode={joinCode} />
+  return <Tv key={joinCode} joinCode={joinCode} mirror={search.has('mirror')} />
 }
 
-function Tv({ joinCode }: { joinCode: string }) {
+function Tv({ joinCode, mirror }: { joinCode: string; mirror: boolean }) {
   // Guests share the venue's one IP: the anonymous sign-in may wait out a rate limit (5.9).
   const [busy, setBusy] = useState(false)
   const lookup = useCallback(async () => {
@@ -56,7 +60,7 @@ function Tv({ joinCode }: { joinCode: string }) {
       <QueryGate query={query} notFound={<TvNotFound joinCode={joinCode} />}>
         {({ party, host }) => (
           <LiveSessionProvider sessionId={party.id} screen="tv">
-            <PairedTv party={party} hostPreview={host} />
+            <PairedTv party={party} host={host} mirror={mirror} />
           </LiveSessionProvider>
         )}
       </QueryGate>
@@ -64,11 +68,15 @@ function Tv({ joinCode }: { joinCode: string }) {
   )
 }
 
-/** The TV scene once this screen may read the party (paired, or a host's preview); the pairing screen until then. */
-function PairedTv({ party, hostPreview }: { party: PublicSession; hostPreview: boolean }) {
+/** The TV scene once this screen may read the party (paired, or a host's own browser); the pairing screen until then. */
+function PairedTv({ party, host, mirror }: { party: PublicSession; host: boolean; mirror: boolean }) {
   const { query, refresh } = useLive()
   // The TV sends each live game's timer sync 250 ms after its wake_at (4.5, 5.10).
   useWakeSync({ delayMs: 250 })
+  // It runs all evening: no dimming or sleep while it shows.
+  useScreenWakeLock()
+  // In a host's own browser, the control room shows "TV open in this browser".
+  useAnnounceTvTab(party.join_code, host)
 
   const pair = useCallback(
     async (code: string) => {
@@ -84,7 +92,7 @@ function PairedTv({ party, hostPreview }: { party: PublicSession; hostPreview: b
     <QueryGate query={query} notFound={<TvNotFound joinCode={party.join_code} />}>
       {(snapshot) =>
         snapshot.member && snapshot.session ? (
-          <TvScreen hostPreview={hostPreview} />
+          <TvScreen hostPreview={host && !mirror} />
         ) : (
           // Unpaired by the host, the next read says member: false and the TV comes back here by itself.
           <PairingScreen partyName={party.name} onPair={pair} />

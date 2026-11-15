@@ -2862,7 +2862,15 @@ even with devtools: it reads exactly what a guest reads.
    (its next read says `member: false`).
 4. A host's own browser skips pairing (`member` is true through `is_host()`)
    and shows a small "Host preview" label in the corner. At the party, the TV
-   laptop is never signed in as the host.
+   laptop is never signed in as the host. **Changed after the switch-over (15
+   Nov):** when no second device can be paired, the host page's Show the TV
+   here opens `/tv/{join code}?mirror=1` in a named tab of the host's browser,
+   without the label. The host casts that tab, or moves it to the TV as a
+   second screen; a whole-screen mirror would show the control room too, so the
+   host then runs the party from a phone. The tab reads only what a guest reads,
+   like any TV, sends the TV's timer syncs, and tells the host page over a
+   `BroadcastChannel` (same browser only) that it is open. Every TV page also
+   holds a screen wake lock while it shows, so the laptop never dims.
 5. In dev builds, `?fixture=<scene>` renders a fixture instead (5.11).
 
 **Layout** at 1920 by 1080 (and 1440 by 900 with the `short` variant):
@@ -2962,11 +2970,14 @@ animation, fades only.
    - Show the recap on the TV, or Back to the party (`setTvScene`), once a
      recap is published.
    - The screens line: "1 TV paired" (`snapshot.screens`) with Unpair
-     (`unpairScreens`, with a confirm), or "No TV paired yet" with Pair a TV.
+     (`unpairScreens`, with a confirm), "TV open in this browser" while a Show
+     the TV here tab is open (7.2), or "No TV paired yet" with Pair a TV.
    - **Pair a TV** (`issueScreenCode`): a dialog with "On the TV laptop, open
      {origin}/tv/{join code} and type this code", the code in large type, and
-     the time left. It closes by itself when `screens` goes up. Preview the TV
-     opens the same route in a new tab of this browser (Host preview).
+     the time left. It closes by itself when `screens` goes up. Show the TV
+     here (also beside Pair a TV) opens the same route with `?mirror=1` in a
+     named tab of this browser (7.2). A start in the background says so in a
+     toast with Show on the TV.
 3. **Live games**: one card per live game, newest first: title, type icon,
    Live and "On the TV" badges, the module's `HostView` (fed `state`, `config`,
    `tallies`, `gamePoints`, `act`), Show on the TV (when it isn't), and End

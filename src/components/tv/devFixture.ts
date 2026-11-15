@@ -63,7 +63,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
     paired: resize(fixtureSnapshot('lobby', 'tv'), size !== null && Number.isInteger(size) && size > 0 ? size : 12),
     partyName: 'Birthday party',
     recap: scene === 'recap' ? fixtureRecapDoc() : undefined,
-    hostPreview: search.get('host') === '1',
+    hostPreview: search.get('host') === '1' && !search.has('mirror'),
   }
 }
 

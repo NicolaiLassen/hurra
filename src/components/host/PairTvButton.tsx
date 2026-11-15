@@ -1,6 +1,7 @@
 import { ArrowSquareOutIcon, CopyIcon, TelevisionSimpleIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useState, type ComponentProps } from 'react'
 import IssuedCodeView from '@/components/host/IssuedCodeView'
+import { tvTabWindow } from '@/lib/tvTab'
 import { useIssuedCode } from '@/components/host/useIssuedCode'
 import { Button } from '@/components/ui/button'
 import {
@@ -102,10 +103,14 @@ function PairTv({
         </Button>
       </div>
       <IssuedCodeView code={code} className="py-2" />
+      <p className="text-sm text-muted-foreground">
+        No second device? Show the TV here instead, in a new tab, and cast that tab or move it to the TV as a second screen.
+        If you mirror your whole screen, run the party from your phone: everything on this screen shows on the TV.
+      </p>
       <DialogFooter>
         <Button asChild variant="outline" size="lg">
-          <a href={`/tv/${joinCode}`} target="_blank" rel="noreferrer">
-            Preview the TV
+          <a href={`/tv/${joinCode}?mirror=1`} target={tvTabWindow(joinCode)}>
+            Show the TV here
             <ArrowSquareOutIcon />
           </a>
         </Button>

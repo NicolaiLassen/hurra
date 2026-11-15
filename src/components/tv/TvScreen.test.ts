@@ -68,6 +68,12 @@ describe('the TV scene for each fixture', () => {
     await expect(html('fixture=lobby&host=1')).resolves.toContain('Host preview')
   })
 
+  it('hides the preview label in the tab Show the TV here opens, since that tab is the TV', async () => {
+    const page = await html('fixture=lobby&host=1&mirror=1')
+    expect(page).not.toContain('Host preview')
+    expect(page).toContain('Join the game')
+  })
+
   it('keeps the join card to an open party with guests', async () => {
     await expect(html('fixture=lobby')).resolves.toContain('Join the game')
     await expect(html('fixture=archived')).resolves.not.toContain('Join the game')

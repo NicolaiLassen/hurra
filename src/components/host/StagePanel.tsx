@@ -19,6 +19,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { getGameModule } from '@/games/registry'
 import { setSpotlight, setTvScene, unpairScreens } from '@/lib/queries'
 import { tvScene, type TvScene } from '@/lib/stage'
+import { tvTabWindow, useTvTabOpen } from '@/lib/tvTab'
 import type { Snapshot } from '@/lib/types'
 import { useServerNow } from '@/lib/useLive'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
   const call = useHostCall()
   const [pending, setPending] = useState<string | null>(null)
   const screens = snapshot.screens ?? 0
+  // A TV shown in a tab of this browser (Show the TV here), for when no second device can be paired.
+  const tvTab = useTvTabOpen(session.join_code)
 
   async function run(id: string, request: () => Promise<unknown>, success?: string) {
     if (pending) return
@@ -106,13 +109,17 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <span className={cn('size-2 rounded-full', screens > 0 ? 'bg-confetti-teal' : 'bg-muted-foreground')} aria-hidden />
-            {screensLine(snapshot.screens)}
+            <span className={cn('size-2 rounded-full', screens > 0 || tvTab ? 'bg-confetti-teal' : 'bg-muted-foreground')} aria-hidden />
+            {screensLine(snapshot.screens, tvTab)}
           </p>
           <div className="ml-auto flex flex-wrap items-center gap-1">
             <Button asChild variant="ghost">
-              <a href={`/tv/${session.join_code}`} target="_blank" rel="noreferrer">
-                Preview the TV
+              <a
+                href={`/tv/${session.join_code}?mirror=1`}
+                target={tvTabWindow(session.join_code)}
+                title="Opens the TV in a new tab of this browser: cast that tab, or move it to the TV as a second screen"
+              >
+                Show the TV here
                 <ArrowSquareOutIcon />
               </a>
             </Button>
