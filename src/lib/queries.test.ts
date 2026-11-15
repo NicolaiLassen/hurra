@@ -30,6 +30,8 @@ const db = vi.hoisted(() => {
     rpcs: [] as { name: string; args: Record<string, unknown> }[],
     respond: empty as Respond,
     respondRpc: empty as RespondRpc,
+    session: { user: { id: 'user-1' }, access_token: 'token' } as { user: { id: string }; access_token: string } | null,
+    signOuts: 0,
   }
   const builder = (call: Call): unknown =>
     new Proxy(
@@ -58,7 +60,18 @@ const db = vi.hoisted(() => {
       const result = state.respondRpc(name, args)
       return Object.assign(Promise.resolve(result), { abortSignal: () => Promise.resolve(result) })
     },
-    auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' }, access_token: 'token' } }, error: null }) },
+    auth: {
+      getSession: async () => ({ data: { session: state.session }, error: null }),
+      signOut: async () => {
+        state.signOuts++
+        state.session = null
+        return { error: null }
+      },
+      signInAnonymously: async () => {
+        state.session = { user: { id: 'user-2' }, access_token: 'token-2' }
+        return { data: { user: state.session.user, session: state.session }, error: null }
+      },
+    },
   }
   return { state, client }
 })
@@ -73,6 +86,8 @@ const ok = (data: unknown): Result => ({ data, error: null, status: 200 })
 beforeEach(() => {
   db.state.calls = []
   db.state.rpcs = []
+  db.state.session = { user: { id: 'user-1' }, access_token: 'token' }
+  db.state.signOuts = 0
   db.state.respond = () => ok(null)
   db.state.respondRpc = () => ok(null)
 })
@@ -118,6 +133,28 @@ describe('joining', () => {
     expect(db.state.rpcs).toEqual([{ name: 'join_session', args: { p_join_code: 'PARTY', p_name: 'Ana' } }])
     expect(error).toBeInstanceOf(GameCallError)
     expect([error.status, error.code, error.message]).toEqual([409, 'name_taken', 'Someone already joined as "Ana". Try another name.'])
+  })
+
+  it('heals a sign-in whose account was deleted: signs in afresh and joins once more', async () => {
+    const goneError = {
+      message: 'insert or update on table "players" violates foreign key constraint "players_user_id_fkey"',
+      details: 'Key (user_id)=(x) is not present in table "users".',
+      code: '23503',
+    }
+    const player = { id: PLAYER, session_id: SESSION, user_id: 'user-2', name: 'Ana', code: 'ABCDE', profile: {}, created_at: '2026-11-28T20:00:00Z' }
+    db.state.respondRpc = () => (db.state.session?.user.id === 'user-1' ? { data: null, error: goneError, status: 409 } : ok(player))
+    await expect(joinSession('party', 'Ana')).resolves.toEqual(player)
+    expect(db.state.rpcs).toHaveLength(2)
+    expect(db.state.signOuts).toBe(1)
+  })
+
+  it('shows a raw database error as plain words, keeping its code', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    db.state.respondRpc = () => ({ data: null, error: { message: 'new row violates check constraint "players_name_check"', code: '23514' }, status: 400 })
+    const error = (await joinSession('PARTY', 'Ana').catch((e: unknown) => e)) as GameCallError
+    expect([error.message, error.code]).toEqual(['Something went wrong. Try again.', '23514'])
+    expect(db.state.rpcs).toHaveLength(1)
+    expect(db.state.signOuts).toBe(0)
   })
 
   it('joinSession does not retry when the network fails either', async () => {

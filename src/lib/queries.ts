@@ -7,7 +7,7 @@
 // SQLSTATE of a table error, and whose `status` is the HTTP status (0 when the
 // server never answered).
 import { useCallback } from 'react'
-import { ensureSignedIn } from '@/lib/auth'
+import { ensureSignedIn, renewSignIn } from '@/lib/auth'
 import { createGameApi, GameCallError, type EngineRequest, type EngineResponse } from '@/lib/gameApi'
 import type { RawRecap, RecapDoc } from '@/lib/recap'
 import { supabase } from '@/lib/supabase'
@@ -34,11 +34,32 @@ const SCREEN_CODE_MS = 15 * 60_000
 
 type DbError = { message: string; details?: string | null; code?: string | null }
 
-/** A PostgREST error as a GameCallError: custom PT4xx refusals carry their code in DETAIL. */
+/**
+ * A PostgREST error as a GameCallError: custom PT4xx refusals carry their code in
+ * DETAIL and their words for the screen. Any other database error (a SQLSTATE such
+ * as 23503) keeps its code for the callers, but its words go to the console only.
+ */
 function failure(error: DbError, status: number): GameCallError {
   if (status === 0) return new GameCallError("Couldn't reach the party. Check your connection and try again.", 0, 'unavailable')
-  const code = /^PT\d{3}$/.test(error.code ?? '') ? (error.details ?? '') : (error.code ?? '')
+  const custom = /^PT\d{3}$/.test(error.code ?? '')
+  const code = custom ? (error.details ?? '') : (error.code ?? '')
+  if (!custom && /^[0-9A-Z]{5}$/.test(code)) {
+    console.warn('Database error', code, error.message)
+    return new GameCallError('Something went wrong. Try again.', status, code)
+  }
   return new GameCallError(error.message || `The party answered ${status}`, status, code)
+}
+
+/** The signed-in account no longer exists: writing its user id hits a foreign key to auth.users. */
+const accountGone = (error: DbError | null) => error?.code === '23503' && /_user_id_fkey/.test(error.message)
+
+/** A call that writes this account's user id; if the account is gone, signs in afresh and tries once more. */
+async function asThisAccount<T>(call: () => PromiseLike<{ data: unknown; error: DbError | null; status: number }>): Promise<T> {
+  await ensureSignedIn()
+  const result = await call()
+  if (!accountGone(result.error)) return unwrap<T>(result)
+  await renewSignIn()
+  return unwrap<T>(await call())
 }
 
 function unwrap<T>({ data, error, status }: { data: unknown; error: DbError | null; status: number }): T {
@@ -104,21 +125,18 @@ export async function loadMembership(joinCode: string): Promise<Membership | nul
  * from the sign-in (5.9). Refusals carry their code: 'closed', 'archived',
  * 'name_taken', 'bad_name', 'not_found'.
  */
-export async function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
-  await ensureSignedIn()
-  return unwrap<PlayerRow>(await supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() }))
+export function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
+  return asThisAccount(() => supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() }))
 }
 
 /** Moves a player to this phone with the code the host showed ('bad_code', 'already_player'). */
-export async function claimPlayer(code: string): Promise<PlayerRow> {
-  await ensureSignedIn()
-  return unwrap<PlayerRow>(await supabase.rpc('claim_player', { p_code: normalCode(code) }))
+export function claimPlayer(code: string): Promise<PlayerRow> {
+  return asThisAccount(() => supabase.rpc('claim_player', { p_code: normalCode(code) }))
 }
 
 /** claim_screen: pairs this browser as a TV of the party. Returns the party's id. */
-export async function claimScreen(code: string): Promise<string> {
-  await ensureSignedIn()
-  return unwrap<string>(await supabase.rpc('claim_screen', { p_code: normalCode(code) }))
+export function claimScreen(code: string): Promise<string> {
+  return asThisAccount(() => supabase.rpc('claim_screen', { p_code: normalCode(code) }))
 }
 
 /** A player by their code, with their party. Null for an unknown code, or one from a party this user isn't in. */

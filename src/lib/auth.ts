@@ -40,6 +40,18 @@ export function ensureSignedIn(options: { onBusy?: () => void } = {}): Promise<U
   return pending.promise
 }
 
+/**
+ * This browser's sign-in points at an account that no longer exists: the party's
+ * data was cleared while the phone kept its token, which stays valid for up to an
+ * hour. Forget it here (no server call: the account is gone) and sign in afresh.
+ * Only on that proof, never on a failed refresh, which would orphan a guest's
+ * player and points (see signIn).
+ */
+export async function renewSignIn(): Promise<User> {
+  await supabase.auth.signOut({ scope: 'local' })
+  return ensureSignedIn()
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /** HTTP 429 from Auth: the anonymous sign-in's rate limit. */
