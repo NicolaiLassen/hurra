@@ -19,3 +19,12 @@
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# Sounds keep their names, so unlike /assets they can't be cached forever. A
+# day fresh, then a week of playing the cached copy while the browser checks
+# for a new one in the background, so a reload never waits on the network for
+# its sounds. The app then decodes them into memory, as before.
+[[headers]]
+  for = "/sounds/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
