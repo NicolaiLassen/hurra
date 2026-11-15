@@ -10,7 +10,9 @@ import Play from '@/pages/Play'
 import PlayerCard from '@/pages/PlayerCard'
 
 // The guests' pages come with the app. The host's pages load on demand, so 45
-// phones never download the control room, the settings editors or the recap.
+// phones never download the control room's panels or the recap page. The
+// games' own host views and settings editors still come with the app, because
+// the registry (src/games/registry.ts) imports every game module up front.
 const hostHome = async () => ({ Component: (await import('@/pages/host/HostHome')).default })
 const hostLogin = async () => ({ Component: (await import('@/pages/host/HostLogin')).default })
 const hostSession = async () => ({ Component: (await import('@/pages/host/HostSession')).default })
