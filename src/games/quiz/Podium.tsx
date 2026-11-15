@@ -66,7 +66,7 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
         initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.5, rotate: -6 }}
         animate={{ opacity: 1, scale: 1, rotate: -3 }}
         transition={{ type: 'spring', stiffness: 300, damping: 14 }}
-        className="text-9xl font-black tracking-tight text-primary drop-shadow-[0_0_40px_rgb(245_197_66/0.45)] short:text-8xl"
+        className="text-9xl font-black tracking-tight text-primary [text-shadow:0_0_40px_rgb(245_197_66/0.45)] short:text-8xl"
       >
         Hurra!
       </motion.p>

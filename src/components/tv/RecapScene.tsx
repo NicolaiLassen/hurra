@@ -389,7 +389,7 @@ function PodiumSlide({ doc }: { doc: RecapDoc }) {
           initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotate: -4 }}
           animate={{ opacity: 1, scale: 1, rotate: -2 }}
           transition={reduce ? { duration: 0.4 } : { type: 'spring', stiffness: 280, damping: 14 }}
-          className="mt-3 text-8xl font-black tracking-tight text-balance text-primary drop-shadow-[0_0_40px_rgb(245_197_66/0.4)] short:text-7xl"
+          className="mt-3 text-8xl font-black tracking-tight text-balance text-primary [text-shadow:0_0_40px_rgb(245_197_66/0.4)] short:text-7xl"
         >
           Hurra for {listNames(winners)}!
         </motion.h2>
