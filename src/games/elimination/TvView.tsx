@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
 import type { EliminationGame, EliminationPublicState, PublicKnockout } from '@/games/elimination/logic'
-import { nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
+import { knockoutLine, nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
 import SurvivorMeter from '@/games/elimination/SurvivorMeter'
 import type { TvViewProps } from '@/games/types'
 import { fitGrid } from '@/lib/fitGrid'
@@ -89,7 +89,7 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
                 >
                   <MethodIcon method={k.method} className="mt-1 size-6 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-lg font-semibold">{describe(k, nameOf)}</p>
+                    <p className="text-lg font-semibold">{knockoutLine(k, nameOf)}</p>
                     {k.task && <p className="truncate text-muted-foreground">“{k.task}”</p>}
                   </div>
                 </motion.li>
@@ -223,10 +223,6 @@ function PlayerTiles({
       )}
     </div>
   )
-}
-
-function describe(k: PublicKnockout, nameOf: (id: string) => string) {
-  return k.method === 'catch' ? `${nameOf(k.by)} caught ${nameOf(k.target)}` : `${nameOf(k.by)} got ${nameOf(k.target)}`
 }
 
 function MethodIcon({ method, className }: { method: PublicKnockout['method']; className?: string }) {

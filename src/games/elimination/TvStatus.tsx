@@ -2,7 +2,7 @@ import { CrownIcon, DetectiveIcon, SwordIcon } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import type { EliminationGame, PublicKnockout } from '@/games/elimination/logic'
-import { nameFrom, roundRoster, timeAgo, topHunters } from '@/games/elimination/roster'
+import { knockoutLine, nameFrom, roundRoster, timeAgo, topHunters } from '@/games/elimination/roster'
 import SurvivorMeter from '@/games/elimination/SurvivorMeter'
 import type { TvStatusProps } from '@/games/types'
 
@@ -66,7 +66,7 @@ function Status({
             className="flex min-w-0 items-center gap-2.5 animate-in duration-500 fade-in slide-in-from-right-4 motion-reduce:animate-none"
           >
             <MethodIcon method={latest.method} />
-            <span className="min-w-0 flex-1 truncate text-lg font-semibold">{describe(latest, nameOf)}</span>
+            <span className="min-w-0 flex-1 truncate text-lg font-semibold">{knockoutLine(latest, nameOf)}</span>
             <span className="shrink-0 text-sm text-muted-foreground">{timeAgo(latest.at, now)}</span>
           </p>
         </div>
@@ -75,10 +75,6 @@ function Status({
       )}
     </>
   )
-}
-
-function describe(k: PublicKnockout, nameOf: (id: string) => string) {
-  return k.method === 'catch' ? `${nameOf(k.by)} caught ${nameOf(k.target)}` : `${nameOf(k.by)} got ${nameOf(k.target)}`
 }
 
 function MethodIcon({ method }: { method: PublicKnockout['method'] }) {

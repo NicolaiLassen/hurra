@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { listNames, type EliminationPublicState } from '@/games/elimination/logic'
-import { nameFrom, roundRoster, timeAgo, topHunters } from '@/games/elimination/roster'
+import { knockoutLine, nameFrom, roundRoster, timeAgo, topHunters } from '@/games/elimination/roster'
 import type { Player } from '@/lib/types'
 
 const player = (id: string): Player => ({ id, name: id.toUpperCase(), code: id.toUpperCase(), profile: {}, created_at: 0 })
@@ -37,6 +37,13 @@ describe('what every screen counts', () => {
     const nameOf = nameFrom([player('ana')])
     expect(nameOf('ana')).toBe('ANA')
     expect(nameOf('gone')).toBe('Someone')
+  })
+
+  it('tells a knockout in words', () => {
+    const nameOf = nameFrom([player('ana'), player('bo')])
+    expect(knockoutLine({ by: 'bo', target: 'ana', method: 'tag', task: null, at: 0 }, nameOf)).toBe('BO got ANA')
+    expect(knockoutLine({ by: 'bo', target: 'ana', method: 'catch', task: 'sing', at: 0 }, nameOf)).toBe('BO caught ANA')
+    expect(knockoutLine({ by: 'gone', target: 'ana', method: 'tag', task: null, at: 0 }, nameOf)).toBe('Someone got ANA')
   })
 
   it('says how long ago something happened', () => {

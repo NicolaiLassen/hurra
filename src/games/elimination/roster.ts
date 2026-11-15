@@ -1,4 +1,4 @@
-import type { EliminationPublicState } from '@/games/elimination/logic'
+import type { EliminationPublicState, PublicKnockout } from '@/games/elimination/logic'
 import type { Player } from '@/lib/types'
 
 /**
@@ -18,6 +18,11 @@ export function roundRoster(players: readonly Player[], publicState: Elimination
 /** A player's name, or "Someone" for a player who has left the party. */
 export function nameFrom(players: readonly Player[]) {
   return (id: string) => players.find((p) => p.id === id)?.name ?? 'Someone'
+}
+
+/** A knockout in words, for the TV board and its rail card: "Bo got Ana" or "Bo caught Ana". */
+export function knockoutLine(k: PublicKnockout, nameOf: (id: string) => string): string {
+  return k.method === 'catch' ? `${nameOf(k.by)} caught ${nameOf(k.target)}` : `${nameOf(k.by)} got ${nameOf(k.target)}`
 }
 
 /**
