@@ -64,6 +64,16 @@ export function screensLine(screens: number | null, tabOpen = false): string {
   return `${count} TV${count === 1 ? '' : 's'} paired`
 }
 
+/** A step of the TV's sound effects volume: "Off", "25%", "100%". */
+export function soundVolumeLabel(volume: number): string {
+  return volume <= 0 ? 'Off' : `${volume}%`
+}
+
+/** The toast after the host changes it: "TV sound effects at 50%", or "TV sound effects off". */
+export function soundVolumeToast(volume: number): string {
+  return volume <= 0 ? 'TV sound effects off' : `TV sound effects at ${volume}%`
+}
+
 export type StartChoice = { stage: boolean; label: string }
 
 /** The split button's two sides: the default follows the game's presentation ('stage' when it says nothing). */

@@ -190,6 +190,22 @@ from scratch. It replaces all six existing migration files, which are deleted.
 The main engineer wipes production and rebuilds it from this file (section 11),
 so there is no data migration.
 
+**Changed after the switch-over (15 Nov):** production now runs this file, so
+later changes come as small additive migrations beside it, each by the rules
+of 2.1: its own exact grants, and a copy of the self-checks (2.12) as its last
+statement. They are:
+
+- `20261115230000_tv_sound_volume.sql`: the TV's sound effects volume,
+  `sessions.sound_volume` (2.4, 7.2, 7.3). It adds the column, states the
+  party's grants again with the column in the update grant (2.5), replaces
+  `log_session_change` and the `sessions_logged_update` trigger so a change
+  is logged and pings the room (2.9), replaces `session_snapshot` with the one
+  key added (2.7), and ends with the self-checks plus one new check on the
+  party's column grants. It sets `lock_timeout` to 10 s, so on a live party
+  it gives up rather than queue every screen's read behind a long transaction.
+  Apply it before deploying the app that uses it: until it is applied, that
+  app plays the TV at 100% and its volume steps in the control room fail.
+
 ### 2.1 Rules for the file
 
 - **Privileges.** This project's default privileges grant anon and
@@ -322,6 +338,9 @@ create table public.sessions (
   -- Set by a trigger whenever spotlight_game_id changes (database clock).
   spotlight_at timestamptz,
   tv_scene text not null default 'live' check (tv_scene in ('live', 'recap')),
+  -- How loud TV screens play the sound effects, in percent: 0 is off (7.2).
+  -- Added after the switch-over by 20261115230000_tv_sound_volume.sql.
+  sound_volume smallint not null default 100 check (sound_volume between 0 and 100),
   archived_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -533,7 +552,7 @@ rows are `uuid[]` and refuses the policy (`operator does not exist: uuid = uuid[
 | Table | Grants to authenticated | Policies |
 | --- | --- | --- |
 | `hosts` | none | none (read only through `is_host()`) |
-| `sessions` | `select, delete`; `insert (name, join_code)`; `update (name, status, archived_at, spotlight_game_id, tv_scene)` | select: host or `id = any (my_session_ids())`. insert, update, delete: host. |
+| `sessions` | `select, delete`; `insert (name, join_code)`; `update (name, status, archived_at, spotlight_game_id, tv_scene, sound_volume)` | select: host or `id = any (my_session_ids())`. insert, update, delete: host. (`sound_volume` since `20261115230000_tv_sound_volume.sql`.) |
 | `players` | `select, delete`; `update (name)` | select: host or member. update, delete: host. Inserts only through `join_session`. |
 | `session_games` | `select, delete`; `insert (session_id, game_type, title, position)`; `update (title, position, archived_at)` | select: host or member. insert, update, delete: host. |
 | `game_settings` | `select, insert, update, delete` | all: host. |
@@ -680,7 +699,7 @@ phones never parse timestamps. Returns:
   "member": true,                         // is_host(), a player of this party or a paired screen
   "exists": true,                         // session_exists(p_session_id)
   "session": { "id", "name", "join_code", "status", "data", "spotlight_game_id",
-               "spotlight_at", "tv_scene", "archived_at", "created_at" } ,  // null if not readable
+               "spotlight_at", "tv_scene", "sound_volume", "archived_at", "created_at" } ,  // null if not readable
   "games": [ { "id", "game_type", "title", "position", "status",
                "public_state",            // "shown games" only, else null (below)
                "started_at", "finished_at", "finished_by", "winners", "wake_at",
@@ -727,6 +746,11 @@ executable by authenticated) looks for a `player.moved` row whose `data` holds
 the caller as `from_user`, which the `players` trigger now writes. So an old
 phone that slept through its `moved` ping still shows "Your player moved to
 another phone" when it wakes, not "You're no longer in X" (5.4, 7.1).
+
+**Changed after the switch-over (15 Nov):** the session also carries
+`sound_volume` (0 to 100), the TV's sound effects volume (7.2), added by
+`20261115230000_tv_sound_volume.sql`, which replaces the function with its
+whole body plus that one key. Every screen gets it; only the TV uses it.
 
 **`session_recap(p_session_id uuid) returns jsonb`**, stable, plpgsql,
 invoker. Hosts only: anyone else gets `PT403` "Only hosts can read this". The
@@ -956,7 +980,7 @@ one save sort together.
 | --- | --- | --- |
 | `sessions` | `before update of spotlight_game_id` | `touch_spotlight()`: sets `spotlight_at = now()` when the value changes. Runs for the engine too. |
 | `sessions` | `after insert` | Logs `session.created`. No ping. |
-| `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`. Pings room. |
+| `sessions` | `after update of name, status, archived_at, spotlight_game_id, tv_scene, sound_volume` | Logs `session.renamed`, `session.opened` or `session.closed`, `session.archived` or `session.unarchived`, `stage.changed` (actor host), `session.tv_scene`, `session.sound_volume`. Pings room, so a TV hears a new volume at once. (`sound_volume` since `20261115230000_tv_sound_volume.sql`, which replaces the trigger and `log_session_change`.) |
 | `sessions` | `after delete` | `ping('room:' \|\| id, 'changed', { session, deleted: true })`, so open screens learn the party is gone. |
 | `players` | `before insert or update of name` | **Added during review.** Stores the name clean (`clean_name`, 2.3), whoever writes it. |
 | `players` | `after insert` | Logs `player.joined` (`data.name`). Pings stage (the TV and host page; phones see the newcomer at the next room ping or poll, which is every 10 s in the lobby, 5.4). |
@@ -1071,6 +1095,10 @@ migration) when:
   `game_submissions`;
 - authenticated can insert or update any column listed as never in a client
   grant (2.5), checked one by one with `has_column_privilege`;
+- (**added by `20261115230000_tv_sound_volume.sql`**) authenticated's insert
+  and update grants on `sessions` differ from 2.5 in either direction:
+  every column is checked, so `sound_volume` must be updatable, and no other
+  column may be;
 - service_role can't execute `game_load`, `game_commit`, `ping`,
   `ping_session` or `ping_player` (the engine needs them);
 - service_role lacks what the engine uses: select on every table and view in
@@ -1131,7 +1159,7 @@ so no password ever sits in the repo.
 | `stage.changed` | game_commit or trigger | game or host | `{ game_id, title, reason }` |
 | `prompt.answered` | submit_answer (the claim) | player | `{ key, answer, ms, round }` |
 | `prompt.closed` | game_load | host (Reveal now and other closes a host action names) or timer (a deadline) | `{ key, round, closed_at }`: one row per prompt game_load closes; no `request_id` |
-| `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene` | triggers; `session.tv_scene` also game_commit, when a start takes the stage from the recap (`reason: 'start'`) | host or system | the changed values |
+| `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene`, `session.sound_volume` | triggers; `session.tv_scene` also game_commit, when a start takes the stage from the recap (`reason: 'start'`) | host or system | the changed values; `session.sound_volume` is `{ from, sound_volume }` |
 | `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }`; `player.moved` also `from_user` (the old phone's user, hosts only like every log row) |
 | `points.awarded`, `points.undone` | trigger (host awards only) | host | `{ player_id, points, reason, game_id, score_event_id }` |
 | `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted`, `game.settings_changed` | triggers | host | `{ title, game_type }` |
@@ -1997,7 +2025,10 @@ browser-only events (visibility, online) through its `environment` option.
 UI-only helpers stay as they are and no package edits them: `announcement.tsx`,
 `callout.ts`, `fitGrid.ts`, `format.ts`, `loader.ts`, `sound.ts`,
 `soundPolicy.ts`, `toast.tsx`, `useElementSize.ts`, `utils.ts`, `urls.ts`,
-`storage.ts`.
+`storage.ts`. **Changed after the switch-over (15 Nov):** `soundVolume.ts`
+holds the TV's sound effects volume as pure functions (the steps, a stored
+value read safely, the gain for a percentage), and `sound.ts` gains
+`setEffectsVolume` and `previewEffectsVolume` (7.2).
 
 ### 5.2 types.ts
 
@@ -2009,6 +2040,8 @@ export type GameStatus = 'pending' | 'active' | 'finished'
 export type Session = {
   id: string; name: string; join_code: string; status: 'open' | 'closed'; data: GameData
   spotlight_game_id: string | null; spotlight_at: number | null; tv_scene: 'live' | 'recap'
+  /** How loud TV screens play the sound effects, 0 (off) to 100. Added after the switch-over. */
+  sound_volume: number
   archived_at: number | null; created_at: number
 }
 /** What session_by_code returns to someone who isn't in the party yet. */
@@ -2204,7 +2237,8 @@ How it behaves:
   ping arrived since that read, and none arrives within 3 s, `pings` becomes
   `'unhealthy'` (the live dot turns grey, 5 s polling starts) until the next
   ping. The fingerprint holds only what changes with a ping this screen hears:
-  - phones: the session's name, status, spotlight, `tv_scene` and
+  - phones: the session's name, status, spotlight, `tv_scene`,
+    `sound_volume` (its change pings the room too) and
     `archived_at`; for each active or finished game its status,
     `finished_at`, `archived_at` and `wake_at`, plus `public_state` while it
     is active; each prompt's key, `closed_at` and `revealed_at`; the newest feed id;
@@ -2352,6 +2386,8 @@ export async function archiveSession(sessionId: string, archived: boolean): Prom
 export async function deleteSession(sessionId: string): Promise<void>
 export async function setSpotlight(sessionId: string, gameId: string | null): Promise<void>
 export async function setTvScene(sessionId: string, scene: 'live' | 'recap'): Promise<void>
+/** The TV's sound effects volume, a whole number from 0 (off) to 100; else 'bad_volume'. Added after the switch-over. */
+export async function setSoundVolume(sessionId: string, volume: number): Promise<void>
 export async function addGame(sessionId: string, gameType: string, title: string, position: number): Promise<{ id: string }>
 export async function renameGame(gameId: string, title: string): Promise<void>
 export async function moveGame(gameId: string, position: number): Promise<void>
@@ -2932,6 +2968,22 @@ even with devtools: it reads exactly what a guest reads.
 **Timers.** `useWakeSync({ delayMs: 250 })` (5.10, 4.5): the TV's sync for
 each live game at `wake_at + 250 ms`, with the shared rate limit and backoff.
 
+**Sound effects volume.** **Changed after the switch-over (15 Nov):** the TV
+plays its sounds at the party's `sound_volume` (0 to 100, which the host sets
+in the control room, 7.3), so a computer that plays the party music as well
+can keep Hurra's sounds under the music. `useEffectsVolume` in `TvScreen`
+applies it when the TV opens and on every change, in a layout effect, so
+before any sound of that render starts. `setEffectsVolume` moves the master
+gain to 0.8 times `(volume / 100)^(5/3)` over 0.15 s, never in a jump: 50% is
+10 dB down and sounds about half as loud, 25% is 20 dB down, and at 0 no sound
+starts at all. A change while the TV shows plays one coin (1 s, about as loud
+as most effects) once the gain has reached the new level, so the host hears
+it in the room; the level the TV opens with plays nothing, and changes close
+together play it once. Every TV screen follows it: paired TVs, the host's
+preview and a Show the TV here tab. Phones never do: they keep the device's
+volume and their own sound toggle, and leaving the TV page puts the volume
+back to 100. A snapshot without the key plays at 100.
+
 **Recap scene** (`tv_scene 'recap'`): slides that advance every 8 s and loop,
 from the published `RecapDoc`: (1) "{party}: the night in numbers", (2) the
 race: an animated bar race of the top 8 over the night, about 12 s,
@@ -2995,6 +3047,14 @@ animation, fades only.
      here (also beside Pair a TV) opens the same route with `?mirror=1` in a
      named tab of this browser (7.2). A start in the background says so in a
      toast with Show on the TV.
+   - **TV sound effects** (**changed after the switch-over, 15 Nov**), under
+     the screens line: Off, 25%, 50%, 75% and 100%, the party's current step
+     in gold (`setSoundVolume`), with "Keep them under the party music. Phones
+     keep their own volume." Only TV screens follow it (7.2). A change says
+     so in a toast, "TV sound effects at 50%" or "TV sound effects off", plus
+     "The TV plays a short sound at this level." while a TV is paired or open
+     in this browser. A value set some other way shows as its percentage,
+     with no step pressed.
 3. **Live games**: one card per live game, newest first: title, type icon,
    Live and "On the TV" badges, the module's `HostView` (fed `state`, `config`,
    `tallies`, `gamePoints`, `act`), Show on the TV (when it isn't), and End
@@ -3074,7 +3134,7 @@ game if live, else the newest live game. New: Move to a new phone.
 - The recap page's chart is a step line of the top 8 with a legend, a
   crosshair readout on pointer or arrow keys, and a table view. It says when
   more has happened since the last publish, ignoring its own publish and TV
-  switches.
+  switches (and, since 15 Nov, the TV's sound volume).
 - The router loads the host pages on demand (React Router `lazy`), with the
   loader as `hydrateFallbackElement`. Dev builds: `/host/s/<id>?fixture=<scene>`
   and `/host/s/<id>/recap?fixture=<scene>` render fixtures.
@@ -3554,6 +3614,15 @@ prints one by one on the TV. A point per right person.
 | GAME-fusion | `setKey` rules; lock closes every picture; a second lock and a second reveal of the same n are skipped; people in a picture don't score on it; points per right person; reveal before lock refused; finish (nobody when nobody scored); the recap names no unrevealed picture's people; the contract; the bot playing a round through `simulateParty`. |
 | PHONE, TV, HOST | Unit tests for any pure helper they add. Screens are checked against the fixtures (5.11) and then on the local stack; TV also runs the fit checks in 10.4. |
 
+**Changed after the switch-over (15 Nov):** the TV's sound effects volume has
+`soundVolume.test.ts` (the volume mapping: whole percentages, 50% 10 dB down,
+anything else read as 100), `sound.test.ts` (against a stand-in for Web Audio:
+the master gain starts at a volume set before unlocking, ramps to a new one,
+reaches 0, starts nothing at 0, and a preview plays one coin after the ramp),
+`TvSoundControl.test.ts` (the steps with the party's one pressed, rendered to
+static HTML, also inside the control room), and `setSoundVolume` in
+`queries.test.ts`.
+
 ### 9.2 Integration tests (`npm run test:integration`, local stack)
 
 All in `netlify/lib/` (CORE-DB), through the real `/api/game` handler and real
@@ -3629,7 +3698,13 @@ file's pings. **Changed during build:** an answer is held in flight with
     host can do all four;
   - deleting a whole party with games, prompts, submissions, awards, a
     transfer code, a paired screen and log rows succeeds, leaves no rows
-    behind, writes no log rows for its parts, and sends one `deleted` ping.
+    behind, writes no log rows for its parts, and sends one `deleted` ping;
+  - (**15 Nov**) the TV's sound volume: a new party is at 100 in every
+    screen's snapshot; a host sets it, every screen's snapshot carries it at
+    once, and one `session.sound_volume` row says who changed it from what
+    (the same value again logs nothing); a guest, a TV and an outsider change
+    nothing, anon is refused, a host can't go outside 0 to 100 (`23514`), and
+    nobody sets it when creating a party.
 - **`realtime.integration.test.ts`**: private channels with real tokens. A
   member joins `room:<party>`; an outsider is refused; a guest is refused on
   `stage:`; a paired screen joins `room:` and `stage:` but not a `player:`
@@ -3638,7 +3713,8 @@ file's pings. **Changed during build:** an answer is held in flight with
   save that opens a prompt sends `prompt: true`; an answer sends one `tally`
   to the host; a rolled-back save sends nothing; `moved` reaches the old
   phone; a recap Update (data only) sends a `changed` and a later
-  `published_at`.
+  `published_at`; (**15 Nov**) a host's change of the TV's sound volume sends
+  one `changed` to a paired TV on `room:`, and its next read carries it.
 
 ### 9.3 The end-to-end party test (`npm run rehearse`)
 

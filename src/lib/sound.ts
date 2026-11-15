@@ -1,30 +1,47 @@
 import { useCallback, useEffect, useState } from 'react'
 import { SOUND_NAMES, SOUNDS, type SoundName } from '@/games/core/sounds'
 import { decideSound, type SoundSlot } from '@/lib/soundPolicy'
+import { DEFAULT_SOUND_VOLUME, soundVolumeGain, soundVolumeOf } from '@/lib/soundVolume'
 
 // Plays the sound library (public/sounds/<name>.mp3, generated with ElevenLabs
 // by `npm run sounds`). Browsers keep audio locked until the page is tapped,
 // so the first tap or key press anywhere unlocks it. One sound plays at a time
 // (see soundPolicy.ts), through a master gain and a limiter so nothing clips.
+// On the TV the master gain also follows the party's sound effects volume
+// (setEffectsVolume); phones never set it.
 
 const STORAGE_KEY = 'party:sound'
 // Events that count as a user gesture everywhere. A touch only counts when it
 // ends, so pointerdown alone never unlocks audio on phones.
 const GESTURES = ['pointerup', 'touchend', 'click', 'keydown'] as const
 const GESTURE_OPTIONS: AddEventListenerOptions = { capture: true, passive: true }
+/** The master gain at the full effects volume. */
 const MASTER_GAIN = 0.8
 /** How long a sound that's cut off takes to fade out. */
 const FADE_SECONDS = 0.08
+/** How long the master gain takes to reach a new effects volume: smooth, so a change never clicks. */
+export const VOLUME_RAMP_SECONDS = 0.15
+/**
+ * The short sound a volume change plays on the TV. It is about as loud as most
+ * effects (the knockout's slash, the announcement pop), so the host can judge
+ * the level by it; the toggle's chime is a few dB quieter than they are.
+ */
+export const VOLUME_PREVIEW: SoundName = 'coin'
 let context: AudioContext | null = null
 let output: GainNode | null = null
 let enabled = false
+/** The TV's sound effects volume, 0 to 100 (setEffectsVolume). */
+let effectsVolume = DEFAULT_SOUND_VOLUME
 let pendingSoft: ReturnType<typeof setTimeout> | undefined
+let pendingPreview: ReturnType<typeof setTimeout> | undefined
 /** The sound that started last, with the nodes to fade it out. */
 let current: (SoundSlot & { source: AudioBufferSourceNode; gain: GainNode }) | null = null
 const buffers = new Map<SoundName, Promise<AudioBuffer | null>>()
 const listeners = new Set<() => void>()
 
 const notify = () => listeners.forEach((listener) => listener())
+
+const masterGain = () => MASTER_GAIN * soundVolumeGain(effectsVolume)
 
 function audio() {
   if (!context) {
@@ -39,7 +56,8 @@ function audio() {
     limiter.release.value = 0.25
     limiter.connect(ctx.destination)
     output = ctx.createGain()
-    output.gain.value = MASTER_GAIN
+    // A volume the TV set before audio was unlocked applies from the first sound.
+    output.gain.value = masterGain()
     output.connect(limiter)
     ctx.addEventListener('statechange', () => {
       // Wait for gestures again whenever the browser suspends audio (e.g. iOS after a call).
@@ -129,11 +147,12 @@ export function playSoftSound(name: SoundName, delay = 400) {
 }
 
 async function start(name: SoundName, soft: boolean) {
-  if (!enabled) return
+  // At effects volume 0 nothing starts: off means off, not a silent sound holding the slot.
+  if (!enabled || effectsVolume === 0) return
   const ctx = audio()
   if (ctx.state !== 'running' || !output) return
   const buffer = await load(name)
-  if (!buffer || !enabled) return
+  if (!buffer || !enabled || effectsVolume === 0) return
 
   // Decided after loading, so two sounds requested together still see each other.
   const now = performance.now()
@@ -150,6 +169,35 @@ async function start(name: SoundName, soft: boolean) {
   source.onended = () => gain.disconnect()
   source.start()
   current = { name, priority, soft, startedAt: now, endsAt: now + buffer.duration * 1000, source, gain }
+}
+
+/**
+ * The TV's sound effects volume, 0 to 100: the party's setting, which the host
+ * picks in the control room (docs/engine-v2.md, 7.2). The master gain follows
+ * it smoothly, over VOLUME_RAMP_SECONDS, and at 0 no sound starts. Before audio
+ * is unlocked it is only remembered. Phones never call it, so they stay at 100
+ * and the device's own volume.
+ */
+export function setEffectsVolume(volume: number) {
+  const next = soundVolumeOf(volume)
+  if (next === effectsVolume) return
+  effectsVolume = next
+  if (!context || !output) return
+  const at = context.currentTime
+  const { gain } = output
+  gain.cancelScheduledValues(at)
+  gain.setValueAtTime(gain.value, at)
+  gain.linearRampToValueAtTime(masterGain(), at + VOLUME_RAMP_SECONDS)
+}
+
+/**
+ * Plays VOLUME_PREVIEW once the master gain has reached the effects volume: a
+ * change on the TV, so the host hears the new level in the room. Calls close
+ * together play it once, and nothing plays at 0, while sound is off or locked.
+ */
+export function previewEffectsVolume() {
+  clearTimeout(pendingPreview)
+  pendingPreview = setTimeout(() => void playSound(VOLUME_PREVIEW), VOLUME_RAMP_SECONDS * 1000)
 }
 
 function fadeOut(ctx: AudioContext, sound: NonNullable<typeof current>) {

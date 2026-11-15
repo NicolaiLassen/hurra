@@ -77,6 +77,7 @@ const BASE_SESSION: Session = {
   spotlight_game_id: null,
   spotlight_at: null,
   tv_scene: 'live',
+  sound_volume: 100,
   archived_at: null,
   created_at: FIXTURE_NOW - 3 * 60 * MIN,
 }

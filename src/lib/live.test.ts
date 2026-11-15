@@ -116,6 +116,7 @@ function snapshot(patch: Partial<Snapshot> = {}): Snapshot {
       spotlight_game_id: null,
       spotlight_at: null,
       tv_scene: 'live',
+      sound_volume: 100,
       archived_at: null,
       created_at: START - 3_600_000,
     },
@@ -751,6 +752,8 @@ describe('ping health', () => {
       { feed: [{ id: 9, game_id: GAME, message: 'Hi', detail: null, audience: null, sound: null, icon: null, tone: null, interrupt: false, created_at: START }] },
       { recap: { published_at: START } },
       { session: { ...base.session!, spotlight_game_id: GAME, spotlight_at: START } },
+      // The TV's sound volume pings the room like every other change to the party.
+      { session: { ...base.session!, sound_volume: 25 } },
       { prompts: [{ game_id: GAME, key: 'q1', spec: { kind: 'choice', options: ['0'] }, opened_at: START, closes_at: null, closed_at: START, revealed_at: null }] },
     ]
     for (const patch of announced) expect(pingedFingerprint('phone', { ...base, ...patch })).not.toBe(pingedFingerprint('phone', base))

@@ -34,9 +34,10 @@ screen connects, for guests, the host and the TV, is in
 - **Backend:** Supabase, plus one Netlify Function for game logic. The design
   doc is [docs/engine-v2.md](engine-v2.md).
   - **Postgres** holds parties, players, games and their state, the points
-    ledger and an event log of the whole night, all from one init file
-    ([supabase/migrations](../supabase/migrations)) that checks its own grants
-    and policies and aborts if one is missing.
+    ledger and an event log of the whole night, all from one init file and
+    small additive migrations after it
+    ([supabase/migrations](../supabase/migrations)), each of which checks its own
+    grants and policies and aborts if one is missing.
   - **Anonymous auth** gives every phone a user on its first visit. The
     session lives in the browser's localStorage, so reopening the page brings
     the guest back as the same player.
@@ -63,7 +64,7 @@ screen connects, for guests, the host and the TV, is in
 
 | Table | What it is |
 | --- | --- |
-| `sessions` | A party. `join_code` is in the join QR; `status` open/closed controls joining; `spotlight_game_id` is the game on the TV. |
+| `sessions` | A party. `join_code` is in the join QR; `status` open/closed controls joining; `spotlight_game_id` is the game on the TV; `sound_volume` is how loud the TV plays its sound effects (phones keep their own). |
 | `players` | A guest in a party, tied to their auth user. `code` is in their personal QR. |
 | `session_games` | A game in a party: `game_type` picks the plugin, `public_state` is what everyone sees, `wake_at` when it wants a timer sync. Several can be `active` at once. |
 | `game_settings` | A game's settings (quiz questions and answers): hosts only, frozen into the state at start. |

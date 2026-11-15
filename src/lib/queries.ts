@@ -217,6 +217,17 @@ export async function setTvScene(sessionId: string, scene: 'live' | 'recap'): Pr
   expectRow(await supabase.from('sessions').update({ tv_scene: scene }).eq('id', sessionId).select('id'), 'That party is gone')
 }
 
+/**
+ * How loud TV screens play the sound effects, 0 (off) to 100: paired TVs and
+ * a TV tab of the host's browser follow it at once; phones keep their own volume.
+ */
+export async function setSoundVolume(sessionId: string, volume: number): Promise<void> {
+  if (!Number.isInteger(volume) || volume < 0 || volume > 100) {
+    throw new GameCallError('The volume is a whole number from 0 to 100', 400, 'bad_volume')
+  }
+  expectRow(await supabase.from('sessions').update({ sound_volume: volume }).eq('id', sessionId).select('id'), 'That party is gone')
+}
+
 // Host: games -------------------------------------------------------------------------------
 
 function checkGameTitle(title: string): string {

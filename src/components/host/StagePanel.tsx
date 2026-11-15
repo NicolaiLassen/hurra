@@ -14,6 +14,7 @@ import Confirm from '@/components/Confirm'
 import { useHostCall } from '@/components/host/hostCalls'
 import PairTvButton from '@/components/host/PairTvButton'
 import { formatCountdown, screensLine, stageWords } from '@/components/host/scene'
+import TvSoundControl from '@/components/host/TvSoundControl'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { getGameModule } from '@/games/registry'
@@ -26,9 +27,10 @@ import { cn } from '@/lib/utils'
 
 /**
  * "On the TV now" (docs/engine-v2.md, 7.3): what the TV shows, in words and as
- * a small screen, with the ways to change it (Back to standings, the recap)
- * and the paired TVs. Its own clock ticks every second for the final screen's
- * countdown, so only this panel re-renders with it.
+ * a small screen, with the ways to change it (Back to standings, the recap),
+ * the paired TVs and how loud the TV plays its sound effects. Its own clock
+ * ticks every second for the final screen's countdown, so only this panel
+ * re-renders with it.
  */
 export default function StagePanel({ snapshot, className }: { snapshot: Snapshot; className?: string }) {
   const now = useServerNow(1000)
@@ -145,6 +147,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
             />
           </div>
         </div>
+
+        <TvSoundControl sessionId={session.id} volume={session.sound_volume} tvOpen={screens > 0 || tvTab} />
       </CardContent>
     </Card>
   )

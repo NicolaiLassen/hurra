@@ -65,6 +65,8 @@
   and every guest finds their own night on their phone.
 - **The TV from your own browser.** No second device for the TV? *Show the TV
   here* opens it in a tab of the host's browser, ready to cast.
+- **Sound effects under the music.** The host sets how loud the TV plays
+  its sound effects, from off to full, so they sit under the party's music.
 - **Games that finish by themselves.** The quiz, fusion and Last one standing
   end the moment they have their winner.
 - **A TV that can't peek.** The TV pairs with a code and reads what a guest

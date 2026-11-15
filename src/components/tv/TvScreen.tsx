@@ -13,6 +13,7 @@ import StageView from '@/components/tv/StageView'
 import Strip from '@/components/tv/Strip'
 import Ticker from '@/components/tv/Ticker'
 import TitleCard from '@/components/tv/TitleCard'
+import { useEffectsVolume } from '@/components/tv/useEffectsVolume'
 import { useGains } from '@/components/tv/useGains'
 import { useNews } from '@/components/tv/useNews'
 import { useTitleCard } from '@/components/tv/useTitleCard'
@@ -69,6 +70,8 @@ function Screen({
   const { connected, pings } = useLive()
   const now = useServerNow(1000)
   const scene = tvScene(snapshot, now)
+  // The host's sound effects volume for this party: every sound below plays at it.
+  useEffectsVolume(session.sound_volume)
 
   // The recap is read once its scene is on; a fixture brings its own.
   const recapRevision = scene.kind === 'recap' && !fixtureRecap ? (snapshot.recap?.published_at ?? 0) : 0

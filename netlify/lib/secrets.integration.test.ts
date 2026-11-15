@@ -3,7 +3,7 @@
 // Row level security and the grants decide; these tests prove it.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { admin, anonClient, engine, rows, SUPABASE_URL, World, type Guest, type Party, type Person } from './testUsers'
+import { admin, anonClient, engine, randomCode, rows, SUPABASE_URL, World, type Guest, type Party, type Person } from './testUsers'
 
 const SECRET = 'TOP-SECRET-ANSWER'
 const world = new World()
@@ -213,6 +213,65 @@ describe('writes', () => {
     expect(
       await refused(host.client.from('score_events').insert({ session_id: party.id, player_id: ana.playerId, points: 1, awarded_by: ana.userId })),
     ).toBe('42501')
+  })
+})
+
+describe("the TV's sound volume", () => {
+  // A party of its own, so the other tests' party keeps its settings.
+  let loud: Party
+  let gus: Guest
+  let screen: Person
+  const volumeOn = async (person: Person, screenKind: 'host' | 'tv' | 'phone') => {
+    const { data, error } = await person.client.rpc('session_snapshot', { p_session_id: loud.id, p_screen: screenKind })
+    expect(error).toBeNull()
+    return data.session.sound_volume
+  }
+  const stored = async () => (await rows<{ sound_volume: number }>('sessions', 'id', loud.id))[0].sound_volume
+  const logged = async () =>
+    (await admin.from('event_log').select('kind, actor, user_id, data').eq('session_id', loud.id).eq('kind', 'session.sound_volume').order('id'))
+      .data ?? []
+
+  beforeAll(async () => {
+    loud = await world.party(host, 'Volume test')
+    gus = await world.guest(loud, 'Gus')
+    screen = await world.screen(host, loud)
+  })
+
+  it("starts at 100 for a new party, and every screen's snapshot carries it", async () => {
+    expect(await stored()).toBe(100)
+    expect(await volumeOn(host, 'host')).toBe(100)
+    expect(await volumeOn(screen, 'tv')).toBe(100)
+    expect(await volumeOn(gus, 'phone')).toBe(100)
+  })
+
+  it('lets a host set it: the snapshot carries it at once, and the log says who changed it from what', async () => {
+    const { data, error } = await host.client.from('sessions').update({ sound_volume: 25 }).eq('id', loud.id).select('sound_volume')
+    expect(error).toBeNull()
+    expect(data).toEqual([{ sound_volume: 25 }])
+    expect(await volumeOn(screen, 'tv')).toBe(25)
+    expect(await volumeOn(gus, 'phone')).toBe(25)
+    expect(await volumeOn(host, 'host')).toBe(25)
+    expect(await logged()).toEqual([{ kind: 'session.sound_volume', actor: 'host', user_id: host.userId, data: { from: 100, sound_volume: 25 } }])
+    // The same value again changes nothing, so it logs nothing.
+    expect((await host.client.from('sessions').update({ sound_volume: 25 }).eq('id', loud.id)).error).toBeNull()
+    expect(await logged()).toHaveLength(1)
+  })
+
+  it("keeps a guest, a TV, an outsider and anon from changing it, and even a host within 0 to 100", async () => {
+    // An update the policy filters out changes nothing.
+    for (const person of [gus, screen, outsider]) {
+      const { data, error } = await person.client.from('sessions').update({ sound_volume: 0 }).eq('id', loud.id).select('id')
+      expect(error).toBeNull()
+      expect(data).toEqual([])
+    }
+    expect((await anonClient().from('sessions').update({ sound_volume: 0 }).eq('id', loud.id)).error?.code).toBe('42501')
+    for (const wrong of [101, -1]) {
+      expect((await host.client.from('sessions').update({ sound_volume: wrong }).eq('id', loud.id)).error?.code, String(wrong)).toBe('23514')
+    }
+    // Nor is it set at creation: a new party always starts at 100.
+    expect((await host.client.from('sessions').insert({ name: 'Quiet', join_code: `Q${randomCode()}`, sound_volume: 0 })).error?.code).toBe('42501')
+    expect(await stored()).toBe(25)
+    expect(await logged()).toHaveLength(1)
   })
 })
 

@@ -27,6 +27,7 @@ const session = (patch: Partial<Session> = {}): Session => ({
   spotlight_game_id: null,
   spotlight_at: null,
   tv_scene: 'live',
+  sound_volume: 100,
   archived_at: null,
   created_at: NOW - 600 * MIN,
   ...patch,

@@ -12,6 +12,7 @@ import {
   removePlayer,
   renamePlayer,
   revokePlayerTransfer,
+  setSoundVolume,
   setSpotlight,
   unpublishRecap,
 } from './queries'
@@ -228,6 +229,23 @@ describe('host writes', () => {
     await setSpotlight(SESSION, null)
     expect(op(db.state.calls[0], 'update')).toEqual([{ spotlight_game_id: 'game-1', tv_scene: 'live' }])
     expect(op(db.state.calls[1], 'update')).toEqual([{ spotlight_game_id: null }])
+  })
+
+  it('setSoundVolume writes the party’s TV sound volume, a whole number from 0 to 100 only', async () => {
+    for (const bad of [-1, 101, 12.5, Number.NaN]) {
+      const error = (await setSoundVolume(SESSION, bad).catch((e: unknown) => e)) as GameCallError
+      expect([error.code, error.status]).toEqual(['bad_volume', 400])
+    }
+    expect(db.state.calls).toHaveLength(0)
+    db.state.respond = () => ok([{ id: SESSION }])
+    await setSoundVolume(SESSION, 0)
+    await setSoundVolume(SESSION, 75)
+    expect(db.state.calls.map((call) => [call.table, op(call, 'update'), op(call, 'eq')])).toEqual([
+      ['sessions', [{ sound_volume: 0 }], ['id', SESSION]],
+      ['sessions', [{ sound_volume: 75 }], ['id', SESSION]],
+    ])
+    db.state.respond = () => ok([])
+    await expect(setSoundVolume(SESSION, 50)).rejects.toThrow('That party is gone')
   })
 
   it('an update that changes no row says the thing is gone', async () => {

@@ -126,6 +126,18 @@ describe('what a save sends', () => {
     expect(room.heard.filter((h) => h.event === 'changed')).toHaveLength(1)
   })
 
+  it("pings the room when the host changes the TV's sound volume, so a TV reads it at once", async () => {
+    const tvRoom = await listen(tv, `room:${party.id}`)
+    expect(tvRoom.status).toBe('SUBSCRIBED')
+    reset(tvRoom)
+    await host.client.from('sessions').update({ sound_volume: 40 }).eq('id', party.id)
+    expect((await hear(tvRoom, (h) => h.event === 'changed')).payload).toMatchObject({ session: party.id })
+    const { data } = await tv.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'tv' })
+    expect(data.session.sound_volume).toBe(40)
+    await sleep(500)
+    expect(tvRoom.heard.filter((h) => h.event === 'changed')).toHaveLength(1)
+  })
+
   it('marks a save that opens a prompt, so phones read at once', async () => {
     reset(room)
     await engine(host, { type: 'host-action', gameId, action: { type: 'open', key: 'p1', spec: { kind: 'choice', options: ['a', 'b'] } } })

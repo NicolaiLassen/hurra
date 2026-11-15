@@ -347,6 +347,7 @@ export function pingedFingerprint(screen: Screen, s: Snapshot): string {
     s.session.spotlight_game_id,
     s.session.spotlight_at,
     s.session.tv_scene,
+    s.session.sound_volume,
     s.session.archived_at,
   ]
   const phone = screen === 'phone'

@@ -87,11 +87,12 @@ export function timeTicks(from: number, to: number, most: number): number[] {
   return ticks
 }
 
-/** Log rows that change nothing in the recap: the recap itself, the TV, the pairing, joining, settings, a prompt closing. */
+/** Log rows that change nothing in the recap: the recap itself, the TV and its sound, the pairing, joining, settings, a prompt closing. */
 const QUIET_KINDS = new Set([
   'recap.published',
   'recap.unpublished',
   'session.tv_scene',
+  'session.sound_volume',
   'stage.changed',
   'prompt.closed',
   'screen.paired',

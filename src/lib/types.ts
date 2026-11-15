@@ -17,6 +17,8 @@ export type Session = {
   spotlight_game_id: string | null
   spotlight_at: number | null
   tv_scene: 'live' | 'recap'
+  /** How loud TV screens play the sound effects, 0 (off) to 100. Phones keep their own volume. */
+  sound_volume: number
   archived_at: number | null
   created_at: number
 }
