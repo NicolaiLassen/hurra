@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router'
 import { Loading, RouteError } from '@/components/layout'
+import { lazyPage } from '@/lib/lazyPage'
 import HostLayout from '@/pages/host/HostLayout'
 import LazyScoreboard from '@/pages/host/LazyScoreboard'
 import RequireHost from '@/pages/host/RequireHost'
@@ -13,11 +14,19 @@ import PlayerCard from '@/pages/PlayerCard'
 // phones never download the control room's panels or the recap page. The
 // games' own host views and settings editors still come with the app, because
 // the registry (src/games/registry.ts) imports every game module up front.
-const hostHome = async () => ({ Component: (await import('@/pages/host/HostHome')).default })
-const hostLogin = async () => ({ Component: (await import('@/pages/host/HostLogin')).default })
-const hostSession = async () => ({ Component: (await import('@/pages/host/HostSession')).default })
-const recap = async () => ({ Component: (await import('@/pages/host/Recap')).default })
-const scan = async () => ({ Component: (await import('@/pages/host/Scan')).default })
+// After a deploy, a tab still on the old app loads the new one at the page it
+// was going to when that page's old file is gone, instead of showing an error
+// (lazyPage.ts). The address changes only once the page is in, so it comes
+// from the navigation under way.
+const goingTo = () => {
+  const location = router.state.navigation.location
+  return location ? router.createHref(location) : null
+}
+const hostHome = lazyPage(() => import('@/pages/host/HostHome'), goingTo)
+const hostLogin = lazyPage(() => import('@/pages/host/HostLogin'), goingTo)
+const hostSession = lazyPage(() => import('@/pages/host/HostSession'), goingTo)
+const recap = lazyPage(() => import('@/pages/host/Recap'), goingTo)
+const scan = lazyPage(() => import('@/pages/host/Scan'), goingTo)
 
 export const router = createBrowserRouter([
   {

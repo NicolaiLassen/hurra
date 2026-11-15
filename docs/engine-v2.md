@@ -3067,6 +3067,22 @@ game if live, else the newest live game. New: Move to a new phone.
   loader as `hydrateFallbackElement`. Dev builds: `/host/s/<id>?fixture=<scene>`
   and `/host/s/<id>/recap?fixture=<scene>` render fixtures.
 
+**Changed during review (pressing Recap after a deploy, 15 November):**
+
+- **"It starts by saying sorry, then it loads."** A deploy replaces the site's
+  files. A control room opened before it still runs the old app, so pressing
+  Recap asked for the recap page's old file (`assets/Recap-<hash>.js`), which
+  the deploy had removed; the site answered with its `index.html`, the import
+  failed, and the route showed "Something went wrong" with Retry, which reloaded
+  the tab into the new app. Reproduced locally with two builds served the way
+  Netlify serves them. Now every page the router loads on demand goes through
+  `lazyPage` (src/lib/lazyPage.ts): when a page's file fails to load and the
+  site answers, the new app loads at once at the address the navigation was
+  going to (the URL changes only once a page is in, so it comes from the
+  navigation under way), under the loader. A second missing file within a
+  minute, or no answer from the site, shows the error with Retry as before, so
+  a broken deploy or a dropped connection never loops.
+
 ### 7.5 From the winning move to the next game, with several games
 
 | Moment | Host | TV | Phones that played | Others |
