@@ -3305,7 +3305,7 @@ no circular countdown, no music. Instead:
   as answers arrive, with "31 of 45" beside it. Counts only: the circles carry
   no names or faces, so nobody can tell who hasn't answered;
 - sounds come only from the library and are played by the views, once per
-  question (3.5): whoosh when a question appears and the tick-tock at the reveal
+  question (3.5): whoosh when a question appears and the tick-tock over the countdown's last 1.6 s, its bell on zero (scheduled by the database clock; an early Reveal now cancels it)
   (TV), coin for your right answer and sad for a wrong one or none (phone).
   The winner's fanfare comes with the finish announcement;
 - no title card of its own: the core's "Hurra presents" card (7.2) opens the

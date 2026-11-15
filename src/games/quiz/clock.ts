@@ -62,3 +62,32 @@ export function useMomentSound(moment: string | null, sound: SoundName | null) {
     if (moment && sound) playOnce(moment, sound)
   }, [moment, sound])
 }
+
+/** The latest a scheduled sound may start and still mean its moment. */
+export const LATE_MS = 500
+
+/** How long until a sound due `at` should start (0: now), or null when it is too late to mean anything. */
+export function soundDelay(at: number, now: number): number | null {
+  const delay = at - now
+  return delay < -LATE_MS ? null : Math.max(0, delay)
+}
+
+/**
+ * Plays `sound` once for `moment` at `at` by the database clock: a timer, not a
+ * render tick, so a countdown's sound lands on time. A screen that opens more
+ * than LATE_MS past `at` stays quiet, and one that unmounts first (an early
+ * reveal) cancels it.
+ */
+export function useMomentSoundAt(moment: string | null, sound: SoundName, at: number, serverNow: () => number) {
+  const clock = useRef(serverNow)
+  useEffect(() => {
+    clock.current = serverNow
+  }, [serverNow])
+  useEffect(() => {
+    if (!moment) return
+    const delay = soundDelay(at, clock.current())
+    if (delay === null) return
+    const timer = setTimeout(() => playOnce(moment, sound), delay)
+    return () => clearTimeout(timer)
+  }, [moment, sound, at])
+}

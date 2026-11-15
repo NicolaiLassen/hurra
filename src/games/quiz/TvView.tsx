@@ -2,7 +2,8 @@ import { CheckCircleIcon, LightningIcon, QuestionIcon } from '@phosphor-icons/re
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import Avatar from '@/components/Avatar'
-import { useMomentSound, useServerTime } from '@/games/quiz/clock'
+import { SOUNDS } from '@/games/core/sounds'
+import { useMomentSound, useMomentSoundAt, useServerTime } from '@/games/quiz/clock'
 import { formatNumber, formatSeconds, type QuizGame, type QuizPublicState } from '@/games/quiz/logic'
 import { FRESH_MS, LETTERS, momentId, tvOptionSize, tvQuestionSize } from '@/games/quiz/look'
 import { AnsweredDots, DrainBar, LetterBadge, SecondsLeft } from '@/games/quiz/parts'
@@ -34,7 +35,7 @@ export default function TvView({ game, players, publicState, prompts, tallies, s
       ) : null
     case 'reveal':
       return pub.question && pub.reveal ? (
-        <Revealed game={game} pub={pub} prompt={prompt} players={players} serverNow={serverNow} />
+        <Revealed pub={pub} players={players} />
       ) : (
         <p className="m-auto text-4xl text-muted-foreground">The answer is coming up…</p>
       )
@@ -67,6 +68,9 @@ function Lobby({ total }: { total: number }) {
   )
 }
 
+/** The tick-tock's length: it starts this long before time runs out, so its bell lands on zero. */
+const TICKTOCK_MS = SOUNDS.ticktock.seconds * 1000
+
 /** A question on the screen: the card with its draining bar, the options, the dots filling in. */
 function Asking({
   game,
@@ -86,10 +90,11 @@ function Asking({
   const question = pub.question!
   const now = useServerTime(serverNow, 250)
   const openedAt = prompt?.opened_at ?? null
-  // A whoosh when the question appears, and the tick-tock as time runs out: its bell lands on the reveal.
+  // A whoosh when the question appears, and the tick-tock over the countdown's last moments: its bell lands as
+  // time runs out. An early Reveal now unmounts this view first, which cancels it.
   useMomentSound(openedAt === null || now - openedAt < FRESH_MS ? momentId(game, question.key, 'asked') : null, 'whoosh')
+  useMomentSoundAt(momentId(game, question.key, 'answer'), 'ticktock', question.endsAt - TICKTOCK_MS, serverNow)
   const timeUp = now >= question.endsAt
-  useMomentSound(timeUp && now - question.endsAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'ticktock')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
@@ -123,25 +128,10 @@ function Asking({
 }
 
 /** The answer: each option fills like a bar to its count, the right one gold, then the fastest right answers. */
-function Revealed({
-  game,
-  pub,
-  prompt,
-  players,
-  serverNow,
-}: {
-  game: SessionGame
-  pub: QuizPublicState
-  prompt: PromptState | undefined
-  players: Player[]
-  serverNow: () => number
-}) {
+function Revealed({ pub, players }: { pub: QuizPublicState; players: Player[] }) {
   const question = pub.question!
   const reveal = pub.reveal!
   const reduce = useReducedMotion()
-  const [revealedAt] = useState(() => prompt?.revealed_at ?? serverNow())
-  // Unless it already rolled when time ran out.
-  useMomentSound(serverNow() - revealedAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'ticktock')
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const most = Math.max(1, reveal.answered)
 
