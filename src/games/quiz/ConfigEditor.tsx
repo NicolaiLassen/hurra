@@ -54,7 +54,7 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
   const [pasting, setPasting] = useState(false)
   // The option an Enter just added, so it takes the cursor.
   const [focus, setFocus] = useState<string | null>(null)
-  const { problems } = checkQuizConfig(config as unknown as Record<string, unknown>)
+  const { problems } = checkQuizConfig(config)
   const room = MAX_QUESTIONS - questions.length
 
   const setQuestions = (next: QuizQuestion[]) => onChange({ ...config, questions: next.slice(0, MAX_QUESTIONS) })
