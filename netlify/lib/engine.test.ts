@@ -191,6 +191,7 @@ describe('errorResponse', () => {
     expect(errorResponse(gone).status).toBe(404)
     expect(errorResponse(Object.assign(new Error('x'), { code: 'PT409', details: 'stale' }))).toMatchObject({ status: 409, body: { code: 'busy' } })
     expect(errorResponse(Object.assign(new Error('x'), { code: '40P01' }))).toMatchObject({ status: 409, body: { code: 'busy' } })
+    expect(errorResponse(Object.assign(new Error('x'), { code: '40001' }))).toMatchObject({ status: 409, body: { code: 'busy' } })
     expect(errorResponse(Object.assign(new Error('TypeError: fetch failed'), { status: 0 }))).toEqual({
       status: 503,
       body: { error: "The party database didn't answer. Try again.", code: 'unavailable' },

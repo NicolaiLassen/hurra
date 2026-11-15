@@ -166,7 +166,8 @@ export async function handleGameRequest(
  * Another save of this game landed first. game_commit raises PT409 'stale'
  * for a version conflict (never 40001, which PostgREST would retry forever);
  * Postgres raises 40P01 for a deadlock, e.g. two games updating the same
- * players' profiles at once.
+ * players' profiles at once. A 40001 that ever reaches the engine counts as a
+ * lost race too, so it is retried like one.
  */
 export function lostRace(error: RpcError): boolean {
   return (error.code === 'PT409' && error.details === 'stale') || error.code === '40P01' || error.code === '40001'
