@@ -180,6 +180,8 @@ describe('outsiders and anon', () => {
 })
 
 describe('writes', () => {
+  const refused = async (result: PromiseLike<{ error: { code?: string } | null }>) => (await result).error?.code
+
   it("keep a guest away from the engine's functions and from every table", async () => {
     for (const [fn, args] of [
       ['game_load', { p_game_id: gameId, p_user_id: ana.userId }],
@@ -189,7 +191,6 @@ describe('writes', () => {
     ] as const) {
       expect((await ana.client.rpc(fn, args)).error?.code, fn).toBe('42501')
     }
-    const refused = async (result: PromiseLike<{ error: { code?: string } | null }>) => (await result).error?.code
     expect(await refused(ana.client.from('sessions').insert({ name: 'Mine', join_code: 'HACKED1' }))).toBe('42501')
     expect(await refused(ana.client.from('session_games').insert({ session_id: party.id, game_type: 'lab', title: 'Mine' }))).toBe('42501')
     expect(await refused(ana.client.from('score_events').insert({ session_id: party.id, player_id: ana.playerId, points: 99 }))).toBe('42501')
@@ -204,7 +205,6 @@ describe('writes', () => {
   })
 
   it("keep even a host away from the engine's columns", async () => {
-    const refused = async (result: PromiseLike<{ error: { code?: string } | null }>) => (await result).error?.code
     expect(await refused(host.client.from('session_games').update({ status: 'finished' }).eq('id', gameId))).toBe('42501')
     expect(await refused(host.client.from('session_games').update({ public_state: {} }).eq('id', gameId))).toBe('42501')
     expect(await refused(host.client.from('sessions').update({ data: { x: 1 } }).eq('id', party.id))).toBe('42501')
