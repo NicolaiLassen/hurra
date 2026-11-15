@@ -71,7 +71,7 @@ export class World {
     this.users.push(data.user.id)
     const { error: hostError } = await admin.from('hosts').insert({ user_id: data.user.id })
     if (hostError) throw hostError
-    const client = createClient(SUPABASE_URL, PUBLISHABLE_KEY, options)
+    const client = anonClient()
     const { data: login, error: loginError } = await client.auth.signInWithPassword({ email, password })
     if (loginError || !login.session) throw loginError ?? new Error('sign-in failed')
     return { client, token: login.session.access_token, userId: data.user.id }
@@ -80,7 +80,7 @@ export class World {
   /** An anonymous user, as every guest and every TV is. */
   async user(): Promise<Person> {
     await waitForApi()
-    const client = createClient(SUPABASE_URL, PUBLISHABLE_KEY, options)
+    const client = anonClient()
     const { data, error } = await client.auth.signInAnonymously()
     if (error || !data.session || !data.user) throw error ?? new Error('anonymous sign-in failed')
     this.users.push(data.user.id)
