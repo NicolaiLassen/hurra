@@ -1,7 +1,8 @@
 // Helpers for the integration tests (docs/engine-v2.md, 9.2): real signed-in
-// users on the local Supabase stack, the real /api/game handler, and two
-// test-only game plugins served through handleGameRequest's logicFor. Each
-// test file makes its own World and cleans up what it made.
+// users on the local Supabase stack, the real /api/game handler, and three
+// test-only game plugins (probe, lab and stuck) served through
+// handleGameRequest's logicFor. Each test file makes its own World and cleans
+// up what it made.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { loadEnv } from 'vite'
 import { Game, GameError, type AnswerPayload, type GameContext, type PlayerId, type PromptSpec } from '../../src/games/core/Game'
@@ -149,8 +150,9 @@ export async function call(person: Person | null, body: unknown): Promise<Answer
 
 /**
  * The handler's own steps after the token check, through handleGameRequest
- * with logicFor serving the test-only plugins (the conformance and prompt
- * tests). The user id comes from the verified token, as in the handler.
+ * with logicFor serving the test-only plugins (probe, lab and stuck) beside
+ * the registry's games. The user id comes from the verified token, as in the
+ * handler.
  */
 export async function engine(person: Person, body: Record<string, unknown>): Promise<Answer> {
   const { data, error } = await admin.auth.getClaims(person.token)

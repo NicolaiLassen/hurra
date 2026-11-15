@@ -96,7 +96,7 @@ export async function handleGameRequest(
   options: {
     random?: () => number
     now?: number
-    /** Tests only (the conformance test's probe game). Default: the registry in src/games/logic.ts. */
+    /** Tests only: the test-only plugins, such as probe, lab and stuck (testLogic in netlify/lib/testUsers.ts). Default: the registry in src/games/logic.ts. */
     logicFor?: (gameType: string) => AnyGame | undefined
     /** Filled in with this request's durations, for the Server-Timing header. */
     timing?: Timing
