@@ -189,10 +189,11 @@ async function rpc<T>(db: SupabaseClient, name: string, args: Record<string, unk
   return data as T
 }
 
+// Strings, so .includes() takes any DETAIL; satisfies checks each one is an ErrorCode.
 const CODES: readonly string[] = [
   'bad_request', 'rule', 'not_signed_in', 'not_host', 'not_player', 'not_found', 'already_running',
   'not_running', 'archived', 'restarted', 'busy', 'unknown_game_type', 'unavailable', 'internal',
-]
+] satisfies readonly ErrorCode[]
 
 /** The error mapping of section 4.4: what the phone gets for any failure. */
 export function errorResponse(error: unknown): { status: number; body: { error: string; code: string } } {
