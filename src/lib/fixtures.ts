@@ -795,7 +795,6 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
 export function fixtureRecapDoc(): RecapDoc {
   const snapshot = fixtureSnapshot('archived', 'tv')
   const points = world('archived').points ?? {}
-  const nameOf = nameOfPlayer
   let rank = 0
   const standings = snapshot.standings.map((row, i, rows) => {
     if (i === 0 || row.points !== rows[i - 1].points) rank = i + 1
@@ -815,9 +814,9 @@ export function fixtureRecapDoc(): RecapDoc {
     startedAt: g.started_at ?? start,
     finishedAt: g.finished_at,
     finishedBy: g.finished_by,
-    winners: g.winners.map((id) => ({ id, name: nameOf(id) })),
+    winners: g.winners.map((id) => ({ id, name: nameOfPlayer(id) })),
     highlights: [
-      { title: `${g.winners.map(nameOf).join(' and ')} won ${g.title}`, players: g.winners, icon: 'crown', weight: 'headline' },
+      { title: `${g.winners.map(nameOfPlayer).join(' and ')} won ${g.title}`, players: g.winners, icon: 'crown', weight: 'headline' },
     ],
   }))
   chapters[0].highlights.push(
