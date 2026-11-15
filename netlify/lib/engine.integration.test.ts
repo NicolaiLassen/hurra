@@ -158,7 +158,7 @@ describe('Last one standing through the real handler', () => {
 })
 
 describe('races and restarts', () => {
-  it('retries a different move that lost the race (40001), then saves it', async () => {
+  it('retries a different move that lost the race (PT409 stale), then saves it', async () => {
     const gameId = await world.game(host, party, 'elimination', 'Race', { tasks: ['a', 'b', 'c', 'd'] })
     const game = elimination(gameId)
     await game.start(false)
