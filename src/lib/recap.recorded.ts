@@ -2,7 +2,8 @@
 // a party of six played through the real engine. Last one standing still runs
 // (its tasks are in the round's state), Beer pong finished by the host and runs
 // again as round 2, a lab quiz with one prompt finished by itself, one award was
-// undone and Cy was removed. For recap.test.ts only.
+// undone and Cy was removed. For the recap tests (recap, recapView and
+// controlRoom) and, in dev builds only, the recap page's ?fixture= preview.
 import type { RawRecap } from './recap'
 
 export const recordedRawRecap: RawRecap = {
