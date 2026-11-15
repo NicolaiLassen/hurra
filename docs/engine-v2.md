@@ -1979,7 +1979,7 @@ directly: every read and write goes through the functions below.
 | `auth.ts` | `ensureSignedIn` (now with 429 retries), `currentUser`, `isHost`, plus `signInHost`, `signOut` (5.9). |
 | `gameApi.ts` | `createGameApi` for any client, `newRequestId`, `GameCallError` (5.3). |
 | `live.ts` | `createLiveSession` for any client: pings, snapshot reads, polling, ping health, server clock (5.4). |
-| `useLive.tsx` | `LiveSessionProvider` (live, or a fixture), `useLive` and the adapted hooks (5.4, 5.6). |
+| `useLive.tsx` | `LiveSessionProvider` (live, or a fixture), `useLive` and `useServerNow` (5.4, 5.6). |
 | `stage.ts` | Pure helpers: TV scene, phone layout, final screen window (5.5). |
 | `queries.ts` | One-off reads and every write, including the app's `callGame` and `submitAnswer` and the recap calls (5.3, 5.6, 5.7). |
 | `useLiveQuery.ts` | The existing loader hook, minus Postgres Changes (5.6). |
@@ -2320,6 +2320,13 @@ Rules:
 
 ### 5.6 queries.ts and the adapted hooks
 
+**Changed after the switch-over (15 Nov):** the adapted v1 hooks below
+(`useSession`, `useSessionGames`, `usePlayers`, `useScoreboard`,
+`usePlayerPoints`, `useFeed`, `usePlayerGameView`, `useGameState`) and the
+selectors `useTallies`, `usePrompts`, `useGamePoints` and `useMyAnswers` were
+deleted with `partyExists`: no screen used them. Every screen reads `useLive()`
+(or `useServerNow()`) and the selectors in `src/lib/stage.ts`.
+
 **One-off reads and writes** (all throw `Error` with the server's message):
 
 ```ts
@@ -2328,7 +2335,6 @@ export async function callGame(request: EngineRequest): Promise<EngineResponse>
 export async function submitAnswer(gameId: string, key: string, answer: AnswerPayload): Promise<SubmitResult>
 
 export async function sessionByCode(joinCode: string): Promise<PublicSession | null>
-export async function partyExists(joinCode: string): Promise<boolean>
 export async function loadMembership(joinCode: string): Promise<{ session: PublicSession; player: PlayerRow | null } | null>
 /** join_session. No retry of its own: PostgREST has no rate limit; the 429 comes from sign-in (5.9). */
 export async function joinSession(joinCode: string, name: string): Promise<PlayerRow>
@@ -2394,7 +2400,7 @@ provider for that session is mounted.
 | `useSessions()` | one-off query, 30 s poll | `LiveQuery<HostSessionRow[]>` |
 | `usePlayerEvents(playerId)` | one-off query, now also takes `revision` | `LiveQuery<ScoreEvent[]>` |
 | `getSessionByCode(code)` | renamed `sessionByCode` | `PublicSession \| null` |
-| `sessionExists(id)` | replaced by `partyExists(joinCode)` and `snapshot.exists` | |
+| `sessionExists(id)` | replaced by `sessionByCode(joinCode)` (null when there is none) and `snapshot.exists` | |
 
 New selector hooks, all reading the provider: `useTallies(gameId)`,
 `usePrompts(gameId)`, `useGamePoints(gameId)`, `useMyAnswers(gameId)`.

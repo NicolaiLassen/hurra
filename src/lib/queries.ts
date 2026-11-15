@@ -15,17 +15,6 @@ import type { AnswerPayload, HostSessionRow, PlayerRow, PublicSession, ScoreEven
 import { isJoinCode, isPlayerCode, isUuid } from '@/lib/urls'
 import { useLiveQuery, type LiveQuery } from '@/lib/useLiveQuery'
 
-export {
-  useFeed,
-  useGameState,
-  usePlayerGameView,
-  usePlayerPoints,
-  usePlayers,
-  useScoreboard,
-  useSession,
-  useSessionGames,
-} from '@/lib/useLive'
-
 const PLAYER_COLUMNS = 'id, session_id, user_id, name, code, profile, created_at'
 /** How long a code that moves a player works (player_transfers' default). */
 const MOVE_CODE_MS = 5 * 60_000
@@ -98,10 +87,6 @@ export async function sessionByCode(joinCode: string): Promise<PublicSession | n
   const code = normalCode(joinCode)
   if (!isJoinCode(code)) return null
   return unwrap<PublicSession | null>(await supabase.rpc('session_by_code', { p_join_code: code }))
-}
-
-export async function partyExists(joinCode: string): Promise<boolean> {
-  return (await sessionByCode(joinCode)) !== null
 }
 
 export type Membership = {

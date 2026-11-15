@@ -1,23 +1,12 @@
 /* eslint-disable react-refresh/only-export-components -- the provider and the hooks that read it are one module (docs/engine-v2.md, 5.1) */
 // One live session per page (docs/engine-v2.md, 5.4 and 5.6): the
 // LiveSessionProvider joins the party's channels, reads the snapshot when
-// pinged, and every hook below reads from it. Screens mount one provider; the
+// pinged, and useLive() and useServerNow() read from it. Screens mount one provider; the
 // award page mounts its own, beside or inside another, and they share channels.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createLiveSession, type LiveEnvironment, type LiveState, type Screen } from '@/lib/live'
-import { gamePointsOf, myAnswersOf, promptsOf, talliesOf } from '@/lib/stage'
 import { supabase } from '@/lib/supabase'
-import type {
-  AnswerPayload,
-  FeedItem,
-  Player,
-  PromptState,
-  ScoreRow,
-  Session,
-  SessionGame,
-  Snapshot,
-  Tallies,
-} from '@/lib/types'
+import type { Snapshot, Tallies } from '@/lib/types'
 import type { LiveQuery } from '@/lib/useLiveQuery'
 
 export type LiveValue = {
@@ -34,13 +23,9 @@ export type LiveValue = {
   refresh: () => void
 }
 
-type Provided = LiveValue & { sessionId: string; screen: Screen; parent: Provided | null }
-
-const LiveContext = createContext<Provided | null>(null)
+const LiveContext = createContext<LiveValue | null>(null)
 
 const IDLE: LiveState = { tallies: {}, connected: false, pings: 'ok', moved: false }
-const NOTHING: Readonly<Record<string, never>> = Object.freeze({})
-const NO_PROMPTS: PromptState[] = []
 
 const browserEnvironment: LiveEnvironment = {
   onVisible(listener) {
@@ -70,7 +55,6 @@ export function LiveSessionProvider({
   fixture?: Snapshot
   children: ReactNode
 }) {
-  const parent = useContext(LiveContext)
   const key = `${sessionId}|${screen}|${playerId ?? ''}`
   const [live, setLive] = useState<{ key: string; state: LiveState } | null>(null)
   const session = useRef<{ refresh(): void; serverNow(): number } | null>(null)
@@ -106,12 +90,9 @@ export function LiveSessionProvider({
   )
   const state = fixtureState ?? (live?.key === key ? live.state : IDLE)
 
-  const value = useMemo<Provided>(() => {
+  const value = useMemo<LiveValue>(() => {
     const snapshot = state.snapshot
     return {
-      sessionId,
-      screen,
-      parent,
       query: {
         data: snapshot === undefined ? undefined : snapshot.exists ? snapshot : null,
         error: snapshot === undefined ? state.error : undefined,
@@ -125,7 +106,7 @@ export function LiveSessionProvider({
       serverNow,
       refresh,
     }
-  }, [state, sessionId, screen, parent, serverNow, refresh])
+  }, [state, serverNow, refresh])
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>
 }
@@ -157,114 +138,4 @@ export function useServerNow(ms = 1000): number {
     return () => clearTimeout(timer)
   }, [serverNow, ms])
   return now
-}
-
-// The v1 hooks, adapted: same names and parameters, read from the provider ----------
-
-/** The provider for this party: the nearest one, or one further up. */
-function useLiveFor(sessionId: string, hook: string): Provided {
-  const nearest = useContext(LiveContext)
-  for (let provided = nearest; provided; provided = provided.parent) {
-    if (provided.sessionId === sessionId) return provided
-  }
-  throw new Error(`${hook}(${sessionId}) needs a <LiveSessionProvider sessionId="${sessionId}"> above it`)
-}
-
-/** The nearest provider, whichever party it is for. */
-function useNearest(hook: string): Provided {
-  const nearest = useContext(LiveContext)
-  if (!nearest) throw new Error(`${hook}() needs a <LiveSessionProvider> above it`)
-  return nearest
-}
-
-/** A LiveQuery of a value picked from the snapshot: `data` must be stable while the snapshot is. */
-function useQueryOf<T>(live: Provided, data: T | undefined): LiveQuery<T> {
-  const error = live.snapshot === undefined ? live.query.error : undefined
-  const { refresh } = live
-  return useMemo(() => ({ data, error, retry: refresh }), [data, error, refresh])
-}
-
-/** The party; null when it doesn't exist or this screen can't read it (not a member). */
-export function useSession(sessionId: string): LiveQuery<Session | null> {
-  const live = useLiveFor(sessionId, 'useSession')
-  return useQueryOf(live, live.snapshot === undefined ? undefined : live.snapshot.session)
-}
-
-/** The party's games, by position. */
-export function useSessionGames(sessionId: string): LiveQuery<SessionGame[]> {
-  const live = useLiveFor(sessionId, 'useSessionGames')
-  return useQueryOf(live, live.snapshot?.games)
-}
-
-/** The party's players, by join time. */
-export function usePlayers(sessionId: string): LiveQuery<Player[]> {
-  const live = useLiveFor(sessionId, 'usePlayers')
-  return useQueryOf(live, live.snapshot?.players)
-}
-
-/** The day's standings: points highest first, then name. */
-export function useScoreboard(sessionId: string): LiveQuery<ScoreRow[]> {
-  const live = useLiveFor(sessionId, 'useScoreboard')
-  return useQueryOf(live, live.snapshot?.standings)
-}
-
-/** A player's points on the day's scoreboard (0 when they have none). */
-export function usePlayerPoints(playerId: string): LiveQuery<number> {
-  const live = useNearest('usePlayerPoints')
-  const standings = live.snapshot?.standings
-  return useQueryOf(live, standings === undefined ? undefined : (standings.find((r) => r.player_id === playerId)?.points ?? 0))
-}
-
-/** The newest announcements (at most 12), newest first; `everyoneOnly` skips ones aimed at specific players. */
-export function useFeed(
-  sessionId: string,
-  { limit = 5, everyoneOnly = false }: { limit?: number; everyoneOnly?: boolean } = {},
-): LiveQuery<FeedItem[]> {
-  const live = useLiveFor(sessionId, 'useFeed')
-  const feed = live.snapshot?.feed
-  const data = useMemo(
-    () => feed?.filter((item) => !everyoneOnly || item.audience === null).slice(0, limit),
-    [feed, limit, everyoneOnly],
-  )
-  return useQueryOf(live, data)
-}
-
-/** This phone's own view of a game; null when it has none (a phone screen only). */
-export function usePlayerGameView(gameId: string, playerId: string): LiveQuery<unknown> {
-  const live = useNearest('usePlayerGameView')
-  const snapshot = live.snapshot
-  const me = snapshot?.me
-  return useQueryOf(live, snapshot === undefined ? undefined : me && me.player_id === playerId ? (me.views[gameId] ?? null) : null)
-}
-
-/** A live game's full state; null when there is none or this isn't the host screen. */
-export function useGameState(gameId: string): LiveQuery<unknown> {
-  const live = useNearest('useGameState')
-  const snapshot = live.snapshot
-  return useQueryOf(live, snapshot === undefined ? undefined : (snapshot.states?.[gameId]?.state ?? null))
-}
-
-// Selectors for game views' props ----------------------------------------------------
-
-/** Answers in so far, by unrevealed prompt key. */
-export function useTallies(gameId: string): Readonly<Record<string, number>> {
-  return talliesOf(useNearest('useTallies').tallies, gameId)
-}
-
-/** This game's prompts (this round). */
-export function usePrompts(gameId: string): PromptState[] {
-  const snapshot = useNearest('usePrompts').snapshot
-  return useMemo(() => (snapshot ? promptsOf(snapshot, gameId) : NO_PROMPTS), [snapshot, gameId])
-}
-
-/** This round's points per player: its scores plus its awards and bonuses. */
-export function useGamePoints(gameId: string): Readonly<Record<string, number>> {
-  const snapshot = useNearest('useGamePoints').snapshot
-  return snapshot ? gamePointsOf(snapshot, gameId) : NOTHING
-}
-
-/** This phone's own answers to the game's prompts, by key, read back after a reload. */
-export function useMyAnswers(gameId: string): Readonly<Record<string, AnswerPayload>> {
-  const snapshot = useNearest('useMyAnswers').snapshot
-  return snapshot ? myAnswersOf(snapshot, gameId) : NOTHING
 }
