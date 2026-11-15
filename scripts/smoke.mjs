@@ -157,18 +157,6 @@ async function listen(who, topic) {
   }
 }
 
-/** Polls until a game row passes `test`. */
-async function until(what, read, test, timeoutMs = 10_000) {
-  const end = Date.now() + timeoutMs
-  let last
-  while (Date.now() < end) {
-    last = await read()
-    if (test(last)) return last
-    await sleep(250)
-  }
-  throw new Error(`${what}: never happened`)
-}
-
 // A 1x1 JPEG.
 const TINY_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
