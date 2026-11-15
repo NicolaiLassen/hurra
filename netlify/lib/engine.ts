@@ -197,8 +197,9 @@ const CODES: readonly string[] = [
 /** The error mapping of section 4.4: what the phone gets for any failure. */
 export function errorResponse(error: unknown): { status: number; body: { error: string; code: string } } {
   if (error instanceof HttpError) return { status: error.status, body: { error: error.message, code: error.code } }
-  const { code, details, message, status } = (error ?? {}) as RpcError
-  if (lostRace((error ?? {}) as RpcError)) return { status: 409, body: { error: 'The game is busy. Try again.', code: 'busy' } }
+  const rpcError = (error ?? {}) as RpcError
+  const { code, details, message, status } = rpcError
+  if (lostRace(rpcError)) return { status: 409, body: { error: 'The game is busy. Try again.', code: 'busy' } }
   // game_commit's own refusals: PT409 "This game is not running" with the code in DETAIL.
   const custom = /^PT(\d{3})$/.exec(code ?? '')
   if (custom) {
