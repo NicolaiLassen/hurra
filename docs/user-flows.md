@@ -9,7 +9,7 @@ files and effort.
 
 Describes the app as of engine v2 ([engine-v2.md](engine-v2.md), sections 5 to
 7): several live games at once, the TV as a paired screen, live data on pings,
-the recap of the night. Routes are listed in the README.
+the recap of the night. Routes are listed in [developing.md](developing.md#pages).
 
 ## Legend
 

@@ -1717,7 +1717,7 @@ moves.
 
 ### 3.5 Rules for game authors
 
-These go into the README's "Writing a game" section.
+These go into the "Writing a game" section of docs/developing.md (in the README until 15 Nov).
 
 - Use `ctx.now` and `ctx.random()` only. A lint rule bans `Date`,
   `Math.random` and `crypto` in `src/games/*/logic.ts`: a hook may run twice
