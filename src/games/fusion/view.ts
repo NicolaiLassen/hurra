@@ -1,6 +1,7 @@
-// Pure helpers for Participant fusion's screens: no React, so they are unit
-// tested on their own (view.test.ts). The screens get everything else through
-// their props (docs/engine-v2.md, 6).
+// Helpers for Participant fusion's screens: no React, so they are unit tested
+// on their own (view.test.ts). All are pure except firstTime, which remembers
+// keys in sessionStorage. The screens get everything else through their props
+// (docs/engine-v2.md, 6).
 import type { AnswerPayload, PlayerId } from '@/games/core/Game'
 import { pointsFor, type FusionPhase, type FusionPublicPicture, type FusionPublicState } from '@/games/fusion/logic'
 import { foldName } from '@/lib/format'
