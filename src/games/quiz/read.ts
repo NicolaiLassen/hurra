@@ -2,7 +2,7 @@
 // plain JSON (a fixture, or a save from an older bundle), so every screen
 // reads them through these, which fill in what is missing instead of crashing.
 import type { AnswerPayload, PlayerId } from '../core/Game'
-import type { QuizLeaderboardRow, QuizPhase, QuizPlayerView, QuizPublicState } from './logic'
+import { promptKey, type QuizLeaderboardRow, type QuizPhase, type QuizPlayerView, type QuizPublicState } from './logic'
 
 const PHASES: readonly QuizPhase[] = ['lobby', 'question', 'reveal', 'leaderboard', 'done']
 
@@ -24,7 +24,7 @@ export function readPublic(raw: unknown): QuizPublicState | null {
     total: number(pub.total, Math.max(index + 1, 0)),
     question: question
       ? {
-          key: typeof question.key === 'string' ? question.key : `q${index + 1}`,
+          key: typeof question.key === 'string' ? question.key : promptKey(index),
           text: typeof question.text === 'string' ? question.text : '',
           options: strings(question.options),
           endsAt: number(question.endsAt),
