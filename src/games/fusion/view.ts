@@ -46,12 +46,28 @@ export function togglePick(pick: readonly PlayerId[], id: PlayerId): PlayerId[] 
   return [...pick, id].slice(-2)
 }
 
-/** The players a guest can vote for: everyone but themselves, by name, filtered by a search. */
+/**
+ * The players a guest can vote for: everyone but themselves, filtered by a search like an autocomplete.
+ * Names that start with the search come first, then names with a later word that does ("bj" finds
+ * Christoffer Bjørnskov), then names that only contain it; each group by name.
+ */
 export function candidatesFor(players: readonly Player[], meId: PlayerId, query: string): Player[] {
   const needle = foldName(query)
   return players
-    .filter((p) => p.id !== meId && (needle === '' || foldName(p.name).includes(needle)))
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((p) => p.id !== meId)
+    .map((p) => ({ p, rank: needle === '' ? 0 : matchRank(foldName(p.name), needle) }))
+    .filter((c) => c.rank < NO_MATCH)
+    .sort((a, b) => a.rank - b.rank || a.p.name.localeCompare(b.p.name))
+    .map((c) => c.p)
+}
+
+const NO_MATCH = 3
+
+/** 0 when the name starts with the search, 1 when a later word does, 2 when it only contains it. */
+function matchRank(name: string, needle: string): number {
+  if (name.startsWith(needle)) return 0
+  if (name.split(/\s+/).some((word) => word.startsWith(needle))) return 1
+  return name.includes(needle) ? 2 : NO_MATCH
 }
 
 /** Whether a picture still takes votes: voting is on, its prompt is open, and it isn't revealed. */

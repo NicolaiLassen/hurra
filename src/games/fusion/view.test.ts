@@ -76,6 +76,23 @@ describe('finding people', () => {
     expect(candidatesFor(players, 'me', 'me')).toEqual([])
   })
 
+  it('searches like an autocomplete: names that start with the search come first', () => {
+    const players = [
+      player('1', 'Clara'),
+      player('2', 'Ana'),
+      player('3', 'Christoffer Bjørnskov'),
+      player('4', 'Asta'),
+      player('5', 'Lars'),
+      player('me', 'Sofie'),
+    ]
+    // "a": Ana and Asta start with it; Clara and Lars only contain it.
+    expect(candidatesFor(players, 'me', 'a').map((p) => p.name)).toEqual(['Ana', 'Asta', 'Clara', 'Lars'])
+    // A later word counts before a plain contains: "bj" finds the surname.
+    expect(candidatesFor(players, 'me', 'bj').map((p) => p.name)).toEqual(['Christoffer Bjørnskov'])
+    // Only contains: by name.
+    expect(candidatesFor(players, 'me', 'r').map((p) => p.name)).toEqual(['Christoffer Bjørnskov', 'Clara', 'Lars'])
+  })
+
   it('names players, falling back to the name a reveal kept', () => {
     expect(nameOf([player('1', 'Mads')], '1')).toBe('Mads')
     expect(nameOf([], '1', 'Anna')).toBe('Anna')
