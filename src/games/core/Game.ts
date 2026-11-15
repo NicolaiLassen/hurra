@@ -157,7 +157,7 @@ export type GameContext<Config> = GameInfo<Config> & {
   updateProfile(playerId: PlayerId, patch: Record<string, unknown>): void
   /** Shallow-merges into this game's section of the session's shared data. */
   updateSessionData(patch: Record<string, unknown>): void
-  /** A banner on the TV and a toast on phones; with `to`, only those players. `to` is filtered to present players and dropped when empty. */
+  /** A banner on the TV and a toast on phones; with `to`, only those players. `to` is filtered to present players; when none is left, the announcement is dropped, never made public. */
   announce(message: string, options?: AnnouncementOptions): void
   /** Opens a prompt everyone answers from their phone, straight to the database. `closesAt` (ms) is a deadline. */
   openPrompt(key: string, spec: PromptSpec, options?: { closesAt?: number }): void
