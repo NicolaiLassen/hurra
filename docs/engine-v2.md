@@ -2897,7 +2897,18 @@ even with devtools: it reads exactly what a guest reads.
     5, its last room-wide announcement). It switches to the standings by
     itself when the 3 minutes are over.
   - `standings`: the podium and standings, exactly as today (`rowLayout`, the
-    compact podium over 27 players).
+    compact podium over 27 players). **Changed after the switch-over (15
+    Nov):** the party's size picks the composition (`boardTier` in
+    `src/components/tv/fit.ts`), centred in the room under the header, so 1
+    guest looks as meant as 45. 1 to 3 guests: a big podium, and beside it
+    the big join card (QR and code) while joining is open, with the games as
+    chips under it (the header leaves its own join card out,
+    `joinCardPlace`), or the status cards once joining is closed. 4 to 12:
+    the podium centred over large rows. 13 to 30:
+    the podium over columns of rows. 31 and up: a smaller podium that still
+    reads from across the room, over compact rows. The status cards stand on
+    the podium's floor at the right edge, where the rows and the header's
+    join card end.
   - `over`: final standings, as today.
   - `recap`: the recap scene (below).
 - **Rail** (a right column, about 24rem) when a game holds the stage (`live`

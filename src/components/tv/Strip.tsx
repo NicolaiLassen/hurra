@@ -18,15 +18,19 @@ const GAP_PX = 16
  * the background ("Also running"), and the games that finished lately as
  * chips. It sits beside the podium, in the `room` the board measured, so the
  * standings below keep their height; cards that don't fit become Live chips.
+ * Under a small party's join card every game is a chip (`chipsOnly`), so that
+ * column never grows taller than the screen.
  */
 export default function Strip({
   room,
+  chipsOnly = false,
   nowPlaying,
   running,
   finished,
   players,
 }: {
   room: number
+  chipsOnly?: boolean
   nowPlaying: SessionGame | null
   running: SessionGame[]
   finished: SessionGame[]
@@ -39,8 +43,34 @@ export default function Strip({
   const shownRunning = cards.slice(shownPlaying ? 1 : 0, fit)
   const chips = cards.slice(fit)
 
+  if (chipsOnly) {
+    return (
+      <div data-fit="strip" className="flex min-w-0 flex-col gap-4 short:gap-3" style={{ maxWidth: room }}>
+        {nowPlaying && (
+          <ChipGroup label="Now playing">
+            <LiveChip game={nowPlaying} />
+          </ChipGroup>
+        )}
+        {running.length > 0 && (
+          <ChipGroup label="Also running">
+            {running.map((game) => (
+              <LiveChip key={game.id} game={game} />
+            ))}
+          </ChipGroup>
+        )}
+        {finished.length > 0 && (
+          <ChipGroup label="Finished">
+            {finished.map((game) => (
+              <FinishedChip key={game.id} game={game} players={players} />
+            ))}
+          </ChipGroup>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div data-fit="strip" className="flex min-w-0 shrink-0 flex-col gap-4 short:gap-3" style={{ maxWidth: room }}>
+    <div data-fit="strip" className="flex min-w-0 flex-col gap-4 short:gap-3" style={{ maxWidth: room }}>
       {fit > 0 && (
         <div className="flex items-start gap-4">
           {shownPlaying && (
@@ -84,6 +114,15 @@ function Group({ label, width, children }: { label: string; width: number; child
     <div className="grid gap-2" data-fit="card" style={{ width }}>
       <Eyebrow>{label}</Eyebrow>
       {children}
+    </div>
+  )
+}
+
+function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-2">
+      <Eyebrow>{label}</Eyebrow>
+      <ChipRow>{children}</ChipRow>
     </div>
   )
 }

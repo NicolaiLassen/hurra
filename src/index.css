@@ -4,13 +4,9 @@
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
-/* Short screens (laptops, projectors), or anything inside [data-short]: the
-   scoreboard shrinks to leave room (a big party marks its podium data-short). */
+/* Short screens (laptops, projectors): the TV shrinks to leave room. */
 @custom-variant short {
   @media (max-height: 960px) {
-    @slot;
-  }
-  &:where([data-short] *) {
     @slot;
   }
 }

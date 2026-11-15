@@ -1,8 +1,23 @@
-// The TV's fit logic: what fits the screen, measured in pixels, so 8 guests and
-// 45 both read from across the room at 1920 by 1080 and at 1440 by 900.
+// The TV's fit logic: what fits the screen, measured in pixels, so 1 guest, 8
+// and 45 all read from across the room at 1920 by 1080 and at 1440 by 900.
 
-/** More players than this and the podium shrinks, so the list keeps rows you can read across the room. */
-export const BIG_PARTY = 27
+/**
+ * How the standings board is composed for a party of this size, so it looks
+ * meant at every count (docs/engine-v2.md, 7.2):
+ * - `few` (1 to 3): a big podium, with a big join card beside it while
+ *   joining is open; there are no rows yet.
+ * - `small` (4 to 12): the podium and roomy rows, centred as one block.
+ * - `medium` (13 to 30): the podium over columns of rows.
+ * - `large` (31 and up): a smaller podium that stays readable, over compact rows.
+ */
+export type BoardTier = 'few' | 'small' | 'medium' | 'large'
+
+export function boardTier(players: number): BoardTier {
+  if (players <= 3) return 'few'
+  if (players <= 12) return 'small'
+  if (players <= 30) return 'medium'
+  return 'large'
+}
 
 // Row layouts, roomiest first: the first whose rows fit the space (filled top
 // to bottom, in at most maxColumns columns, each at least minColumnWidth wide)
@@ -13,23 +28,36 @@ export const ROW_LAYOUTS = [
   { kind: 'tiny', height: 32, gap: 4, maxColumns: 6, minColumnWidth: 220 },
 ] as const
 
-export type RowLayout = (typeof ROW_LAYOUTS)[number]
+/** Roomier rows, tried first for a small party (`small`), whose few rows would otherwise leave the screen half empty. */
+export const LARGE_ROWS = { kind: 'large', height: 80, gap: 12, maxColumns: 3, minColumnWidth: 520 } as const
+
+export type RowLayout = (typeof ROW_LAYOUTS)[number] | typeof LARGE_ROWS
+
+/** The row layouts a tier may use, roomiest first. */
+export function rowLayoutsFor(tier: BoardTier): readonly RowLayout[] {
+  return tier === 'small' ? [LARGE_ROWS, ...ROW_LAYOUTS] : ROW_LAYOUTS
+}
 
 /** The space between columns (gap-x-6), in px. */
 export const COLUMN_GAP = 24
 /** Badges only fit beside a name in a column at least this wide (px); in a narrower one they crush it. */
 export const BADGES_MIN_WIDTH = 520
 
-/** The roomiest row layout whose rows all fit `width` by `height`, with its column count. */
-export function rowLayout(count: number, width: number, height: number): { layout: RowLayout; columns: number; fits: boolean } {
-  for (const layout of ROW_LAYOUTS) {
+/** The roomiest of `layouts` whose rows all fit `width` by `height`, with its column count. */
+export function rowLayout(
+  count: number,
+  width: number,
+  height: number,
+  layouts: readonly RowLayout[] = ROW_LAYOUTS,
+): { layout: RowLayout; columns: number; fits: boolean } {
+  for (const layout of layouts) {
     const perColumn = Math.max(1, Math.floor((height + layout.gap) / (layout.height + layout.gap)))
     const columns = Math.ceil(count / perColumn)
     const widthColumns = Math.floor((width + COLUMN_GAP) / (layout.minColumnWidth + COLUMN_GAP))
     if (columns <= Math.min(layout.maxColumns, widthColumns)) return { layout, columns, fits: true }
   }
   // Nothing fits: the smallest rows, in as few columns as their height allows.
-  const layout = ROW_LAYOUTS[ROW_LAYOUTS.length - 1]
+  const layout = layouts[layouts.length - 1]
   const perColumn = Math.max(1, Math.floor((height + layout.gap) / (layout.height + layout.gap)))
   return { layout, columns: Math.min(layout.maxColumns, Math.ceil(count / perColumn)), fits: false }
 }

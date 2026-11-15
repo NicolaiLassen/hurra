@@ -4,6 +4,7 @@ import type { Player, Session, SessionGame } from '@/lib/types'
 import {
   byOldestStart,
   freshStage,
+  joinCardPlace,
   mainArea,
   resultLine,
   runningFor,
@@ -72,6 +73,27 @@ describe('mainArea', () => {
     expect(mainArea({ kind: 'standings', lastGame: null }, withView)).toEqual({ kind: 'board', over: false, nowPlaying: null })
     expect(mainArea({ kind: 'over' }, withView)).toEqual({ kind: 'board', over: true, nowPlaying: null })
     expect(mainArea({ kind: 'recap' }, withView)).toEqual({ kind: 'recap' })
+  })
+})
+
+describe('joinCardPlace', () => {
+  const board = { kind: 'board', over: false, nowPlaying: null } as const
+  const stage = { kind: 'stage', game: game('q'), finished: false } as const
+
+  it('puts the big join card on the board while the standings show 1 to 3 guests', () => {
+    expect([1, 2, 3].map((guests) => joinCardPlace(board, true, guests))).toEqual(['board', 'board', 'board'])
+  })
+
+  it('keeps it in the header for a bigger party, and while a game holds the stage', () => {
+    expect(joinCardPlace(board, true, 4)).toBe('header')
+    expect(joinCardPlace(board, true, 45)).toBe('header')
+    expect(joinCardPlace(stage, true, 2)).toBe('header')
+  })
+
+  it('shows none while joining is closed, or before anyone joined (the empty board is a QR code already)', () => {
+    expect(joinCardPlace(board, false, 2)).toBeNull()
+    expect(joinCardPlace(stage, false, 12)).toBeNull()
+    expect(joinCardPlace(board, true, 0)).toBeNull()
   })
 })
 

@@ -79,6 +79,18 @@ describe('the TV scene for each fixture', () => {
     await expect(html('fixture=archived')).resolves.not.toContain('Join the game')
   })
 
+  it('shows one join card: big on the board for 1 to 3 guests, in the header after that', async () => {
+    const count = (page: string, text: string) => page.split(text).length - 1
+    const few = await html('fixture=standings&players=2')
+    expect(count(few, 'Join the game')).toBe(1)
+    expect(few).toContain('data-fit="invite"')
+    const more = await html('fixture=standings&players=4')
+    expect(count(more, 'Join the game')).toBe(1)
+    expect(more).not.toContain('data-fit="invite"')
+    // A game on the stage keeps the header's card, whatever the party's size.
+    expect(count(await html('fixture=quiz-question&players=2'), 'Join the game')).toBe(1)
+  })
+
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
     await expect(html('fixture=removed')).resolves.toBe('')
   })

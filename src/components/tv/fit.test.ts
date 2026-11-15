@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { cardsThatFit, cardsThatStack, rowLayout } from './fit'
+import { boardTier, cardsThatFit, cardsThatStack, LARGE_ROWS, ROW_LAYOUTS, rowLayout, rowLayoutsFor } from './fit'
+
+describe('boardTier', () => {
+  it('composes the board for the size of the party', () => {
+    expect([1, 2, 3].map(boardTier)).toEqual(['few', 'few', 'few'])
+    expect([4, 8, 12].map(boardTier)).toEqual(['small', 'small', 'small'])
+    expect([13, 24, 30].map(boardTier)).toEqual(['medium', 'medium', 'medium'])
+    expect([31, 45, 60].map(boardTier)).toEqual(['large', 'large', 'large'])
+  })
+})
+
+describe('rowLayoutsFor', () => {
+  it('offers the large rows to a small party only, roomiest first', () => {
+    expect(rowLayoutsFor('small')).toEqual([LARGE_ROWS, ...ROW_LAYOUTS])
+    expect(rowLayoutsFor('medium')).toEqual(ROW_LAYOUTS)
+    expect(rowLayoutsFor('large')).toEqual(ROW_LAYOUTS)
+  })
+
+  it('gives a small party large rows while they fit, and the usual ones after', () => {
+    // 9 rows (12 guests) at 1920 by 1080, under the podium: 3 columns of 3.
+    expect(rowLayout(9, 1840, 300, rowLayoutsFor('small'))).toMatchObject({ layout: { kind: 'large' }, columns: 3, fits: true })
+    // 1440 by 900 has room for 2 columns of large rows only, so 9 rows step down to regular ones.
+    expect(rowLayout(9, 1376, 340, rowLayoutsFor('small'))).toMatchObject({ layout: { kind: 'regular' }, columns: 2, fits: true })
+    // The same rows in a medium party's list never get the large ones.
+    expect(rowLayout(9, 1840, 300, rowLayoutsFor('medium'))).toMatchObject({ layout: { kind: 'regular' }, columns: 3, fits: true })
+  })
+})
 
 describe('rowLayout', () => {
   it('gives a small party the roomiest rows', () => {

@@ -379,8 +379,10 @@ sound.
 The corner holds the full screen button, the sound toggle and a live dot, in a
 gutter below the board so they never cover it. While the browser still blocks
 audio, the toggle is a small "Click for sound" pill. The plain standings fit
-the same way: three row sizes, and a compact podium once a party has more than
-27 players.
+the same way, composed for the party's size and centred under the header: a big
+podium beside a big join card for 1 to 3 guests, large rows under the podium
+up to 12, columns of rows up to 30, and a smaller podium over compact rows
+after that.
 
 ## 5. Errors, not found and the ways back
 

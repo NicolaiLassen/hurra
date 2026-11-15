@@ -8,7 +8,7 @@ import Header from '@/components/tv/Header'
 import type { NewsStage } from '@/components/tv/news'
 import Rail from '@/components/tv/Rail'
 import RecapScene from '@/components/tv/RecapScene'
-import { byOldestStart, mainArea, sceneLine } from '@/components/tv/scene'
+import { byOldestStart, joinCardPlace, mainArea, sceneLine } from '@/components/tv/scene'
 import StageView from '@/components/tv/StageView'
 import Strip from '@/components/tv/Strip'
 import Ticker from '@/components/tv/Ticker'
@@ -83,6 +83,7 @@ function Screen({
   const gains = useGains(snapshot.standings)
   const over = session.archived_at !== null
   const open = session.status === 'open' && !over
+  const joinCard = joinCardPlace(area, open, ranked.length)
 
   // The game on the stage, and what runs beside it.
   const stageId = area.kind === 'stage' ? area.game.id : area.kind === 'board' ? (area.nowPlaying?.id ?? null) : null
@@ -104,7 +105,9 @@ function Screen({
   const nowPlaying = area.kind === 'board' ? area.nowPlaying : null
   const strip =
     !over && (nowPlaying || running.length > 0 || finished.length > 0)
-      ? (room: number) => <Strip room={room} nowPlaying={nowPlaying} running={running} finished={finished} players={players} />
+      ? (room: number, chipsOnly: boolean) => (
+          <Strip room={room} chipsOnly={chipsOnly} nowPlaying={nowPlaying} running={running} finished={finished} players={players} />
+        )
       : undefined
 
   return (
@@ -119,7 +122,7 @@ function Screen({
             name={session.name}
             line={sceneLine(shown, players)}
             icon={<SceneIcon scene={shown} />}
-            joinCode={open && players.length > 0 ? session.join_code : null}
+            joinCode={joinCard === 'header' ? session.join_code : null}
           />
           {area.kind === 'stage' ? (
             <div className="flex min-h-0 flex-1 gap-8 short:gap-6">
@@ -131,7 +134,7 @@ function Screen({
           ) : ranked.length === 0 ? (
             <EmptyBoard joinCode={session.join_code} open={open} over={over} />
           ) : (
-            <Board rows={ranked} gains={gains} strip={strip} />
+            <Board rows={ranked} gains={gains} strip={strip} invite={joinCard === 'board' ? session.join_code : null} />
           )}
         </>
       )}
