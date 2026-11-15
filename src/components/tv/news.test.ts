@@ -71,7 +71,7 @@ describe('takeNews', () => {
 
   it('plays nothing for a sound-only moment that has no sound', () => {
     expect(takeNews([item()], SOUND_ONLY)).toEqual({})
-    expect(takeNews([item({ sound: 'drumroll' })], SOUND_ONLY)).toEqual({ sound: 'drumroll' })
+    expect(takeNews([item({ sound: 'ticktock' })], SOUND_ONLY)).toEqual({ sound: 'ticktock' })
   })
 
   it('keeps the ticker quiet and shows its newest line', () => {

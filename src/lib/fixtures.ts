@@ -560,7 +560,7 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
       const feed = [
         say('Who is fused? 6 pictures on the wall. Vote on your phone.', FUSION_STARTED, { game_id: FUSION, icon: 'detective', sound: 'chime' }),
       ]
-      if (scene !== 'fusion-voting') feed.push(say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'drumroll' }))
+      if (scene !== 'fusion-voting') feed.push(say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'ticktock' }))
       for (const picture of fusion.publicState.pictures) {
         if (!picture.revealed) continue
         const [a, b] = picture.revealed.people.map(nameOfPlayer)

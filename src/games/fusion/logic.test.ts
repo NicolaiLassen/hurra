@@ -142,7 +142,7 @@ describe('setup', () => {
     expect(VOTE_SPEC).toEqual({ kind: 'choice', options: 'players', min: 2, max: 2, exclude_self: true })
     expect(state).toMatchObject({ phase: 'voting', key: { 1: ['ana', 'bo'], 2: ['cy', 'dee'] }, revealed: [] })
     expect(effects.announcements).toEqual([
-      expect.objectContaining({ message: 'Who is fused?', detail: '3 pictures on the wall. Vote on your phone.', sound: 'chime' }),
+      expect.objectContaining({ message: 'Who is fused?', detail: '3 pictures on the wall. Vote on your phone.', sound: 'gong' }),
     ])
   })
 
@@ -200,7 +200,7 @@ describe('lock', () => {
     const { result: state, effects } = host(start().result, { type: 'lock' })
     expect(state.phase).toBe('locked')
     expect(effects.prompts.close).toEqual(['p1', 'p2', 'p3'])
-    expect(effects.announcements).toEqual([expect.objectContaining({ message: 'Voting is closed', sound: 'drumroll' })])
+    expect(effects.announcements).toEqual([expect.objectContaining({ message: 'Voting is closed', sound: 'ticktock' })])
   })
 
   it('does nothing a second time (a double tap)', () => {

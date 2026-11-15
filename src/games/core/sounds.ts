@@ -68,10 +68,10 @@ export const SOUNDS = {
     seconds: 3.5,
     priority: 5,
   },
-  drumroll: {
+  ticktock: {
     prompt:
-      'Suspense drum roll for a game show reveal: a tight snare roll that builds steadily in volume and intensity for about two and a half seconds, ending with one crisp cymbal crash. No other instruments, no voice.',
-    seconds: 3,
+      'Light ticking suspense before a reveal: a soft wooden clock tick-tock that speeds up and resolves on a gentle bell ding. Playful game show feel, quiet, no drums, no voice.',
+    seconds: 1.6,
     priority: 3,
   },
 } as const satisfies Record<string, { prompt: string; seconds: number; priority: number }>

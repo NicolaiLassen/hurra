@@ -177,7 +177,7 @@ export class FusionGame extends Game<
       detail: `${plural(pictures.length, 'picture')} on the wall. Vote on your phone.`,
       icon: 'detective',
       tone: 'violet',
-      sound: 'chime',
+      sound: 'gong',
     })
     return {
       phase: 'voting',
@@ -398,7 +398,7 @@ export class FusionGame extends Game<
       detail: 'The reveal is coming up on the TV',
       icon: 'megaphone',
       tone: 'violet',
-      sound: 'drumroll',
+      sound: 'ticktock',
     })
     return { ...state, phase: 'locked' }
   }

@@ -86,10 +86,10 @@ function Asking({
   const question = pub.question!
   const now = useServerTime(serverNow, 250)
   const openedAt = prompt?.opened_at ?? null
-  // A whoosh when the question appears, and the drumroll as time runs out: it rolls into the reveal.
+  // A whoosh when the question appears, and the tick-tock as time runs out: its bell lands on the reveal.
   useMomentSound(openedAt === null || now - openedAt < FRESH_MS ? momentId(game, question.key, 'asked') : null, 'whoosh')
   const timeUp = now >= question.endsAt
-  useMomentSound(timeUp && now - question.endsAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'drumroll')
+  useMomentSound(timeUp && now - question.endsAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'ticktock')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
@@ -141,7 +141,7 @@ function Revealed({
   const reduce = useReducedMotion()
   const [revealedAt] = useState(() => prompt?.revealed_at ?? serverNow())
   // Unless it already rolled when time ran out.
-  useMomentSound(serverNow() - revealedAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'drumroll')
+  useMomentSound(serverNow() - revealedAt < FRESH_MS ? momentId(game, question.key, 'answer') : null, 'ticktock')
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const most = Math.max(1, reveal.answered)
 

@@ -3305,7 +3305,7 @@ no circular countdown, no music. Instead:
   as answers arrive, with "31 of 45" beside it. Counts only: the circles carry
   no names or faces, so nobody can tell who hasn't answered;
 - sounds come only from the library and are played by the views, once per
-  question (3.5): whoosh when a question appears and drumroll at the reveal
+  question (3.5): whoosh when a question appears and the tick-tock at the reveal
   (TV), coin for your right answer and sad for a wrong one or none (phone).
   The winner's fanfare comes with the finish announcement;
 - no title card of its own: the core's "Hurra presents" card (7.2) opens the
@@ -3400,7 +3400,7 @@ prints one by one on the TV. A point per right person.
     `GameError` "#n is already revealed"); two different players in the
     party.
   - `{ type: 'lock' }`: in voting, `closePrompt` for every picture; phase
-    `locked`; announces "Voting is closed" (megaphone, drumroll). The next
+    `locked`; announces "Voting is closed" (megaphone, tick-tock). The next
     request sees every vote in `info.answers`. In locked or done: unchanged
     (a double tap).
   - `{ type: 'reveal', n }`: in voting, `GameError` "Lock voting first". In
