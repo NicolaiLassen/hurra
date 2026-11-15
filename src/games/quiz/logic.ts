@@ -264,15 +264,15 @@ export class QuizGame extends Game<QuizState, never, QuizPublicState, QuizPlayer
 
   parseHostAction(input: unknown): QuizHostAction {
     const action = (input !== null && typeof input === 'object' ? input : {}) as Record<string, unknown>
-    const step = (value: unknown, min: number) =>
+    const step = (value: unknown, min: number): value is number =>
       typeof value === 'number' && Number.isInteger(value) && value >= min && value < MAX_QUESTIONS
     switch (action.type) {
       case 'next':
-        if (step(action.from, -1)) return { type: 'next', from: action.from as number }
+        if (step(action.from, -1)) return { type: 'next', from: action.from }
         break
       case 'reveal':
       case 'leaderboard':
-        if (step(action.index, 0)) return { type: action.type as 'reveal' | 'leaderboard', index: action.index as number }
+        if (step(action.index, 0)) return { type: action.type, index: action.index }
         break
       case 'finish':
         return { type: 'finish' }
