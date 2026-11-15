@@ -363,8 +363,6 @@ export class QuizGame extends Game<QuizState, never, QuizPublicState, QuizPlayer
     const asking = question !== undefined && state.phase !== 'lobby' && state.phase !== 'done'
     const last = state.results.at(-1)
     const revealed = last !== undefined && last.index === state.index && (state.phase === 'reveal' || state.phase === 'leaderboard')
-    const present = new Set(info.players.map((p) => p.id))
-    const order = new Map(info.players.map((p, i) => [p.id, i]))
 
     return {
       phase: state.phase,
@@ -379,11 +377,7 @@ export class QuizGame extends Game<QuizState, never, QuizPublicState, QuizPlayer
             counts: [...last.counts],
             answered: last.counts.reduce((sum, n) => sum + n, 0),
             rightCount: last.counts[last.correct] ?? 0,
-            fastest: rightAnswers(last)
-              .filter((a) => present.has(a.playerId))
-              .sort((a, b) => a.ms - b.ms || (order.get(a.playerId) ?? 0) - (order.get(b.playerId) ?? 0))
-              .slice(0, 3)
-              .map(({ playerId, ms }) => ({ playerId, ms })),
+            fastest: fastestRight(last, info.players).slice(0, 3),
           }
         : null,
       leaderboard: rankPlayers(state.quizPoints, info.players)
@@ -508,11 +502,7 @@ export class QuizGame extends Game<QuizState, never, QuizPublicState, QuizPlayer
     ctx.revealPrompt(key)
 
     // The night's story: how this question went, for the event log and the recap's timeline.
-    const present = new Set(ctx.players.map((p) => p.id))
-    const order = new Map(ctx.players.map((p, i) => [p.id, i]))
-    const fastest = rightAnswers(result)
-      .filter((a) => present.has(a.playerId))
-      .sort((a, b) => a.ms - b.ms || (order.get(a.playerId) ?? 0) - (order.get(b.playerId) ?? 0))[0]
+    const fastest = fastestRight(result, ctx.players)[0]
     ctx.record(
       'revealed',
       {
@@ -594,6 +584,14 @@ function rightAnswers(result: QuizResult): { playerId: PlayerId; ms: number }[] 
   return Object.entries(result.answers)
     .filter(([, answer]) => answer.points > 0)
     .map(([playerId, answer]) => ({ playerId, ms: answer.ms }))
+}
+
+/** A question's right answers from players still in the party, fastest first, ties in join order: the TV's Fastest row and the reveal's record. */
+function fastestRight(result: QuizResult, players: readonly Pick<GamePlayer, 'id'>[]): { playerId: PlayerId; ms: number }[] {
+  const order = new Map(players.map((p, i) => [p.id, i]))
+  return rightAnswers(result)
+    .filter((a) => order.has(a.playerId))
+    .sort((a, b) => a.ms - b.ms || (order.get(a.playerId) ?? 0) - (order.get(b.playerId) ?? 0))
 }
 
 /** The option an answer picked, or null for anything else. */
