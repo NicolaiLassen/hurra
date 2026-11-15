@@ -3030,7 +3030,8 @@ game if live, else the newest live game. New: Move to a new phone.
    never reveals a live task or an answer key (5.7).
 2. **Preview**: the numbers, the race chart (a line chart of the top 8), the
    chapters with their highlights, the timeline, and a player picker showing
-   any guest's "Your night".
+   any guest's "Your night" (since 15 November also the headline and podium,
+   the night's awards and a peek at the TV's slides, below).
 3. **Actions**: Publish (or Update) with `publishRecap`, which reaches every
    screen each time; Unpublish; Show on the TV and Back to the party
    (`setTvScene`); Download the night (the raw recap as JSON, hosts only, for
@@ -3067,7 +3068,7 @@ game if live, else the newest live game. New: Move to a new phone.
   loader as `hydrateFallbackElement`. Dev builds: `/host/s/<id>?fixture=<scene>`
   and `/host/s/<id>/recap?fixture=<scene>` render fixtures.
 
-**Changed during review (pressing Recap after a deploy, 15 November):**
+**Changed during review (the recap page, 15 November):**
 
 - **"It starts by saying sorry, then it loads."** A deploy replaces the site's
   files. A control room opened before it still runs the old app, so pressing
@@ -3082,6 +3083,29 @@ game if live, else the newest live game. New: Move to a new phone.
   navigation under way), under the loader. A second missing file within a
   minute, or no answer from the site, shows the error with Retry as before, so
   a broken deploy or a dropped connection never loops.
+- **From the loader straight to the night.** The night (`fetchRawRecap`) is read
+  alongside the live snapshot, not after it, and the page holds the loader until
+  it is in: never the page around a night still on its way. The read on arrival
+  tries again after 1 s and 2 s before "The night couldn't be read" shows (with
+  Try again), so a blip on the way in never reads as an error.
+- **The preview, more fun.** A hero with the night's headline ("Hurra for Lea!",
+  or "Bo leads the night" while a round still runs), the night in numbers, the
+  podium of the top three with the leader's crown, and a little confetti
+  drifting behind it; its band holds the status and every action. Then the
+  night's awards as cards with avatars: each finished round's winners (with
+  what their game said about them), each highlight a finished round's game
+  wrote about named guests ("Fastest right answer", "Top hunter"), and the
+  biggest climber in the race (most places gained since halfway, at least 2).
+  The core still names no game: awards come from `chapters[].winners` and the
+  games' own highlights. The race has more room, a crown in the new leader's
+  colour at each lead change, and a legend in finishing order. Chapters are
+  cards in the game's tone with its icon. The room's view: the TV's slides in
+  its own order (`recapSlides`), each a small picture with its time and the
+  length of a loop, and any guest's "Your night" on a phone, drawn by the
+  phone's own `YourNight`. The timeline runs down a line in the party's colours,
+  the first 8 moments with Show all. Motion is CSS enter animations and the
+  confetti; reduced motion has neither. On a phone the awards are a row to
+  swipe.
 
 ### 7.5 From the winning move to the next game, with several games
 

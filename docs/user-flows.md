@@ -321,7 +321,7 @@ flowchart LR
   classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
 
   SP["Control room"]:::screen -- "Recap" --> BUILD["/host/s/:id/recap<br/>built from the night's event log in this browser"]:::screen
-  BUILD --> PREV["Preview: the numbers, the race, a chapter per game,<br/>the timeline, any guest's Your night"]:::screen
+  BUILD --> PREV["Preview: the headline and podium, the awards,<br/>the race, a chapter per game, the TV's slides,<br/>any guest's Your night on a phone, the timeline"]:::screen
   PREV -- "Publish, or Update" --> PUB["Every phone shows Your night<br/>the room's screens follow each Update"]:::closed
   PUB -- "Show on the TV" --> TVR["The TV plays the recap on a loop"]:::screen
   TVR -- "Back to the party" --> PUB
@@ -333,6 +333,9 @@ flowchart LR
 The recap can be built any time, also mid-party: a game still running gets a
 chapter with only who leads, so publishing early never gives away a live task
 or an answer. When more has happened since the last Publish, the page says so.
+The page holds the loader until the night is in, then shows it whole; pressing
+Recap in a control room opened before a deploy loads the new app straight onto
+the recap.
 
 ## 4. The TV
 

@@ -96,14 +96,22 @@ describe('the control room', () => {
 })
 
 describe('the recap preview', () => {
-  it('renders a recorded night: the numbers, the race, every chapter, the timeline and a guest’s night', async () => {
+  it('renders a recorded night: the headline and numbers, the awards, the race, every chapter, the TV’s slides, the timeline and a guest’s night', async () => {
     const doc = buildRecapDoc(recordedRawRecap, gameLogic)
     const text = await html(createElement(RecapPreview, { doc }))
-    expect(text).toContain('Games played')
+    expect(text).toContain('Bo leads the night')
+    expect(text).toContain(`${doc.numbers.games} games played`)
+    expect(text).toContain(`${doc.numbers.guests} guests`)
+    expect(text).toContain("The night's awards")
+    expect(text).toContain('Won Beer pong')
+    expect(text).toContain('Biggest climber')
     expect(text).toContain('The race')
     for (const chapter of doc.chapters) expect(text).toContain(chapter.title)
     expect(text).toContain('Still running')
-    expect(text).toContain('Timeline')
+    expect(text).toContain('On the TV')
+    expect(text).toContain('The night in numbers')
+    expect(text).toContain('How the night went')
+    for (const entry of doc.timeline.slice(0, 8)) expect(text).toContain(entry.text)
     expect(text).toContain('Your night')
     expect(text).toContain(doc.standings[0].name)
   })
@@ -112,5 +120,7 @@ describe('the recap preview', () => {
     const doc = fixtureRecapDoc()
     const text = await html(createElement(RecapPreview, { doc }))
     for (const chapter of doc.chapters) expect(text).toContain(chapter.title)
+    expect(text).toContain('Hurra for Bo, Freja and Maja!')
+    expect(text).toContain('Top hunter')
   })
 })

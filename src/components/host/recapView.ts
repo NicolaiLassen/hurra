@@ -1,7 +1,11 @@
-// What the recap page draws from a RecapDoc (docs/engine-v2.md, 7.4): the race
-// chart's series, scales and ticks, times of day and the download's name.
-// Pure, so they are unit-tested.
-import type { RawRecap, RecapDoc } from '@/lib/recap'
+// What the recap page draws from a RecapDoc (docs/engine-v2.md, 7.4): the
+// night's headline and awards, the race chart's series, scales and ticks, the
+// TV's slides, times of day and the download's name. Pure, so they are
+// unit-tested. Like the rest of the core, it knows no game: awards come from
+// the chapters' winners and the highlights the games' own recap hooks wrote.
+import { recapName, recapSlides, slideKey, slideMs, type RecapSlide } from '@/components/tv/recapSlides'
+import type { AnnouncementIcon, Highlight, Tone } from '@/games/core/Game'
+import { listNames, type RawRecap, type RecapDoc } from '@/lib/recap'
 
 /**
  * The race's colours: the validated dark categorical steps (the dataviz
@@ -102,6 +106,24 @@ export function movedOnSince(raw: Pick<RawRecap, 'log'>, builtAt: number): boole
   return raw.log.some((row) => row.at > builtAt && !QUIET_KINDS.has(row.kind))
 }
 
+/**
+ * Where the race chart draws its lead changes' crowns, from their x positions
+ * in time order: changes closer than `gap` pixels share a spot, their crowns
+ * fanned out leftwards from the latest by `step`, at most `most` of them (the
+ * latest). Per change, its crown's x, or null when its crown is left out.
+ */
+export function crownSpots(xs: readonly number[], gap = 18, step = 9, most = 3): (number | null)[] {
+  const spots: (number | null)[] = xs.map(() => null)
+  let start = 0
+  for (let i = 1; i <= xs.length; i++) {
+    if (i < xs.length && xs[i] - xs[i - 1] <= gap) continue
+    const end = i - 1
+    for (let k = end; k >= start && end - k < most; k--) spots[k] = xs[end] - (end - k) * step
+    start = i
+  }
+  return spots
+}
+
 /** The sample nearest to `at`: what the crosshair snaps to. */
 export function nearestIndex(times: readonly number[], at: number): number {
   let best = 0
@@ -155,4 +177,291 @@ export type NightRead<T> = { attempt: number; raw: T | null; error: string | nul
  */
 export function failedNightRead<T>(last: NightRead<T> | null, attempt: number, quiet: boolean, message: string): NightRead<T> {
   return { attempt, raw: last?.raw ?? null, error: quiet && last?.raw ? last.error : message }
+}
+
+/**
+ * What the recap page shows: the loader until the night is in, or until its
+ * read gave up (the page then says so, with Try again). Never the page around
+ * a night still on its way: it goes from the loader straight to the night.
+ */
+export function recapScreen(night: { raw: unknown; error: string | null }): 'loader' | 'page' {
+  return night.raw === null && night.error === null ? 'loader' : 'page'
+}
+
+/** Waits before the read on arrival tries again: a blip on the way in never reads as "The night couldn't be read". */
+export const ARRIVAL_RETRIES_MS = [1000, 2000] as const
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Runs `read`, and again after each of `waits` while it fails; the last failure
+ * is thrown. `stop()` gives up early (the page has moved on).
+ */
+export async function retried<T>(
+  read: () => Promise<T>,
+  waits: readonly number[],
+  stop: () => boolean = () => false,
+  sleep: (ms: number) => Promise<void> = wait,
+): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await read()
+    } catch (error) {
+      if (i >= waits.length || stop()) throw error
+      await sleep(waits[i])
+      if (stop()) throw error
+    }
+  }
+}
+
+// The night at a glance --------------------------------------------------------------
+
+const pointsText = (n: number) => `${formatCount(n)} point${n === 1 || n === -1 ? '' : 's'}`
+
+/** "1st", "2nd", "3rd", "4th", "11th", "22nd". */
+export function ordinal(n: number): string {
+  const tens = n % 100
+  if (tens >= 11 && tens <= 13) return `${n}th`
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+}
+
+/** Who tops the night: everyone tied first, once someone has scored. */
+export function nightLeaders(doc: Pick<RecapDoc, 'standings'>): RecapDoc['standings'] {
+  return doc.standings.filter((row) => row.rank === 1 && row.points > 0)
+}
+
+/** The hero's headline and the line under it. Present tense while a round still runs. */
+export function nightHeadline(doc: Pick<RecapDoc, 'standings' | 'chapters'>): { title: string; line: string } {
+  const leaders = nightLeaders(doc)
+  if (leaders.length === 0) {
+    return {
+      title: 'The night is young',
+      line: doc.chapters.length === 0 ? 'No game has started yet. The recap fills up as the night goes on.' : 'Nobody has scored yet.',
+    }
+  }
+  const names = listNames(leaders.map((row) => row.name))
+  const top = leaders[0].points
+  const running = doc.chapters.some((chapter) => chapter.finishedAt === null)
+  if (leaders.length > 1) {
+    return running
+      ? { title: `${names} lead the night`, line: `${pointsText(top)} each so far.` }
+      : { title: `Hurra for ${names}!`, line: `${names} share the night with ${pointsText(top)} each.` }
+  }
+  // Everyone tied right behind, while they have points too.
+  const nextRank = Math.min(...doc.standings.filter((row) => row.rank > 1).map((row) => row.rank))
+  const next = doc.standings.filter((row) => row.rank === nextRank && row.points > 0)
+  const ahead = next.length > 0 ? `, ${pointsText(top - next[0].points)} ahead of ${listNames(next.map((row) => row.name))}` : ''
+  return running
+    ? { title: `${names} leads the night`, line: `${pointsText(top)} so far${ahead}.` }
+    : { title: `Hurra for ${names}!`, line: `${names} took the night with ${pointsText(top)}${ahead}.` }
+}
+
+/** An award's symbol: a highlight's icon, or the climber's arrow. */
+export type AwardIcon = AnnouncementIcon | 'climb'
+
+export type Award = {
+  key: string
+  /** What it is for: "Won Quiz", "Fastest right answer", "Biggest climber"; the game's title when it is a whole sentence. */
+  label: string
+  /** The big line: who won it, or the highlight's own sentence. */
+  title: string
+  /** Who it names (they may have left the party since). */
+  players: { id: string; name: string }[]
+  detail?: string
+  icon: AwardIcon
+  tone: Tone
+  /** A crown on their avatars: they won. */
+  crown: boolean
+  /** The round it comes from. */
+  chapter?: { gameId: string; gameType: string; title: string; round: number }
+}
+
+type Chapter = RecapDoc['chapters'][number]
+
+/** The round's own headline about exactly its winners ("Lea was the last one standing"), if its game wrote one. */
+function winnersHeadline(chapter: Chapter): Highlight | undefined {
+  if (chapter.winners.length === 0) return undefined
+  const ids = new Set(chapter.winners.map((w) => w.id))
+  return chapter.highlights.find((h) => h.weight === 'headline' && h.players?.length === ids.size && h.players.every((id) => ids.has(id)))
+}
+
+const WEIGHT_ORDER: Record<NonNullable<Highlight['weight']>, number> = { headline: 0, highlight: 1, line: 2 }
+
+/**
+ * A round's card: the line about its winners (their game's own headline, or
+ * "Ana and Bo won"), then every other highlight, headlines first. The generic
+ * "Ana won Quiz" says what the winners' line already does, so it goes.
+ */
+export function chapterStory(chapter: Chapter): { winners: { title: string; detail?: string } | null; highlights: Highlight[] } {
+  const names = chapter.winners.map((w) => w.name)
+  const headline = winnersHeadline(chapter)
+  const generic = names.length > 0 ? `${listNames(names)} won ${chapter.title}` : null
+  const highlights = chapter.highlights
+    .map((highlight, order) => ({ highlight, order }))
+    .filter(({ highlight }) => highlight !== headline && highlight.title !== generic)
+    .sort((a, b) => WEIGHT_ORDER[a.highlight.weight ?? 'line'] - WEIGHT_ORDER[b.highlight.weight ?? 'line'] || a.order - b.order)
+    .map(({ highlight }) => highlight)
+  if (names.length === 0) return { winners: null, highlights }
+  const winners = headline
+    ? { title: headline.title, ...(headline.detail ? { detail: headline.detail } : {}) }
+    : { title: `${listNames(names)} won` }
+  return { winners, highlights }
+}
+
+/** "Fastest right answer: Hanne" names its winners after the colon: the label is what comes before it. */
+function awardLabel(title: string, names: string[]): string | null {
+  const colon = title.indexOf(': ')
+  return colon > 0 && title.slice(colon + 2) === listNames(names) ? title.slice(0, colon) : null
+}
+
+/**
+ * The night's awards, people first: every round's winners, then each highlight
+ * a finished round's game wrote about named guests (its headline about the
+ * winners is their own card, and its minor lines stay in its chapter), then the
+ * biggest climber in the race. The night's leader is the hero's podium.
+ */
+export function nightAwards(doc: RecapDoc): Award[] {
+  const winners: Award[] = []
+  const mentions: Award[] = []
+  for (const chapter of doc.chapters) {
+    if (chapter.finishedAt === null) continue
+    const from = { gameId: chapter.gameId, gameType: chapter.gameType, title: chapter.title, round: chapter.round }
+    const round = chapter.round > 1 ? `, round ${chapter.round}` : ''
+    const headline = winnersHeadline(chapter)
+    if (chapter.winners.length > 0) {
+      winners.push({
+        key: `won:${chapter.gameId}:${chapter.round}`,
+        label: `Won ${chapter.title}${round}`,
+        title: listNames(chapter.winners.map((w) => w.name)),
+        players: chapter.winners,
+        ...(headline?.detail ? { detail: headline.detail } : {}),
+        icon: 'crown',
+        tone: 'gold',
+        crown: true,
+        chapter: from,
+      })
+    }
+    chapter.highlights.forEach((h, i) => {
+      if (!h.players?.length || h.weight === 'line' || h === headline) return
+      const players = h.players.map((id) => ({ id, name: recapName(doc, id) }))
+      const label = awardLabel(h.title, players.map((p) => p.name))
+      mentions.push({
+        key: `highlight:${chapter.gameId}:${chapter.round}:${i}`,
+        label: label ?? `${chapter.title}${round}`,
+        title: label ? listNames(players.map((p) => p.name)) : h.title,
+        players,
+        ...(h.detail ? { detail: h.detail } : {}),
+        icon: h.icon ?? 'star',
+        tone: h.tone ?? 'gold',
+        crown: false,
+        chapter: from,
+      })
+    })
+  }
+  const climber = biggestClimber(doc)
+  const climb: Award[] = climber
+    ? [
+        {
+          key: `climber:${climber.playerId}`,
+          label: 'Biggest climber',
+          title: climber.name,
+          players: [{ id: climber.playerId, name: climber.name }],
+          detail: `From ${ordinal(climber.from)} to ${ordinal(climber.to)} in the race since ${clockTime(climber.at)}`,
+          icon: 'climb',
+          tone: 'teal',
+          crown: false,
+        },
+      ]
+    : []
+  return [...winners, ...mentions, ...climb]
+}
+
+/**
+ * The guest in the race (the night's top 8) who climbed the most places in the
+ * second half of the night: from their lowest place since halfway to where
+ * they finished, at least 2 places. Places count among the race's guests, as
+ * the chart draws them. Ties go to the better finish.
+ */
+export function biggestClimber(
+  doc: Pick<RecapDoc, 'race' | 'standings'>,
+): { playerId: string; name: string; from: number; to: number; at: number } | null {
+  const { times, series } = raceSeries(doc)
+  const last = times.length - 1
+  if (series.length < 3 || last < 2) return null
+  // Competition places among the race's guests, at every moment.
+  const places = times.map((_, i) => series.map((s) => 1 + series.filter((other) => other.values[i] > s.values[i]).length))
+  const halfway = times[0] + (times[last] - times[0]) / 2
+  let best: { index: number; from: number; to: number; at: number } | null = null
+  for (let index = 0; index < series.length; index++) {
+    const to = places[last][index]
+    let from = to
+    let at = times[last]
+    for (let i = 0; i < last; i++) {
+      // The latest moment at their lowest place: they climbed from there.
+      if (times[i] >= halfway && places[i][index] >= from && places[i][index] > to) {
+        from = places[i][index]
+        at = times[i]
+      }
+    }
+    const climb = from - to
+    if (climb >= 2 && (!best || climb > best.from - best.to || (climb === best.from - best.to && to < best.to))) best = { index, from, to, at }
+  }
+  if (!best) return null
+  return { playerId: series[best.index].playerId, name: series[best.index].name, from: best.from, to: best.to, at: best.at }
+}
+
+// The room's view ------------------------------------------------------------------------
+
+export type TvPeekSlide = { key: string; slide: RecapSlide; label: string; seconds: number }
+
+/** The slides the TV plays on a loop once the recap is on it, in its own order, and how long a loop takes. */
+export function tvPeek(doc: RecapDoc): { slides: TvPeekSlide[]; loopSeconds: number } {
+  const slides = recapSlides(doc).map((slide) => ({ key: slideKey(slide), slide, label: slideLabel(doc, slide), seconds: slideMs(slide) / 1000 }))
+  return { slides, loopSeconds: slides.reduce((sum, s) => sum + s.seconds, 0) }
+}
+
+function slideLabel(doc: RecapDoc, slide: RecapSlide): string {
+  switch (slide.kind) {
+    case 'numbers':
+      return 'The night in numbers'
+    case 'race':
+      return 'The race'
+    case 'chapter': {
+      const chapter = doc.chapters[slide.index]
+      return chapter.round > 1 ? `${chapter.title}, round ${chapter.round}` : chapter.title
+    }
+    case 'leads':
+      return 'Lead changes'
+    case 'podium':
+      return 'The podium'
+  }
+}
+
+/** "45 s", "1 min", "1 min 12 s". */
+export function durationText(seconds: number): string {
+  const whole = Math.round(seconds)
+  if (whole < 60) return `${whole} s`
+  const rest = whole % 60
+  return rest === 0 ? `${Math.floor(whole / 60)} min` : `${Math.floor(whole / 60)} min ${rest} s`
+}
+
+/** A tone's text colour (labels and icons; CALLOUT_TONE has its tinted circle and bar). */
+export const TONE_TEXT: Record<Tone, string> = {
+  gold: 'text-primary',
+  pink: 'text-confetti-pink',
+  teal: 'text-confetti-teal',
+  violet: 'text-confetti-violet',
+  red: 'text-destructive',
+}
+
+/** The four party tones in a fixed order: a game keeps its tone wherever the page shows it. */
+export const GAME_TONES = ['gold', 'pink', 'teal', 'violet'] as const satisfies readonly Tone[]
+
+/** Each game's tone, by game id, in the order the games first started. */
+export function gameTones(doc: Pick<RecapDoc, 'chapters'>): Map<string, (typeof GAME_TONES)[number]> {
+  const tones = new Map<string, (typeof GAME_TONES)[number]>()
+  for (const chapter of doc.chapters) {
+    if (!tones.has(chapter.gameId)) tones.set(chapter.gameId, GAME_TONES[tones.size % GAME_TONES.length])
+  }
+  return tones
 }

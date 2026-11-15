@@ -290,3 +290,26 @@
 @theme {
   --animate-count-pop: count-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+/* The recap page's hero (src/components/host/RecapHero.tsx): a few pieces of
+   confetti drift down behind the headline. Each piece sets its --fall (how long
+   a fall takes), --wait (a negative delay, so it starts part way down), --drift
+   and --turn. None with reduced motion. */
+@keyframes recap-drift {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(var(--drift, 0px), 56rem, 0) rotate(var(--turn, 360deg));
+  }
+}
+
+.recap-drift {
+  animation: recap-drift var(--fall, 14s) linear var(--wait, 0s) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recap-drift {
+    display: none;
+  }
+}
