@@ -10,7 +10,7 @@
 //
 // Pure and deterministic, with relative imports only: the rehearsal builds the
 // same doc under Node.
-import type { AnnouncementIcon, AnyGame, Highlight, LogEntry, RecapRound, Tone } from '../games/core/Game'
+import { ANNOUNCEMENT_ICONS, type AnnouncementIcon, type AnyGame, type Highlight, type LogEntry, type RecapRound, type Tone } from '../games/core/Game'
 import type { GameData, GameStatus } from './types'
 
 /** session_recap() output (section 2.7). Every time is epoch ms. */
@@ -85,7 +85,7 @@ const RACE_POINTS = 120
 const LEAD_CHANGE_QUIET_MS = 15 * 60_000
 const TIMELINE_ENTRIES = 60
 
-const ICONS: readonly string[] = ['megaphone', 'sword', 'detective', 'skull', 'crown', 'confetti', 'trophy', 'star', 'lightning', 'target']
+const ICONS: readonly string[] = ANNOUNCEMENT_ICONS
 const TONES: readonly string[] = ['gold', 'pink', 'teal', 'violet', 'red']
 const WEIGHTS: readonly string[] = ['headline', 'highlight', 'line']
 
