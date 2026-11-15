@@ -13,20 +13,7 @@ import type { Screen } from './live'
 import type { RecapDoc } from './recap'
 import type { AnswerPayload, FeedItem, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
 
-export type FixtureScene =
-  | 'lobby'
-  | 'quiz-question'
-  | 'quiz-reveal'
-  | 'quiz-leaderboard'
-  | 'fusion-voting'
-  | 'fusion-locked'
-  | 'fusion-reveal'
-  | 'final'
-  | 'background'
-  | 'removed'
-  | 'archived'
-
-export const FIXTURE_SCENES: readonly FixtureScene[] = [
+export const FIXTURE_SCENES = [
   'lobby',
   'quiz-question',
   'quiz-reveal',
@@ -38,7 +25,9 @@ export const FIXTURE_SCENES: readonly FixtureScene[] = [
   'background',
   'removed',
   'archived',
-]
+] as const
+
+export type FixtureScene = (typeof FIXTURE_SCENES)[number]
 
 export const isFixtureScene = (value: string | null | undefined): value is FixtureScene =>
   FIXTURE_SCENES.includes(value as FixtureScene)
