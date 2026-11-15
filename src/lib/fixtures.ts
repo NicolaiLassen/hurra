@@ -1,7 +1,8 @@
 // Typed sample snapshots for every scene (docs/engine-v2.md, 5.11), so the
-// phone, TV and host screens and the game views build against real shapes
-// before the live data works. In dev builds the pages read ?fixture=<scene>
-// and pass fixtureSnapshot(scene, screen) to their LiveSessionProvider.
+// phone, TV and host screens and the game views can be previewed and unit
+// tested against real shapes without a live party. In dev builds the pages
+// read ?fixture=<scene> and pass fixtureSnapshot(scene, screen) to their
+// LiveSessionProvider.
 //
 // The game data here (public_state, views, states) is sample JSON in the
 // shapes of section 8, for screens only: no core code reads it. Each screen
