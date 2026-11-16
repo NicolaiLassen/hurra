@@ -5,6 +5,7 @@
 // award page mounts its own, beside or inside another, and they share channels.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createLiveSession, type LiveEnvironment, type LiveState, type Screen } from '@/lib/live'
+import { PlayerPhotosProvider } from '@/lib/photos'
 import { supabase } from '@/lib/supabase'
 import type { Snapshot, Tallies } from '@/lib/types'
 import type { LiveQuery } from '@/lib/useLiveQuery'
@@ -108,7 +109,11 @@ export function LiveSessionProvider({
     }
   }, [state, serverNow, refresh])
 
-  return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>
+  return (
+    <LiveContext.Provider value={value}>
+      <PlayerPhotosProvider players={state.snapshot?.players}>{children}</PlayerPhotosProvider>
+    </LiveContext.Provider>
+  )
 }
 
 /** The nearest provider's live session. Throws outside a provider. */
