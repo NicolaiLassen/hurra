@@ -11,7 +11,7 @@ import {
 } from '@phosphor-icons/react'
 import type { CSSProperties, ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
-import { formatCount, nightHeadline } from '@/components/host/recapView'
+import { formatCount, nightHeadline, ordinal, podiumPlaces } from '@/components/host/recapView'
 import { numberTiles, type NumberTile } from '@/components/tv/recapSlides'
 import type { RecapDoc } from '@/lib/recap'
 import { cn } from '@/lib/utils'
@@ -84,19 +84,21 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
   )
 }
 
-// Left to right: 2nd, 1st, 3rd.
-const SLOTS = [1, 0, 2]
+// The list is in place order, for screen readers; on screen, left to right: 2nd, 1st, 3rd.
+const ORDER = ['order-2', 'order-1', 'order-3']
 const STEPS = [
   { avatar: 'size-16 text-xl ring-4 ring-primary', pedestal: 'h-20 from-primary/45', points: 'text-primary' },
   { avatar: 'size-12 text-base ring-[3px] ring-slate-300/80', pedestal: 'h-14 from-slate-300/25', points: 'text-slate-200' },
   { avatar: 'size-12 text-base ring-[3px] ring-amber-600/80', pedestal: 'h-10 from-amber-600/30', points: 'text-amber-500' },
 ]
 
-/** The top three on their steps, as the TV's last slide has them: the night's leader wears the crown. */
+/**
+ * The top three on their steps, as the TV's last slide has them: everyone tied
+ * first wears the crown. A screen reader hears each place and points in words.
+ */
 function Podium({ doc }: { doc: RecapDoc }) {
-  const top = doc.podium.slice(0, 3)
-  const rank = new Map(doc.standings.map((row) => [row.playerId, row.rank]))
-  if (top.length === 0) {
+  const places = podiumPlaces(doc)
+  if (places.length === 0) {
     return (
       <div className="grid justify-items-center gap-2 rounded-2xl bg-background/40 p-6 text-center text-sm text-muted-foreground ring-1 ring-foreground/10">
         <TrophyIcon weight="duotone" className="size-10 text-primary/70" />
@@ -106,17 +108,20 @@ function Podium({ doc }: { doc: RecapDoc }) {
   }
   return (
     <ol aria-label="The podium" className="flex min-w-0 items-end justify-center gap-3">
-      {SLOTS.filter((slot) => slot < top.length).map((slot) => {
-        const row = top[slot]
-        const place = rank.get(row.playerId) ?? slot + 1
-        const step = STEPS[Math.min(place, 3) - 1]
+      {places.map((guest, slot) => {
+        const { row, place } = guest
+        const step = STEPS[guest.step]
         return (
           <li
             key={row.playerId}
             // Third, then second, then first rises onto its step.
             style={{ animationDelay: `${250 + (2 - slot) * 150}ms` }}
-            className="flex min-w-0 max-w-24 flex-1 flex-col items-center duration-500 ease-out animate-in fill-mode-both fade-in slide-in-from-bottom-6 motion-reduce:animate-none"
+            className={cn(
+              'flex min-w-0 max-w-24 flex-1 flex-col items-center duration-500 ease-out animate-in fill-mode-both fade-in slide-in-from-bottom-6 motion-reduce:animate-none',
+              ORDER[slot],
+            )}
           >
+            <span className="sr-only">{`${ordinal(place)} place: `}</span>
             {place === 1 && (
               <span
                 aria-hidden
@@ -128,9 +133,14 @@ function Podium({ doc }: { doc: RecapDoc }) {
             )}
             <Avatar name={row.name} className={step.avatar} />
             <p className="mt-2 w-full truncate text-center text-sm font-semibold">{row.name}</p>
-            <p className={cn('text-lg leading-tight font-black', step.points)}>{formatCount(row.points)}</p>
+            <p className={cn('text-lg leading-tight font-black', step.points)}>
+              {formatCount(row.points)}
+              <span className="sr-only">{row.points === 1 ? ' point' : ' points'}</span>
+            </p>
             <div className={cn('mt-2 grid w-full place-items-center rounded-t-xl bg-linear-to-b to-transparent', step.pedestal)}>
-              <span className={cn('text-2xl font-black opacity-70', step.points)}>{place}</span>
+              <span aria-hidden className={cn('text-2xl font-black opacity-70', step.points)}>
+                {place}
+              </span>
             </div>
           </li>
         )

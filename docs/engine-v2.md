@@ -3193,7 +3193,8 @@ game if live, else the newest live game. New: Move to a new phone.
   Try again), so a blip on the way in never reads as an error.
 - **The preview, more fun.** A hero with the night's headline ("Hurra for Lea!",
   or "Bo leads the night" while a round still runs), the night in numbers, the
-  podium of the top three with the leader's crown, and a little confetti
+  podium of the top three with a crown for everyone tied first (read in place
+  order to a screen reader, places and points in words), and a little confetti
   drifting behind it; its band holds the status and every action. Then the
   night's awards as cards with avatars: each finished round's winners (with
   what their game said about them), each highlight a finished round's game
