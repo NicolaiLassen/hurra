@@ -32,8 +32,8 @@ the recap of the night. Routes are listed in [developing.md](developing.md#pages
 
 ```mermaid
 flowchart LR
-  classDef entry fill:#2a2645,stroke:#f5c542,color:#f5f3ff
-  classDef route fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
+  classDef entry fill:#29241e,stroke:#f5c542,color:#f2ebde
+  classDef route fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
 
   JQR(["Join QR on the TV or the host's join card"]):::entry --> JOIN["/join/:code<br/>pick a name"]:::route
   LINK(["Copied join link"]):::entry --> JOIN
@@ -63,10 +63,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
-  classDef open fill:#3b1d2a,stroke:#ff6b6b,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
+  classDef open fill:#402118,stroke:#f2603f,color:#f2ebde
 
   HOME["Start page<br/>type a code, or Continue in the party"]:::screen
   HOME -- "Join with a code" --> J0{{"/join/:code loads"}}:::gate
@@ -96,9 +96,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   P0{{"/play/:code loads"}}:::gate
   P0 -- "unknown or malformed code" --> NF["Party not found<br/>Join another party"]:::closed
@@ -134,9 +134,9 @@ view.
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   START(["Host starts the game, usually in the background"]) --> V{"My view"}:::gate
   V -- "still loading" --> DEAL["Dealing tasks..."]:::screen
@@ -171,9 +171,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   SC(["A player QR is scanned or opened"]) --> PC{{"/p/:playerCode"}}:::gate
   PC -- "error" --> PCE["Something went wrong<br/>Retry"]:::closed
@@ -196,9 +196,9 @@ demand, so guests' phones never download them.
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   ANYH(["Any /host page"]) --> RQ{{"Signed in as a host?"}}:::gate
   RQ -- "error" --> RQE["Something went wrong<br/>Retry"]:::closed
@@ -234,8 +234,8 @@ page sends each timer's sync 1.5 s after the TV would, as a backup.
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   ADD["Add game: type and title"]:::screen --> PEND["Row: not started<br/>Start split button, menu"]:::screen
   PEND -- "menu: Settings" --> SET["The game's own settings editor<br/>Save or Cancel; a problem that would stop<br/>the start shows when you save"]:::screen
@@ -273,7 +273,7 @@ background. The caret offers the other way.
 
 ```mermaid
 flowchart LR
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
 
   NAV["Header: Scan player"]:::screen --> SCAN["/host/scan<br/>camera, or type the code"]:::screen
   SCAN -- "not a player QR" --> SCAN
@@ -294,8 +294,8 @@ any player QR.
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   STAGE["On the TV now: the scene in words and as a small TV"]:::screen
   STAGE -- "a game is live on the TV" --> SLIVE["Quiz, live on the TV<br/>Back to standings keeps it running"]:::screen
@@ -317,8 +317,8 @@ TV on a finished game shows its final screen again for 3 minutes.
 
 ```mermaid
 flowchart LR
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   SP["Control room"]:::screen -- "Recap" --> BUILD["/host/s/:id/recap<br/>built from the night's event log in this browser"]:::screen
   BUILD --> PREV["Preview: the headline and podium, the awards,<br/>the race, a chapter per game, the TV's slides,<br/>any guest's Your night on a phone, the timeline"]:::screen
@@ -344,9 +344,9 @@ to be paired; the host's own browser skips that with a small Host preview label.
 
 ```mermaid
 flowchart TD
-  classDef screen fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef gate fill:#0f0d1a,stroke:#f5c542,color:#f5f3ff
-  classDef closed fill:#123b36,stroke:#4fd1c5,color:#f5f3ff
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
   OPEN(["/tv/:code opened on the TV laptop"]) --> TVL{{"The party loads"}}:::gate
   TVL -- "unknown code" --> PNF["Party not found"]:::closed

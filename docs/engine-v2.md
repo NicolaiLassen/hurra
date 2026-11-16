@@ -32,11 +32,13 @@ stays in the repo as the engine's design doc.
 - **Phosphor icons only, no emoji, and no en or em dashes** in UI copy or docs.
 - **The quiz has an original look.** No Kahoot shapes, colours, music or layout.
 - **Keep** the logo (the party popper), the sound library in `public/sounds`
-  (never run `npm run sounds`), the visual style (night sky `#0f0d1a`, gold
-  `#f5c542`, confetti pink `#ff6fae`, teal `#4fd1c5` and violet `#a78bfa`, the
-  Geist font, the hopping confetti loader), and what already works: the loader,
-  `QueryGate`, `Callout` and toasts, the sound policy, the error and not-found
-  screens, and the TV fit logic (`fitGrid`, the standings row layouts).
+  (never run `npm run sounds`), the visual identity (Running Order since
+  November 16: the warm studio ground `#14110e`, gold `#f5c542` for what is on
+  air, pink `#ff6fae` for the hunt, Archivo and Schibsted Grotesk, the hopping
+  confetti loader; [identity.md](identity.md)), and what already works: the
+  loader, `QueryGate`, `Callout` and toasts, the sound policy, the error and
+  not-found screens, and the TV fit logic (`fitGrid`, the standings row
+  layouts).
 - **Never touch production.** No `supabase db push`, nothing with `--linked`, no
   deploys, no Supabase or Netlify MCP write tools, no `git push`. Never print
   values from `.env` files. Use only the local Supabase stack. The production
@@ -98,8 +100,8 @@ idea comes from.
 
 ```mermaid
 flowchart LR
-  classDef box fill:#1b1830,stroke:#a9a3c7,color:#f5f3ff
-  classDef db fill:#2a2645,stroke:#f5c542,color:#f5f3ff
+  classDef box fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef db fill:#29241e,stroke:#f5c542,color:#f2ebde
   P["Phones<br/>/play/:code"]:::box
   T["TV<br/>/tv/:joinCode<br/>paired screen, not a host"]:::box
   H["Host control room<br/>/host/s/:id"]:::box
@@ -2837,11 +2839,11 @@ the card contract three ways, so it is fixed here, and the comments in
 
 - `PlayerCard` and `TvStatus` each draw a **whole card** in place of the
   generic one: the chrome (the phone's `Card`; on the TV a `section` with
-  `rounded-3xl bg-card/80 p-5 ring-1 ring-foreground/10`), the game's icon and
-  title, and on the phone the Live badge and a header that calls `open` when
-  there is more to see. The phone's Also running list and the TV's rail stack
-  them as they are: no wrapper and no second title. The generic cards look the
-  same.
+  `rounded-3xl bg-raised p-5`, the `CARD` of `src/components/tv/look.ts`),
+  the game's icon and title, and on the phone the Live badge and a header
+  that calls `open` when there is more to see. The phone's Also running list
+  and the TV's rail stack them as they are: no wrapper and no second title.
+  The generic cards look the same.
 - `PlayerView` and `ResultView` draw their content only (7.1).
 - A refused `act` or `submit` on a phone is the **view's** toast: the view
   catches the rejection and shows its message. The phone's wrappers reject
@@ -3516,9 +3518,10 @@ layout: no 2 by 2 grid of four coloured answer tiles, no triangle, diamond,
 circle and square symbols, no red, blue, yellow and green, no purple backdrop,
 no circular countdown, no music. Instead:
 
-- the question is a large dark card (`bg-card`) on the night sky backdrop with
-  the falling confetti; the countdown is a gold bar draining along the bottom
-  edge of that card, turning pink in the last 5 s;
+- the question is a large dark card (`bg-card`) on the plain studio ground
+  (the night sky and its falling confetti until November 16); the countdown
+  is a gold bar draining along the bottom edge of that card, turning pink in
+  the last 5 s;
 - the 2 to 4 options are full-width rows stacked under the question, each a
   dark card with a letter badge (A to D) and the option text. The four
   confetti colours (gold, pink, teal, violet) colour the letter badges only;
@@ -4549,7 +4552,7 @@ any more:
   as by the ping (5.4), so an old phone that slept through the move still
   says "Your player moved to another phone". The fixture provider passes a
   fixture's `moved` through. Unit and integration tests cover it.
-- **Worktrees serve the Geist font:** `vite.config.ts` allows the real path of
+- **Worktrees serve the fonts:** `vite.config.ts` allows the real path of
   a linked `node_modules`, which PHONE and TV hit (a 403 on the font).
 - **`npm run smoke`** (`scripts/smoke.mjs`, 9.3, 11).
 - README (the four games, the pages, "Writing a game" for SDK v2, fresh

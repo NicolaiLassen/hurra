@@ -165,6 +165,8 @@ game: every game is a plugin.
 - **[Engine v2](docs/engine-v2.md)**: the engine's design and build contract.
 - **[User flows](docs/user-flows.md)**: how every screen connects, for guests,
   the host and the TV.
+- **[Identity](docs/identity.md)**: the Running Order look for engineers: the
+  colour jobs, surfaces, type, radius, motion and the tests that guard them.
 
 ## Credits
 

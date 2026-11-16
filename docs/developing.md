@@ -16,12 +16,16 @@ screen connects, for guests, the host and the TV, is in
 - **Frontend:** React + Vite + Tailwind + [shadcn/ui](https://ui.shadcn.com),
   hosted on Netlify as a single-page app. shadcn components live in
   [src/components/ui](../src/components/ui) and are ours to edit; add more with
-  `npx shadcn@latest add <component>`. The theme (dark, gold primary) is the
-  CSS variables in [src/index.css](../src/index.css).
+  `npx shadcn@latest add <component>`. The look is Running Order: its tokens
+  are the `@theme` block in [src/index.css](../src/index.css), and
+  [identity.md](identity.md) says what each colour, size and radius is for
+  and which tests guard them. Type is Archivo and Schibsted Grotesk.
   Icons are [Phosphor](https://phosphoricons.com) (`@phosphor-icons/react`,
   bold by default via `IconContext` in [src/main.tsx](../src/main.tsx)). The
   TV animates with `motion`, loaded only on the TV page and the games' TV
-  screens, so phones never download it. The app icon is
+  screens, so phones never download it; only its `MotionConfig`, which makes
+  every animation follow the device's reduced motion setting, wraps the whole
+  app. The app icon is
   [public/favicon.svg](../public/favicon.svg); the PNGs next to it are rendered from it.
 - **Sound:** phones and the TV download their sounds when they open and decode
   them into memory with the Web Audio API

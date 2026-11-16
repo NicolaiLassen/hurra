@@ -213,7 +213,7 @@ export function squareCrop(width: number, height: number, edge = PHOTO_EDGE): { 
   }
 }
 
-/** The square of `source` at (sx, sy), `side` wide, drawn `size` wide on the night sky (transparent parts land on it). */
+/** The square of `source` at (sx, sy), `side` wide, drawn `size` wide on the studio ground (transparent parts land on it). */
 function drawSquare(source: CanvasImageSource, sx: number, sy: number, side: number, size: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
