@@ -319,45 +319,6 @@
   }
 }
 
-/* Scoreboard backdrop: soft glows plus slowly falling confetti. */
-.scoreboard-glow {
-  background:
-    radial-gradient(60% 45% at 50% 0%, color-mix(in oklch, var(--primary) 16%, transparent), transparent),
-    radial-gradient(45% 45% at 0% 100%, color-mix(in oklch, var(--confetti-violet) 16%, transparent), transparent),
-    radial-gradient(40% 40% at 100% 90%, color-mix(in oklch, var(--confetti-pink) 10%, transparent), transparent);
-}
-
-.confetti-fall {
-  animation: confetti-fall linear infinite;
-}
-
-@keyframes confetti-fall {
-  from {
-    transform: translateY(-5vh) rotate(0deg);
-  }
-  to {
-    transform: translateY(110vh) rotate(720deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .confetti-fall {
-    display: none;
-  }
-}
-
-/* Confetti dots for party surfaces (e.g. the face of a SecretCard). */
-.confetti-pattern {
-  background-image:
-    radial-gradient(circle at 12% 18%, var(--confetti-pink) 0 5px, transparent 6px),
-    radial-gradient(circle at 86% 20%, var(--confetti-teal) 0 4px, transparent 5px),
-    radial-gradient(circle at 80% 82%, var(--confetti-violet) 0 6px, transparent 7px),
-    radial-gradient(circle at 18% 84%, var(--confetti-teal) 0 3px, transparent 4px),
-    radial-gradient(circle at 52% 9%, var(--confetti-violet) 0 3px, transparent 4px),
-    radial-gradient(circle at 93% 55%, var(--confetti-pink) 0 3px, transparent 4px),
-    radial-gradient(circle at 6% 52%, var(--confetti-violet) 0 3px, transparent 4px);
-}
-
 /* A number that just changed: pops in, then settles (re-key the element to replay). */
 @keyframes count-pop {
   0% {

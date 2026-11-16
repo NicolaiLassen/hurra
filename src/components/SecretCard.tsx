@@ -42,7 +42,7 @@ export default function SecretCard({
       >
         {compact ? (
           <>
-            <div className="confetti-pattern flex items-center gap-4 rounded-2xl bg-primary px-4 py-3 text-primary-foreground backface-hidden">
+            <div className="flex items-center gap-4 rounded-2xl bg-primary px-4 py-3 text-primary-foreground backface-hidden">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-foreground/10 text-2xl font-black">
                 ?
               </span>
@@ -61,7 +61,7 @@ export default function SecretCard({
           </>
         ) : (
           <>
-            <div className="confetti-pattern flex flex-col items-center justify-center gap-3 rounded-3xl bg-primary p-6 text-center text-primary-foreground backface-hidden">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl bg-primary p-6 text-center text-primary-foreground backface-hidden">
               <span className="grid size-16 place-items-center rounded-2xl bg-primary-foreground/10 text-4xl font-black">
                 ?
               </span>

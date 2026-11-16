@@ -16,7 +16,7 @@ export default function TvStatus({ game, players, publicState, serverNow }: TvSt
   const now = useNow(serverNow, 30_000)
 
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-4 rounded-3xl bg-card/80 p-5 ring-1 ring-foreground/10 backdrop-blur short:gap-3 short:p-4">
+    <section className="grid min-w-0 grid-cols-1 gap-4 rounded-3xl bg-raised p-5 short:gap-3 short:p-4">
       <header className="flex min-w-0 items-center gap-2.5">
         <SwordIcon weight="duotone" className="size-7 shrink-0 text-confetti-pink short:size-6" />
         <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>

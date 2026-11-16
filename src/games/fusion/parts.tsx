@@ -43,7 +43,7 @@ export function PictureArt({
       role="img"
       aria-label={`Picture ${picture.label}`}
       className={cn(
-        'confetti-pattern grid place-items-center bg-confetti-violet/15 font-black text-confetti-violet',
+        'grid place-items-center bg-confetti-violet/15 font-black text-confetti-violet',
         className,
       )}
     >

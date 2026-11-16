@@ -21,7 +21,7 @@ export default function TvStatus({ game, players, gamePoints, serverNow }: TvSta
   return (
     // min-w-0 and grid-cols-1: as wide as the rail gives it, so a long title or
     // name truncates instead of widening the card.
-    <section className="grid min-w-0 grid-cols-1 gap-3 rounded-3xl bg-card/80 p-5 ring-1 ring-foreground/10 backdrop-blur short:gap-2 short:p-4">
+    <section className="grid min-w-0 grid-cols-1 gap-3 rounded-3xl bg-raised p-5 short:gap-2 short:p-4">
       <header className="flex min-w-0 items-center gap-2.5">
         <UsersThreeIcon weight="duotone" className="size-7 shrink-0 text-confetti-teal short:size-6" />
         <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>
