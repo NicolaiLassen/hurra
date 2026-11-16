@@ -25,7 +25,18 @@ export type Session = {
 /** What session_by_code returns to someone who isn't in the party yet. */
 export type PublicSession = Pick<Session, 'id' | 'name' | 'join_code' | 'status' | 'archived_at'>
 
-export type Player = { id: string; name: string; code: string; profile: GameData; created_at: number }
+export type Player = {
+  id: string
+  name: string
+  code: string
+  profile: GameData
+  created_at: number
+  /**
+   * The player's photo in the player-photos bucket, <session id>/<player id>/<uuid>.jpg,
+   * or null (docs/guest-photos.md). Optional, so fixtures and test players need none.
+   */
+  photo?: string | null
+}
 /** A players row read directly (PlayerCard, joining): ISO times, with its session and user. */
 export type PlayerRow = {
   id: string
@@ -35,6 +46,8 @@ export type PlayerRow = {
   code: string
   profile: GameData
   created_at: string
+  /** Set on what join_session and claim_player return; the app's own column lists leave it out. */
+  photo?: string | null
 }
 
 export type SessionGame = {
