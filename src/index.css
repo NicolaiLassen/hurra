@@ -140,20 +140,21 @@
    The TV scoreboard is read from across the room, so it goes up a step or two. */
 
 /* The app is dark-only (index.html sets class="dark"). The shadcn slots keep
-   their @theme inline mapping; their values now point at the brand. The old
-   names stay as aliases until the last screen has moved. */
+   their @theme inline mapping; their values point at the brand's tokens, so a
+   token changed above changes them too. The old names stay as aliases until
+   the last screen has moved. */
 :root {
-  --background: #14110e; --foreground: #f2ebde;
-  --card: #1e1a16; --card-foreground: #f2ebde;
-  --popover: #29241e; --popover-foreground: #f2ebde;
-  --primary: #f5c542; --primary-foreground: #15120e;
-  --secondary: #29241e; --secondary-foreground: #f2ebde;
-  --muted: #1e1a16; --muted-foreground: #c9bfae;
-  --accent: #29241e; --accent-foreground: #f2ebde;
-  --destructive: #f2603f;
-  --border: #3a332a; --input: #3a332a; --ring: #f5c542;
+  --background: var(--color-ground); --foreground: var(--color-paper);
+  --card: var(--color-raised); --card-foreground: var(--color-paper);
+  --popover: var(--color-overlay); --popover-foreground: var(--color-paper);
+  --primary: var(--color-gold); --primary-foreground: var(--color-ink);
+  --secondary: var(--color-overlay); --secondary-foreground: var(--color-paper);
+  --muted: var(--color-raised); --muted-foreground: var(--color-paper-2);
+  --accent: var(--color-overlay); --accent-foreground: var(--color-paper);
+  --destructive: var(--color-danger);
+  --border: var(--color-rule); --input: var(--color-rule); --ring: var(--color-gold);
   --radius: 0.5rem;
-  --confetti-pink: #ff6fae; --confetti-teal: #4fd1c5; --confetti-violet: #a78bfa;
+  --confetti-pink: var(--color-pink); --confetti-teal: var(--color-guest-teal); --confetti-violet: var(--color-guest-violet);
 }
 
 /* Type styles as utilities. Each sets its own weight, so don't pair them with font-bold and the like. */

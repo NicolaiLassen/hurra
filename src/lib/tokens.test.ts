@@ -109,6 +109,20 @@ describe('the palette guard', () => {
   })
 })
 
+describe('the old shadcn names', () => {
+  it("point at Hurra's tokens, so a token changed in the theme changes them too", () => {
+    const css = readFileSync(join(SRC, 'index.css'), 'utf8')
+    const tokens = new Set(Array.from(css.matchAll(/^\s*(--color-[\w-]+):/gm), (match) => match[1]))
+    const root = css.match(/^:root \{([^}]*)\}/m)?.[1] ?? ''
+    const aliases = Array.from(root.matchAll(/(--[\w-]+):\s*([^;]+);/g), ([, name, value]) => [name, value.trim()] as const)
+    expect(aliases.map(([name]) => name)).toContain('--background')
+    for (const [name, value] of aliases.filter(([name]) => name !== '--radius')) {
+      expect(value, name).toMatch(/^var\(--color-[\w-]+\)$/)
+      expect([...tokens], name).toContain(value.slice('var('.length, -1))
+    }
+  })
+})
+
 describe("src uses only Hurra's colours", () => {
   const files = sourceFiles()
 

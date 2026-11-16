@@ -190,9 +190,11 @@ Out is never a badge.
 
 ## Old names
 
-The shadcn slots and the confetti names are aliases that point at the brand,
-so every screen not yet restyled stands on the warm ground. New code uses the
-token names; the aliases go once the last screen has moved.
+The shadcn slots and the confetti names are aliases that point at the brand:
+each is a `var()` of its token in src/index.css, so every screen not yet
+restyled stands on the warm ground, and a token changed in the theme changes
+its alias too. New code uses the token names; the aliases go once the last
+screen has moved.
 
 | Old name | Now |
 | --- | --- |
@@ -205,7 +207,7 @@ token names; the aliases go once the last screen has moved.
 | `primary`, `ring` | `gold` |
 | `primary-foreground` | `ink` |
 | `destructive` | `danger` |
-| `confetti-pink`, `confetti-teal`, `confetti-violet` | `pink`, and the teal and violet of the key and the guest colours |
+| `confetti-pink`, `confetti-teal`, `confetti-violet` | `pink`, `guest-teal`, `guest-violet` (the same teal and violet as `key-c` and `key-d`) |
 
 ## Guards
 
