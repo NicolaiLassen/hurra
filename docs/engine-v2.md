@@ -2951,9 +2951,11 @@ even with devtools: it reads exactly what a guest reads.
     status cards once joining is closed; on a narrow screen the podium
     narrows, never the join card. 4 to 12: the podium centred over large
     rows. 13 to 27: the podium over columns of rows. 28 and up: a smaller
-    podium that still reads from across the room, over compact rows (the
-    regular one would leave 1920 by 1080 too little room for 25 regular
-    rows). The status cards stand on
+    podium that still reads from across the room, over the same rows (the
+    regular podium would leave 1920 by 1080 too little room for 25 regular
+    rows). Guests tied for first share the gold and the crown on whichever
+    step they stand (**changed on 16 Nov**; the crown used to go to the
+    middle step only). The status cards stand on
     the podium's floor at the right edge, where the rows and the header's
     join card end.
   - `over`: final standings, as today.

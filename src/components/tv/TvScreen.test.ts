@@ -91,6 +91,13 @@ describe('the TV scene for each fixture', () => {
     expect(count(await html('fixture=quiz-question&players=2'), 'Join the game')).toBe(1)
   })
 
+  it('crowns every guest tied for first on the podium, not only the middle step', async () => {
+    const crowns = (page: string) => page.split('data-crown').length - 1
+    // With 45 guests, Felix and Luna share first place on 12 points.
+    expect(crowns(await html('fixture=standings&players=45'))).toBe(2)
+    expect(crowns(await html('fixture=standings&players=24'))).toBe(1)
+  })
+
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
     await expect(html('fixture=removed')).resolves.toBe('')
   })

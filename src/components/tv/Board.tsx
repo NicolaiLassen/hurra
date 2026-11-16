@@ -255,7 +255,8 @@ function Podium({
     <section ref={ref} className={cn('flex w-fit items-end justify-center', gap, className)}>
       {PODIUM_SLOTS.filter((slot) => slot < rows.length).map((slot) => {
         const row = rows[slot]
-        const tone = PLACE_TONE[slot]
+        // Ties share a place: a guest level with the leader is gold and crowned on any step.
+        const tone = PLACE_TONE[Math.min(row.rank, 3) - 1]
         return (
           <div key={slot} data-fit="podium" className={cn('flex min-w-0 flex-col items-center', step)}>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -267,8 +268,8 @@ function Podium({
                 transition={spring}
                 className="flex w-full flex-col items-center"
               >
-                {slot === 0 && (
-                  <CrownIcon weight="fill" className={cn('mb-1 text-primary drop-shadow-[0_0_20px_rgb(245_197_66/0.6)]', look.crown)} />
+                {row.rank === 1 && (
+                  <CrownIcon data-crown="" weight="fill" className={cn('mb-1 text-primary drop-shadow-[0_0_20px_rgb(245_197_66/0.6)]', look.crown)} />
                 )}
                 <div className="relative">
                   <Avatar name={row.name} className={cn(look.avatars[slot], tone.ring)} />

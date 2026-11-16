@@ -8,7 +8,7 @@
  *   joining is open; there are no rows yet.
  * - `small` (4 to 12): the podium and roomy rows, centred as one block.
  * - `medium` (13 to 27): the podium over columns of rows.
- * - `large` (28 and up): a smaller podium that stays readable, over compact rows.
+ * - `large` (28 and up): a smaller podium that stays readable, over the same rows.
  *   From 28 the regular podium would leave 1920 by 1080 room for only 24 regular
  *   rows, so a bigger party would get smaller rows than 31 guests do.
  */
