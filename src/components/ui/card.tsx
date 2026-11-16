@@ -1,6 +1,11 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+/**
+ * A solid raised panel, told apart from the ground by value, with no hairline
+ * (docs/identity.md). Its ring stays transparent so a screen can colour it to
+ * mark a state, as the host room does for the game on the TV.
+ */
 function Card({
   className,
   size = "default",
@@ -11,7 +16,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-raised py-(--card-spacing) text-sm text-paper ring-1 ring-transparent [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -37,7 +42,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-lg leading-snug font-semibold group-data-[size=sm]/card:text-base",
+        "font-heading text-lg leading-snug font-extrabold group-data-[size=sm]/card:text-base",
         className
       )}
       {...props}
@@ -49,7 +54,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm text-paper-2", className)}
       {...props}
     />
   )
@@ -83,7 +88,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "flex items-center rounded-b-xl bg-overlay p-(--card-spacing)",
         className
       )}
       {...props}

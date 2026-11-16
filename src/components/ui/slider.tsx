@@ -3,8 +3,9 @@ import { cn } from "@/lib/utils"
 import { Slider as SliderPrimitive } from "radix-ui"
 
 /**
- * shadcn/ui's slider with one thumb. `thumbProps` reach the thumb, the element
- * a screen reader announces, so its name and value text go there.
+ * shadcn/ui's slider with one thumb: a paper range and thumb on a rule track
+ * (docs/identity.md). `thumbProps` reach the thumb, the element a screen reader
+ * announces, so its name and value text go there.
  */
 function Slider({
   className,
@@ -24,15 +25,15 @@ function Slider({
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="relative h-2 w-full grow overflow-hidden rounded-full bg-muted"
+        className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-rule"
       >
-        <SliderPrimitive.Range data-slot="slider-range" className="absolute h-full bg-primary" />
+        <SliderPrimitive.Range data-slot="slider-range" className="absolute h-full bg-paper" />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         data-slot="slider-thumb"
         {...thumbProps}
         className={cn(
-          "block size-5 shrink-0 cursor-grab rounded-full border-2 border-primary bg-background shadow-sm ring-ring/50 transition-[color,box-shadow] outline-none hover:ring-4 focus-visible:ring-4 active:cursor-grabbing disabled:pointer-events-none",
+          "block size-5.5 shrink-0 cursor-grab rounded-full bg-paper shadow-sm shadow-black/50 ring-paper/25 transition-[box-shadow] outline-none hover:ring-4 focus-visible:ring-4 focus-visible:ring-ring/50 active:cursor-grabbing disabled:pointer-events-none",
           thumbProps?.className
         )}
       />
