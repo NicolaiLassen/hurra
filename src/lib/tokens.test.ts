@@ -27,8 +27,13 @@ const SHADE = '(?:50|[1-9]00|950)'
  */
 const STOCK_CLASS = new RegExp(`(?<=[-.])(?:${STOCK_HUES.join('|')})[-.]${SHADE}(?!\\w)|-\\$\\{[^}]*\\}-${SHADE}(?!\\w)`, 'g')
 
-/** A CSS hex colour (#rgb, #rgba, #rrggbb, #rrggbbaa), not an anchor like #add-a-game or an entity like &#123;. */
-const HEX = /(?<![\w&#])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-])/gi
+/**
+ * A CSS hex colour (#rgb, #rgba, #rrggbb, #rrggbbaa), not an anchor like
+ * #add-a-game or an entity like &#123;. Letters and digits bound it, not \w:
+ * Tailwind writes a space in an arbitrary value as an underscore, so a glow
+ * like shadow-[0_0_24px_#f5c542] has one right before the #.
+ */
+const HEX = /(?<![0-9A-Za-z&#])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9A-Za-z-])/gi
 
 /** Files that may hold raw hex colours, each with its reason. Keep it short. */
 const HEX_ALLOWED: Record<string, string> = {
@@ -94,7 +99,16 @@ describe('the palette guard', () => {
   })
 
   it('knows a hex colour from an anchor or an issue number', () => {
-    for (const hex of ['#fff', '#14110E', "'#ff6fae'", 'bg-[#06050b]', '#0008', 'fill="#b7791f80"']) {
+    for (const hex of [
+      '#fff',
+      '#14110E',
+      "'#ff6fae'",
+      'bg-[#06050b]',
+      '#0008',
+      'fill="#b7791f80"',
+      'shadow-[0_0_24px_#f5c542]',
+      'bg-[linear-gradient(#0f0d1a_0%,transparent)]',
+    ]) {
       expect(matches(hex, HEX), hex).toHaveLength(1)
     }
     for (const text of ['#add-a-game', 'issue #12', '&#123;', '#abcde', '#1234567', '#coffee']) {
