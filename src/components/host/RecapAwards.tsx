@@ -85,13 +85,14 @@ function Faces({ players, crown }: { players: Award['players']; crown: boolean }
     <div aria-hidden className={cn('flex shrink-0 items-end', !one && '-space-x-3', crown && 'pt-3')}>
       {shown.map((player) => (
         <span key={player.id} className="relative">
+          <Avatar name={player.name} className={cn('ring-3 ring-card', one ? 'size-12 text-base' : 'size-10 text-sm')} />
+          {/* After the avatar, which is positioned too, so the crown paints over its ring. */}
           {crown && (
             <CrownIcon
               weight="fill"
               className={cn('absolute left-1/2 -translate-x-1/2 text-primary drop-shadow-[0_0_8px_rgb(245_197_66/0.6)]', one ? '-top-4 size-5' : '-top-3.5 size-4')}
             />
           )}
-          <Avatar name={player.name} className={cn('ring-3 ring-card', one ? 'size-12 text-base' : 'size-10 text-sm')} />
         </span>
       ))}
       {more > 0 && (
