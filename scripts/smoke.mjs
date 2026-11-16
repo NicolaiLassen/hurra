@@ -21,9 +21,11 @@
 // answer stays out of public state until its reveal); guest photos (a guest's
 // photo reaches the TV and the other phones and is public, another guest can't
 // upload into her folder or set her photo, a PNG, a 70 KB file and a second
-// photo at once are refused, the host's Remove photo reaches the room); Last
-// one standing in the background with a knockout; a 2-question quiz on the
-// stage to its crown, with the final-screen spotlight; fusion
+// photo at once are refused, so are an upload with a content coding, a signed
+// upload URL and her delete of the file her photo shows, the host's Remove
+// photo reaches the room); Last one standing in the background with a
+// knockout; a 2-question quiz on the stage to its crown, with the
+// final-screen spotlight; fusion
 // with one picture from votes to its reveal; a host award and its undo;
 // moving a player to a new phone; the recap read, published and read back by
 // a guest; a game-media upload; unpairing the TV; deleting the party.
@@ -341,6 +343,13 @@ try {
     await data(upload(ana, second), 'second photo upload')
     const soon = await refusal(setAnasPhoto(ana, second))
     check(soon?.details === 'too_soon', 'a second photo at once answers too_soon')
+    // The file a photo shows never changes, and no file is served packed: a few KB of brotli can unpack to gigabytes.
+    const packed = await refusal(photos(ana).upload(newPath(), TINY_JPEG, { contentType: 'image/jpeg', contentEncoding: 'br' }))
+    check(packed !== null, `an upload with Content-Encoding: br is refused (${packed?.statusCode})`)
+    const signed = await refusal(photos(ana).createSignedUploadUrl(newPath()))
+    check(signed !== null, `a guest may not sign an upload URL (${signed?.statusCode})`)
+    const kept = await data(photos(ana).remove([photo]), "Ana's delete of her photo's file")
+    check(kept.length === 0, "Ana can't delete the file her photo shows")
 
     const removedAt = Date.now()
     const removed = await data(host.client.rpc('host_remove_photo', { p_player_id: ana.player.id }), 'host_remove_photo')

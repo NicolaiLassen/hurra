@@ -1091,8 +1091,10 @@ is in a picture.
 holds guests' photos (`20261116000000_guest_photos.sql`; docs/guest-photos.md,
 3): public, 64 KB, JPEG only, paths
 `<session id>/<player id>/<random uuid>.jpg`. Its three policies let a guest
-upload into their own player's folder only, and the owner and hosts list and
-delete.
+upload into their own player's folder only, with no content coding and never
+through a signed upload URL; the owner and hosts list; hosts delete any file,
+and the owner any but the one their photo points at, so its bytes never
+change.
 
 ### 2.12 Self-checks
 
@@ -1134,7 +1136,7 @@ migration) when:
 - there is not exactly one foreign key between `sessions` and `session_games`;
 - (**added by `20261116000000_guest_photos.sql`**, docs/guest-photos.md, 2.7)
   a photo function is missing, or authenticated or service_role can't
-  execute the five that clients and the storage policies call;
+  execute the six that clients and the storage policies call;
   `players.photo` or `players.photo_set_at` is in a client grant; the
   `players_photo_path` check is missing, or the `players_photo_logged`
   trigger is missing or disabled; the `player-photos` bucket or one of its

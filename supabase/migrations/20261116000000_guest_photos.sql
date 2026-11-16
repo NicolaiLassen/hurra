@@ -42,8 +42,8 @@ $$;
 
 -- An upload is allowed into the caller's own folder, while the party is on,
 -- with fewer than 10 files there. The app keeps one; the cap only stops the
--- app and a simple script, because Storage checks it once per request, and a
--- signed upload URL is checked when it is made, not when it is used.
+-- app and a simple script, because Storage checks it once per request, so
+-- uploads sent in parallel each see the folder before the others land.
 create function public.may_upload_photo(p_path text) returns boolean
 language sql stable security definer set search_path = '' as $$
   select public.owns_photo_path(p_path)
@@ -68,6 +68,18 @@ alter table public.players add constraint players_photo_path check (
   or (photo ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$'
       and split_part(photo, '/', 1) = session_id::text
       and split_part(photo, '/', 2) = id::text));
+
+-- The delete policy's helper (5), here because it reads the photo column: an
+-- owner may delete any file in their folder but the one their player's photo
+-- points at. Otherwise they could delete it and upload other bytes to the
+-- same path after set_my_photo checked it, and every screen would show them.
+-- The app always moves or clears the photo before it deletes the file.
+create function public.may_delete_photo(p_path text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select public.owns_photo_path(p_path) and not exists (
+    select 1 from public.players p
+    where p.id = public.try_uuid(split_part(p_path, '/', 2)) and p.photo = p_path)
+$$;
 
 -- 3. The log row and the ping ------------------------------------------------------
 -- That a photo changed, never which file: the log is the night's story, and
@@ -109,8 +121,9 @@ create trigger players_photo_logged after update of photo on public.players
 -- 4. Client RPCs ---------------------------------------------------------------------
 
 -- A guest sets (a path) or removes (null) their own photo. The file must
--- already be uploaded into their folder, labelled image/jpeg and no bigger
--- than the app's encoder ever makes (48 KB). A new photo at most every 10 s,
+-- already be uploaded into their folder, labelled image/jpeg, no bigger than
+-- the app's encoder ever makes (48 KB), and stored as the app uploads it: no
+-- content coding, cached an hour. A new photo at most every 10 s,
 -- since every change writes a log row and pings: removing is never throttled,
 -- and setting the photo the player already has changes nothing. Returns the
 -- photo and the one it replaced, so the phone can delete the old file.
@@ -149,10 +162,15 @@ begin
     end if;
     -- Storage compares only the type a client states, so the stored label and
     -- size are checked here too: only a file the app's encoder could have made
-    -- is ever shown.
+    -- is ever shown. Storage also keeps the uploader's content coding and
+    -- cache time and serves them: a few KB of brotli can unpack to gigabytes
+    -- in every screen's browser, and a year's cache time would keep a removed
+    -- photo on the CDN for a year. The app's uploads have no coding and an hour.
     if not exists (select 1 from storage.objects o
                    where o.bucket_id = 'player-photos' and o.name = v_path
                      and o.metadata ->> 'mimetype' = 'image/jpeg'
+                     and o.metadata ->> 'contentEncoding' is null
+                     and o.metadata ->> 'cacheControl' = 'max-age=3600'
                      and case when jsonb_typeof(o.metadata -> 'size') = 'number'
                               then (o.metadata -> 'size')::numeric between 1 and 49152 else false end) then
       raise exception 'That file can''t be a photo here' using errcode = 'PT415', detail = 'bad_file';
@@ -322,10 +340,13 @@ $$;
 -- re-encodes every photo to a 320 px square of about 25 KB first
 -- (src/lib/media.ts), so a raw camera file is refused. Storage compares only
 -- the type a client states, never the bytes: so the insert policy refuses a
--- copy given another type, set_my_photo checks the stored label and size,
--- and screens measure a photo before they draw it. No update policy: a file
--- never changes, and nobody can overwrite one. Every file is deleted after the
--- party (scripts/delete-photos.ts).
+-- copy given another type, set_my_photo checks the stored label, size, coding
+-- and cache time, and screens measure a photo before they draw it. The file a
+-- photo points at never changes: there is no update policy, the insert policy
+-- refuses to sign an upload URL (its uploads run later as the storage admin,
+-- upserts included, so they could overwrite a file), and its owner can't
+-- delete it to upload other bytes in its place (may_delete_photo). Every file
+-- is deleted after the party (scripts/delete-photos.ts).
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('player-photos', 'player-photos', true, 65536, array['image/jpeg'])
@@ -334,13 +355,18 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
--- An upload states its type in the metadata Storage tests the policy with;
--- a copy states the type it asks for, so a copy given another type is refused.
+-- An upload states its type and its content coding in the metadata Storage
+-- tests the policy with; a copy states the ones it asks for, so a copy given
+-- another type is refused, and so is any stated coding. Storage names the
+-- request in storage.operation() (empty outside the Storage API), so the
+-- test that signs an upload URL is refused too.
 drop policy if exists "Guests add their own photo" on storage.objects;
 create policy "Guests add their own photo" on storage.objects
   for insert to authenticated
   with check (bucket_id = 'player-photos'
               and coalesce(metadata ->> 'mimetype', 'image/jpeg') = 'image/jpeg'
+              and coalesce(metadata ->> 'contentEncoding', '') = ''
+              and coalesce(storage.operation(), '') <> 'storage.object.sign_upload_url'
               and public.may_upload_photo(name));
 -- Storage needs this one before a delete can find the file; it also lets the
 -- owner list their own folder. Hosts see every folder (moderation, cleanup).
@@ -348,21 +374,24 @@ drop policy if exists "Owners and hosts see player photos" on storage.objects;
 create policy "Owners and hosts see player photos" on storage.objects
   for select to authenticated
   using (bucket_id = 'player-photos' and ((select public.is_host()) or public.owns_photo_path(name)));
+-- The owner deletes any of their files but the one their photo points at;
+-- hosts delete any (Remove photo, removing a guest or a party).
 drop policy if exists "Owners and hosts delete player photos" on storage.objects;
 create policy "Owners and hosts delete player photos" on storage.objects
   for delete to authenticated
-  using (bucket_id = 'player-photos' and ((select public.is_host()) or public.owns_photo_path(name)));
+  using (bucket_id = 'player-photos' and ((select public.is_host()) or public.may_delete_photo(name)));
 
 -- 6. Function grants: everything revoked, then exactly what each role needs ---------------
 
 revoke execute on function
   public.is_photo_path(text), public.owns_photo_path(text), public.may_upload_photo(text),
-  public.log_player_photo(), public.set_my_photo(uuid, text), public.host_remove_photo(uuid),
-  public.session_snapshot(uuid, text)
+  public.may_delete_photo(text), public.log_player_photo(), public.set_my_photo(uuid, text),
+  public.host_remove_photo(uuid), public.session_snapshot(uuid, text)
 from public, anon, authenticated;
 
 -- Helpers: the storage policies run as the caller.
-grant execute on function public.is_photo_path(text), public.owns_photo_path(text), public.may_upload_photo(text)
+grant execute on function public.is_photo_path(text), public.owns_photo_path(text), public.may_upload_photo(text),
+  public.may_delete_photo(text)
 to authenticated, service_role;
 
 -- What the app calls.
@@ -431,16 +460,17 @@ begin
        and not has_function_privilege('service_role', r.oid, 'execute') then
       v_problems := v_problems || format('service_role can''t execute %s', r.proname);
     end if;
-    -- New: the storage policies call the three helpers as the caller, and the app calls the two photo functions.
-    if r.proname in ('is_photo_path', 'owns_photo_path', 'may_upload_photo', 'set_my_photo', 'host_remove_photo')
+    -- New: the storage policies call the four helpers as the caller, and the app calls the two photo functions.
+    if r.proname in ('is_photo_path', 'owns_photo_path', 'may_upload_photo', 'may_delete_photo', 'set_my_photo',
+                     'host_remove_photo')
        and not (has_function_privilege('authenticated', r.oid, 'execute')
                 and has_function_privilege('service_role', r.oid, 'execute')) then
       v_problems := v_problems || format('authenticated or service_role can''t execute %s', r.proname);
     end if;
   end loop;
   -- New: the photo functions exist.
-  foreach v_name in array array['is_photo_path', 'owns_photo_path', 'may_upload_photo', 'log_player_photo',
-                                'set_my_photo', 'host_remove_photo'] loop
+  foreach v_name in array array['is_photo_path', 'owns_photo_path', 'may_upload_photo', 'may_delete_photo',
+                                'log_player_photo', 'set_my_photo', 'host_remove_photo'] loop
     if not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = v_name) then
       v_problems := v_problems || format('function %s is missing', v_name);
     end if;
@@ -589,14 +619,16 @@ begin
     v_problems := v_problems || 'a game-media storage policy is missing'::text;
   end if;
   -- New: the three photo policies, each for its one command, for signed-in users only, and with its rule: the
-  -- insert checks the type and may_upload_photo, the select and the delete owns_photo_path.
+  -- insert checks the type, the content coding, that it isn't signing an upload URL, and may_upload_photo; the
+  -- select owns_photo_path; the delete may_delete_photo.
   if (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects'
       and roles = array['authenticated']::name[]
       and ((policyname = 'Guests add their own photo' and cmd = 'INSERT'
-            and with_check like '%mimetype%' and with_check like '%may_upload_photo(name)%')
+            and with_check like '%mimetype%' and with_check like '%contentEncoding%'
+            and with_check like '%storage.object.sign_upload_url%' and with_check like '%may_upload_photo(name)%')
         or (policyname = 'Owners and hosts see player photos' and cmd = 'SELECT' and qual like '%owns_photo_path(name)%')
         or (policyname = 'Owners and hosts delete player photos' and cmd = 'DELETE'
-            and qual like '%owns_photo_path(name)%'))) <> 3 then
+            and qual like '%may_delete_photo(name)%'))) <> 3 then
     v_problems := v_problems || 'a player-photos storage policy is missing or changed'::text;
   end if;
   -- Checking names is enough: these files have just recreated their own seven.

@@ -1,11 +1,13 @@
 // Guest photos against the local stack (docs/guest-photos.md, 8.2): who may
 // upload into which folder of the player-photos bucket, what set_my_photo and
-// host_remove_photo check, what every screen's snapshot shows, and that each
-// change is logged once, never with its file, and pings the stage (a guest's
-// own change) or the room (the host's). On the shared stack it runs alone:
+// host_remove_photo check, that the file a photo points at never changes,
+// what every screen's snapshot shows, and that each change is logged once,
+// never with its file, and pings the stage (a guest's own change) or the room
+// (the host's). On the shared stack it runs alone:
 // `INTEGRATION=1 npx vitest run photos.integration`. Deleting the parties and
 // users leaves their files, so every path a test tried is deleted at the end
 // with the secret key.
+import { brotliCompressSync } from 'node:zlib'
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { admin, anonClient, rows, sleep, sql, World, type Guest, type Party, type Person } from './testUsers'
@@ -85,11 +87,25 @@ function jpeg(size = 14, type = 'image/jpeg'): Blob {
   return new Blob([bytes], { type })
 }
 
-/** An upload as the app makes one (media.ts): no upsert, cached an hour. */
-function upload(client: SupabaseClient, path: string, body: Blob = jpeg(), upsert = false) {
+/** The same bytes compressed with brotli: a few KB of it can unpack to gigabytes in a browser. */
+const brotli = async (blob: Blob) => new Blob([brotliCompressSync(new Uint8Array(await blob.arrayBuffer()))], { type: blob.type })
+
+type Extra = { upsert?: boolean; cacheControl?: string; contentEncoding?: string }
+/**
+ * An upload as the app makes one (media.ts): no upsert, cached an hour, no
+ * content coding; `extra` changes what a script could. A Blob goes as a form,
+ * bytes as a plain body with headers, as supabase-js sends each.
+ */
+function upload(client: SupabaseClient, path: string, body: Blob | Uint8Array = jpeg(), extra: Extra = {}) {
   tried.add(path)
-  return client.storage.from(BUCKET).upload(path, body, { contentType: body.type, upsert, cacheControl: '3600' })
+  const contentType = body instanceof Blob ? body.type : 'image/jpeg'
+  return client.storage.from(BUCKET).upload(path, body, { contentType, upsert: false, cacheControl: '3600', ...extra })
 }
+
+/** What Storage stored about a file, as set_my_photo reads it. */
+const stored = async (path: string) =>
+  (await sql<{ metadata: Record<string, unknown> }>(`select metadata from storage.objects where bucket_id = '${BUCKET}' and name = '${path}'`))[0]
+    ?.metadata
 
 /** 'ok', or the status Storage refused with: the one in its body, which the app reads (media.ts, storageFailure). */
 const outcome = (result: { error: { statusCode?: string } | null }) => (result.error ? result.error.statusCode : 'ok')
@@ -214,7 +230,7 @@ it("a guest can't write another guest's folder or another party's, a wrong path,
   }
   // Her own file can't be overwritten: no upload replaces one, and an upsert has no update policy.
   expect(outcome(await upload(ana.client, path, jpeg(40)))).toBe('409')
-  expect(outcome(await upload(ana.client, path, jpeg(40), true))).not.toBe('ok')
+  expect(outcome(await upload(ana.client, path, jpeg(40), { upsert: true }))).not.toBe('ok')
   const stored = await (await fetch(publicUrl(path))).arrayBuffer()
   expect(new Uint8Array(stored)).toEqual(new Uint8Array(await original.arrayBuffer()))
 })
@@ -258,6 +274,23 @@ it('a copy given another type is refused', async () => {
   expect(served.headers.get('content-type')).toBe('image/jpeg')
 })
 
+it('an upload that states a content coding, and a signed upload URL, are refused', async () => {
+  await fresh(ana)
+  // Storage would serve the coding with the file, and every screen would unpack it. A form names it in a field,
+  // a plain upload in its Content-Encoding header.
+  const packed = await brotli(jpeg())
+  expect(outcome(await upload(ana.client, newPath(ana), packed, { contentEncoding: 'br' })), 'form').toBe('403')
+  const bytes = new Uint8Array(await packed.arrayBuffer())
+  expect(outcome(await upload(ana.client, newPath(ana), bytes, { contentEncoding: 'br' })), 'plain').toBe('403')
+  // A signed URL's uploads run as the storage admin, any number of times for 2 hours, upserts included.
+  for (const upsert of [false, true]) {
+    const path = newPath(ana)
+    tried.add(path)
+    expect(outcome(await ana.client.storage.from(BUCKET).createSignedUploadUrl(path, { upsert })), `upsert ${upsert}`).toBe('403')
+  }
+  expect(await names(ana.client, folder(ana))).toEqual([])
+})
+
 it("set_my_photo refuses another player, a path outside the folder and a file that isn't there", async () => {
   await fresh(ana)
   await fresh(bo)
@@ -275,6 +308,21 @@ it("set_my_photo refuses another player, a path outside the folder and a file th
       expect((await person.client.from('players').update(change).eq('id', ana.playerId)).error?.code).toBe('42501')
     }
   }
+  expect((await rows<{ photo: string | null }>('players', 'id', ana.playerId))[0].photo).toBeNull()
+})
+
+it('set_my_photo refuses a file stored with a content coding or a longer cache time', async () => {
+  await fresh(ana)
+  // Only the secret key can still store a coding.
+  const packed = newPath(ana)
+  expect(outcome(await upload(admin, packed, await brotli(jpeg()), { contentEncoding: 'br' }))).toBe('ok')
+  expect(await stored(packed)).toMatchObject({ mimetype: 'image/jpeg', contentEncoding: 'br', cacheControl: 'max-age=3600' })
+  expect((await setPhoto(ana, packed)).error).toMatchObject({ code: 'PT415', details: 'bad_file' })
+  // A year would keep a removed photo on the CDN for a year; the app asks for an hour.
+  const cached = newPath(ana)
+  expect(outcome(await upload(ana.client, cached, jpeg(), { cacheControl: '31536000' }))).toBe('ok')
+  expect(await stored(cached)).toMatchObject({ mimetype: 'image/jpeg', cacheControl: 'max-age=31536000' })
+  expect((await setPhoto(ana, cached)).error).toMatchObject({ code: 'PT415', details: 'bad_file' })
   expect((await rows<{ photo: string | null }>('players', 'id', ana.playerId))[0].photo).toBeNull()
 })
 
@@ -311,6 +359,21 @@ it('only the owner and hosts list and delete', async () => {
   expect(await bo.client.storage.from(BUCKET).remove([path])).toMatchObject({ data: [], error: null })
   expect(await names(ana.client, folder(ana))).toEqual([fileName(path)])
   expect(await names(host.client, folder(ana))).toEqual([fileName(path)])
+})
+
+it("the owner can't delete the file her photo points at, so nobody swaps its bytes", async () => {
+  await fresh(ana)
+  const path = await addPhoto(ana)
+  const original = new Uint8Array(await (await fetch(publicUrl(path))).arrayBuffer())
+  // Her delete changes nothing, as Bo's does above, so the path stays taken and no other bytes go there.
+  expect(await ana.client.storage.from(BUCKET).remove([path])).toMatchObject({ data: [], error: null })
+  expect(await names(ana.client, folder(ana))).toEqual([fileName(path)])
+  expect(outcome(await upload(ana.client, path, jpeg(40)))).toBe('409')
+  expect(new Uint8Array(await (await fetch(publicUrl(path))).arrayBuffer())).toEqual(original)
+  // Once her photo no longer points at it, the same delete works, as the app makes it.
+  expect((await setPhoto(ana, null)).error).toBeNull()
+  expect((await ana.client.storage.from(BUCKET).remove([path])).data?.map((file) => file.name)).toEqual([path])
+  expect(await names(ana.client, folder(ana))).toEqual([])
 })
 
 it("the host removes a photo and deletes its file; a guest can't", async () => {
