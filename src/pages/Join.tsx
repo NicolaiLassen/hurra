@@ -201,12 +201,12 @@ function JoinForm({
   )
 }
 
-/** Your initials as the others will see them, coloured by the name, as you type it. */
+/** Your token as the others will see it, in the colour and piece your name gives you, as you type it. */
 function NamePreview({ name }: { name: string }) {
   const trimmed = name.trim()
   if (!trimmed) {
     return (
-      <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground">
+      <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-token bg-secondary text-muted-foreground">
         <UserIcon weight="duotone" className="size-6" />
       </span>
     )

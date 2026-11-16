@@ -96,7 +96,7 @@ function Faces({ players, crown }: { players: Award['players']; crown: boolean }
         </span>
       ))}
       {more > 0 && (
-        <span className="grid size-10 place-items-center rounded-full bg-muted text-xs font-bold text-muted-foreground ring-3 ring-card">
+        <span className="grid size-10 place-items-center rounded-token bg-muted text-xs font-bold text-muted-foreground ring-3 ring-card">
           +{more}
         </span>
       )}

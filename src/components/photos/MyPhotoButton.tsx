@@ -109,7 +109,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
         <button
           type="button"
           aria-label={hasPhoto ? 'Change your photo' : 'Add a photo'}
-          className="relative shrink-0 rounded-full transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 motion-reduce:transition-none"
+          className="relative shrink-0 rounded-token transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 motion-reduce:transition-none"
         >
           {face}
           {!hasPhoto && <AvatarBadge icon={CameraIcon} tone="gold" size="md" />}
@@ -125,7 +125,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
           {/* After a save the connection lost: the photo Try again sends. */}
           <Avatar name={player.name} playerId={player.id} src={save.canRetry ? save.preview : src} className="size-32 text-5xl" />
           {busy && (
-            <span className="absolute inset-0 grid place-items-center rounded-full bg-background/50">
+            <span className="absolute inset-0 grid place-items-center rounded-token bg-background/50">
               <SpinnerIcon className="size-10 animate-spin" />
             </span>
           )}

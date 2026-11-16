@@ -58,7 +58,7 @@ export function GenericResult({ game, player, players, gamePoints }: ResultViewP
           ))}
         </span>
       ) : (
-        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground">
+        <span className="grid size-12 shrink-0 place-items-center rounded-token bg-secondary text-muted-foreground">
           <FlagCheckeredIcon weight="duotone" className="size-6" />
         </span>
       )}

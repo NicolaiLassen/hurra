@@ -187,10 +187,10 @@ describe('PlayerPhotosProvider', () => {
       }),
     )
 
-  it('gives Avatar no photo before it has measured it: the first render shows initials', async () => {
+  it("gives Avatar no photo before it has measured it: the first render shows each guest's colour and piece", async () => {
     const markup = await faces([ana, bo, cy])
     expect(markup).not.toContain('<img')
-    expect(markup).toContain('>A<')
+    expect(markup.match(/data-piece="/g)).toHaveLength(3)
   })
 
   it('draws no made-up faces under Node, nor in a browser without ?photos', async () => {

@@ -83,7 +83,7 @@ export default function AddPhotoStep({ player, onDone }: { party: PublicSession;
       <div className="relative mt-8 self-center">
         <Avatar name={player.name} src={save.preview} className="size-32 text-5xl" />
         {saving && (
-          <span className="absolute inset-0 grid place-items-center rounded-full bg-background/50">
+          <span className="absolute inset-0 grid place-items-center rounded-token bg-background/50">
             <SpinnerIcon className="size-10 animate-spin" />
           </span>
         )}

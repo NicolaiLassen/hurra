@@ -154,7 +154,7 @@ export default function PeoplePicker({
                   ) : (
                     <span
                       key={`empty-${slot}`}
-                      className="grid size-10 place-items-center rounded-full border-2 border-dashed border-foreground/25 bg-background text-muted-foreground"
+                      className="grid size-10 place-items-center rounded-token border-2 border-dashed border-foreground/25 bg-background text-muted-foreground"
                     >
                       <UserIcon />
                     </span>

@@ -2920,8 +2920,8 @@ shows "Add a photo" (Take a selfie, Choose a photo, Skip for now), held above
 its membership reload so coming back from the camera never skips it. On the
 phone home the header avatar is a button that opens "Your photo", to add,
 change or remove it; without a photo it wears a gold camera badge. Every
-Avatar shows the player's photo, and initials without one
-(docs/guest-photos.md, 5 and 6).
+Avatar shows the player's photo (docs/guest-photos.md, 5 and 6), and without
+one the player token's colour and piece (docs/identity.md).
 
 **Home** (`/`): as today, with `sessionByCode` for "Continue in {party}".
 

@@ -10,7 +10,8 @@ block in [src/index.css](../src/index.css), and the approved
 
 **Contents:** [Colour jobs](#colour-jobs) · [Surfaces](#surfaces) ·
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
-[Primitives](#primitives) · [Old names](#old-names) · [Guards](#guards) ·
+[Primitives](#primitives) · [The player token](#the-player-token) ·
+[Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
@@ -22,7 +23,7 @@ Only Hurra's colours exist: the theme resets Tailwind's stock palette, so
 | --- | --- |
 | `gold` | What is on air, the leader or winner, and the one next step on a screen (the default Button). Never decoration, never a quiz key. |
 | `gold-rim` | Pressed gold. Never text. |
-| `pink` | The hunt (Last one standing): its tab, the word Out, the scan action. |
+| `pink` | The hunt (Last one standing): its tab, the word Out and the stripe across a knocked-out guest's token, the scan action. |
 | `danger` | Destructive host actions only. |
 | `key-a` to `key-d` | The quiz key: A coral, B pink, C teal, D violet. Always with the letter and in its fixed place. Pink and teal sit on a diagonal, because people with deuteranopia see them as almost the same colour. |
 | `guest-coral`, `guest-teal`, `guest-violet`, `guest-sky`, `guest-lime`, `guest-paper` | Identity only: a guest's token, their own phone, the winner's field. |
@@ -136,6 +137,52 @@ jobs, with their props and variant names unchanged:
 - **Slider:** a paper range and thumb on a rule track.
 - **Input**, and Textarea and the Select trigger beside it: a rule border on
   the overlay surface.
+
+## The player token
+
+Every guest is one square token:
+[src/components/Avatar.tsx](../src/components/Avatar.tsx), with the props it
+always had (`name`, `playerId`, `src`, `className`) and `out`. The call site
+gives the size; everything inside follows it through a container query and
+container units, so the same token works from a 24 px chip to a 200 px hero.
+
+- **Shape:** a square with `rounded-token` (14 percent).
+- **With a photo:** the square crop, with a band in the guest's colour along
+  the bottom (7.5 percent of the token, 3 px at least).
+- **Without one** (and while it loads, and if it fails): the guest's colour.
+  Under 96 px, their piece in ink, 62 percent of the token. From 96 px, their
+  whole first name instead: Archivo at 62 percent wide and weight 900, tilted
+  4 degrees, fitted so it is never cropped. A hyphenated name breaks after
+  the hyphen (Marie- over Louise). Never initials.
+- **Out** of Last one standing (`out`): one pink stripe from the bottom left
+  corner to the top right (10 percent, 4 px at least), over the piece at half
+  strength or the photo at half brightness. The band and a name stay at full
+  strength. The stripe never says it alone: wherever a knocked-out guest's
+  name is printed, the word Out sits beside it in pink.
+
+**Colour and piece** come from one function, `guestLook(name)` in
+[src/lib/guest.ts](../src/lib/guest.ts): six guest colours (coral, teal,
+violet, sky, lime, paper) times three pieces (dot, curl, wave), keyed on the
+name with the hash that always coloured a guest. So the TV, every phone and
+the host room agree without asking anyone. Gold and pink have jobs, so they
+are never a guest's colour. Two guests can share a pair; a small token always
+has the name beside it.
+
+**The pieces** are the logo's own confetti:
+[src/components/Piece.tsx](../src/components/Piece.tsx) draws the paths from
+[public/favicon.svg](../public/favicon.svg), each framed in a square of its
+own, in the current text colour. The curl lies at 45 degrees so it never
+reads as an S, and it crosses the out stripe instead of hiding under it. The
+star stays in the confetti: on a small tile it reads as the AI sparkle.
+
+**The name's fit:** `slateSize` gives the largest size at which the longest
+line, tilted, takes at most 78 percent of the token both ways; a short name
+(Bo, Ida) stops at 58 percent. It adds up Archivo's advance widths at that
+instance from a table measured in Chrome (kerning only ever narrows a word,
+so the sum is never short), and counts a character Archivo lacks as wider
+than any of its own. Change the slate's face, width, weight or tilt, and
+measure the table again: [src/lib/guest.test.ts](../src/lib/guest.test.ts)
+holds real browser widths the fit must never undercut.
 
 ## Old names
 
