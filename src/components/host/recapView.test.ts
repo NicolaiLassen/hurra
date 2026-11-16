@@ -317,6 +317,28 @@ describe('nightAwards', () => {
       'Fastest right answer',
     ])
   })
+
+  it('names a guest who left from a round they won or a lead they took, and gives one it cannot name no face', () => {
+    // Jonas, Kim and Hanne left: the standings no longer have them.
+    const left = nightOf({ Lea: 18, Bo: 3 }, [
+      chapter('Last one standing', ['Jonas'], [
+        { title: 'Top hunter: Jonas', detail: '5 knockouts', players: ['jonas'], icon: 'sword', tone: 'pink', weight: 'highlight' },
+      ]),
+      chapter('Quiz', ['Lea'], [
+        { title: 'Fastest right answer: Kim', players: ['kim'], icon: 'lightning', tone: 'teal', weight: 'highlight' },
+        { title: 'Slowest right answer: Hanne', players: ['hanne'], icon: 'target', tone: 'violet', weight: 'highlight' },
+        { title: 'Best team: Lea and Hanne', players: ['lea', 'hanne'], icon: 'star', weight: 'highlight' },
+      ]),
+    ])
+    const doc = { ...left, leadChanges: [{ at: AT, playerId: 'kim', name: 'Kim' }] }
+    expect(nightAwards(doc).filter((a) => !a.crown).map((a) => [a.label, a.title, a.players.map((p) => p.name)])).toEqual([
+      ['Top hunter', 'Jonas', ['Jonas']],
+      ['Fastest right answer', 'Kim', ['Kim']],
+      // Nothing in the doc names Hanne: the game's sentence stays whole, under its title, and only Lea has a face.
+      ['Quiz', 'Slowest right answer: Hanne', []],
+      ['Quiz', 'Best team: Lea and Hanne', ['Lea']],
+    ])
+  })
 })
 
 describe('chapterStory', () => {

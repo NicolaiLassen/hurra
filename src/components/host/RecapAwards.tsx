@@ -75,8 +75,9 @@ function AwardCard({ award }: { award: Award }) {
   )
 }
 
-/** Up to three avatars, overlapping, with a crown over each winner; "+2" for the rest. */
+/** Up to three avatars, overlapping, with a crown over each winner; "+2" for the rest. None when the doc can't name anyone. */
 function Faces({ players, crown }: { players: Award['players']; crown: boolean }) {
+  if (players.length === 0) return null
   const shown = players.slice(0, 3)
   const more = players.length - shown.length
   const one = players.length === 1

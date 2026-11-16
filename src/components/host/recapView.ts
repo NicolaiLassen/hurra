@@ -3,7 +3,7 @@
 // TV's slides, times of day and the download's name. Pure, so they are
 // unit-tested. Like the rest of the core, it knows no game: awards come from
 // the chapters' winners and the highlights the games' own recap hooks wrote.
-import { recapName, recapSlides, slideKey, slideMs, type RecapSlide } from '@/components/tv/recapSlides'
+import { recapSlides, slideKey, slideMs, type RecapSlide } from '@/components/tv/recapSlides'
 import type { AnnouncementIcon, Highlight, Tone } from '@/games/core/Game'
 import { listNames, type RawRecap, type RecapDoc } from '@/lib/recap'
 
@@ -292,7 +292,7 @@ export type Award = {
   label: string
   /** The big line: who won it, or the highlight's own sentence. */
   title: string
-  /** Who it names (they may have left the party since). */
+  /** Who it names, each with a face: the guests the doc can name (they may have left the party since). */
   players: { id: string; name: string }[]
   detail?: string
   icon: AwardIcon
@@ -348,6 +348,14 @@ function awardLabel(title: string, names: string[]): string | null {
  * biggest climber in the race. The night's leader is the hero's podium.
  */
 export function nightAwards(doc: RecapDoc): Award[] {
+  // A guest who left is gone from the standings, but a round they won or a lead
+  // they took still names them. Later entries win: the standings' names come last.
+  const named = new Map<string, string>([
+    ...doc.chapters.flatMap((c) => c.winners.map((w) => [w.id, w.name] as const)),
+    ...doc.leadChanges.map((l) => [l.playerId, l.name] as const),
+    ...doc.standings.map((r) => [r.playerId, r.name] as const),
+    ...Object.entries(doc.players).map(([id, p]) => [id, p.name] as const),
+  ])
   const winners: Award[] = []
   const mentions: Award[] = []
   for (const chapter of doc.chapters) {
@@ -370,8 +378,12 @@ export function nightAwards(doc: RecapDoc): Award[] {
     }
     chapter.highlights.forEach((h, i) => {
       if (!h.players?.length || h.weight === 'line' || h === headline) return
-      const players = h.players.map((id) => ({ id, name: recapName(doc, id) }))
-      const label = awardLabel(h.title, players.map((p) => p.name))
+      // A guest the doc can't name gets no face, and the game's own sentence (which names them) stays whole.
+      const players = h.players.flatMap((id) => {
+        const name = named.get(id)
+        return name === undefined ? [] : [{ id, name }]
+      })
+      const label = players.length === h.players.length ? awardLabel(h.title, players.map((p) => p.name)) : null
       mentions.push({
         key: `highlight:${chapter.gameId}:${chapter.round}:${i}`,
         label: label ?? `${chapter.title}${round}`,
