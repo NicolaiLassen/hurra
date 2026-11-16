@@ -184,6 +184,9 @@ than any of its own. Change the slate's face, width, weight or tilt, and
 measure the table again: [src/lib/guest.test.ts](../src/lib/guest.test.ts)
 holds real browser widths the fit must never undercut.
 
+**AvatarBadge** puts a square gold chip across a token's bottom right corner:
+the winner's crown, or the camera on your own token before you add a photo.
+
 ## Old names
 
 The shadcn slots and the confetti names are aliases that point at the brand,
