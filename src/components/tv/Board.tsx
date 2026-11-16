@@ -29,7 +29,8 @@ const ONE_COLUMN_MIN = 768
  * room under the header:
  * - 1 to 3 guests: a big podium, and beside it a column with the big join
  *   card (`invite`, while joining is open) over the games as chips; without
- *   the join card, the status cards themselves.
+ *   the join card, the status cards themselves. On a narrow screen the podium
+ *   narrows, never the join card, so its QR code stays whole.
  * - 4 and up: the podium over the rows, both centred; the status cards stand
  *   on the podium's floor at the right edge, where the rows and the header's
  *   join card end. The podium narrows while they show, and moves left when
@@ -88,12 +89,12 @@ export default function Board({
                 gains={gains}
                 size={PODIUM_SIZE[tier]}
                 narrow={!few && !!strip}
-                className={few ? undefined : 'col-start-2 row-start-1'}
+                className={few ? 'min-w-0' : 'col-start-2 row-start-1'}
               />
             )}
             {few
               ? (inviting || strip) && (
-                  <div className="flex min-w-0 flex-col gap-6 short:gap-4">
+                  <div className="flex shrink-0 flex-col gap-6 short:gap-4">
                     {inviting && (
                       <div ref={inviteRef}>
                         <JoinInvite joinCode={invite} />
@@ -253,7 +254,7 @@ function Podium({
         const row = rows[slot]
         const tone = PLACE_TONE[slot]
         return (
-          <div key={slot} data-fit="podium" className={cn('flex flex-col items-center', step)}>
+          <div key={slot} data-fit="podium" className={cn('flex min-w-0 flex-col items-center', step)}>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={row.player_id}

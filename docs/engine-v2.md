@@ -2947,7 +2947,8 @@ even with devtools: it reads exactly what a guest reads.
     guest looks as meant as 45. 1 to 3 guests: a big podium, and beside it
     the big join card (QR and code) while joining is open, with the games as
     chips under it (the header leaves its own join card out,
-    `joinCardPlace`), or the status cards once joining is closed. 4 to 12:
+    `joinCardPlace`), or the status cards once joining is closed; on a
+    narrow screen the podium narrows, never the join card. 4 to 12:
     the podium centred over large rows. 13 to 30:
     the podium over columns of rows. 31 and up: a smaller podium that still
     reads from across the room, over compact rows. The status cards stand on
