@@ -1,5 +1,5 @@
-import { ArrowClockwiseIcon, CameraIcon, ImagesIcon, SpinnerIcon, TrashIcon } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { ArrowClockwiseIcon, CameraIcon, CheckCircleIcon, ImagesIcon, SpinnerIcon, TrashIcon } from '@phosphor-icons/react'
+import { useEffect, useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
 import { usePhotoPicker, usePhotoSave } from '@/components/photos/PhotoControls'
@@ -12,6 +12,8 @@ import { useLive } from '@/lib/useLive'
 
 /** The longest this phone shows its own change after it is done, before it follows the snapshot again. */
 const HOLD_MS = 10_000
+/** How long the open sheet's line says a change worked, as long as a toast stays. */
+const NOTE_MS = 4_000
 
 type Tap = 'selfie' | 'library' | 'retry' | 'remove'
 /** The sheet's buttons: with Try again, and with Remove photo. */
@@ -29,15 +31,31 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
   const save = usePhotoSave({ id: player.id, session_id: session.id }, refresh)
   const measured = usePlayerPhoto(player.id)
   const [open, setOpen] = useState(false)
+  // Whether the sheet is open now: a change ends after a wait, maybe with the sheet closed.
+  const isOpen = useRef(false)
   // This phone's change: the snapshot's photo when it started, and whether it is done.
   const [held, setHeld] = useState<{ from: string | null; done: boolean } | null>(null)
   const [tap, setTap] = useState<{ which: Tap; layout: Layout } | null>(null)
+  // "Photo saved" or "Photo removed" in the open sheet's line, for a moment.
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!held?.done) return
     const timer = setTimeout(() => setHeld(null), HOLD_MS)
     return () => clearTimeout(timer)
   }, [held])
+
+  useEffect(() => {
+    if (note === null) return
+    const timer = setTimeout(() => setNote(null), NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [note])
+
+  function openSheet(next: boolean) {
+    isOpen.current = next
+    setOpen(next)
+    if (!next) setNote(null)
+  }
 
   // Held until the snapshot's photo is no longer the one the change started
   // from and, for a new photo, this screen has measured it; 10 s at most.
@@ -50,10 +68,15 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
 
   async function change(run: () => Promise<boolean>, success: string) {
     if (busy) return
+    setNote(null)
     setHeld({ from: photo, done: false })
     const ok = await run()
     setHeld((h) => (ok && h ? { ...h, done: true } : null))
-    if (ok) toast.success(success)
+    if (!ok) return
+    // With the sheet open, its own line says so: a toast would sit on top of
+    // its buttons, and a screen reader can't reach a toast behind the sheet.
+    if (isOpen.current) setNote(success)
+    else toast.success(success)
   }
   const picker = usePhotoPicker((file) => void change(() => save.save(file), 'Photo saved'))
 
@@ -61,7 +84,8 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
   // While a change runs, the buttons stay as they were when it was tapped, the tapped one spinning.
   const layout = busy && tap ? tap.layout : now
   const spinning = (which: Tap) => busy && tap?.which === which
-  const press = (which: Tap, act: () => void) => () => {
+  // Called from the buttons when tapped, never while rendering: a change reads isOpen when it ends.
+  function press(which: Tap, act: () => void) {
     setTap({ which, layout: now })
     act()
   }
@@ -80,7 +104,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
         : "Add a photo so everyone can see who's who. It's deleted after the party."
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={openSheet}>
       <SheetTrigger asChild>
         <button
           type="button"
@@ -110,6 +134,12 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
           <SheetDescription key="error" role="alert" className="mt-5 text-center text-base text-destructive">
             {save.error}
           </SheetDescription>
+        ) : note ? (
+          // The same key as the text: one live region, so the change is read out.
+          <SheetDescription key="text" aria-live="polite" className="mt-5 flex items-center justify-center gap-2 text-base font-semibold text-foreground">
+            <CheckCircleIcon weight="fill" className="size-5 shrink-0 text-confetti-teal" />
+            {note}
+          </SheetDescription>
         ) : (
           <SheetDescription key="text" aria-live="polite" className="mt-5 text-center text-base text-balance">
             {text}
@@ -118,7 +148,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
 
         <div className="mt-6 grid gap-3">
           {layout.retry && !over && (
-            <Button size="xl" disabled={busy} isPending={spinning('retry')} onClick={press('retry', () => void change(save.retry, 'Photo saved'))}>
+            <Button size="xl" disabled={busy} isPending={spinning('retry')} onClick={() => press('retry', () => void change(save.retry, 'Photo saved'))}>
               {spinning('retry') ? <SpinnerIcon className="animate-spin" /> : <ArrowClockwiseIcon />}
               Try again
             </Button>
@@ -130,12 +160,12 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
                 variant={layout.retry ? 'secondary' : 'default'}
                 disabled={busy}
                 isPending={spinning('selfie')}
-                onClick={press('selfie', picker.takeSelfie)}
+                onClick={() => press('selfie', picker.takeSelfie)}
               >
                 {spinning('selfie') ? <SpinnerIcon className="animate-spin" /> : <CameraIcon />}
                 Take a selfie
               </Button>
-              <Button size="xl" variant="secondary" disabled={busy} isPending={spinning('library')} onClick={press('library', picker.choosePhoto)}>
+              <Button size="xl" variant="secondary" disabled={busy} isPending={spinning('library')} onClick={() => press('library', picker.choosePhoto)}>
                 {spinning('library') ? <SpinnerIcon className="animate-spin" /> : <ImagesIcon />}
                 Choose a photo
               </Button>
@@ -147,13 +177,13 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
               variant="destructive"
               disabled={busy}
               isPending={spinning('remove')}
-              onClick={press('remove', () => void change(save.remove, 'Photo removed'))}
+              onClick={() => press('remove', () => void change(save.remove, 'Photo removed'))}
             >
               {spinning('remove') ? <SpinnerIcon className="animate-spin" /> : <TrashIcon />}
               Remove photo
             </Button>
           )}
-          <Button size="lg" variant="ghost" className="text-muted-foreground" onClick={() => setOpen(false)}>
+          <Button size="lg" variant="ghost" className="text-muted-foreground" onClick={() => openSheet(false)}>
             Done
           </Button>
         </div>
