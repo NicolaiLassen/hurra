@@ -204,7 +204,7 @@ statement. They are:
   party's column grants. It sets `lock_timeout` to 10 s, so on a live party
   it gives up rather than queue every screen's read behind a long transaction.
   Apply it before deploying the app that uses it: until it is applied, that
-  app plays the TV at 100% and its volume steps in the control room fail.
+  app plays the TV at 100% and its volume slider in the control room can't save.
 
 ### 2.1 Rules for the file
 
@@ -2026,8 +2026,9 @@ UI-only helpers stay as they are and no package edits them: `announcement.tsx`,
 `callout.ts`, `fitGrid.ts`, `format.ts`, `loader.ts`, `sound.ts`,
 `soundPolicy.ts`, `toast.tsx`, `useElementSize.ts`, `utils.ts`, `urls.ts`,
 `storage.ts`. **Changed after the switch-over (15 Nov):** `soundVolume.ts`
-holds the TV's sound effects volume as pure functions (the steps, a stored
-value read safely, the gain for a percentage), and `sound.ts` gains
+holds the TV's sound effects volume as pure functions (a stored value read
+safely, the gain for a percentage) and `newestOnly`, which saves the control
+room's slider one level at a time, the newest last, and `sound.ts` gains
 `setEffectsVolume` and `previewEffectsVolume` (7.2).
 
 ### 5.2 types.ts
@@ -3048,13 +3049,19 @@ animation, fades only.
      named tab of this browser (7.2). A start in the background says so in a
      toast with Show on the TV.
    - **TV sound effects** (**changed after the switch-over, 15 Nov**), under
-     the screens line: Off, 25%, 50%, 75% and 100%, the party's current step
-     in gold (`setSoundVolume`), with "Keep them under the party music. Phones
-     keep their own volume." Only TV screens follow it (7.2). A change says
-     so in a toast, "TV sound effects at 50%" or "TV sound effects off", plus
-     "The TV plays a short sound at this level." while a TV is paired or open
-     in this browser. A value set some other way shows as its percentage,
-     with no step pressed.
+     the screens line: a slider from Off to 100% in steps of 5, with the
+     party's level beside its name ("TV sound effects 40%"), and "Keep them
+     under the party music. Phones keep their own volume." Only TV screens
+     follow it (7.2). The level saves (`setSoundVolume`) when the host lets
+     go, or with each arrow key, one save at a time: dragging again while one
+     saves sends only the newest level, after it (`newestOnly`, 5.1).
+     Letting go saves the level the thumb last moved to, since Radix commits
+     the value it last rendered. The thumb keeps the new level until the
+     snapshot has it (`stillHeld`), so it never jumps back. A saved change says so in one toast that each change replaces,
+     "TV sound effects at 40%" or "TV sound effects off", plus "The TV plays
+     a short sound at this level." while a TV is paired or open in this
+     browser. **Changed on 16 Nov:** a slider, at the owner's wish, replaced
+     the five steps (Off, 25%, 50%, 75% and 100%).
 3. **Live games**: one card per live game, newest first: title, type icon,
    Live and "On the TV" badges, the module's `HostView` (fed `state`, `config`,
    `tallies`, `gamePoints`, `act`), Show on the TV (when it isn't), and End
@@ -3616,11 +3623,15 @@ prints one by one on the TV. A point per right person.
 
 **Changed after the switch-over (15 Nov):** the TV's sound effects volume has
 `soundVolume.test.ts` (the volume mapping: whole percentages, 50% 10 dB down,
-anything else read as 100), `sound.test.ts` (against a stand-in for Web Audio:
+anything else read as 100; `newestOnly` skips a replaced save, runs the newest
+after the running one, and keeps going after one that throws; `stillHeld` keeps
+the host's level through an older one arriving and gives way once the snapshot
+has it, or to a newer one once it saved), `sound.test.ts` (against a stand-in for Web Audio:
 the master gain starts at a volume set before unlocking, ramps to a new one,
 reaches 0, starts nothing at 0, and a preview plays one coin after the ramp),
-`TvSoundControl.test.ts` (the steps with the party's one pressed, rendered to
-static HTML, also inside the control room), and `setSoundVolume` in
+`TvSoundControl.test.ts` (the slider filled to the party's level, the level
+beside its name, the thumb's name and value text, rendered to static HTML, also
+inside the control room), and `setSoundVolume` in
 `queries.test.ts`.
 
 ### 9.2 Integration tests (`npm run test:integration`, local stack)

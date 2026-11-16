@@ -16,8 +16,6 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 // The join card and the dialogs build links from the page's address.
 vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } })
 
-const STEP = /^(Off|\d+%)$/
-
 function party(scene: FixtureScene, volume: unknown): Snapshot {
   const s = fixtureSnapshot(scene, 'host')
   return { ...s, session: { ...s.session!, sound_volume: volume as number } }
@@ -33,11 +31,19 @@ async function markup(snapshot: Snapshot, node: ReactNode): Promise<string> {
 
 const text = (html: string) => html.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
 
-/** The volume steps on screen: each one's label and whether it is pressed. */
-function steps(html: string): [string, boolean][] {
-  return [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)]
-    .map(([, attributes, inside]): [string, boolean] => [text(inside).trim(), /aria-pressed="true"/.test(attributes)])
-    .filter(([label]) => STEP.test(label))
+/**
+ * The slider on screen: the level beside its name, how far the range is filled,
+ * and what a screen reader hears on the thumb (its name and value text). Radix
+ * draws the thumb itself only in a browser, so its position isn't checked here.
+ */
+function slider(html: string) {
+  const name = html.match(/role="slider"[^>]*aria-labelledby="([^"]+)"/)?.[1]
+  return {
+    level: text(html).match(/TV sound effects (Off|\d+%)/)?.[1],
+    filled: 100 - Number(html.match(/data-slot="slider-range"[^>]*style="left:0%;right:([\d.]+)%"/)?.[1]),
+    thumbName: name ? text(html.match(new RegExp(`id="${name}">([^<]*)<`))?.[1] ?? '').trim() : undefined,
+    valueText: html.match(/role="slider"[^>]*aria-valuetext="([^"]*)"/)?.[1],
+  }
 }
 
 function control(volume: unknown) {
@@ -46,48 +52,34 @@ function control(volume: unknown) {
 }
 
 describe('the TV sound effects control', () => {
-  it("offers Off to 100% and presses the party's step", async () => {
+  it("shows the party's level beside its name, with the slider filled to it", async () => {
     const html = await control(50)
-    expect(steps(html)).toEqual([
-      ['Off', false],
-      ['25%', false],
-      ['50%', true],
-      ['75%', false],
-      ['100%', false],
-    ])
-    expect(text(html)).toContain('TV sound effects')
+    expect(slider(html)).toEqual({ level: '50%', filled: 50, thumbName: 'TV sound effects', valueText: '50%' })
+    expect(html).toContain('role="slider" aria-valuemin="0" aria-valuemax="100"')
     expect(text(html)).toContain('Phones keep their own volume.')
   })
 
-  it('presses Off at 0, and 100% for a new party or a snapshot from before the setting', async () => {
-    expect(steps(await control(0)).filter(([, pressed]) => pressed)).toEqual([['Off', true]])
-    expect(steps(await control(100)).filter(([, pressed]) => pressed)).toEqual([['100%', true]])
-    expect(steps(await control(undefined)).filter(([, pressed]) => pressed)).toEqual([['100%', true]])
+  it('reads Off at 0, and 100% for a new party or a snapshot from before the setting', async () => {
+    expect(slider(await control(0))).toMatchObject({ level: 'Off', filled: 0, valueText: 'Off' })
+    expect(slider(await control(100))).toMatchObject({ level: '100%', filled: 100, valueText: '100%' })
+    expect(slider(await control(undefined))).toMatchObject({ level: '100%', filled: 100, valueText: '100%' })
   })
 
-  it('says what a volume set some other way is, with no step pressed', async () => {
-    const html = await control(60)
-    expect(steps(html).some(([, pressed]) => pressed)).toBe(false)
-    expect(text(html)).toContain('TV sound effects 60%')
+  it('shows any level, not only the round ones', async () => {
+    expect(slider(await control(35))).toMatchObject({ level: '35%', filled: 35, valueText: '35%' })
   })
 
-  it('sits in the control room\'s "On the TV now", with the party\'s step pressed', async () => {
+  it('sits in the control room\'s "On the TV now", at the party\'s level', async () => {
     const snapshot = party('background', 25)
     const html = await markup(snapshot, createElement(ControlRoomGate, { live: false }))
     expect(text(html)).toContain('On the TV now')
-    expect(steps(html)).toEqual([
-      ['Off', false],
-      ['25%', true],
-      ['50%', false],
-      ['75%', false],
-      ['100%', false],
-    ])
+    expect(slider(html)).toMatchObject({ level: '25%', filled: 25, thumbName: 'TV sound effects' })
   })
 })
 
 describe('its words', () => {
-  it('names each step and says what a change did', () => {
-    expect([0, 25, 50, 75, 100].map(soundVolumeLabel)).toEqual(['Off', '25%', '50%', '75%', '100%'])
+  it('names each level and says what a change did', () => {
+    expect([0, 5, 35, 100].map(soundVolumeLabel)).toEqual(['Off', '5%', '35%', '100%'])
     expect(soundVolumeToast(0)).toBe('TV sound effects off')
     expect(soundVolumeToast(75)).toBe('TV sound effects at 75%')
   })

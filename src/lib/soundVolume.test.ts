@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SOUND_VOLUME, SOUND_VOLUME_STEPS, soundVolumeGain, soundVolumeOf } from './soundVolume'
+import { DEFAULT_SOUND_VOLUME, newestOnly, soundVolumeGain, soundVolumeOf, stillHeld } from './soundVolume'
 
 const db = (gain: number) => 20 * Math.log10(gain)
 
@@ -37,7 +37,7 @@ describe('soundVolumeGain', () => {
   })
 
   it('grows with every step and stays within 0 and 1, whatever it is given', () => {
-    const gains = SOUND_VOLUME_STEPS.map(soundVolumeGain)
+    const gains = [0, 5, 25, 50, 75, 100].map(soundVolumeGain)
     for (let i = 1; i < gains.length; i++) expect(gains[i]).toBeGreaterThan(gains[i - 1])
     expect(soundVolumeGain(-20)).toBe(0)
     expect(soundVolumeGain(400)).toBe(1)
@@ -45,11 +45,65 @@ describe('soundVolumeGain', () => {
   })
 })
 
-describe('the steps', () => {
-  it('run from off to full volume, the default, in rising order', () => {
-    expect(SOUND_VOLUME_STEPS[0]).toBe(0)
-    expect(SOUND_VOLUME_STEPS.at(-1)).toBe(DEFAULT_SOUND_VOLUME)
-    expect([...SOUND_VOLUME_STEPS].sort((a, b) => a - b)).toEqual(SOUND_VOLUME_STEPS)
-    expect(SOUND_VOLUME_STEPS).toEqual([0, 25, 50, 75, 100])
+describe('newestOnly, the slider\'s saves', () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('runs the newest waiting task after the running one, and skips the ones it replaced', async () => {
+    const enqueue = newestOnly()
+    const ran: string[] = []
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    let firstWasNewest: boolean | undefined
+    enqueue(async (newest) => {
+      ran.push('80%')
+      await held
+      firstWasNewest = newest()
+    })
+    await tick()
+    enqueue(async () => void ran.push('60%'))
+    enqueue(async () => void ran.push('30%'))
+    release()
+    await tick()
+    expect(ran).toEqual(['80%', '30%'])
+    expect(firstWasNewest).toBe(false)
+  })
+
+  it('tells a lone task it is the newest', async () => {
+    const enqueue = newestOnly()
+    let seen: boolean | undefined
+    enqueue(async (newest) => void (seen = newest()))
+    await tick()
+    expect(seen).toBe(true)
+  })
+
+  it('keeps saving after a task that throws', async () => {
+    const enqueue = newestOnly()
+    const ran: string[] = []
+    enqueue(async () => {
+      throw new Error('offline')
+    })
+    await tick()
+    enqueue(async () => void ran.push('next'))
+    await tick()
+    expect(ran).toEqual(['next'])
+  })
+})
+
+describe("stillHeld, the slider's thumb while the snapshot catches up", () => {
+  it('keeps an unsaved level while an older one arrives from an earlier save', () => {
+    expect(stillHeld({ level: 20, settled: false }, 60)).toEqual({ level: 20, settled: false })
+  })
+
+  it('lets go once the snapshot has the level, saved or not', () => {
+    expect(stillHeld({ level: 20, settled: false }, 20)).toBeNull()
+    expect(stillHeld({ level: 20, settled: true }, 20)).toBeNull()
+  })
+
+  it('gives way to a newer level from another tab once the host\'s level saved', () => {
+    expect(stillHeld({ level: 20, settled: true }, 45)).toBeNull()
+  })
+
+  it('holds nothing when nothing was set', () => {
+    expect(stillHeld(null, 50)).toBeNull()
   })
 })

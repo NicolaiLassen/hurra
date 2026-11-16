@@ -12,13 +12,15 @@ type ToastOptions = {
   eyebrow?: ReactNode
   action?: { label: string; onClick: () => void }
   duration?: number
+  /** A toast with the same id replaces the one on screen instead of stacking. */
+  id?: string
 }
 
 /**
  * The app's toasts, used like sonner's `toast` (import this one instead). Every
  * toast is the shared Callout at toast size, so phones and the TV share one look.
  */
-function show(title: ReactNode, { description, icon, tone = 'gold', eyebrow, action, duration }: ToastOptions = {}) {
+function show(title: ReactNode, { description, icon, tone = 'gold', eyebrow, action, duration, id }: ToastOptions = {}) {
   return sonner.custom(
     (id) => (
       <Callout
@@ -44,7 +46,7 @@ function show(title: ReactNode, { description, icon, tone = 'gold', eyebrow, act
         }
       />
     ),
-    { duration },
+    { duration, id },
   )
 }
 
