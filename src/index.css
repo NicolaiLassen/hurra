@@ -53,6 +53,11 @@
   /* Type: Archivo, stretched wide and narrow, is the on-air voice; Schibsted Grotesk is for reading. */
   --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Archivo Variable', 'Schibsted Grotesk Variable', sans-serif;
+  /* Codes (the party's code, a guest's code, a TV's address): Archivo
+     condensed with tabular figures, as the mockups set them. No third face. */
+  --font-mono: 'Archivo Variable', 'Schibsted Grotesk Variable', ui-monospace, monospace;
+  --font-mono--font-variation-settings: 'wdth' 62;
+  --font-mono--font-feature-settings: 'tnum';
 
   /* TV sizes at 1080p; short: steps each one down. Nothing on the TV is under 28 px. */
   --text-tv-count: 15.625rem;   --text-tv-count--line-height: 0.8;     /* 250 px countdown */

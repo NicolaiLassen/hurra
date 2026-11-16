@@ -355,7 +355,7 @@ function PasteBox({ room, onAdd, onClose }: { room: number; onAdd: (questions: Q
         rows={9}
         value={text}
         placeholder={PASTE_EXAMPLE}
-        className="font-mono text-sm"
+        className="text-sm"
         onChange={(e) => setText(e.target.value)}
       />
       <p className="text-xs text-muted-foreground">
