@@ -41,7 +41,7 @@ by hairlines: no glass (transparency or blur) and no ring around a panel.
 | `ground` | `#14110e` | Every page, the TV's backdrop |
 | `raised` | `#1e1a16` | The band, the host header and panels, cards, the TV's cards, dialogs and sheets |
 | `overlay` | `#29241e` | Answer tiles, secondary buttons, menus, fields, a well inside a raised panel |
-| `rule` | `#3a332a` | The only line colour: quiet buttons, empty pips, field borders; and a menu's highlighted item |
+| `rule` | `#3a332a` | The line colour: quiet buttons, empty pips, dividers; and a menu's highlighted item |
 
 Whatever sits on a surface is one step above it, or it disappears: a
 secondary button, a field or a well on a raised card or dialog is overlay,
@@ -146,8 +146,11 @@ jobs, with their props and variant names unchanged:
   leading), `secondary`, `outline`, `ghost` (a plain word: Done, Ready),
   `destructive`, and `hunt` (pink: Out).
 - **Slider:** a paper range and thumb on a rule track.
-- **Input**, and Textarea and the Select trigger beside it: a rule border on
-  the overlay surface.
+- **Input**, and Textarea and the Select trigger beside it: the overlay
+  surface edged in `paper-3` at 60 percent. A field's edge is the one line
+  that must reach 3 to 1 against what it sits on (WCAG 1.4.11), so it is
+  found before it is focused: 3.2 to 1 on a raised card or dialog, where a
+  `rule` edge would be 1.4.
 
 ## The player token
 
