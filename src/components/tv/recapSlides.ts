@@ -103,7 +103,5 @@ export function shownLeadChanges(doc: RecapDoc, max = LEAD_CHANGES_SHOWN): Recap
   return [...doc.leadChanges].sort((a, b) => a.at - b.at).slice(-max)
 }
 
-/** "21:40": a time of the night by the TV's clock, as Danish screens show it. */
-export function clockTime(at: number): string {
-  return new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-}
+/** "21:40": the recap's times of the night, by the same clock as the TV's frame. */
+export { clockTime } from '@/components/tv/clock'

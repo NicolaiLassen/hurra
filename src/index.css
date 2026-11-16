@@ -53,10 +53,13 @@
   /* Type: Archivo, stretched wide and narrow, is the on-air voice; Schibsted Grotesk is for reading. */
   --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Archivo Variable', 'Schibsted Grotesk Variable', sans-serif;
-  /* Codes (the party's code, a guest's code, a TV's address): Archivo
-     condensed with tabular figures, as the mockups set them. No third face. */
+  /* Codes (the party's code, a guest's code, a TV's address): Archivo with
+     tabular figures. No third face. Archivo has no slashed or dotted zero, and
+     condensed its 0 and O are both tall ovals, so codes are set at 87.5
+     percent: there the O is round and the 0 an oval as wide as the 3 beside
+     it, so HURRA30 never reads as HURRA3O. */
   --font-mono: 'Archivo Variable', 'Schibsted Grotesk Variable', ui-monospace, monospace;
-  --font-mono--font-variation-settings: 'wdth' 62;
+  --font-mono--font-variation-settings: 'wdth' 87.5;
   --font-mono--font-feature-settings: 'tnum';
 
   /* TV sizes at 1080p; short: steps each one down. Nothing on the TV is under 28 px. */
@@ -68,6 +71,7 @@
   --text-tv-answer: 4.125rem;   --text-tv-answer--line-height: 1.1;    /* 66 px */
   --text-tv-score: 3.75rem;     --text-tv-score--line-height: 1;       /* 60 px top five points */
   --text-tv-name: 3.125rem;     --text-tv-name--line-height: 1.1;      /* 50 px top five names */
+  --text-tv-band: 2.75rem;      --text-tv-band--line-height: 1;        /* 44 px the band's figures, the clock, a code */
   --text-tv-field: 2.0625rem;   --text-tv-field--line-height: 1.2;     /* 33 px field names */
   --text-tv-body: 2rem;         --text-tv-body--line-height: 1.3;      /* 32 px band and commentary */
   --text-tv-tab: 1.875rem;      --text-tv-tab--line-height: 1;         /* 30 px tabs */

@@ -1,39 +1,39 @@
 import { GameControllerIcon } from '@phosphor-icons/react'
-import { Suspense } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import Contained from '@/components/Contained'
 import { CARD } from '@/components/tv/look'
 import { runningFor, topOfGame } from '@/components/tv/scene'
+import { drawsOwn, useStatusProps } from '@/components/tv/status'
 import { getGameModule } from '@/games/registry'
-import type { TvStatusProps } from '@/games/types'
+import type { TvStatusProps, TvStatusVariant } from '@/games/types'
 import { listNames } from '@/lib/recap'
-import { gamePointsOf, talliesOf } from '@/lib/stage'
 import type { SessionGame } from '@/lib/types'
-import { useLive, useServerNow } from '@/lib/useLive'
+import { useServerNow } from '@/lib/useLive'
 import { cn } from '@/lib/utils'
 
 /**
- * A game running beside the stage: its own card (the module's TvStatus), or the
- * generic one. A whole card either way, stacked as it is in the rail or the
- * strip (docs/engine-v2.md, 6 and 7.2). A card that throws gives way to the
- * generic one, so one game can't take the TV down.
+ * A game running beside the stage, as a card in the strip beside the podium:
+ * its own (the module's TvStatus), or the generic one. A whole card either
+ * way (docs/engine-v2.md, 6 and 7.2).
  */
 export default function StatusCard({ game }: { game: SessionGame }) {
-  const { snapshot, tallies, serverNow } = useLive()
-  const props: TvStatusProps = {
-    game,
-    players: snapshot?.players ?? [],
-    publicState: game.public_state,
-    gamePoints: snapshot ? gamePointsOf(snapshot, game.id) : {},
-    tallies: talliesOf(tallies, game.id),
-    serverNow,
-  }
-  const generic = <GenericStatus {...props} />
+  const props = useStatusProps(game, 'card')
+  return <GameStatus game={game} variant="card" fallback={<GenericStatus {...props} />} />
+}
+
+/**
+ * A game's own TvStatus in `variant`, or `fallback` when the game doesn't draw
+ * that variant. One that throws gives way to the fallback too, so one game
+ * can't take the TV down.
+ */
+export function GameStatus({ game, variant, fallback }: { game: SessionGame; variant: TvStatusVariant; fallback: ReactNode }) {
+  const props = useStatusProps(game, variant)
   const Own = getGameModule(game.game_type)?.TvStatus
-  if (!Own) return generic
+  if (!Own || !drawsOwn(game.game_type, variant)) return fallback
   return (
-    <Contained key={game.id} fallback={generic}>
-      <Suspense fallback={generic}>
+    <Contained key={`${game.id}:${game.started_at}:${variant}`} fallback={fallback}>
+      <Suspense fallback={fallback}>
         <Own {...props} />
       </Suspense>
     </Contained>
@@ -50,7 +50,7 @@ function GenericStatus({ game, players, gamePoints }: TvStatusProps) {
   return (
     <section className={cn(CARD, 'grid min-w-0 grid-cols-1 gap-3 p-5 short:gap-2 short:p-4')}>
       <header className="flex min-w-0 items-center gap-2.5">
-        <Icon weight="duotone" className="size-7 shrink-0 text-primary short:size-6" />
+        <Icon weight="duotone" className="size-7 shrink-0 text-paper-2 short:size-6" />
         <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>
         {game.started_at !== null && (
           <span className="shrink-0 text-lg text-muted-foreground tabular-nums short:text-base">

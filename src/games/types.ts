@@ -93,7 +93,22 @@ export type TvViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
   finished: boolean
 }
 
-/** A small card in the TV rail for a game running in the background. */
+/**
+ * Where the TV draws a game's status (docs/identity.md, The TV's frame):
+ * - `card`: a whole card, its chrome, icon and title included, for the strip
+ *   beside the podium. Every TvStatus draws it; it is the default.
+ * - `band`: the game's one line in the band along the bottom of the TV while
+ *   it runs in the background: its tab (src/components/tv/onAir.tsx has the
+ *   parts) and a short status, at most a band line high and never wrapping.
+ *   Without it the TV draws a plain line: the title and "Running since" with
+ *   the time the game started.
+ * - `strap`: the words in the paper strap at the top while the game holds the
+ *   stage, plain text such as "Question 3 of 10". Without it the TV says how
+ *   long the game has run, or "Final result".
+ */
+export type TvStatusVariant = 'card' | 'band' | 'strap'
+
+/** A game's status on the TV while it runs (the strip's card, a band line, the strap's words). */
 export type TvStatusProps<G extends AnyGame = AnyGame> = {
   game: SessionGame
   players: Player[]
@@ -101,7 +116,16 @@ export type TvStatusProps<G extends AnyGame = AnyGame> = {
   gamePoints: Readonly<Record<PlayerId, number>>
   tallies: Readonly<Record<string, number>>
   serverNow: () => number
+  /** What to draw: only `card` (the default) or a variant the TvStatus lists in its `variants`. */
+  variant?: TvStatusVariant
 }
+
+/**
+ * The variants a TvStatus draws besides the card, set on the component
+ * (`TvStatus.variants = ['band', 'strap']`): the TV asks only for those, so
+ * a game opts in one variant at a time and the core never names a game.
+ */
+export type TvStatusVariants = { variants?: readonly Exclude<TvStatusVariant, 'card'>[] }
 
 export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   config: Parts<G>['config']
@@ -148,11 +172,12 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   /** The TV's final screen (with lazyScreen too). Default: TvView with finished, else a generic winners screen. */
   FinalTvView?: ComponentType<TvViewProps<G>> & Preloadable
   /**
-   * The TV rail card while in the background. Default: title, live time, this
-   * game's leader. A whole card, drawn in place of the default: its chrome, icon
-   * and title. The TV stacks it as it is, in the rail or the strip.
+   * The game's status on the TV while it runs (TvStatusVariant). The card,
+   * drawn in place of the default (title, live time, this game's leader): its
+   * chrome, icon and title, stacked as it is in the strip beside the podium.
+   * With `variants`, also its line in the bottom band and its strap words.
    */
-  TvStatus?: ComponentType<TvStatusProps<G>>
+  TvStatus?: ComponentType<TvStatusProps<G>> & TvStatusVariants
   /** The settings editor; saves to game_settings (hosts only). */
   ConfigEditor?: ComponentType<ConfigEditorProps<G>>
   /** The PlayerView takes player codes; camera scans of player QR codes land here. */

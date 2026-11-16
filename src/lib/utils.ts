@@ -8,7 +8,7 @@ import { createCn } from 'cn/config'
 /** Hurra's names in Tailwind's font size, radius, easing and animation scales. */
 export const THEME_SCALES = {
   text: [
-    'tv-count', 'tv-lead', 'tv-cheer', 'tv-code', 'tv-question', 'tv-answer', 'tv-score', 'tv-name', 'tv-field',
+    'tv-count', 'tv-lead', 'tv-cheer', 'tv-code', 'tv-question', 'tv-answer', 'tv-score', 'tv-name', 'tv-band', 'tv-field',
     'tv-body', 'tv-tab', 'tv-floor', 'phone-key', 'phone-place', 'phone-head', 'phone-action',
   ],
   radius: ['token', 'chip', 'tile', 'control', 'phone'],
