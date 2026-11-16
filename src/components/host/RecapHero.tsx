@@ -52,7 +52,7 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
           </h1>
           {headline && (
             <div className="duration-500 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
-              <p className="mt-5 text-4xl leading-[1.05] font-black tracking-tight text-balance text-primary [text-shadow:0_0_36px_rgb(245_197_66/0.35)] sm:text-5xl">
+              <p className="mt-5 text-4xl leading-[1.05] font-black tracking-tight text-balance break-words text-primary [text-shadow:0_0_36px_rgb(245_197_66/0.35)] sm:text-5xl">
                 {headline.title}
               </p>
               <p className="mt-3 max-w-xl text-base text-pretty text-muted-foreground sm:text-lg">{headline.line}</p>
