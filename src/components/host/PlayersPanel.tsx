@@ -14,6 +14,7 @@ import { useHostCall } from '@/components/host/hostCalls'
 import MovePlayerDialog, { type MovingPlayer } from '@/components/host/MovePlayerDialog'
 import RenameDialog from '@/components/host/RenameDialog'
 import { useDialogTarget } from '@/components/host/useDialogTarget'
+import { useRemovePhoto } from '@/components/photos/RemovePhoto'
 import ProfileBadges from '@/components/ProfileBadges'
 import RankBadge from '@/components/RankBadge'
 import { Button } from '@/components/ui/button'
@@ -48,6 +49,7 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
   const moving = useDialogTarget<MovingPlayer>()
   const renaming = useDialogTarget<ScoreRow>()
   const removing = useDialogTarget<ScoreRow>()
+  const removingPhoto = useRemovePhoto(snapshot)
 
   const rows = withRanks(snapshot.standings)
   // Folded like fusion's search: "soren" finds Søren, and plain letters find a full-width name.
@@ -110,6 +112,7 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
                       <ArrowsLeftRightIcon />
                       Move to a new phone…
                     </DropdownMenuItem>
+                    {removingPhoto.item(row)}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => removing.show(row)}>
                       <UserMinusIcon />
@@ -124,6 +127,8 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
       )}
 
       <MovePlayerDialog player={moving.target} open={moving.open} onOpenChange={moving.onOpenChange} joinCode={session.join_code} />
+
+      {removingPhoto.dialog}
 
       <RenameDialog
         open={renaming.open}

@@ -154,6 +154,10 @@ describe('movedOnSince', () => {
     expect(movedOnSince({ log }, 10)).toBe(false)
   })
 
+  it('ignores a guest adding, changing or removing their photo', () => {
+    expect(movedOnSince({ log: [row(10, 'game.finished'), row(20, 'player.photo_changed')] }, 10)).toBe(false)
+  })
+
   it('works on a recorded night', () => {
     const last = Math.max(...recordedRawRecap.log.map((e) => e.at))
     expect(movedOnSince(recordedRawRecap, last)).toBe(false)

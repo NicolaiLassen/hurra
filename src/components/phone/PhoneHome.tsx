@@ -12,6 +12,7 @@ import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
 import { finishedLine, timeAgo } from '@/components/phone/text'
 import YourNight from '@/components/phone/YourNight'
+import MyPhotoButton from '@/components/photos/MyPhotoButton'
 import ProfileBadges from '@/components/ProfileBadges'
 import QueryGate from '@/components/QueryGate'
 import SoundToggle from '@/components/SoundToggle'
@@ -244,7 +245,7 @@ function Home({
 function PhoneHeader({ session, player, points }: { session: Session; player: Player; points: number }) {
   return (
     <header className="flex items-center gap-3">
-      <Avatar name={player.name} className="size-12 text-lg" />
+      <MyPhotoButton session={session} player={player} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-muted-foreground">{session.name}</p>
         <h1 className="truncate text-2xl leading-tight font-bold">{player.name}</h1>

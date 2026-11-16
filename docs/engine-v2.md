@@ -2124,6 +2124,11 @@ export type Snapshot = {
 }
 ```
 
+**Changed after the switch-over (16 Nov):** `Player` and `PlayerRow` gain an
+optional `photo`, the path of the guest's photo in the `player-photos` bucket
+or null, so every snapshot's players carry it (`20261116000000_guest_photos.sql`,
+docs/guest-photos.md 4.1). Games never see it.
+
 ### 5.3 gameApi.ts
 
 ```ts
@@ -2584,6 +2589,16 @@ uploaded raw:
   height set; the TV shows the full image. 12 pictures cost about 16 MB across
   45 phones instead of 1.6 to 5.4 GB.
 
+**Changed after the switch-over (16 Nov):** guest photos (docs/guest-photos.md,
+4). media.ts gains a second section for the `player-photos` bucket:
+`preparePhoto` (a square of at most 320 px, a JPEG under 48 KB),
+`playerPhotoPath`, `uploadPlayerPhoto`, `listPlayerPhotos`, `listPartyPhotos`,
+`removePlayerPhotos` and `playerPhotoUrl`. queries.ts gains `setMyPhoto`,
+`removeMyPhoto` and `removeGuestPhoto`. `photoIndex.ts` holds the index
+Avatar reads, and imports nothing that reaches the Supabase client;
+`photos.tsx` holds the provider every `LiveSessionProvider` mounts, which
+measures each photo once per tab before any Avatar draws it.
+
 ### 5.9 auth.ts
 
 ```ts
@@ -2896,6 +2911,13 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
 the host reopens. New: a "Got a code from the host?" link opens a 6-character
 code field; `claimPlayer(code)` then goes to `/play/:code`. The taken-name
 error links to it: "Is that you on another phone? Ask the host for a code."
+**Changed after the switch-over (16 Nov):** after Let's go, the join page
+shows "Add a photo" (Take a selfie, Choose a photo, Skip for now), held above
+its membership reload so coming back from the camera never skips it. On the
+phone home the header avatar is a button that opens "Your photo", to add,
+change or remove it; without a photo it wears a gold camera badge. Every
+Avatar shows the player's photo, and initials without one
+(docs/guest-photos.md, 5 and 6).
 
 **Home** (`/`): as today, with `sessionByCode` for "Continue in {party}".
 
@@ -3139,6 +3161,10 @@ animation, fades only.
      in large type, the time left, and "On the new phone, open the join link,
      tap Got a code from the host, and type this code."
    - **Remove**: confirm, then `removePlayer` (which syncs every live game).
+   - **Remove photo…** (**changed after the switch-over, 16 Nov**): for a
+     guest with a photo, a confirm that shows it, then `removeGuestPhoto`,
+     which takes it off every screen at once. Remove also takes the guest's
+     photo and deletes their files (docs/guest-photos.md, 4.3 and 6.4).
 6. **Join card** (as today).
 
 **Timers.** `useWakeSync({ delayMs: 1500 })` (5.10): the backup sync for each

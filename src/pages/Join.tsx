@@ -8,6 +8,7 @@ import { isBusyError, useBusySignIn } from '@/components/phone/busy'
 import BusyScreen from '@/components/phone/BusyScreen'
 import ClaimCodeForm from '@/components/phone/ClaimCodeForm'
 import { couldBeClaimCode } from '@/components/phone/text'
+import AddPhotoStep from '@/components/photos/AddPhotoStep'
 import QueryGate from '@/components/QueryGate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ import { joinSession, loadMembership, sessionByCode } from '@/lib/queries'
 import { forgetJoinCode, rememberJoinCode } from '@/lib/storage'
 import type { PublicSession } from '@/lib/types'
 import { useLiveQuery } from '@/lib/useLiveQuery'
+import { joinScreen, type Joined } from '@/pages/joinScreen'
 import { PartyNotFound, WayBack } from '@/pages/NotFound'
 
 /** While joining is closed, the party is looked up this often, so the form appears as soon as the host opens it. */
@@ -25,7 +27,9 @@ const CLOSED_POLL_MS = 5000
 /**
  * Joining a party (docs/engine-v2.md, 7.1): pick a name, or move your player
  * to this phone with a code from the host. A browser that already has a
- * player here goes straight to the phone home.
+ * player here goes straight to the phone home. The guest who just joined here
+ * gets the Add a photo step first (docs/guest-photos.md, 6.1), held here,
+ * above the membership reload, so coming back from the camera never skips it.
  */
 export default function Join() {
   const code = (useParams().joinCode ?? '').toUpperCase()
@@ -35,37 +39,52 @@ export default function Join() {
     return loadMembership(code)
   }, [code, signIn])
   const membership = useLiveQuery(load)
+  const navigate = useNavigate()
+  const [joined, setJoined] = useState<Joined | null>(null)
+  const screen = joinScreen(joined, membership.data === undefined && (busy || isBusyError(membership.error)))
 
-  if (membership.data === undefined && (busy || isBusyError(membership.error))) return <BusyScreen />
+  if (screen.kind === 'step') {
+    const { party, player } = screen.joined
+    return <AddPhotoStep party={party} player={player} onDone={() => navigate(`/play/${party.join_code}`, { replace: true })} />
+  }
+  if (screen.kind === 'busy') return <BusyScreen />
   return (
     <QueryGate query={membership} notFound={<JoinNotFound code={code} />}>
       {({ session, player }) =>
-        player ? <Navigate to={`/play/${session.join_code}`} replace /> : <JoinGate key={session.id} party={session} />
+        player ? <Navigate to={`/play/${session.join_code}`} replace /> : <JoinGate key={session.id} party={session} onJoined={setJoined} />
       }
     </QueryGate>
   )
 }
 
 /** The party as found: over, closed (waiting for the host), or open; or the code form. */
-function JoinGate({ party }: { party: PublicSession }) {
+function JoinGate({ party, onJoined }: { party: PublicSession; onJoined: (joined: Joined) => void }) {
   const [claiming, setClaiming] = useState(false)
   const claim = useCallback(() => setClaiming(true), [])
 
   if (claiming) return <ClaimScreen party={party} onBack={() => setClaiming(false)} />
   if (party.archived_at !== null) return <PartyOver party={party} />
-  if (party.status !== 'open') return <WhileClosed party={party} onClaim={claim} />
-  return <JoinForm party={party} onClaim={claim} />
+  if (party.status !== 'open') return <WhileClosed party={party} onClaim={claim} onJoined={onJoined} />
+  return <JoinForm party={party} onClaim={claim} onJoined={onJoined} />
 }
 
 /** "Joining is closed", looking again every 5 s: the form appears as soon as the host opens joining. */
-function WhileClosed({ party, onClaim }: { party: PublicSession; onClaim: () => void }) {
+function WhileClosed({
+  party,
+  onClaim,
+  onJoined,
+}: {
+  party: PublicSession
+  onClaim: () => void
+  onJoined: (joined: Joined) => void
+}) {
   const poll = useCallback(() => sessionByCode(party.join_code), [party.join_code])
   const { data } = useLiveQuery(poll, { pollMs: CLOSED_POLL_MS })
   const fresh = data === undefined ? party : data
 
   if (fresh === null) return <JoinNotFound code={party.join_code} />
   if (fresh.archived_at !== null) return <PartyOver party={fresh} />
-  if (fresh.status === 'open') return <JoinForm party={fresh} onClaim={onClaim} />
+  if (fresh.status === 'open') return <JoinForm party={fresh} onClaim={onClaim} onJoined={onJoined} />
   return (
     <Notice
       title="Joining is closed"
@@ -92,8 +111,15 @@ function PartyOver({ party }: { party: PublicSession }) {
   )
 }
 
-function JoinForm({ party, onClaim }: { party: PublicSession; onClaim: () => void }) {
-  const navigate = useNavigate()
+function JoinForm({
+  party,
+  onClaim,
+  onJoined,
+}: {
+  party: PublicSession
+  onClaim: () => void
+  onJoined: (joined: Joined) => void
+}) {
   const [name, setName] = useState('')
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState<Error>()
@@ -104,9 +130,9 @@ function JoinForm({ party, onClaim }: { party: PublicSession; onClaim: () => voi
     setJoining(true)
     setError(undefined)
     try {
-      await joinSession(party.join_code, name)
+      const player = await joinSession(party.join_code, name)
       rememberJoinCode(party.join_code)
-      navigate(`/play/${party.join_code}`, { replace: true })
+      onJoined({ party, player })
     } catch (failure) {
       setError(failure instanceof Error ? failure : new Error(String(failure)))
       setJoining(false)

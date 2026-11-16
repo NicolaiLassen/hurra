@@ -100,6 +100,8 @@ const QUIET_KINDS = new Set([
   'session.opened',
   'session.closed',
   'game.settings_changed',
+  // A guest's photo: the recap holds none; the screens draw them live (docs/guest-photos.md).
+  'player.photo_changed',
 ])
 
 /** Whether the night has moved on since a recap built at `builtAt` (its generatedAt): a row after it that the recap would show. */
