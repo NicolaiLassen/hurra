@@ -170,6 +170,8 @@ game: every game is a plugin.
 
 - Sound effects generated with [ElevenLabs](https://elevenlabs.io).
 - Icons by [Phosphor](https://phosphoricons.com), components from
-  [shadcn/ui](https://ui.shadcn.com), type in [Geist](https://vercel.com/font).
+  [shadcn/ui](https://ui.shadcn.com), type in
+  [Archivo](https://fonts.google.com/specimen/Archivo) and
+  [Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk).
 
 <p align="center"><sub>Hurra, hurra, hurra!</sub></p>

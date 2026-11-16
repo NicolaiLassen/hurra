@@ -2,7 +2,11 @@ import { IconContext } from '@phosphor-icons/react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from '@/App'
+import { holdLoaderForFonts } from '@/lib/fonts'
 import '@/index.css'
+
+// The first screen waits under the loader until its fonts are in (src/lib/fonts.ts).
+holdLoaderForFonts()
 
 // Phosphor's defaults with a bold weight: regular-weight icons look thin next to
 // button text. The provider replaces the whole default context, so size and

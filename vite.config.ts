@@ -15,7 +15,7 @@ export default defineConfig({
     host: true,
     // A git worktree may link node_modules to the main checkout's; its real
     // path is then outside this folder, and the dev server would refuse the
-    // Geist font from it (403).
+    // fonts from it (403).
     fs: { allow: [searchForWorkspaceRoot(process.cwd()), ...nodeModulesRealPath()] },
   },
 })

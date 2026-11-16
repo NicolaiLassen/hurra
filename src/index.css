@@ -1,7 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+/* Archivo's width axis (62 to 125 percent) and Schibsted Grotesk. index.html
+   preloads Archivo's Latin file and src/lib/fonts.ts holds the first open's
+   loader until both are in, so no screen draws its first frame in a fallback. */
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/schibsted-grotesk";
+
+/* Hurra's own theme (docs/identity.md). It sits above the shadcn mapping below. */
+@theme {
+  /* Type: Archivo, stretched wide and narrow, is the on-air voice; Schibsted Grotesk is for reading. */
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Archivo Variable', 'Schibsted Grotesk Variable', sans-serif;
+}
 
 @custom-variant dark (&:is(.dark *));
 /* Short screens (laptops, projectors): the TV shrinks to leave room. */
@@ -13,7 +24,6 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
