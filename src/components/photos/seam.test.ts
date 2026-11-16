@@ -54,7 +54,7 @@ describe('the photo button in the phone header', () => {
     const without = await phone('archived', null)
     expect(hasButton(without, 'Add a photo')).toBe(false)
     expect(hasButton(without, 'Change your photo')).toBe(false)
-    expect(without).toContain('That&#x27;s a wrap!')
+    expect(without).toContain('That&#x27;s a wrap.')
     expect(hasButton(await phone('archived', PHOTO), 'Change your photo')).toBe(true)
   })
 })

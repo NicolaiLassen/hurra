@@ -1,39 +1,44 @@
-import { CaretRightIcon, ChampagneIcon, CrownIcon, HourglassMediumIcon, TrophyIcon } from '@phosphor-icons/react'
-import { createElement, useContext, useEffect, useRef, useState, type RefObject } from 'react'
+import { CaretRightIcon, CrownIcon, FlagCheckeredIcon, HourglassMediumIcon } from '@phosphor-icons/react'
+import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Link } from 'react-router'
 import Avatar from '@/components/Avatar'
 import { Notice, Screen } from '@/components/layout'
-import { FixtureMode, gameIconOf } from '@/components/phone/calls'
+import Logo from '@/components/Logo'
+import { FixtureMode, isBackgroundGame, phoneStrapOf } from '@/components/phone/calls'
 import { useFeedToasts } from '@/components/phone/feed'
-import GameCard, { Eyebrow, type GameStatus } from '@/components/phone/GameCard'
+import GameCard from '@/components/phone/GameCard'
 import GameSheet from '@/components/phone/GameSheet'
+import MyPlace from '@/components/phone/MyPlace'
+import OnTheTv from '@/components/phone/OnTheTv'
 import { GameCompactCard, GameResult, GameView } from '@/components/phone/PhoneGame'
+import { homeLayout, tvRows, type HomeLayout } from '@/components/phone/running'
 import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
-import { finishedLine, timeAgo } from '@/components/phone/text'
+import type { TabTone } from '@/components/phone/Strap'
+import { finishedAt, finishedLine, runningSince } from '@/components/phone/text'
 import YourNight from '@/components/phone/YourNight'
-import MyPhotoButton from '@/components/photos/MyPhotoButton'
-import ProfileBadges from '@/components/ProfileBadges'
 import QueryGate from '@/components/QueryGate'
 import SoundToggle from '@/components/SoundToggle'
 import Standings from '@/components/Standings'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { getGameModule } from '@/games/registry'
+import { getGameModule, knockedOutIds } from '@/games/registry'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
 import { PHONE_SOUNDS } from '@/lib/sound'
-import { phoneLayout, scanTarget, tvScene, type PhoneLayout } from '@/lib/stage'
+import { scanTarget, tvScene } from '@/lib/stage'
 import { rememberJoinCode } from '@/lib/storage'
 import { toast } from '@/lib/toast'
 import type { Player, PromptState, PublicSession, Session, SessionGame, Snapshot } from '@/lib/types'
 import { useLive, useServerNow } from '@/lib/useLive'
 import { PartyNotFound } from '@/pages/NotFound'
 
-// The phone home (docs/engine-v2.md, 7.1, and user-flows 7): the game on the
-// main card, the other live games as compact cards, what finished lately,
-// "Your night", the standings and the Show my code bar. Everything comes from
-// the nearest LiveSessionProvider; game screens come through the registry.
+// The phone home (docs/engine-v2.md, 7.1, and user-flows 7), top to bottom:
+// the header (the logo, the party and the sound), the game on the main card
+// when one holds it, your token and place, On the TV (Now, Next and Later),
+// the games running underneath in their own sections, what finished lately,
+// "Your night", the standings, and the Show my code bar, the home's one gold
+// step. Everything comes from the nearest LiveSessionProvider; game screens
+// come through the registry.
 
 const acceptsScans = (gameType: string) => getGameModule(gameType)?.acceptsScans === true
 
@@ -70,6 +75,16 @@ export default function PhoneHome({
   )
 }
 
+/**
+ * A game's strap words: its own while it is live (GameModule.phoneStrap, as
+ * "Question 3 of 10"), else where it is: "On the TV", "Since 20:30" or
+ * "Finished at 22:41". Only times the database holds.
+ */
+function strapLine(game: SessionGame, onStage: boolean): string | null {
+  if (game.status === 'finished') return finishedAt(game)
+  return phoneStrapOf(game) ?? (onStage ? 'On the TV' : runningSince(game))
+}
+
 function Home({
   snapshot,
   session,
@@ -83,9 +98,12 @@ function Home({
 }) {
   const fixture = useContext(FixtureMode)
   const now = useServerNow(30_000)
-  const layout = phoneLayout(snapshot, now)
+  const layout = homeLayout(snapshot, now, isBackgroundGame)
   const scene = tvScene(snapshot, now)
   const stageId = scene.kind === 'live' ? scene.game.id : null
+  // The game the TV shows, live or its final screen: its tab is gold, the colour of what is on air.
+  const airId = scene.kind === 'live' || scene.kind === 'final' ? scene.game.id : null
+  const toneOf = (game: SessionGame): TabTone => (game.id === airId ? 'air' : 'plain')
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
   const liveMain = main.kind === 'game' ? main.game : null
@@ -95,8 +113,8 @@ function Home({
   // code bar steps aside for it, so it covers none of the answers.
   const timed =
     main.kind === 'game' && snapshot.prompts.some((p) => p.game_id === main.game.id && p.closes_at !== null && p.closed_at === null)
-  const points = snapshot.standings.find((row) => row.player_id === player.id)?.points ?? 0
-  const status = (game: SessionGame): GameStatus => (game.status === 'finished' ? 'finished' : game.id === stageId ? 'stage' : 'running')
+  const out = useMemo(() => knockedOutIds(snapshot.games), [snapshot.games])
+  const rows = tvRows(snapshot, now, player.id, mainGame?.id ?? null, phoneStrapOf)
 
   // "Your night", once the host publishes the recap: nothing for a guest who joined after it was made.
   const revision = fixture ? 0 : (snapshot.recap?.published_at ?? 0)
@@ -106,7 +124,7 @@ function Home({
 
   useFeedToasts(snapshot.feed, player.id, snapshot.now)
   useRemovedGameToast(snapshot, mainGame?.id ?? null, main.kind === 'lobby' ? 'Back to the lobby until the next game.' : undefined)
-  const mainCard = useRef<HTMLDivElement>(null)
+  const mainCard = useRef<HTMLElement>(null)
 
   // Stored again on every fresh read, so a "not found" that was wrong (say, a
   // read during a failed token refresh) can't drop it for good.
@@ -120,7 +138,7 @@ function Home({
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const scan = useScannedCode()
   const target = scan.code ? scanTarget(snapshot, acceptsScans, now) : null
-  const scanInMain = target !== null && main.kind === 'game' && target.id === main.game.id
+  const scanInMain = target !== null && liveMain !== null && target.id === liveMain.id
   const scanSheet = target !== null && !scanInMain ? target : null
   const shown: SheetState | null = scanSheet ? { gameId: scanSheet.id, open: true } : sheet
   const sheetGame = shown ? snapshot.games.find((g) => g.id === shown.gameId && g.archived_at === null) : undefined
@@ -135,89 +153,96 @@ function Home({
   useScanToast(scan, target !== null, snapshot.players, player.id)
   useBringIntoView(mainCard, snapshot, layout, sheetOpen)
 
-  return (
-    // Bottom padding keeps the last card clear of the Show my code bar.
-    <Screen className={over ? undefined : 'pb-32'}>
-      <PhoneHeader session={session} player={player} points={points} />
+  const myToken = <Avatar name={player.name} playerId={player.id} className="size-9" />
 
-      <div className="mt-6">
-        {/* One keyed list: a live game that loses the main card (to another
-            game, or to a result card) keeps its view, out of sight, so a
-            full-screen layer it has open (the fusion picker, the scan sheet, a
-            knockout dialog) stays on top until the guest is done. Game layers
-            are position: fixed (see GameSheet), so the hidden wrapper doesn't
-            clip them. */}
-        {[liveMain, held].map(
-          (game) =>
-            game && (
-              <div key={roundKey(game)} className={game === liveMain ? undefined : 'invisible h-0 overflow-hidden [&_.fixed]:visible'}>
-                <GameCard
-                  ref={game === liveMain ? mainCard : undefined}
-                  status={game.id === stageId ? 'stage' : 'playing'}
-                  icon={gameIconOf(game.game_type)}
-                  title={game.title}
-                >
-                  <GameView
-                    snapshot={snapshot}
-                    session={session}
-                    game={game}
-                    player={player}
-                    onStage={game.id === stageId}
-                    scannedCode={game === liveMain && scanInMain ? (scan.code ?? undefined) : undefined}
-                    onScanHandled={scan.done}
-                  />
-                </GameCard>
-              </div>
-            ),
-        )}
-        {main.kind === 'result' && (
-          <GameCard ref={mainCard} status="finished" icon={gameIconOf(main.game.game_type)} title={main.game.title}>
+  return (
+    // Bottom padding keeps the last section clear of the Show my code bar.
+    <Screen className={over ? undefined : 'pb-36'}>
+      <PhoneHeader session={session} />
+
+      {/* One keyed list: a live game that loses the main card (to another
+          game, a result card, or its own section) keeps its view, out of
+          sight, so a full-screen layer it has open (the fusion picker, the
+          scan sheet, a knockout dialog) stays on top until the guest is done.
+          Game layers are position: fixed (see GameSheet), so the hidden
+          wrapper doesn't clip them. */}
+      {[liveMain, held].map(
+        (game) =>
+          game && (
+            <div key={roundKey(game)} className={game === liveMain ? 'mt-7' : 'invisible h-0 overflow-hidden [&_.fixed]:visible'}>
+              <GameCard
+                ref={game === liveMain ? mainCard : undefined}
+                title={game.title}
+                tone={toneOf(game)}
+                line={strapLine(game, game.id === stageId)}
+                aside={myToken}
+              >
+                <GameView
+                  snapshot={snapshot}
+                  session={session}
+                  game={game}
+                  player={player}
+                  onStage={game.id === stageId}
+                  scannedCode={game === liveMain && scanInMain ? (scan.code ?? undefined) : undefined}
+                  onScanHandled={scan.done}
+                />
+              </GameCard>
+            </div>
+          ),
+      )}
+      {main.kind === 'result' && (
+        <div className="mt-7">
+          <GameCard ref={mainCard} title={main.game.title} tone={toneOf(main.game)} line={strapLine(main.game, false)} aside={myToken}>
             <GameResult snapshot={snapshot} session={session} game={main.game} player={player} />
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 text-sm text-paper-2">
               <HourglassMediumIcon weight="duotone" className="size-5 shrink-0" />
               Waiting for the next game
             </p>
           </GameCard>
-        )}
-        {main.kind === 'lobby' && <Lobby players={snapshot.players} />}
-        {main.kind === 'over' && <PartyOver session={session} recap={recap !== null} />}
+        </div>
+      )}
+      {main.kind === 'lobby' && <Lobby players={snapshot.players} />}
+      {main.kind === 'over' && <PartyOver session={session} recap={recap !== null} />}
+
+      <div className="mt-7">
+        <MyPlace session={session} player={player} standings={snapshot.standings} />
       </div>
 
-      {layout.alsoRunning.length > 0 && (
-        <section aria-labelledby="also-running" className="mt-6 grid grid-cols-1 gap-3">
-          <Eyebrow as="h2" id="also-running">
-            Also running
-          </Eyebrow>
-          {layout.alsoRunning.map((game) => (
-            <GameCompactCard
-              key={roundKey(game)}
-              snapshot={snapshot}
-              session={session}
-              game={game}
-              player={player}
-              onStage={game.id === stageId}
-              open={() => openSheet(game.id)}
-            />
-          ))}
-        </section>
+      {rows.length > 0 && (
+        <div className="mt-8">
+          <OnTheTv rows={rows} />
+        </div>
       )}
+
+      {layout.alsoRunning.map((game) => (
+        <div key={roundKey(game)} className="mt-8">
+          <GameCompactCard
+            snapshot={snapshot}
+            session={session}
+            game={game}
+            player={player}
+            onStage={game.id === stageId}
+            open={() => openSheet(game.id)}
+          />
+        </div>
+      ))}
 
       {layout.finishedLately.length > 0 && (
-        <FinishedLately games={layout.finishedLately} players={snapshot.players} meId={player.id} now={now} onOpen={openSheet} />
+        <FinishedLately games={layout.finishedLately} players={snapshot.players} meId={player.id} onOpen={openSheet} />
       )}
 
-      {recap && <YourNight doc={recap} playerId={player.id} className="mt-6" />}
+      {recap && <YourNight doc={recap} playerId={player.id} className="mt-8" />}
 
-      {snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} className="mt-6" />}
+      {snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />}
 
       {!over && <ShowMyCode player={player} hidden={timed} />}
 
       <GameSheet
         open={sheetOpen}
         onClose={closeSheet}
-        status={sheetGame ? status(sheetGame) : 'running'}
-        icon={gameIconOf(sheetGame?.game_type ?? '')}
+        tone={sheetGame ? toneOf(sheetGame) : 'plain'}
         title={sheetGame?.title ?? ''}
+        line={sheetGame ? strapLine(sheetGame, sheetGame.id === stageId) : null}
       >
         {sheetGame?.status === 'active' && (
           <GameView
@@ -241,121 +266,94 @@ function Home({
   )
 }
 
-/** Avatar, name, badges, the sound toggle and the day's points (as before v2). */
-function PhoneHeader({ session, player, points }: { session: Session; player: Player; points: number }) {
+/** The logo, the party's name and this phone's sound. */
+function PhoneHeader({ session }: { session: Session }) {
   return (
-    <header className="flex items-center gap-3">
-      <MyPhotoButton session={session} player={player} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-muted-foreground">{session.name}</p>
-        <h1 className="truncate text-2xl leading-tight font-bold">{player.name}</h1>
-        <ProfileBadges profile={player.profile} className="mt-1" />
-      </div>
-      <SoundToggle preload={PHONE_SOUNDS} className="-mr-1 shrink-0" />
-      <div className="shrink-0 rounded-2xl bg-primary px-4 py-2 text-center text-primary-foreground">
-        {/* Keyed by the points, so a change pops in. */}
-        <p key={points} className="animate-count-pop text-2xl leading-none font-black tabular-nums motion-reduce:animate-none">
-          {points}
-        </p>
-        <p className="text-[0.65rem] font-bold tracking-wide uppercase">points</p>
-      </div>
+    <header className="flex items-center gap-2.5">
+      <Logo className="size-[1.625rem]" />
+      <p className="min-w-0 flex-1 truncate text-[0.9375rem] font-bold text-paper-2">{session.name}</p>
+      <SoundToggle preload={PHONE_SOUNDS} className="-mr-2 shrink-0" />
     </header>
   )
 }
 
-/** No game yet, or between games: you're in, and who else is. */
+/** No game yet: you're in, and who else is. */
 function Lobby({ players }: { players: Player[] }) {
   const faces = players.slice(-5).reverse()
   return (
-    <Card>
-      <CardContent className="grid justify-items-center gap-3 py-4 text-center">
-        <ChampagneIcon weight="duotone" className="size-14 text-primary" />
-        <div>
-          <p className="text-xl font-bold">You're in!</p>
-          <p className="text-muted-foreground">The host will start the next game soon.</p>
-        </div>
-        {players.length > 1 && (
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2">
-              {faces.map((p) => (
-                <Avatar key={p.id} name={p.name} className="size-8 ring-2 ring-card" />
-              ))}
-            </div>
-            <p className="text-sm text-muted-foreground">{players.length} players here</p>
+    <section aria-label="You're in" className="mt-7 grid gap-3">
+      <div>
+        <p className="text-phone-head leading-tight font-extrabold">You're in.</p>
+        <p className="mt-1 text-paper-2">The host starts the next game soon.</p>
+      </div>
+      {players.length > 1 && (
+        <div className="flex items-center gap-2.5">
+          <div className="flex -space-x-2">
+            {faces.map((p) => (
+              <Avatar key={p.id} name={p.name} playerId={p.id} className="size-8 ring-2 ring-ground" />
+            ))}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <p className="text-sm text-paper-2">{players.length} players here</p>
+        </div>
+      )}
+    </section>
   )
 }
 
 /** The party is archived: no more games, just how it ended. */
 function PartyOver({ session, recap }: { session: Session; recap: boolean }) {
   return (
-    <Card>
-      <CardContent className="grid justify-items-center gap-3 py-4 text-center">
-        <TrophyIcon weight="duotone" className="size-14 text-primary" />
-        <div>
-          <p className="text-xl font-bold">That's a wrap!</p>
-          <p className="text-muted-foreground">
-            {session.name} is over. Thanks for playing!{recap && ' Here is your night.'}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <section aria-label="The party is over" className="mt-7">
+      <p className="text-phone-head leading-tight font-extrabold">That's a wrap.</p>
+      <p className="mt-1 text-paper-2">
+        {session.name} is over. Thanks for playing.{recap && ' Here is your night.'}
+      </p>
+    </section>
   )
 }
 
-/** One slim row per other game that finished in the last half hour; a tap shows its result. */
+/** One row per other game that finished in the last half hour, with when it finished; a tap shows its result. */
 function FinishedLately({
   games,
   players,
   meId,
-  now,
   onOpen,
 }: {
   games: SessionGame[]
   players: Player[]
   meId: string
-  now: number
   onOpen: (gameId: string) => void
 }) {
   return (
-    <section aria-labelledby="finished-lately" className="mt-6 grid grid-cols-1 gap-3">
-      <Eyebrow as="h2" id="finished-lately">
+    <section aria-labelledby="finished-lately" className="mt-8 grid grid-cols-1 gap-2">
+      <h2 id="finished-lately" className="text-sm on-air text-paper-2">
         Finished lately
-      </Eyebrow>
-      <Card size="sm" className="gap-0 py-1.5">
-        <ul className="divide-y divide-border">
-          {games.map((game) => {
-            const won = game.winners.includes(meId)
-            return (
-              <li key={game.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(game.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-overlay/50 focus-visible:bg-overlay/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset"
-                >
-                  <span
-                    className={
-                      won
-                        ? 'grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary'
-                        : 'grid size-9 shrink-0 place-items-center rounded-xl bg-secondary text-muted-foreground'
-                    }
-                  >
-                    {createElement(won ? CrownIcon : gameIconOf(game.game_type), { weight: 'duotone', className: 'size-5' })}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{finishedLine(game, players, meId)}</span>
-                    <span className="block text-xs text-muted-foreground">{timeAgo(now - (game.finished_at ?? now))}</span>
-                  </span>
-                  <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </Card>
+      </h2>
+      <ul className="grid grid-cols-1 gap-2">
+        {games.map((game) => {
+          const won = game.winners.includes(meId)
+          return (
+            <li key={game.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(game.id)}
+                className="flex min-h-14 w-full items-center gap-3 rounded-phone bg-overlay px-3.5 py-2.5 text-left transition-colors hover:bg-rule focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none"
+              >
+                {won ? (
+                  <CrownIcon weight="fill" className="size-5 shrink-0 text-gold" />
+                ) : (
+                  <FlagCheckeredIcon weight="duotone" className="size-5 shrink-0 text-paper-2" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{finishedLine(game, players, meId)}</span>
+                  <span className="block text-sm text-paper-2">{finishedAt(game)}</span>
+                </span>
+                <CaretRightIcon className="size-4 shrink-0 text-paper-2" />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </section>
   )
 }
@@ -391,12 +389,12 @@ function NotInParty({ party, name, moved }: { party: PublicSession; name: string
 }
 
 /**
- * The live game that had the main card until another game or a result card took
- * it (the host started one on the TV, an older game finished, Back to
- * standings), while that round is still live; else null. When the main game
- * finishes, its result keeps the round's key, so a game held behind it stays
- * held. Home keeps its view mounted out of sight, so what the guest had open in
- * it (a vote being picked, a knockout being confirmed) isn't lost.
+ * The live game that had the main card until something else took it (another
+ * game on the TV, a result card, or its own section when it left the TV),
+ * while that round is still live; else null. When the main game finishes, its
+ * result keeps the round's key, so a game held behind it stays held. Home
+ * keeps its view mounted out of sight, so what the guest had open in it (a
+ * vote being picked, a knockout being confirmed) isn't lost.
  */
 function useHeldGame(snapshot: Snapshot, main: SessionGame | null): SessionGame | null {
   const key = main ? roundKey(main) : null
@@ -404,7 +402,7 @@ function useHeldGame(snapshot: Snapshot, main: SessionGame | null): SessionGame 
   // Remembered while rendering (React's way to follow a prop's previous value), so the hand-over has no gap.
   if (mains.now !== key) setMains({ now: key, before: mains.now })
   const before = mains.now !== key ? mains.now : mains.before
-  if (!main || before === null || before === key) return null
+  if (before === null || before === key) return null
   return snapshot.games.find((g) => roundKey(g) === before && g.status === 'active' && g.archived_at === null) ?? null
 }
 
@@ -448,7 +446,7 @@ function useScanToast(
  * where the last answers would sit below the fold. Not while a sheet covers
  * the page.
  */
-function useBringIntoView(card: RefObject<HTMLDivElement | null>, snapshot: Snapshot, layout: PhoneLayout, covered: boolean) {
+function useBringIntoView(card: RefObject<HTMLElement | null>, snapshot: Snapshot, layout: HomeLayout, covered: boolean) {
   const game = layout.main.kind === 'game' ? layout.main.game : null
   let question: PromptState | null = null
   for (const prompt of snapshot.prompts) {

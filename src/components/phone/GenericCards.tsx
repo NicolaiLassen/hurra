@@ -1,39 +1,33 @@
-import { CaretRightIcon, CrownIcon, FlagCheckeredIcon, type Icon } from '@phosphor-icons/react'
+import { CaretRightIcon, CrownIcon, FlagCheckeredIcon } from '@phosphor-icons/react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
-import { GameIcon } from '@/components/phone/GameCard'
-import { nameIn, pointsText, winnersText } from '@/components/phone/text'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { SectionHead } from '@/components/phone/Strap'
+import { nameIn, pointsText, runningSince, winnersText } from '@/components/phone/text'
 import type { ResultViewProps } from '@/games/types'
 import type { SessionGame } from '@/lib/types'
 
 /**
- * The compact card of a game without a PlayerCard of its own, while another
- * game holds the main card: its title, Live, and Open for the full view. The
- * same shape as the games' own cards.
+ * The section of a game without a PlayerCard of its own, while another game
+ * holds the main card: its name on a paper tab, and a row that opens the full
+ * view, with the time it went live. The same shape as the games' own sections.
  */
-export function GenericPlayerCard({ game, icon, open }: { game: SessionGame; icon: Icon; open: () => void }) {
+export function GenericPlayerCard({ game, open }: { game: SessionGame; open: () => void }) {
+  const since = runningSince(game)
   return (
-    <Card>
-      <CardContent className="grid grid-cols-1">
-        <button
-          type="button"
-          onClick={open}
-          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-overlay/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <GameIcon icon={icon} />
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <span className="truncate text-lg leading-tight font-bold">{game.title}</span>
-              <Badge className="shrink-0">Live</Badge>
-            </span>
-            <span className="block text-sm text-muted-foreground">Open to play</span>
-          </span>
-          <CaretRightIcon className="size-5 shrink-0 text-muted-foreground" />
-        </button>
-      </CardContent>
-    </Card>
+    <section aria-label={game.title} className="grid grid-cols-1 gap-3">
+      <SectionHead tab={game.title} tone="plain" />
+      <button
+        type="button"
+        onClick={open}
+        className="flex min-h-14 w-full items-center gap-3 rounded-phone bg-overlay px-4 py-2.5 text-left transition-colors hover:bg-rule focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-[17px] font-bold">Open to play</span>
+          <span className="block text-sm text-paper-2">{since ? `Live ${since.toLowerCase()}` : 'Live'}</span>
+        </span>
+        <CaretRightIcon className="size-5 shrink-0 text-paper-2" />
+      </button>
+    </section>
   )
 }
 
@@ -52,21 +46,19 @@ export function GenericResult({ game, player, players, gamePoints }: ResultViewP
         <span className="flex shrink-0 -space-x-3">
           {faces.map((id, i) => (
             <span key={id} className="relative">
-              <Avatar name={nameIn(players, id)} className="size-12 ring-2 ring-card" />
+              <Avatar name={nameIn(players, id)} playerId={id} className="size-12 ring-2 ring-ground" />
               {i === 0 && <AvatarBadge icon={CrownIcon} tone="gold" />}
             </span>
           ))}
         </span>
       ) : (
-        <span className="grid size-12 shrink-0 place-items-center rounded-token bg-secondary text-muted-foreground">
+        <span className="grid size-12 shrink-0 place-items-center rounded-token bg-overlay text-paper-2">
           <FlagCheckeredIcon weight="duotone" className="size-6" />
         </span>
       )}
       <div className="min-w-0">
-        <p className="text-xl leading-tight font-black text-balance">{who ? `${who} won` : `${game.title} is over`}</p>
-        <p className="mt-0.5 text-muted-foreground">
-          {mine === 0 ? "You didn't score in this one." : `You scored ${pointsText(mine)}.`}
-        </p>
+        <p className="text-xl leading-tight font-extrabold text-balance">{who ? `${who} won` : `${game.title} is over`}</p>
+        <p className="mt-0.5 text-paper-2">{mine === 0 ? "You didn't score in this one." : `You scored ${pointsText(mine)}.`}</p>
       </div>
     </div>
   )

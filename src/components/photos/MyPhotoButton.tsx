@@ -20,13 +20,24 @@ type Tap = 'selfie' | 'library' | 'retry' | 'remove'
 type Layout = { retry: boolean; photo: boolean }
 
 /**
- * The phone header's avatar, as a button that opens "Your photo"
+ * The phone home's own token, as a button that opens "Your photo"
  * (docs/guest-photos.md, 6.2). The hooks live here, not in the sheet's
  * content, which closes away: a save goes on with the sheet closed, and the
- * header keeps showing this phone's preview until the snapshot has the photo,
- * so it never flickers back.
+ * token keeps showing this phone's preview until the snapshot has the photo,
+ * so it never flickers back. `className` gives the token its size, and
+ * `badge` the camera chip's (AvatarBadge's sizes).
  */
-export default function MyPhotoButton({ session, player }: { session: Session; player: Player }) {
+export default function MyPhotoButton({
+  session,
+  player,
+  className = 'size-12',
+  badge = 'md',
+}: {
+  session: Session
+  player: Player
+  className?: string
+  badge?: 'sm' | 'md' | 'lg'
+}) {
   const { refresh } = useLive()
   const save = usePhotoSave({ id: player.id, session_id: session.id }, refresh)
   const measured = usePlayerPhoto(player.id)
@@ -90,7 +101,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
     act()
   }
 
-  const face = <Avatar name={player.name} playerId={player.id} src={src} className="size-12" />
+  const face = <Avatar name={player.name} playerId={player.id} src={src} className={className} />
   if (over && !hasPhoto) return face
 
   const text = busy
@@ -112,7 +123,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
           className="relative shrink-0 rounded-token transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 motion-reduce:transition-none"
         >
           {face}
-          {!hasPhoto && <AvatarBadge icon={CameraIcon} tone="paper" size="md" />}
+          {!hasPhoto && <AvatarBadge icon={CameraIcon} tone="paper" size={badge} />}
         </button>
       </SheetTrigger>
       <SheetContent

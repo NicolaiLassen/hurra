@@ -29,6 +29,8 @@ export const elimination = defineGameModule({
   ConfigEditor,
   // Players scan each other's codes to knock them out, also with the camera app.
   acceptsScans: true,
+  // Everyone dealt in who no longer stands: lists of the party mark them Out.
+  knockedOut: (publicState) => (Array.isArray(publicState?.out) ? publicState.out.filter((id) => typeof id === 'string') : []),
   profileBadges: (data) => {
     const { tags = 0, catches = 0, wins = 0 } = data as EliminationProfile
     const badges: ProfileBadge[] = []

@@ -4,7 +4,6 @@
 // notices for a guest who is no longer in the party. Rendered to static HTML
 // under Node: no effects run, so this checks what the page shows on its first
 // render of each snapshot.
-import { QuestionIcon } from '@phosphor-icons/react'
 import { createElement, type ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
 import { MemoryRouter } from 'react-router'
@@ -55,7 +54,7 @@ async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', reca
 describe('the phone home', () => {
   it('lobby: you are in, with the standings and the code bar', async () => {
     const text = await phone('lobby')
-    expect(text).toContain("You're in!")
+    expect(text).toContain("You're in.")
     expect(text).toContain('12 players here')
     expect(text).toContain('Standings')
     expect(text).toContain('Show my code')
@@ -64,7 +63,7 @@ describe('the phone home', () => {
 
   it('a quiz question on the TV: the main card says so and shows the question to answer', async () => {
     const text = await phone('quiz-question')
-    expect(text).toContain('On the TV Quiz')
+    expect(text).toContain('Quiz On the TV')
     expect(text).toContain('What is the capital of Denmark?')
     expect(text).toContain('Copenhagen')
     expect(text).not.toContain('Locked in')
@@ -74,21 +73,21 @@ describe('the phone home', () => {
 
   it('the quiz reveal and leaderboard stay on the main card, with the code bar back', async () => {
     const reveal = await phone('quiz-reveal')
-    expect(reveal).toContain('On the TV Quiz')
+    expect(reveal).toContain('Quiz On the TV')
     expect(reveal).toContain('Show my code')
     expect(await phone('quiz-leaderboard')).toContain('Leaderboard after question 3 of 10')
   })
 
   it('fusion voting off the TV is "Now playing"; locked on the TV is "On the TV"', async () => {
     const voting = await phone('fusion-voting')
-    expect(voting).toContain('Now playing Who is fused?')
-    expect(voting).toContain('Who is fused in each picture?')
-    expect(await phone('fusion-locked')).toContain('On the TV Who is fused?')
+    expect(voting).toContain('Who is fused? Live')
+    expect(voting).toContain('Vote on the pictures')
+    expect(await phone('fusion-locked')).toContain('Who is fused? On the TV')
   })
 
   it('a finished game: the result card, then waiting for the next game', async () => {
     const text = await phone('final')
-    expect(text).toContain('Finished Last one standing')
+    expect(text).toContain('Last one standing Finished')
     // Sofie was tagged by Bo, the last one standing.
     expect(text).toContain("You're out")
     expect(text).toContain('Bo won.')
@@ -97,14 +96,11 @@ describe('the phone home', () => {
 
   it('several games: the stage game is main, the background games are compact cards', async () => {
     const text = await phone('background')
-    expect(text).toContain('On the TV Quiz')
+    expect(text).toContain('Quiz On the TV')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
-    expect(text).toContain('Also running')
     expect(text).toContain('Last one standing')
     expect(text).toContain('Who is fused?')
-    // Background games come newest start first: Last one standing started after fusion.
-    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Who is fused?'))
   })
 
   it('a removed guest: no longer in the party, with Join again', async () => {
@@ -122,7 +118,7 @@ describe('the phone home', () => {
 
   it('the party is over: that is a wrap, Your night from the published recap, no code bar', async () => {
     const text = await phone('archived')
-    expect(text).toContain("That's a wrap!")
+    expect(text).toContain("That's a wrap.")
     expect(text).toContain('Here is your night.')
     expect(text).toContain('Your night')
     expect(text).toContain('Points by game')
@@ -134,7 +130,7 @@ describe('the phone home', () => {
     const recap = fixtureRecapDoc()
     const others = Object.fromEntries(Object.entries(recap.players).filter(([id]) => id !== FIXTURE_PLAYER_ID))
     const text = await phone('archived', undefined, { ...recap, players: others })
-    expect(text).toContain("That's a wrap!")
+    expect(text).toContain("That's a wrap.")
     expect(text).not.toContain('Your night')
     expect(text).not.toContain('Here is your night.')
   })
@@ -148,7 +144,7 @@ describe('the phone home', () => {
       games: final.games.map((g) => (g.game_type === 'quiz' ? { ...g, status: 'active', started_at: FIXTURE_NOW - 10_000, public_state: null } : g)),
     }
     const text = await phone(snapshot)
-    expect(text).toContain('Now playing Quiz')
+    expect(text).toContain('Quiz Since')
     expect(text).toContain('Finished lately')
     expect(text).toContain('Bo won Last one standing')
     expect(text).not.toContain('Waiting for the next game')
@@ -181,7 +177,7 @@ describe('the generic cards, for games without their own', () => {
   })
 
   it('a compact card: the title, Live and a way in', async () => {
-    const text = await textOf(createElement(GenericPlayerCard, { game: { ...game, status: 'active' }, icon: QuestionIcon, open: () => {} }))
-    expect(text).toContain('Bingo Live Open to play')
+    const text = await textOf(createElement(GenericPlayerCard, { game: { ...game, status: 'active' }, open: () => {} }))
+    expect(text).toContain('Bingo Open to play Live')
   })
 })
