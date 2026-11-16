@@ -223,10 +223,15 @@ token names; the aliases go once the last screen has moved.
 
 ## The acceptance test
 
-The [token sheet](screenshots/token-sheet.png) is the acceptance test. Before
-each merge, render every guest at every size (38 px in the TV's field, 64 px
-in the top five and on the podium, 120 and 200 px as heroes), with and
-without a photo, in and out, and compare. With it: no TV text under 28 px,
+The [token sheet](screenshots/token-sheet.png) is the acceptance test, and dev
+builds draw the real one: run `npm run dev` and open `/dev/tokens`
+([src/pages/dev/TokenSheet.tsx](../src/pages/dev/TokenSheet.tsx)). It shows
+the fixtures' 24 guests with the real Avatar at every size the screens use
+(38 px in the TV's field, 64 px in the top five and on the podium, 120 and
+200 px as heroes), with and without a photo, in and out, then the switch at
+95 and 96 px, every guest's name at 96 px and all 18 pairs. A production build
+has neither the route nor its file. Before each merge, open it at 1920 by 1080
+and compare it with the approved sheet. With it: no TV text under 28 px,
 nothing outside the TV's 5 percent safe area, contrast as in [Text](#text), no
 dashes in copy, one exclamation mark (the winner's screen), and only times the
 database holds.

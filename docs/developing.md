@@ -190,7 +190,8 @@ real engine step with `simulateParty`, and check the game's own example with
 `checkGameContract` (it must include a join and a leave). In dev builds every
 screen also opens on a sample party: `/play/x?fixture=<scene>`,
 `/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
-(the scenes are listed in `fixtures.ts`).
+(the scenes are listed in `fixtures.ts`), and `/dev/tokens` draws the token
+sheet ([identity.md](identity.md#the-acceptance-test)).
 
 ## Local development
 

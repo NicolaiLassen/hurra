@@ -28,6 +28,10 @@ const hostSession = lazyPage(() => import('@/pages/host/HostSession'), goingTo)
 const recap = lazyPage(() => import('@/pages/host/Recap'), goingTo)
 const scan = lazyPage(() => import('@/pages/host/Scan'), goingTo)
 
+// Dev builds only: the token sheet (docs/identity.md). A production build
+// has neither the route nor its file.
+const devRoutes = import.meta.env.DEV ? [{ path: '/dev/tokens', lazy: lazyPage(() => import('@/pages/dev/TokenSheet'), goingTo) }] : []
+
 export const router = createBrowserRouter([
   {
     // A screen that throws, or a lazy page that fails to load, shows the app's
@@ -64,6 +68,7 @@ export const router = createBrowserRouter([
         ],
       },
 
+      ...devRoutes,
       { path: '*', element: <NotFound /> },
     ],
   },

@@ -79,8 +79,8 @@ function useMeasuredPhotos(index: PhotoIndex): ReadonlySet<string> {
   return useMemo(() => new Set([...index.byId.values()].filter((url) => results.get(url) === 'drawable')), [index, results])
 }
 
-/** A head and shoulders on a hue picked from the name, as an SVG data URL. */
-function drawnFace(name: string): string {
+/** A head and shoulders on a hue picked from the name, as an SVG data URL: dev builds' stand-in photo (and the token sheet's). */
+export function drawnFace(name: string): string {
   const hue = Array.from(name).reduce((h, ch) => (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0, 7) % 360
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
