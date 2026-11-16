@@ -7,15 +7,17 @@
  * - `few` (1 to 3): a big podium, with a big join card beside it while
  *   joining is open; there are no rows yet.
  * - `small` (4 to 12): the podium and roomy rows, centred as one block.
- * - `medium` (13 to 30): the podium over columns of rows.
- * - `large` (31 and up): a smaller podium that stays readable, over compact rows.
+ * - `medium` (13 to 27): the podium over columns of rows.
+ * - `large` (28 and up): a smaller podium that stays readable, over compact rows.
+ *   From 28 the regular podium would leave 1920 by 1080 room for only 24 regular
+ *   rows, so a bigger party would get smaller rows than 31 guests do.
  */
 export type BoardTier = 'few' | 'small' | 'medium' | 'large'
 
 export function boardTier(players: number): BoardTier {
   if (players <= 3) return 'few'
   if (players <= 12) return 'small'
-  if (players <= 30) return 'medium'
+  if (players <= 27) return 'medium'
   return 'large'
 }
 

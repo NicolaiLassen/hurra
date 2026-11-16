@@ -5,8 +5,17 @@ describe('boardTier', () => {
   it('composes the board for the size of the party', () => {
     expect([1, 2, 3].map(boardTier)).toEqual(['few', 'few', 'few'])
     expect([4, 8, 12].map(boardTier)).toEqual(['small', 'small', 'small'])
-    expect([13, 24, 30].map(boardTier)).toEqual(['medium', 'medium', 'medium'])
-    expect([31, 45, 60].map(boardTier)).toEqual(['large', 'large', 'large'])
+    expect([13, 24, 27].map(boardTier)).toEqual(['medium', 'medium', 'medium'])
+    expect([28, 45, 60].map(boardTier)).toEqual(['large', 'large', 'large'])
+  })
+
+  it('gives 28 guests the smaller podium, so their rows are never smaller than 31 guests get', () => {
+    // 25 rows under the regular podium at 1920 by 1080 (about 392 px) need compact rows...
+    expect(rowLayout(25, 1840, 392, rowLayoutsFor(boardTier(27)))).toMatchObject({ layout: { kind: 'compact' } })
+    // ...while under the compact podium (about 472 px) they stay regular, as 28 rows do for 31 guests.
+    expect(boardTier(28)).toBe(boardTier(31))
+    expect(rowLayout(25, 1840, 472, rowLayoutsFor(boardTier(28)))).toMatchObject({ layout: { kind: 'regular' }, fits: true })
+    expect(rowLayout(28, 1840, 472, rowLayoutsFor(boardTier(31)))).toMatchObject({ layout: { kind: 'regular' }, fits: true })
   })
 })
 

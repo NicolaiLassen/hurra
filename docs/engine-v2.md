@@ -2949,10 +2949,11 @@ even with devtools: it reads exactly what a guest reads.
     chips under it, in as many groups as fit the room, Finished first to go
     (the header leaves its own join card out, `joinCardPlace`), or the
     status cards once joining is closed; on a narrow screen the podium
-    narrows, never the join card. 4 to 12:
-    the podium centred over large rows. 13 to 30:
-    the podium over columns of rows. 31 and up: a smaller podium that still
-    reads from across the room, over compact rows. The status cards stand on
+    narrows, never the join card. 4 to 12: the podium centred over large
+    rows. 13 to 27: the podium over columns of rows. 28 and up: a smaller
+    podium that still reads from across the room, over compact rows (the
+    regular one would leave 1920 by 1080 too little room for 25 regular
+    rows). The status cards stand on
     the podium's floor at the right edge, where the rows and the header's
     join card end.
   - `over`: final standings, as today.
