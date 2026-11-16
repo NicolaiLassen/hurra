@@ -26,6 +26,7 @@ import {
   retried,
   timeSpan,
   timeTicks,
+  tvNote,
   tvPeek,
   valueTicks,
 } from './recapView'
@@ -408,6 +409,15 @@ describe("the room's view", () => {
     ])
     expect(peek.loopSeconds).toBe(peek.slides.reduce((sum, s) => sum + s.seconds, 0))
     expect(durationText(peek.loopSeconds)).toBe('1 min 8 s')
+  })
+
+  it('says where the TV stands with these slides, and that it still plays the published version once more has happened', () => {
+    const publishedAt = new Date(2026, 10, 28, 22, 0).getTime()
+    expect(tvNote({ publishedAt: null, onTv: false, behind: false })).toBe('Once published, Show on the TV plays it on a loop.')
+    expect(tvNote({ publishedAt, onTv: false, behind: false })).toBe('Show on the TV plays it there.')
+    expect(tvNote({ publishedAt, onTv: true, behind: false })).toBe('It is playing on the TV now.')
+    expect(tvNote({ publishedAt, onTv: true, behind: true })).toBe('The TV still plays the version you published at 22:00; Update to play these slides.')
+    expect(tvNote({ publishedAt, onTv: false, behind: true })).toBe('Show on the TV plays the version you published at 22:00; Update to play these slides.')
   })
 
   it('writes durations, places and game tones', () => {

@@ -25,6 +25,7 @@ import {
   movedOnSince,
   recapScreen,
   retried,
+  tvNote,
   type NightRead,
 } from '@/components/host/recapView'
 import { useHostFixture } from '@/components/host/useHostFixture'
@@ -280,12 +281,6 @@ function RecapPage({ snapshot, sample, night }: { snapshot: Snapshot; sample: bo
     </div>
   )
 
-  const tvNote = onTv
-    ? 'It is playing on the TV now.'
-    : publishedAt !== null
-      ? 'Show on the TV plays it there.'
-      : 'Once published, Show on the TV plays it on a loop.'
-
   return (
     <Screen wide>
       <nav>
@@ -299,7 +294,7 @@ function RecapPage({ snapshot, sample, night }: { snapshot: Snapshot; sample: bo
 
       <div className="mt-4">
         {doc ? (
-          <RecapPreview doc={doc} partyName={session.name} band={band} tvNote={tvNote} faded={night.loading} />
+          <RecapPreview doc={doc} partyName={session.name} band={band} tvNote={tvNote({ publishedAt, onTv, behind })} faded={night.loading} />
         ) : (
           <RecapHero doc={null} partyName={session.name}>
             {band}

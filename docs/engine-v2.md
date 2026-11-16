@@ -3208,11 +3208,13 @@ game if live, else the newest live game. New: Move to a new phone.
   finishing order. Chapters are
   cards in the game's tone with its icon. The room's view: the TV's slides in
   its own order (`recapSlides`), each a small picture with its time (the podium
-  crowns everyone tied first, as the TV does) and the length of a loop, and any
-  guest's "Your night" on a phone, drawn by the phone's own `YourNight`. The
-  timeline runs down a line in the party's colours, the first 8 moments with
-  Show all. Motion is CSS enter animations and the confetti; reduced motion has
-  neither. On a phone the awards are a row to swipe.
+  crowns everyone tied first, as the TV does) and the length of a loop, under a
+  note on where the TV stands (once more has happened since the last Publish,
+  the TV still plays the version published then, until Update), and any guest's
+  "Your night" on a phone, drawn by the phone's own `YourNight`. The timeline
+  runs down a line in the party's colours, the first 8 moments with Show all.
+  Motion is CSS enter animations and the confetti; reduced motion has neither.
+  On a phone the awards are a row to swipe.
 
 ### 7.5 From the winning move to the next game, with several games
 

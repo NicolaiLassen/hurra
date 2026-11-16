@@ -447,6 +447,19 @@ export function tvPeek(doc: RecapDoc): { slides: TvPeekSlide[]; loopSeconds: num
   return { slides, loopSeconds: slides.reduce((sum, s) => sum + s.seconds, 0) }
 }
 
+/**
+ * Where the TV stands with the slides the page shows. They are the night as
+ * the page last read it, but the TV plays the version published at
+ * `publishedAt`: once more has happened since (`behind`), Update takes them there.
+ */
+export function tvNote({ publishedAt, onTv, behind }: { publishedAt: number | null; onTv: boolean; behind: boolean }): string {
+  if (publishedAt === null) return 'Once published, Show on the TV plays it on a loop.'
+  if (behind) {
+    return `${onTv ? 'The TV still plays' : 'Show on the TV plays'} the version you published at ${clockTime(publishedAt)}; Update to play these slides.`
+  }
+  return onTv ? 'It is playing on the TV now.' : 'Show on the TV plays it there.'
+}
+
 function slideLabel(doc: RecapDoc, slide: RecapSlide): string {
   switch (slide.kind) {
     case 'numbers':
