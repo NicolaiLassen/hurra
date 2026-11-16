@@ -112,7 +112,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
           className="relative shrink-0 rounded-token transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 motion-reduce:transition-none"
         >
           {face}
-          {!hasPhoto && <AvatarBadge icon={CameraIcon} tone="gold" size="md" />}
+          {!hasPhoto && <AvatarBadge icon={CameraIcon} tone="paper" size="md" />}
         </button>
       </SheetTrigger>
       <SheetContent

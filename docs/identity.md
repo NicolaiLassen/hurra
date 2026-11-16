@@ -195,9 +195,10 @@ than any of its own. Change the slate's face, width, weight or tilt, and
 measure the table again: [src/lib/guest.test.ts](../src/lib/guest.test.ts)
 holds real browser widths the fit must never undercut.
 
-**AvatarBadge** puts a square gold chip across a token's bottom right corner:
-the winner's crown, or the camera on your own token before you add a photo.
-Out is never a badge.
+**AvatarBadge** puts a square chip across a token's bottom right corner: the
+winner's crown in gold, or the camera on your own token before you add a
+photo in paper, since gold is a screen's one next step (Show my code on the
+phone home). Out is never a badge.
 
 ## Old names
 

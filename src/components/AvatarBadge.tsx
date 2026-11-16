@@ -2,8 +2,10 @@ import type { Icon } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 
 const TONES = {
-  /** A win, or the one next step (add a photo): a gold chip with an ink icon. */
+  /** A win (the winner's crown): a gold chip with an ink icon. */
   gold: 'bg-gold text-ink',
+  /** A quiet nudge on your own token (add a photo): paper, so the screen's one gold stays its next step. */
+  paper: 'bg-paper text-ink',
 }
 
 // Sized to the token it sits on: sm for size-6 to size-10 tokens, md for
