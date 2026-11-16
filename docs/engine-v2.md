@@ -3201,8 +3201,11 @@ game if live, else the newest live game. New: Move to a new phone.
   wrote about named guests ("Fastest right answer", "Top hunter"), and the
   biggest climber in the race (most places gained since halfway, at least 2).
   The core still names no game: awards come from `chapters[].winners` and the
-  games' own highlights. The race has more room, a crown in the new leader's
-  colour at each lead change, and a legend in finishing order. Chapters are
+  games' own highlights. The race has more room, a hairline at each lead change
+  with a crown in the new leader's colour (changes closer than 18 px share a
+  spot, where only the latest three keep a crown, fanned out to the left of the
+  last one, and the caption then says that a line marks each), and a legend in
+  finishing order. Chapters are
   cards in the game's tone with its icon. The room's view: the TV's slides in
   its own order (`recapSlides`), each a small picture with its time (the podium
   crowns everyone tied first, as the TV does) and the length of a loop, and any

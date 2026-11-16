@@ -2,6 +2,7 @@ import { CrownIcon, TableIcon } from '@phosphor-icons/react'
 import { useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import {
   clockTime,
+  crownsCaption,
   crownSpots,
   formatCount,
   nearestIndex,
@@ -26,7 +27,8 @@ const CROWN = 16
  * The race of the night (docs/engine-v2.md, 7.4): the running totals of the
  * final top 8 as step lines, since points arrive in jumps. A crosshair snaps to
  * the nearest moment (pointer or arrow keys) and lists every guest's total
- * there; a crown in the new leader's colour marks each lead change; the legend
+ * there; a hairline marks each lead change, with a crown in the new leader's
+ * colour (where changes bunch up, only the latest three keep theirs); the legend
  * names each line in finishing order, the leader's line is labelled at its end,
  * and the same numbers are one tap away as a table.
  */
@@ -266,7 +268,7 @@ export default function RaceChart({ doc }: { doc: Pick<RecapDoc, 'race' | 'stand
             {leads.length > 0 && (
               <>
                 <CrownIcon weight="fill" className="size-3.5 shrink-0" />
-                {leads.length === 1 ? 'The crown marks the lead change.' : `The crowns mark the ${leads.length} lead changes.`}
+                {crownsCaption(crowns)}
               </>
             )}
           </p>

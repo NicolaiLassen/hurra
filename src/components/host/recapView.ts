@@ -125,6 +125,16 @@ export function crownSpots(xs: readonly number[], gap = 18, step = 9, most = 3):
   return spots
 }
 
+/**
+ * The race chart's line about its lead changes, from crownSpots: once changes
+ * bunch up, only the latest of them keep a crown, and the hairlines mark them all.
+ */
+export function crownsCaption(crowns: readonly (number | null)[]): string {
+  if (crowns.length === 1) return 'The crown marks the lead change.'
+  if (crowns.every((at) => at !== null)) return `The crowns mark the ${crowns.length} lead changes.`
+  return `The lead changed ${crowns.length} times: a line marks each, and crowns show the latest where they bunch up.`
+}
+
 /** The sample nearest to `at`: what the crosshair snaps to. */
 export function nearestIndex(times: readonly number[], at: number): number {
   let best = 0

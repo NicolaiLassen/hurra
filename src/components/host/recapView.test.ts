@@ -8,6 +8,7 @@ import {
   ARRIVAL_RETRIES_MS,
   biggestClimber,
   chapterStory,
+  crownsCaption,
   crownSpots,
   downloadName,
   durationText,
@@ -376,6 +377,20 @@ describe('crownSpots', () => {
 
   it('shows at most the latest three crowns of a spot', () => {
     expect(crownSpots([100, 101, 102, 103])).toEqual([null, 85, 94, 103])
+  })
+})
+
+describe('crownsCaption', () => {
+  it('says the crowns mark the lead changes while each has one', () => {
+    expect(crownsCaption(crownSpots([40]))).toBe('The crown marks the lead change.')
+    expect(crownsCaption(crownSpots([40, 200, 400]))).toBe('The crowns mark the 3 lead changes.')
+  })
+
+  it('says a line marks each once changes bunch up and only the latest keep a crown', () => {
+    // Six changes 6 minutes apart in a 5 hour night, on a phone's 255 px plot: 5 px apart.
+    const xs = [0, 1, 2, 3, 4, 5].map((i) => 200 + i * 5)
+    expect(crownSpots(xs).filter((x) => x === null)).toHaveLength(3)
+    expect(crownsCaption(crownSpots(xs))).toBe('The lead changed 6 times: a line marks each, and crowns show the latest where they bunch up.')
   })
 })
 
