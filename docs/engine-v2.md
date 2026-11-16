@@ -205,6 +205,14 @@ statement. They are:
   it gives up rather than queue every screen's read behind a long transaction.
   Apply it before deploying the app that uses it: until it is applied, that
   app plays the TV at 100% and its volume slider in the control room can't save.
+- `20261116000000_guest_photos.sql`: guest photos (docs/guest-photos.md, 2).
+  It adds `players.photo` and `players.photo_set_at`, the `player-photos`
+  bucket and its three policies (2.11), `set_my_photo` and
+  `host_remove_photo`, the `player.photo_changed` log row and its ping
+  (2.14), replaces `session_snapshot` with each player's `photo` added to the
+  sound volume file's body, and ends with the current self-check block
+  (2.12). The live app runs on it unchanged, so it is pushed on its own,
+  ahead of the app that shows photos.
 
 ### 2.1 Rules for the file
 
@@ -236,13 +244,16 @@ statement. They are:
   ```
 
   A hotfix migration states its own grants and ends with a copy of the
-  self-check block (2.12).
+  self-check block (2.12): the newest hotfix's, not the init's, so
+  `20261116000000_guest_photos.sql`'s for now.
 - **Functions** all use `set search_path = ''` and fully qualified names.
   `security definer` only where a function must read or write past row level
   security; those are owned by `postgres`.
 - **Errors** for clients use custom SQLSTATEs that PostgREST maps to HTTP
-  status codes: `PT400`, `PT401`, `PT403`, `PT404`, `PT409`. The machine code
-  goes in `DETAIL` (for example `using errcode = 'PT409', detail = 'not_running'`).
+  status codes: `PT400`, `PT401`, `PT403`, `PT404`, `PT409`, and since the
+  guest photos hotfix `PT415` and `PT429` (docs/guest-photos.md, 2.5). The
+  machine code goes in `DETAIL` (for example
+  `using errcode = 'PT409', detail = 'not_running'`).
   Version conflicts use `PT409` with detail `stale`. **Changed during build:**
   not `40001`. PostgREST retries a transaction that fails with SQLSTATE 40001,
   and a version conflict fails the same way on every retry, so on the local
@@ -1076,6 +1087,13 @@ needs no policy. Paths are `<session id>/<game id>/<random uuid>.jpg` with the
 thumbnail beside it as `<random uuid>.thumb.jpg`, so a file name never says who
 is in a picture.
 
+**Changed after the switch-over (15 Nov):** a second bucket, `player-photos`,
+holds guests' photos (`20261116000000_guest_photos.sql`; docs/guest-photos.md,
+3): public, 64 KB, JPEG only, paths
+`<session id>/<player id>/<random uuid>.jpg`. Its three policies let a guest
+upload into their own player's folder only, and the owner and hosts list and
+delete.
+
 ### 2.12 Self-checks
 
 The last statement is a `do $$ ... $$` block that raises (and so aborts the
@@ -1113,7 +1131,19 @@ migration) when:
 - the `game-media` bucket is missing, isn't public, or its limit or types
   differ from 2.11, or one of its four policies is missing, or
   `storage.objects` has any other policy;
-- there is not exactly one foreign key between `sessions` and `session_games`.
+- there is not exactly one foreign key between `sessions` and `session_games`;
+- (**added by `20261116000000_guest_photos.sql`**, docs/guest-photos.md, 2.7)
+  a photo function is missing, or authenticated or service_role can't
+  execute the five that clients and the storage policies call;
+  `players.photo` or `players.photo_set_at` is in a client grant; the
+  `players_photo_path` check is missing, or the `players_photo_logged`
+  trigger is missing or disabled; the `player-photos` bucket or one of its
+  three policies is missing or changed, so "any other policy" above means
+  any beyond those seven; or `session_snapshot` no longer carries each
+  player's `photo` or the party's `sound_volume`.
+
+A later hotfix copies the newest hotfix's block, which is
+`20261116000000_guest_photos.sql`'s for now, not the init's (2.1).
 
 **Changed during review:** the wipe (11) drops only what is in `public`, so
 the `storage` and `realtime` schemas keep any policy a project already has,
@@ -1162,6 +1192,7 @@ so no password ever sits in the repo.
 | `prompt.closed` | game_load | host (Reveal now and other closes a host action names) or timer (a deadline) | `{ key, round, closed_at }`: one row per prompt game_load closes; no `request_id` |
 | `session.created`, `session.renamed`, `session.opened`, `session.closed`, `session.archived`, `session.unarchived`, `session.tv_scene`, `session.sound_volume` | triggers; `session.tv_scene` also game_commit, when a start takes the stage from the recap (`reason: 'start'`) | host or system | the changed values; `session.sound_volume` is `{ from, sound_volume }` |
 | `player.joined`, `player.renamed`, `player.moved`, `player.removed` | triggers | player, host or system | `{ name, player_id }`; `player.moved` also `from_user` (the old phone's user, hosts only like every log row) |
+| `player.photo_changed` | trigger `players_photo_logged` (`20261116000000_guest_photos.sql`; docs/guest-photos.md, 2.9) | player (their own), host (Remove photo) or system (the deletion script) | `{ name, player_id, change }`, `change` one of `added`, `replaced`, `removed`; never the path or a URL |
 | `points.awarded`, `points.undone` | trigger (host awards only) | host | `{ player_id, points, reason, game_id, score_event_id }` |
 | `game.added`, `game.renamed`, `game.archived`, `game.unarchived`, `game.deleted`, `game.settings_changed` | triggers | host | `{ title, game_type }` |
 | `screen.paired`, `screen.unpaired` | trigger | system or host | `{ user_id }` |
