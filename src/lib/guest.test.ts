@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  cleanName,
   GUEST_BG,
   GUEST_COLORS,
   GUEST_PIECES,
@@ -48,6 +49,24 @@ describe('guestLook', () => {
 
   it('reads the whole name as given, as the colour always has', () => {
     expect(new Set(['Ana', 'ana', 'Ana B.', 'Anna'].map((name) => JSON.stringify(guestLook(name)))).size).toBeGreaterThan(1)
+  })
+
+  it('reads a name as the database stores it, so the join preview shows the look the guest gets', () => {
+    // clean_name: composed, invisible characters dropped, white space runs made one space, trimmed.
+    for (const [typed, stored] of [
+      ['Anne  Sofie', 'Anne Sofie'],
+      ['Marie\u00a0Louise', 'Marie Louise'],
+      ['Ida\u200b', 'Ida'],
+      ['A\u030asa', '\u00c5sa'],
+      [' Bo\t', 'Bo'],
+      ['Mads\u2028Emil', 'Mads Emil'],
+    ]) {
+      expect(cleanName(typed), JSON.stringify(typed)).toBe(stored)
+      expect(guestLook(typed), JSON.stringify(typed)).toEqual(guestLook(stored))
+    }
+    // An emoji keeps its joiners and style selector, as the database keeps them.
+    const family = 'Bo \u{1f468}\u200d\u{1f469}\u200d\u{1f467} \u2764\ufe0f'
+    expect(cleanName(family)).toBe(family)
   })
 
   it('reaches all 18 pairs of six colours and three pieces', () => {

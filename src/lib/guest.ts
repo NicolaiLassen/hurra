@@ -26,17 +26,46 @@ export const GUEST_BG: Record<GuestColor, string> = {
 }
 
 /** The hash Avatar has always coloured a guest by: their name, character by character. */
-function nameHash(name: string): number {
+export function nameHash(name: string): number {
   return Array.from(name).reduce((h, ch) => (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0, 7)
 }
 
 /**
- * A guest's colour and piece, one of the 18 pairs, from their name. The one
- * place they come from, so every screen agrees. Two guests can share a pair:
- * a small token always has the name beside it.
+ * What the database's clean_name drops, as code point ranges: control,
+ * invisible and direction characters. The emoji joiner and style selectors
+ * stay, for emoji.
+ */
+const INVISIBLE: readonly (readonly [number, number])[] = [
+  [0x1, 0x8], [0xe, 0x1f], [0x7f, 0x84], [0x86, 0x9f], [0xad, 0xad], [0x34f, 0x34f], [0x61c, 0x61c], [0x115f, 0x1160],
+  [0x17b4, 0x17b5], [0x180b, 0x180f], [0x200b, 0x200c], [0x200e, 0x200f], [0x202a, 0x202e], [0x2060, 0x206f],
+  [0x2800, 0x2800], [0x3164, 0x3164], [0xfe00, 0xfe0d], [0xfeff, 0xfeff], [0xffa0, 0xffa0], [0xfff0, 0xfffb],
+  [0x1bca0, 0x1bca3], [0x1d173, 0x1d17a], [0xe0000, 0xe001f], [0xe0080, 0xe0fff],
+]
+/** A run of white space of any kind, which clean_name makes one plain space. */
+const SPACES = /[\s\u0085]+/gu
+
+/**
+ * A name as the database stores it (clean_name in the v2 migration): composed
+ * (NFC), invisible characters dropped, every run of white space one plain
+ * space, the ends trimmed. A stored name is already clean, so this changes
+ * only what a guest is still typing.
+ */
+export function cleanName(name: string): string {
+  const seen = Array.from(name.normalize('NFC')).filter((ch) => {
+    const code = ch.codePointAt(0) ?? 0
+    return !INVISIBLE.some(([from, to]) => code >= from && code <= to)
+  })
+  return seen.join('').replace(SPACES, ' ').trim()
+}
+
+/**
+ * A guest's colour and piece, one of the 18 pairs, from their name as the
+ * database stores it, so the join form's preview shows the look the guest
+ * gets. The one place they come from, so every screen agrees. Two guests can
+ * share a pair: a small token always has the name beside it.
  */
 export function guestLook(name: string): GuestLook {
-  const pair = nameHash(name) % (GUEST_COLORS.length * GUEST_PIECES.length)
+  const pair = nameHash(cleanName(name)) % (GUEST_COLORS.length * GUEST_PIECES.length)
   return {
     color: GUEST_COLORS[pair % GUEST_COLORS.length],
     piece: GUEST_PIECES[Math.floor(pair / GUEST_COLORS.length)],

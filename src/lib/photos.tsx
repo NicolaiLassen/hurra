@@ -5,6 +5,7 @@
 // screen, and gives Avatar (through photoIndex.ts) only the photos that passed.
 import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { GameCallError } from '@/lib/gameApi'
+import { nameHash } from '@/lib/guest'
 import { playerPhotoUrl, UNREADABLE_PHOTO } from '@/lib/media'
 import { onlyAllowed, photoIndex, photoKey, PhotosContext, PLACEHOLDER_NAMES, type PhotoIndex } from '@/lib/photoIndex'
 import type { Player } from '@/lib/types'
@@ -81,7 +82,7 @@ function useMeasuredPhotos(index: PhotoIndex): ReadonlySet<string> {
 
 /** A head and shoulders on a hue picked from the name, as an SVG data URL: dev builds' stand-in photo (and the token sheet's). */
 export function drawnFace(name: string): string {
-  const hue = Array.from(name).reduce((h, ch) => (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0, 7) % 360
+  const hue = nameHash(name) % 360
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
     `<rect width="64" height="64" fill="hsl(${hue} 42% 30%)"/>` +
