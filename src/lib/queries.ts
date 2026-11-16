@@ -9,6 +9,7 @@
 import { useCallback } from 'react'
 import { ensureSignedIn, renewSignIn } from '@/lib/auth'
 import { createGameApi, GameCallError, type EngineRequest, type EngineResponse } from '@/lib/gameApi'
+import { listPartyPhotos, listPlayerPhotos, playerPhotoPath, removePlayerPhotos, uploadPlayerPhoto } from '@/lib/media'
 import type { RawRecap, RecapDoc } from '@/lib/recap'
 import { supabase } from '@/lib/supabase'
 import type { AnswerPayload, HostSessionRow, PlayerRow, PublicSession, ScoreEvent, SubmitResult } from '@/lib/types'
@@ -140,6 +141,90 @@ export async function getPlayerByCode(code: string): Promise<(PlayerRow & { sess
   return { ...row, session: { ...row.session, archived_at: epochMs(row.session.archived_at) } }
 }
 
+// Guest photos (docs/guest-photos.md) ----------------------------------------------------
+
+type PhotoChange = { photo: string | null; previous: string | null }
+/** How long one set_my_photo call may take before it counts as unanswered (status 0), as gameApi's calls do. */
+const PHOTO_CALL_TIMEOUT_MS = 8000
+/** The longest set_my_photo's throttle ever asks a phone to wait. */
+const PHOTO_WAIT_MAX_MS = 10_000
+
+/** set_my_photo, given up after 8 s: the answer is then status 0, and the call may still have worked. */
+async function callSetMyPhoto(playerId: string, path: string | null) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PHOTO_CALL_TIMEOUT_MS)
+  try {
+    return await supabase.rpc('set_my_photo', { p_player_id: playerId, p_path: path }).abortSignal(controller.signal)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * This phone's photo for its player: the prepared JPEG (preparePhoto) goes to
+ * `path` (a new one in the player's folder, or the same one again when the
+ * phone tries a failed save again), set_my_photo points the player at it,
+ * then every other file in the folder is deleted (the photo it replaced, and
+ * any a lost answer left). Returns the path. When set_my_photo says too_soon
+ * (a second photo within 10 s), this waits the milliseconds its HINT names
+ * and asks once more, so a quick retake only takes a few seconds longer. A
+ * refusal deletes the new file again; a call that never got an answer
+ * (status 0) leaves it, since it may have worked. Refusals: 'not_your_player',
+ * 'archived', 'bad_path', 'not_uploaded', 'bad_file', 'too_soon', and
+ * Storage's statuses (413, 415, 403).
+ */
+export async function setMyPhoto(
+  player: Pick<PlayerRow, 'id' | 'session_id'>,
+  photo: Blob,
+  path: string = playerPhotoPath(player.session_id, player.id),
+): Promise<string> {
+  await uploadPlayerPhoto(path, photo)
+  let result = await callSetMyPhoto(player.id, path)
+  if (result.error?.details === 'too_soon') {
+    const wait = Math.min(Number(result.error.hint) || PHOTO_WAIT_MAX_MS, PHOTO_WAIT_MAX_MS)
+    await new Promise((resolve) => setTimeout(resolve, wait + 250))
+    result = await callSetMyPhoto(player.id, path)
+  }
+  if (result.error) {
+    const refused = failure(result.error, result.status)
+    if (refused.status !== 0) await removePlayerPhotos([path])
+    throw refused
+  }
+  await keepOnly(player, path)
+  return path
+}
+
+/** Removes this phone's photo for its player, and deletes every file in its folder. */
+export async function removeMyPhoto(player: Pick<PlayerRow, 'id' | 'session_id'>): Promise<void> {
+  unwrap<PhotoChange>(await callSetMyPhoto(player.id, null))
+  await keepOnly(player, null)
+}
+
+/**
+ * The host's Remove photo: host_remove_photo, then the removed file is
+ * deleted. Only that file: a new photo the guest is saving at the same
+ * moment stays theirs.
+ */
+export async function removeGuestPhoto(playerId: string): Promise<void> {
+  const change = unwrap<PhotoChange | null>(await supabase.rpc('host_remove_photo', { p_player_id: playerId }))
+  if (change?.previous) await removePlayerPhotos([change.previous])
+}
+
+/** Deletes every file in the player's folder but `keep`. Never throws. */
+async function keepOnly(player: Pick<PlayerRow, 'id' | 'session_id'>, keep: string | null): Promise<void> {
+  const paths = await listPlayerPhotos(player.session_id, player.id).catch(() => [] as string[])
+  await removePlayerPhotos(paths.filter((path) => path !== keep))
+}
+
+/** Deletes every file in a player's folder; a host may list every folder. Never throws. */
+async function clearPlayerFolder(sessionId: string, playerId: string): Promise<void> {
+  try {
+    await removePlayerPhotos(await listPlayerPhotos(sessionId, playerId))
+  } catch {
+    // Left for the after-party script (docs/guest-photos.md, 11).
+  }
+}
+
 // Host: parties ---------------------------------------------------------------------------
 
 /** The host's parties, newest first: a 30 s poll, and on returning to the tab. */
@@ -201,6 +286,12 @@ export async function archiveSession(sessionId: string, archived: boolean): Prom
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
+  // The party's photos first, best effort (docs/guest-photos.md, 4.3).
+  try {
+    await removePlayerPhotos(await listPartyPhotos(sessionId))
+  } catch {
+    // Left for the after-party script's --unreferenced.
+  }
   unwrap(await supabase.from('sessions').delete().eq('id', sessionId))
 }
 
@@ -306,6 +397,9 @@ export async function renamePlayer(playerId: string, name: string): Promise<void
  * error: the removal stands, and the next timer or move runs the hooks.
  */
 export async function removePlayer(sessionId: string, playerId: string): Promise<void> {
+  // The photo first, best effort, then the guest's whole folder (docs/guest-photos.md, 4.3).
+  await removeGuestPhoto(playerId).catch(() => undefined)
+  await clearPlayerFolder(sessionId, playerId)
   unwrap(await supabase.from('players').delete().eq('id', playerId))
   const live = unwrap<{ id: string }[]>(
     await supabase.from('session_games').select('id').eq('session_id', sessionId).eq('status', 'active').is('archived_at', null),

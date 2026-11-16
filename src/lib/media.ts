@@ -9,7 +9,7 @@
 // Paths are <session id>/<game id>/<random uuid>.jpg with the thumbnail beside
 // it as <uuid>.thumb.jpg, so a file name never says who is in a picture. Only
 // hosts upload; everyone reads through the bucket's public URL.
-import { newRequestId } from '@/lib/gameApi'
+import { GameCallError, newRequestId } from '@/lib/gameApi'
 import { supabase } from '@/lib/supabase'
 
 export const GAME_MEDIA_BUCKET = 'game-media'
@@ -179,4 +179,169 @@ export function countingUploads<T>(upload: (file: File) => Promise<T>, count: (c
 /** The public URL of a game-media path. Phones use 'thumb' (with loading="lazy"); the TV uses 'full'. */
 export function gameMediaUrl(path: string, size: 'full' | 'thumb' = 'full'): string {
   return supabase.storage.from(GAME_MEDIA_BUCKET).getPublicUrl(size === 'thumb' ? thumbPath(path) : path).data.publicUrl
+}
+
+// Guest photos (docs/guest-photos.md) -------------------------------------------------
+// One small square JPEG per photo: a 320 px avatar needs no thumbnail. Drawing
+// onto a canvas drops every metadata block (EXIF, GPS), as for game media.
+// Paths are <session id>/<player id>/<random uuid>.jpg: a new one for every
+// upload, so a file never changes and no cache ever shows an old photo.
+
+export const PLAYER_PHOTOS_BUCKET = 'player-photos'
+/** The side of a stored photo: the TV's biggest avatar is 144 px, and a 2x screen doubles it. */
+export const PHOTO_EDGE = 320
+/** The quality steps down from 0.82 until a photo is under this (about 25 KB for a face). */
+export const PHOTO_MAX_BYTES = 48_000
+/** 0.82 first, down to 0.6 for most pictures; 0.5 and 0.4 only for a picture of pure noise. */
+export const PHOTO_QUALITIES = [0.82, 0.76, 0.7, 0.65, 0.6, 0.5, 0.4] as const
+/** set_my_photo refuses a stored file over this (48 KB), so preparePhoto never returns one. The bucket takes 64 KB. */
+export const PHOTO_LIMIT_BYTES = 49_152
+/** Where the square sits in a tall picture: 0 is the top, 0.5 the middle; a face is usually a little above it. */
+export const PHOTO_CROP_FROM_TOP = 0.35
+/** How long one upload may take before it counts as lost: a stalled connection never fails by itself. */
+export const PHOTO_UPLOAD_TIMEOUT_MS = 15_000
+export const UNREADABLE_PHOTO = "This photo can't be read here. Try another one, or take a selfie."
+
+/** The largest square of a picture (centred across, PHOTO_CROP_FROM_TOP down) and the side it is drawn at: never larger than the square. */
+export function squareCrop(width: number, height: number, edge = PHOTO_EDGE): { sx: number; sy: number; side: number; size: number } {
+  const side = Math.min(width, height)
+  return {
+    sx: Math.round((width - side) / 2),
+    sy: Math.round((height - side) * PHOTO_CROP_FROM_TOP),
+    side,
+    size: Math.max(1, Math.min(edge, side)),
+  }
+}
+
+/** The square of `source` at (sx, sy), `side` wide, drawn `size` wide on the night sky (transparent parts land on it). */
+function drawSquare(source: CanvasImageSource, sx: number, sy: number, side: number, size: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error(UNREADABLE_PHOTO)
+  context.fillStyle = BACKDROP
+  context.fillRect(0, 0, size, size)
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(source, sx, sy, side, side, 0, 0, size, size)
+  return canvas
+}
+
+/**
+ * The re-encoding for a guest photo: the square (centred across,
+ * PHOTO_CROP_FROM_TOP down), at most 320 px, a JPEG under 48 KB (quality 0.82
+ * stepping down), every metadata block gone. Throws UNREADABLE_PHOTO for a
+ * file this browser can't decode, and for the picture that is still over
+ * PHOTO_LIMIT_BYTES at 0.4 (none is, in practice).
+ */
+export async function preparePhoto(file: Blob): Promise<Blob> {
+  let image: Decoded
+  try {
+    image = await decode(file)
+  } catch {
+    throw new Error(UNREADABLE_PHOTO)
+  }
+  try {
+    if (!(image.width > 0 && image.height > 0)) throw new Error(UNREADABLE_PHOTO)
+    const crop = squareCrop(image.width, image.height)
+    // A camera photo goes down in two steps, to twice the size first: one big step looks grainy.
+    const twice = crop.size * 2
+    const canvas =
+      crop.side > twice
+        ? drawSquare(drawSquare(image.source, crop.sx, crop.sy, crop.side, twice), 0, 0, twice, crop.size)
+        : drawSquare(image.source, crop.sx, crop.sy, crop.side, crop.size)
+    const photo = await encodeWithin((quality) => toJpeg(canvas, quality), PHOTO_MAX_BYTES, PHOTO_QUALITIES)
+    if (photo.size > PHOTO_LIMIT_BYTES) throw new Error(UNREADABLE_PHOTO)
+    return photo
+  } finally {
+    image.release()
+  }
+}
+
+/** <session id>/<player id>/<new uuid>.jpg. */
+export function playerPhotoPath(sessionId: string, playerId: string, id: string = newRequestId()): string {
+  return `${sessionId}/${playerId}/${id}.jpg`
+}
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const PHOTO_PATH = new RegExp(`^${UUID}/${UUID}/${UUID}\\.jpg$`)
+/** The photo shape, as is_photo_path checks it (the database also checks the party and the player). */
+export const isPlayerPhotoPath = (path: string) => PHOTO_PATH.test(path)
+
+const PHOTO_UPLOAD = { contentType: 'image/jpeg', upsert: false, cacheControl: '3600' } as const
+
+/** A Storage error as a GameCallError: the status from the body's statusCode (403, 409, 413, 415), 0 when nothing answered. */
+export function storageFailure(error: unknown): GameCallError {
+  const e = (error ?? {}) as { name?: string; message?: string; statusCode?: string; status?: number; code?: string }
+  const status = /^\d{3}$/.test(e.statusCode ?? '') ? Number(e.statusCode) : (e.status ?? 0)
+  if (e.name === 'StorageUnknownError' || status === 0) {
+    return new GameCallError("Couldn't reach the party. Check your connection and try again.", 0, 'unavailable')
+  }
+  return new GameCallError(e.message || `Storage answered ${status}`, status, e.code ?? String(status))
+}
+
+/** What an upload that took longer than PHOTO_UPLOAD_TIMEOUT_MS answers: a network failure (status 0). */
+const LATE = { data: null, error: { name: 'StorageUnknownError', message: 'The upload took too long' } }
+
+/**
+ * Uploads one prepared photo: no upsert, cached an hour. An attempt that
+ * fails on the network, or takes longer than 15 s, is tried once more after
+ * 1 s, to the same path. storage-js takes no abort signal, so a slow attempt
+ * is let go, not cancelled: if it lands later, the retry's 409 counts as
+ * uploaded, and an orphan goes with the next save's clean-up or the
+ * after-party script. A 409 counts as uploaded: every pick has a new uuid, so
+ * a file already at this path is this phone's own earlier attempt, whose
+ * answer was lost.
+ */
+export async function uploadPlayerPhoto(path: string, photo: Blob): Promise<void> {
+  const bucket = supabase.storage.from(PLAYER_PHOTOS_BUCKET)
+  for (let attempt = 1; ; attempt++) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<typeof LATE>((resolve) => (timer = setTimeout(() => resolve(LATE), PHOTO_UPLOAD_TIMEOUT_MS)))
+    const { error } = await Promise.race([bucket.upload(path, photo, PHOTO_UPLOAD), late]).finally(() => clearTimeout(timer))
+    if (!error) return
+    const failure = storageFailure(error)
+    if (failure.status === 409) return
+    if (failure.status !== 0 || attempt === 2) throw failure
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+}
+
+/** The photos in a player's folder, as paths: what its owner, or a host, may see and delete. */
+export async function listPlayerPhotos(sessionId: string, playerId: string): Promise<string[]> {
+  const folder = `${sessionId}/${playerId}`
+  const { data, error } = await supabase.storage.from(PLAYER_PHOTOS_BUCKET).list(folder, { limit: 100 })
+  if (error) throw storageFailure(error)
+  return (data ?? []).map((file) => `${folder}/${file.name}`).filter(isPlayerPhotoPath)
+}
+
+const PLAYER_FOLDER = new RegExp(`^${UUID}$`)
+
+/** Every photo of a party, as paths, folder by folder: what a host may see and delete. */
+export async function listPartyPhotos(sessionId: string): Promise<string[]> {
+  const { data, error } = await supabase.storage.from(PLAYER_PHOTOS_BUCKET).list(sessionId, { limit: 1000 })
+  if (error) throw storageFailure(error)
+  const folders = (data ?? []).map((entry) => entry.name).filter((name) => PLAYER_FOLDER.test(name))
+  return (await Promise.all(folders.map((playerId) => listPlayerPhotos(sessionId, playerId)))).flat()
+}
+
+/**
+ * Deletes photos by path through the Storage API, 100 at a time. Never throws,
+ * not even when there is no storage client (a test's): a file left behind
+ * goes with the after-party script.
+ */
+export async function removePlayerPhotos(paths: readonly string[]): Promise<void> {
+  for (let i = 0; i < paths.length; i += 100) {
+    try {
+      await supabase.storage.from(PLAYER_PHOTOS_BUCKET).remove(paths.slice(i, i + 100))
+    } catch {
+      // Left for the after-party script (docs/guest-photos.md, 11).
+    }
+  }
+}
+
+/** The public URL of a player-photos path. */
+export function playerPhotoUrl(path: string): string {
+  return supabase.storage.from(PLAYER_PHOTOS_BUCKET).getPublicUrl(path).data.publicUrl
 }
