@@ -196,7 +196,7 @@ function Revealed({ pub, players }: { pub: QuizPublicState; players: Player[] })
                   transition={{ ...spring, delay: reduce ? 0 : 0.6 + i * 0.12 }}
                   className="flex min-w-0 items-center gap-3 rounded-full bg-card/80 py-1.5 pr-5 pl-1.5 ring-1 ring-foreground/10"
                 >
-                  <Avatar name={nameOf(fast.playerId)} className="size-11 text-base short:size-9" />
+                  <Avatar name={nameOf(fast.playerId)} className="size-11 short:size-9" />
                   <span className="truncate text-2xl font-bold short:text-xl">{nameOf(fast.playerId)}</span>
                   <span className="shrink-0 text-2xl font-black text-confetti-teal short:text-xl">{formatSeconds(fast.ms)}</span>
                 </motion.li>
@@ -261,7 +261,7 @@ function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[]
                   <span className="w-12 text-right text-4xl font-black text-muted-foreground tabular-nums short:text-3xl">
                     {rank}
                   </span>
-                  <Avatar name={nameOf(row.playerId)} className="size-16 text-2xl short:size-12 short:text-lg" />
+                  <Avatar name={nameOf(row.playerId)} className="size-16 short:size-12" />
                   <span className="min-w-0 flex-1 truncate text-4xl font-bold short:text-3xl">{nameOf(row.playerId)}</span>
                   {moved && row.gained > 0 && (
                     <motion.span

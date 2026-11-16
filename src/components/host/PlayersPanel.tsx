@@ -81,7 +81,7 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
             {shown.map((row) => (
               <li key={row.player_id} className="flex items-center gap-2.5 py-1">
                 <RankBadge rank={row.rank} className="mx-0.5" />
-                <Avatar name={row.name} className="size-8 text-xs" />
+                <Avatar name={row.name} className="size-8" />
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                   {/* Padded to a 32px tap target without making the row taller. */}
                   <Link to={`/p/${row.code}`} className="truncate py-1.5 font-medium hover:text-primary">

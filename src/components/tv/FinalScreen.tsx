@@ -51,7 +51,7 @@ export default function FinalScreen({ game, players, gamePoints, feed }: TvViewP
             <div className="flex shrink-0 -space-x-6 pt-10 short:pt-8">
               {winners.slice(0, AVATARS).map((p) => (
                 <div key={p.id} className="relative">
-                  <Avatar name={p.name} className="size-32 text-5xl ring-4 ring-background short:size-24 short:text-4xl" />
+                  <Avatar name={p.name} className="size-32 ring-4 ring-background short:size-24" />
                   <CrownIcon
                     weight="fill"
                     className="absolute -top-10 left-1/2 size-14 -translate-x-1/2 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:-top-8 short:size-11"
@@ -80,7 +80,7 @@ export default function FinalScreen({ game, players, gamePoints, feed }: TvViewP
                 {top.map((row, i) => (
                   <li key={row.player.id} className="flex items-center gap-3">
                     <span className="w-7 text-right text-2xl font-bold text-muted-foreground tabular-nums short:text-xl">{i + 1}</span>
-                    <Avatar name={row.player.name} className="size-10 text-sm short:size-9" />
+                    <Avatar name={row.player.name} className="size-10 short:size-9" />
                     <span className="min-w-0 flex-1 truncate text-2xl font-semibold short:text-xl">{row.player.name}</span>
                     <span className="text-3xl font-black text-primary tabular-nums short:text-2xl">{row.points}</span>
                   </li>

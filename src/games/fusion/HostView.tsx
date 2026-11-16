@@ -173,7 +173,7 @@ export default function HostView({ session, game, players, state, publicState, t
             {withRanks(pub.top).map((row) => (
               <li key={row.playerId} className="flex items-center gap-2.5">
                 <span className="w-5 text-right text-sm font-bold text-muted-foreground tabular-nums">{row.rank}</span>
-                <Avatar name={nameOf(players, row.playerId)} className="size-7 text-[0.65rem]" />
+                <Avatar name={nameOf(players, row.playerId)} className="size-7" />
                 <span className="min-w-0 flex-1 truncate font-medium">{nameOf(players, row.playerId)}</span>
                 <span className="font-bold text-primary tabular-nums">{row.points}</span>
               </li>

@@ -218,13 +218,13 @@ function PictureCard({
               players={players}
               meId={meId}
               className="text-sm"
-              avatarClassName="size-6 text-[0.6rem]"
+              avatarClassName="size-6"
             />
             <p className={cn('text-xs', gotPoints ? 'font-semibold text-primary' : 'text-muted-foreground')}>{outcome}</p>
           </>
         ) : vote ? (
           <>
-            <Pair stacked people={vote} players={players} className="text-sm" avatarClassName="size-6 text-[0.6rem]" />
+            <Pair stacked people={vote} players={players} className="text-sm" avatarClassName="size-6" />
             <p className="text-xs text-muted-foreground">{open ? 'Tap to change' : 'Locked in'}</p>
           </>
         ) : open ? (

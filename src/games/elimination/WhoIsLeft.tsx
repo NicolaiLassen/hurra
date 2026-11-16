@@ -34,7 +34,7 @@ export default function WhoIsLeft({
             )}
           >
             <span className="relative">
-              <Avatar name={p.name} out={out} className="size-6 text-[0.6rem]" />
+              <Avatar name={p.name} out={out} className="size-6" />
               {p.id === publicState.winner && <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />}
             </span>
             {/* The name at full strength, and the word beside it: the stripe never says Out alone. */}

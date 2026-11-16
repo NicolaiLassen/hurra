@@ -57,7 +57,7 @@ export default function FinalTvView({ game, players, publicState }: TvViewProps<
                 <div className="relative">
                   <Avatar
                     name={name}
-                    className={cn(i === 0 ? 'size-36 text-5xl short:size-28 short:text-4xl' : 'size-28 text-4xl short:size-24 short:text-3xl')}
+                    className={cn(i === 0 ? 'size-36 short:size-28' : 'size-28 short:size-24')}
                   />
                   {crowned && (
                     <CrownIcon

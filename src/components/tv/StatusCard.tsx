@@ -60,7 +60,7 @@ function GenericStatus({ game, players, gamePoints }: TvStatusProps) {
       </header>
       {leaders.length > 0 ? (
         <p className="flex min-w-0 items-center gap-2.5">
-          <Avatar name={leaders[0].player.name} className="size-8 text-xs" />
+          <Avatar name={leaders[0].player.name} className="size-8" />
           <span className="min-w-0 flex-1 truncate text-lg font-semibold">
             {listNames(leaders.map((row) => row.player.name))} {leaders.length > 1 ? 'lead' : 'leads'}
           </span>

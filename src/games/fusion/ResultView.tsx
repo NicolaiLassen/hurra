@@ -36,7 +36,7 @@ export default function ResultView({ game, player, players, publicState, view, g
           <span className="flex shrink-0 -space-x-2">
             {winners.slice(0, 3).map((id) => (
               <span key={id} className="relative">
-                <Avatar name={nameOf(players, id)} className="size-10 text-sm ring-2 ring-card" />
+                <Avatar name={nameOf(players, id)} className="size-10 ring-2 ring-card" />
                 <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />
               </span>
             ))}

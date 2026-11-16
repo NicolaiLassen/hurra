@@ -159,9 +159,9 @@ const REGULAR: PodiumLook = {
   step: 'w-56 lg:w-72',
   crown: 'size-12 short:size-8',
   avatars: [
-    'size-24 text-4xl ring-4 lg:size-28 short:size-16 short:text-2xl',
-    'size-20 text-3xl ring-4 lg:size-24 short:size-14 short:text-xl',
-    'size-20 text-3xl ring-4 lg:size-24 short:size-14 short:text-xl',
+    'size-24 ring-4 lg:size-28 short:size-16',
+    'size-20 ring-4 lg:size-24 short:size-14',
+    'size-20 ring-4 lg:size-24 short:size-14',
   ],
   name: 'mt-3 text-2xl lg:text-3xl short:mt-1 short:text-xl',
   points: 'text-4xl short:text-3xl',
@@ -197,9 +197,9 @@ const PODIUM: Record<PodiumSize, PodiumLook> = {
     ...REGULAR,
     crown: 'size-12 short:size-10',
     avatars: [
-      'size-24 text-4xl ring-4 lg:size-28 short:size-24',
-      'size-20 text-3xl ring-4 lg:size-24 short:size-20',
-      'size-20 text-3xl ring-4 lg:size-24 short:size-20',
+      'size-24 ring-4 lg:size-28 short:size-24',
+      'size-20 ring-4 lg:size-24 short:size-20',
+      'size-20 ring-4 lg:size-24 short:size-20',
     ],
     name: 'mt-3 text-2xl lg:text-4xl short:mt-2 short:text-3xl',
     points: 'text-4xl lg:text-5xl',
@@ -215,9 +215,9 @@ const PODIUM: Record<PodiumSize, PodiumLook> = {
     step: 'w-56',
     crown: 'size-10 short:size-8',
     avatars: [
-      'size-24 text-4xl ring-4 short:size-16 short:text-2xl',
-      'size-20 text-3xl ring-4 short:size-14 short:text-xl',
-      'size-20 text-3xl ring-4 short:size-14 short:text-xl',
+      'size-24 ring-4 short:size-16',
+      'size-20 ring-4 short:size-14',
+      'size-20 ring-4 short:size-14',
     ],
     name: 'mt-2 text-2xl short:mt-1 short:text-xl',
     points: 'text-4xl short:text-3xl',
@@ -312,7 +312,7 @@ const ROW_STYLE: Record<RowLayout['kind'], { row: string; rank: string; avatar: 
   large: {
     row: 'h-20 gap-5 rounded-3xl px-6',
     rank: 'w-12 text-3xl',
-    avatar: 'size-14 text-lg',
+    avatar: 'size-14',
     name: 'text-3xl leading-tight',
     points: 'text-4xl',
     bar: 'mt-2 h-2',
@@ -321,14 +321,14 @@ const ROW_STYLE: Record<RowLayout['kind'], { row: string; rank: string; avatar: 
   regular: {
     row: 'h-14 gap-4 rounded-2xl px-5',
     rank: 'w-9 text-2xl',
-    avatar: 'size-10 text-base',
+    avatar: 'size-10',
     name: 'text-2xl leading-tight',
     points: 'text-3xl',
     bar: 'mt-1 h-1.5',
     details: true,
   },
-  compact: { row: 'h-10 gap-3 rounded-2xl px-4', rank: 'w-7 text-lg', avatar: 'size-7 text-xs', name: 'text-lg', points: 'text-xl', bar: '', details: false },
-  tiny: { row: 'h-8 gap-2 rounded-xl px-3', rank: 'w-6 text-base', avatar: 'size-6 text-[0.6rem]', name: 'text-base', points: 'text-lg', bar: '', details: false },
+  compact: { row: 'h-10 gap-3 rounded-2xl px-4', rank: 'w-7 text-lg', avatar: 'size-7', name: 'text-lg', points: 'text-xl', bar: '', details: false },
+  tiny: { row: 'h-8 gap-2 rounded-xl px-3', rank: 'w-6 text-base', avatar: 'size-6', name: 'text-base', points: 'text-lg', bar: '', details: false },
 }
 
 /**

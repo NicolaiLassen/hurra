@@ -55,7 +55,7 @@ export default function Standings({
                   )}
                 >
                   <RankBadge rank={row.rank} />
-                  <Avatar name={row.name} className="size-8 text-xs" />
+                  <Avatar name={row.name} className="size-8" />
                   <span className={cn('flex-1 truncate', isMe ? 'font-bold' : 'font-medium')}>
                     {row.name}
                     {isMe && <span className="font-normal text-muted-foreground"> (you)</span>}

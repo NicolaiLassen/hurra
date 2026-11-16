@@ -4,8 +4,8 @@ import AvatarBadge from '@/components/AvatarBadge'
 import { cn } from '@/lib/utils'
 
 const SIZES = {
-  md: { avatar: 'size-10 text-sm', overlap: '-space-x-3', badge: 'md' },
-  lg: { avatar: 'size-11 text-base short:size-9 short:text-sm', overlap: '-space-x-3 short:-space-x-2', badge: 'md' },
+  md: { avatar: 'size-10', overlap: '-space-x-3', badge: 'md' },
+  lg: { avatar: 'size-11 short:size-9', overlap: '-space-x-3 short:-space-x-2', badge: 'md' },
 } as const
 /** The first face on top, so its crown isn't hidden under the next one. */
 const STACK = ['z-30', 'z-20', 'z-10']

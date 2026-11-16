@@ -90,7 +90,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
     act()
   }
 
-  const face = <Avatar name={player.name} playerId={player.id} src={src} className="size-12 text-lg" />
+  const face = <Avatar name={player.name} playerId={player.id} src={src} className="size-12" />
   if (over && !hasPhoto) return face
 
   const text = busy
@@ -123,7 +123,7 @@ export default function MyPhotoButton({ session, player }: { session: Session; p
         <SheetTitle className="text-center text-xl font-bold">Your photo</SheetTitle>
         <div className="relative mt-5 self-center">
           {/* After a save the connection lost: the photo Try again sends. */}
-          <Avatar name={player.name} playerId={player.id} src={save.canRetry ? save.preview : src} className="size-32 text-5xl" />
+          <Avatar name={player.name} playerId={player.id} src={save.canRetry ? save.preview : src} className="size-32" />
           {busy && (
             <span className="absolute inset-0 grid place-items-center rounded-token bg-background/50">
               <SpinnerIcon className="size-10 animate-spin" />

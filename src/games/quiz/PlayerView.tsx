@@ -320,7 +320,7 @@ function Standing({
               )}
             >
               <span className="w-5 text-right font-black text-muted-foreground tabular-nums">{row.rank}</span>
-              <Avatar name={nameOf(row.playerId)} className="size-8 text-xs" />
+              <Avatar name={nameOf(row.playerId)} className="size-8" />
               <span className="min-w-0 flex-1 truncate font-semibold">{nameOf(row.playerId)}</span>
               <span className="font-black text-primary">{formatNumber(row.points)}</span>
             </li>

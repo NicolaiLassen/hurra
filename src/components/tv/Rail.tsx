@@ -70,7 +70,7 @@ function TopFive({ rows, gains }: { rows: Ranked[]; gains: Gains }) {
           {rows.map((row) => (
             <motion.li key={row.player_id} layout transition={spring} className="relative flex h-10 items-center gap-3 short:h-8">
               <RankBadge rank={row.rank} className="size-8 text-sm short:size-7" />
-              <Avatar name={row.name} className="size-9 text-sm short:size-7 short:text-xs" />
+              <Avatar name={row.name} className="size-9 short:size-7" />
               <span className="min-w-0 flex-1 truncate text-xl font-semibold short:text-lg">{row.name}</span>
               <Points value={row.points} className="text-2xl font-black text-primary short:text-xl" />
               <GainBubble gain={gains[row.player_id]} className="-top-3 right-0" />

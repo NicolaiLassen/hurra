@@ -126,7 +126,7 @@ export default function PeoplePicker({
                     )}
                   >
                     <span className="relative">
-                      <Avatar name={p.name} className="size-12 text-base" />
+                      <Avatar name={p.name} className="size-12" />
                       {picked && (
                         <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-confetti-violet text-[0.65rem] font-black text-background ring-2 ring-background">
                           {order + 1}
@@ -150,7 +150,7 @@ export default function PeoplePicker({
               <span className="flex shrink-0 -space-x-2" aria-hidden>
                 {[0, 1].map((slot) =>
                   pick[slot] ? (
-                    <Avatar key={pick[slot]} name={nameOf(players, pick[slot])} className="size-10 text-sm ring-2 ring-background" />
+                    <Avatar key={pick[slot]} name={nameOf(players, pick[slot])} className="size-10 ring-2 ring-background" />
                   ) : (
                     <span
                       key={`empty-${slot}`}
@@ -192,7 +192,7 @@ export default function PeoplePicker({
                 players={players}
                 meId={me.id}
                 className="text-lg"
-                avatarClassName="size-10 text-sm"
+                avatarClassName="size-10"
               />
               {outcome && <p className="text-sm text-muted-foreground">{outcome}</p>}
             </section>
@@ -207,7 +207,7 @@ export default function PeoplePicker({
                   const right = picture.revealed?.people.includes(id)
                   return (
                     <li key={id} className="flex items-center gap-3 rounded-xl bg-card px-3 py-2 ring-1 ring-foreground/10">
-                      <Avatar name={nameOf(players, id)} className="size-8 text-xs" />
+                      <Avatar name={nameOf(players, id)} className="size-8" />
                       <span className="min-w-0 flex-1 truncate font-medium">{nameOf(players, id)}</span>
                       {picture.revealed &&
                         (right ? (

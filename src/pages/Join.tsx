@@ -211,7 +211,7 @@ function NamePreview({ name }: { name: string }) {
       </span>
     )
   }
-  return <Avatar name={trimmed} className="size-12 text-lg transition-colors" />
+  return <Avatar name={trimmed} className="size-12 transition-colors" />
 }
 
 /**

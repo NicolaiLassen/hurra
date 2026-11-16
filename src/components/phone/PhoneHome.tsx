@@ -278,7 +278,7 @@ function Lobby({ players }: { players: Player[] }) {
           <div className="flex items-center gap-2">
             <div className="flex -space-x-2">
               {faces.map((p) => (
-                <Avatar key={p.id} name={p.name} className="size-8 text-xs ring-2 ring-card" />
+                <Avatar key={p.id} name={p.name} className="size-8 ring-2 ring-card" />
               ))}
             </div>
             <p className="text-sm text-muted-foreground">{players.length} players here</p>

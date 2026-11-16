@@ -60,7 +60,7 @@ export function Pair({
   meId,
   stacked = false,
   className,
-  avatarClassName = 'size-7 text-[0.65rem]',
+  avatarClassName = 'size-7',
 }: {
   people: readonly PlayerId[]
   players: readonly Player[]

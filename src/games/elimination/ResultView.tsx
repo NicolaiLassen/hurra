@@ -74,7 +74,7 @@ export default function ResultView({ game, player, players, publicState, view, g
   return winnerId ? (
     <div className="flex items-center gap-4 rounded-3xl bg-primary/10 p-5 ring-1 ring-primary/30">
       <span className="relative shrink-0">
-        <Avatar name={nameOf(winnerId)} className="size-14 text-lg" />
+        <Avatar name={nameOf(winnerId)} className="size-14" />
         <AvatarBadge icon={CrownIcon} tone="gold" size="lg" />
       </span>
       <div className="min-w-0">

@@ -89,9 +89,9 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
 const ORDER = ['order-2', 'order-1', 'order-3']
 // In the place tones (src/components/placeTones.ts).
 const STEPS = [
-  { avatar: 'size-16 text-xl ring-4', pedestal: 'h-20' },
-  { avatar: 'size-12 text-base ring-[3px]', pedestal: 'h-14' },
-  { avatar: 'size-12 text-base ring-[3px]', pedestal: 'h-10' },
+  { avatar: 'size-16 ring-4', pedestal: 'h-20' },
+  { avatar: 'size-12 ring-[3px]', pedestal: 'h-14' },
+  { avatar: 'size-12 ring-[3px]', pedestal: 'h-10' },
 ]
 
 /**

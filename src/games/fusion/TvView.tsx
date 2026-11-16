@@ -66,7 +66,7 @@ export default function TvView({ players, publicState, tallies, serverNow, media
           leader && (
             <div className="flex shrink-0 items-center gap-4">
               <div className="relative">
-                <Avatar name={nameOf(players, leader.playerId)} className="size-16 text-xl" />
+                <Avatar name={nameOf(players, leader.playerId)} className="size-16" />
                 <AvatarBadge icon={CrownIcon} tone="gold" size="lg" />
               </div>
               <div>
@@ -172,7 +172,7 @@ function Tile({
               <Avatar
                 key={id}
                 name={nameOf(players, id, revealed.names?.[i])}
-                className="size-[16cqw] text-[length:6cqw] ring-[0.8cqw] ring-background"
+                className="size-[16cqw] ring-[0.8cqw] ring-background"
               />
             ))}
           </div>
@@ -297,7 +297,7 @@ function RevealMoment({
                 >
                   <Avatar
                     name={nameOf(players, id, revealed.names?.[i])}
-                    className="size-36 text-5xl ring-4 ring-confetti-violet/60 short:size-28 short:text-4xl"
+                    className="size-36 ring-4 ring-confetti-violet/60 short:size-28"
                   />
                   <span className="min-w-0 truncate text-8xl font-black short:text-7xl">
                     {nameOf(players, id, revealed.names?.[i])}

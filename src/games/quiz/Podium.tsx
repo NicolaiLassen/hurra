@@ -10,9 +10,9 @@ const spring = { type: 'spring', stiffness: 220, damping: 22 } as const
 
 // By rank (ties share a step), in the place tones (src/components/placeTones.ts).
 const STEPS = [
-  { avatar: 'size-36 text-5xl ring-[6px] short:size-28 short:text-4xl', pedestal: 'h-52 short:h-32' },
-  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-36 short:h-20' },
-  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-24 short:h-14' },
+  { avatar: 'size-36 ring-[6px] short:size-28', pedestal: 'h-52 short:h-32' },
+  { avatar: 'size-28 ring-4 short:size-20', pedestal: 'h-36 short:h-20' },
+  { avatar: 'size-28 ring-4 short:size-20', pedestal: 'h-24 short:h-14' },
 ]
 // Left to right: the second row, the first, the third.
 const SLOTS = [1, 0, 2]
@@ -98,7 +98,7 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
           {board.slice(3, 8).map((row) => (
             <li key={row.playerId} className="flex items-center gap-2 rounded-full bg-card/80 py-1.5 pr-4 pl-1.5 ring-1 ring-foreground/10">
               <span className="w-7 text-right text-xl font-bold text-muted-foreground tabular-nums">{row.rank}</span>
-              <Avatar name={nameOf(row.playerId)} className="size-8 text-xs" />
+              <Avatar name={nameOf(row.playerId)} className="size-8" />
               <span className="max-w-48 truncate text-xl font-semibold">{nameOf(row.playerId)}</span>
               <span className="text-xl font-black text-primary">{formatNumber(row.points)}</span>
             </li>

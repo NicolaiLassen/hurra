@@ -237,7 +237,7 @@ function RaceSlide({ doc }: { doc: RecapDoc }) {
             className="flex h-16 items-center gap-5 short:h-12 short:gap-4"
           >
             <span className="w-10 text-right text-3xl font-black text-muted-foreground tabular-nums short:text-2xl">{i + 1}</span>
-            <Avatar name={row.name} className="size-12 text-lg short:size-10 short:text-base" />
+            <Avatar name={row.name} className="size-12 short:size-10" />
             <span className="w-60 truncate text-3xl font-bold short:w-48 short:text-2xl">{row.name}</span>
             <div className="h-10 min-w-0 flex-1 short:h-8">
               <motion.div
@@ -281,7 +281,7 @@ function ChapterSlide({ doc, index }: { doc: RecapDoc; index: number }) {
           <div className="flex shrink-0 -space-x-5 pt-9 short:pt-7">
             {chapter.winners.slice(0, 4).map((w) => (
               <div key={w.id} className="relative">
-                <Avatar name={w.name} className="size-28 text-4xl ring-4 ring-background short:size-20 short:text-3xl" />
+                <Avatar name={w.name} className="size-28 ring-4 ring-background short:size-20" />
                 <CrownIcon
                   weight="fill"
                   className="absolute -top-9 left-1/2 size-12 -translate-x-1/2 text-primary drop-shadow-[0_0_18px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:-top-7 short:size-9"
@@ -348,7 +348,7 @@ function LeadsSlide({ doc }: { doc: RecapDoc }) {
           >
             <span aria-hidden className="absolute top-1/2 -left-[3.2rem] size-6 -translate-y-1/2 rounded-full bg-primary ring-4 ring-background short:-left-[2.7rem] short:size-5" />
             <span className="w-32 shrink-0 text-4xl font-black text-muted-foreground short:w-28 short:text-3xl">{clockTime(lead.at)}</span>
-            <Avatar name={lead.name} className="size-14 text-xl short:size-11 short:text-base" />
+            <Avatar name={lead.name} className="size-14 short:size-11" />
             <span className="min-w-0 truncate text-5xl font-bold short:text-4xl">{lead.name}</span>
             <span className="shrink-0 text-3xl text-muted-foreground short:text-2xl">took the lead</span>
           </motion.li>
@@ -362,9 +362,9 @@ function LeadsSlide({ doc }: { doc: RecapDoc }) {
 const PODIUM_SLOTS = [1, 0, 2]
 // In the place tones (src/components/placeTones.ts).
 const PODIUM_STEPS = [
-  { avatar: 'size-36 text-5xl ring-[6px] short:size-28 short:text-4xl', pedestal: 'h-56 short:h-36' },
-  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-40 short:h-24' },
-  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-28 short:h-16' },
+  { avatar: 'size-36 ring-[6px] short:size-28', pedestal: 'h-56 short:h-36' },
+  { avatar: 'size-28 ring-4 short:size-20', pedestal: 'h-40 short:h-24' },
+  { avatar: 'size-28 ring-4 short:size-20', pedestal: 'h-28 short:h-16' },
 ]
 
 /** The recaps whose podium has cheered on this TV: a fanfare once per version, not on every loop. */

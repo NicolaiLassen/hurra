@@ -37,7 +37,7 @@ export function useRemovePhoto(snapshot: Snapshot): { item: (row: ScoreRow) => R
           {/* Big enough to judge, so the host sees what they remove. */}
           {target && (
             <span className="mb-3 flex justify-center">
-              <Avatar name={target.name} playerId={target.player_id} className="size-24 text-3xl" />
+              <Avatar name={target.name} playerId={target.player_id} className="size-24" />
             </span>
           )}
           It disappears from the TV and every phone now. They can add a new one from their phone.

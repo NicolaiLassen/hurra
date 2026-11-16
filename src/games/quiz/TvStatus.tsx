@@ -56,7 +56,7 @@ export default function TvStatus({ game, players, publicState, tallies, serverNo
         </p>
       ) : leaders.length > 0 ? (
         <p className="flex min-w-0 items-center gap-2.5">
-          <Avatar name={nameOf(leaders[0].playerId)} className="size-8 text-xs" />
+          <Avatar name={nameOf(leaders[0].playerId)} className="size-8" />
           <span className="min-w-0 flex-1 truncate text-lg font-semibold">
             {joinNames(leaders.map((row) => nameOf(row.playerId)))} {verb}
           </span>

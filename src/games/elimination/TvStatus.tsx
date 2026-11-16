@@ -55,7 +55,7 @@ function Status({
               <span className="shrink-0 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                 Top hunter
               </span>
-              <Avatar name={nameOf(hunter[0])} className="size-8 text-xs" />
+              <Avatar name={nameOf(hunter[0])} className="size-8" />
               <span className="min-w-0 flex-1 truncate text-lg font-semibold">{nameOf(hunter[0])}</span>
               <span className="shrink-0 text-2xl font-black text-primary tabular-nums">{hunter[1]}</span>
             </p>

@@ -52,7 +52,7 @@ export function GenericResult({ game, player, players, gamePoints }: ResultViewP
         <span className="flex shrink-0 -space-x-3">
           {faces.map((id, i) => (
             <span key={id} className="relative">
-              <Avatar name={nameIn(players, id)} className="size-12 text-base ring-2 ring-card" />
+              <Avatar name={nameIn(players, id)} className="size-12 ring-2 ring-card" />
               {i === 0 && <AvatarBadge icon={CrownIcon} tone="gold" />}
             </span>
           ))}

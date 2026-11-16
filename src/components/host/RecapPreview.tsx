@@ -161,7 +161,7 @@ function Chapter({ chapter, tone }: { chapter: RecapDoc['chapters'][number]; ton
         <div className="mx-4 flex items-center gap-3 rounded-xl bg-primary/10 px-3 py-2.5 ring-1 ring-primary/20">
           <div aria-hidden className="flex shrink-0 -space-x-2">
             {chapter.winners.slice(0, 3).map((w) => (
-              <Avatar key={w.id} name={w.name} className="size-8 text-xs ring-2 ring-card" />
+              <Avatar key={w.id} name={w.name} className="size-8 ring-2 ring-card" />
             ))}
           </div>
           <div className="min-w-0 text-sm">
@@ -246,7 +246,7 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
           <p className="text-[6.5cqw] font-black">The race</p>
           {rows.map((row, i) => (
             <div key={row.playerId} className="flex items-center gap-[2.5cqw]">
-              <Avatar name={row.name} className="size-[7cqw] text-[3cqw]" />
+              <Avatar name={row.name} className="size-[7cqw]" />
               <span
                 className={cn('h-[3.5cqw] rounded-full', MINI_BARS[i % MINI_BARS.length])}
                 style={{ width: `${Math.max(6, (Math.max(0, row.total) / max) * 80)}%` }}
@@ -272,7 +272,7 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
             <p className="mt-[1.5cqw] flex min-w-0 items-center gap-[2cqw] text-[5cqw] font-bold">
               <span className="relative shrink-0">
                 <CrownIcon weight="fill" className="absolute -top-[4.5cqw] left-1/2 size-[5cqw] -translate-x-1/2 text-primary" />
-                <Avatar name={winner.name} className="size-[9cqw] text-[3.5cqw]" />
+                <Avatar name={winner.name} className="size-[9cqw]" />
               </span>
               <span className="truncate">{listNames(chapter.winners.map((w) => w.name))}</span>
             </p>
@@ -312,7 +312,7 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
             {order.map((i) => (
               <div key={top[i].playerId} className="flex w-[17cqw] flex-col items-center">
                 {places[i].place === 1 && <CrownIcon weight="fill" className="size-[5cqw] text-primary" />}
-                <Avatar name={top[i].name} className={cn(places[i].step === 0 ? 'size-[10cqw] text-[4cqw]' : 'size-[8cqw] text-[3.5cqw]')} />
+                <Avatar name={top[i].name} className={cn(places[i].step === 0 ? 'size-[10cqw]' : 'size-[8cqw]')} />
                 <span className={cn('mt-[1.5cqw] w-full rounded-t-[1.5cqw] bg-linear-to-b to-transparent', PEDESTALS[places[i].step], PLACE_TONES[places[i].step].step)} />
               </div>
             ))}

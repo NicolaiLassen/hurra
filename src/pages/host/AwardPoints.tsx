@@ -137,7 +137,7 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
       </nav>
 
       <header className="mt-4 flex items-center gap-3">
-        <Avatar name={player.name} className="size-14 text-xl" />
+        <Avatar name={player.name} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="font-mono text-sm text-muted-foreground">{player.code}</p>
           <h1 className="truncate text-3xl font-bold">{player.name}</h1>

@@ -41,7 +41,7 @@ export default function HostView({ game, players, gamePoints }: HostViewProps<In
             {rows.slice(0, SHOWN).map((row) => (
               <li key={row.id} className="flex items-center gap-3 py-1.5">
                 <RankBadge rank={row.rank} />
-                <Avatar name={row.name} className="size-7 text-xs" />
+                <Avatar name={row.name} className="size-7" />
                 <span className="min-w-0 flex-1 truncate font-medium">{row.name}</span>
                 <span className="font-bold tabular-nums">{row.points}</span>
               </li>
