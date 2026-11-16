@@ -97,4 +97,22 @@ describe('a knocked-out guest in Last one standing', () => {
     expectMarked(tiles, ['Ana', 'Bo'], ['Dee', 'Clara'])
     expect(tiles.match(new RegExp(AT_THE_FLOOR, 'g'))).toHaveLength(2)
   })
+
+  it('marks a top hunter who is out too, on the same TV screen', async () => {
+    // Bo got Ana after Ana got Clara: Ana is a hunter, and out.
+    const later: EliminationPublicState = {
+      ...publicState,
+      alive: ['bo'],
+      out: ['ana', 'clara', 'dee'],
+      outBy: { ...publicState.outBy, ana: { by: 'bo', method: 'tag' } },
+      knockoutCounts: { bo: 2, ana: 1 },
+    }
+    const markup = await html(TvView as ComponentType<never>, { players, publicState: later, finished: false })
+    const hunters = markup.slice(markup.indexOf('Top hunters'), markup.indexOf('Latest'))
+    const rows = byGuest(hunters, ['Bo', 'Ana'])
+    expect(rows.Ana).toContain('data-stripe=""')
+    expect(rows.Ana).toMatch(AT_THE_FLOOR)
+    expect(rows.Bo).not.toContain('data-out')
+    expect(rows.Bo).not.toContain('>Out<')
+  })
 })

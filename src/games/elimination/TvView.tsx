@@ -64,14 +64,21 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
         <Panel title="Top hunters" className="shrink-0">
           {hunters.length === 0 && <p className="text-lg text-muted-foreground">Nobody's out yet.</p>}
           <ol className="grid grid-cols-1 gap-2">
-            {hunters.map(([id, count], i) => (
-              <motion.li key={id} layout transition={spring} className="flex items-center gap-3">
-                <span className="w-6 text-right text-xl font-bold text-muted-foreground tabular-nums">{i + 1}</span>
-                <Avatar name={nameOf(id)} className="size-10 text-sm" />
-                <span className="flex-1 truncate text-xl font-semibold">{nameOf(id)}</span>
-                <span className="text-2xl font-black text-primary tabular-nums">{count}</span>
-              </motion.li>
-            ))}
+            {hunters.map(([id, count], i) => {
+              // A hunter can be knocked out too: the stripe and the word, as on the tiles.
+              const out = Boolean(publicState.outBy[id])
+              return (
+                <motion.li key={id} layout transition={spring} className="flex items-center gap-3">
+                  <span className="w-6 text-right text-xl font-bold text-muted-foreground tabular-nums">{i + 1}</span>
+                  <Avatar name={nameOf(id)} out={out} className="size-10" />
+                  <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                    <span className="truncate text-xl font-semibold">{nameOf(id)}</span>
+                    {out && <span className={OUT_WORD}>Out</span>}
+                  </span>
+                  <span className="text-2xl font-black text-primary tabular-nums">{count}</span>
+                </motion.li>
+              )
+            })}
           </ol>
         </Panel>
 
