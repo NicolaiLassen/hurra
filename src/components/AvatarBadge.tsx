@@ -4,8 +4,6 @@ import { cn } from '@/lib/utils'
 const TONES = {
   /** A win, or the one next step (add a photo): a gold chip with an ink icon. */
   gold: 'bg-gold text-ink',
-  /** Out: a dark chip with a red icon. */
-  red: 'bg-background text-destructive',
 }
 
 // Sized to the token it sits on: sm for size-6 to size-10 tokens, md for
@@ -20,8 +18,9 @@ const SIZES = {
 
 /**
  * A status mark on a token's bottom right corner, such as a crown for the
- * winner or a skull for someone who's out. Put it next to the Avatar inside a
- * `relative` wrapper; it stays within a few pixels of the token.
+ * winner. Put it next to the Avatar inside a `relative` wrapper; it stays
+ * within a few pixels of the token. Out of Last one standing is no badge: the
+ * token's own pink stripe (Avatar's `out`) and the word Out say it.
  */
 export default function AvatarBadge({
   icon: BadgeIcon,

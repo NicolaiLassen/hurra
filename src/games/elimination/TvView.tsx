@@ -1,4 +1,4 @@
-import { CrownIcon, DetectiveIcon, SkullIcon, SwordIcon, TrophyIcon } from '@phosphor-icons/react'
+import { CrownIcon, DetectiveIcon, SwordIcon, TrophyIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
@@ -188,20 +188,21 @@ function PlayerTiles({
                 layout
                 transition={spring}
                 className={cn(
-                  'relative flex min-w-0 items-center rounded-2xl ring-1 transition-[opacity,filter,background-color] duration-700',
+                  'relative flex min-w-0 items-center rounded-2xl ring-1 transition-colors duration-700',
                   style.tile,
-                  knockedOut ? 'bg-card/40 opacity-50 ring-foreground/5 grayscale' : 'bg-card/80 ring-foreground/10',
+                  knockedOut ? 'bg-card/40 ring-foreground/5' : 'bg-card/80 ring-foreground/10',
                   isWinner && 'bg-primary/15 ring-2 ring-primary',
                 )}
               >
                 <div className={cn('relative shrink-0', squeezed && 'hidden')}>
-                  <Avatar name={p.name} className={style.avatar} />
+                  <Avatar name={p.name} out={Boolean(knockedOut)} className={style.avatar} />
                   {isWinner && <AvatarBadge icon={CrownIcon} tone="gold" size={style.badge} />}
-                  {knockedOut && <AvatarBadge icon={SkullIcon} tone="red" size={style.badge} />}
                 </div>
                 <div className={cn('min-w-0', style.stacked ? 'w-full text-center' : 'flex-1')}>
-                  <p className={cn('truncate font-semibold', style.name, knockedOut && 'line-through decoration-2')}>
-                    {p.name}
+                  {/* The name at full strength, and the word beside it: the stripe never says Out alone. */}
+                  <p className={cn('flex min-w-0 items-baseline gap-1.5 font-semibold', style.name, style.stacked && 'justify-center')}>
+                    <span className="truncate">{p.name}</span>
+                    {knockedOut && <span className="shrink-0 font-bold text-pink">Out</span>}
                   </p>
                   {knockedOut && style.byName && (
                     <p

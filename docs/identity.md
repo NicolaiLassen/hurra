@@ -186,6 +186,7 @@ holds real browser widths the fit must never undercut.
 
 **AvatarBadge** puts a square gold chip across a token's bottom right corner:
 the winner's crown, or the camera on your own token before you add a photo.
+Out is never a badge.
 
 ## Old names
 

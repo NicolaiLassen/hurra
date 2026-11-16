@@ -1,4 +1,4 @@
-import { CrownIcon, SkullIcon } from '@phosphor-icons/react'
+import { CrownIcon } from '@phosphor-icons/react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
 import type { EliminationPublicState } from '@/games/elimination/logic'
@@ -28,17 +28,18 @@ export default function WhoIsLeft({
           <li
             key={p.id}
             className={cn(
-              'flex max-w-full items-center gap-1.5 rounded-full py-0.5 pr-2.5 pl-0.5 text-sm transition-[opacity,filter] duration-700',
-              out ? 'bg-white/5 opacity-50 grayscale' : 'bg-white/10',
+              'flex max-w-full items-center gap-1.5 rounded-md py-0.5 pr-2.5 pl-0.5 text-sm transition-colors duration-700',
+              out ? 'bg-white/5' : 'bg-white/10',
               me && 'ring-1 ring-primary/60',
             )}
           >
             <span className="relative">
-              <Avatar name={p.name} className="size-6 text-[0.6rem]" />
+              <Avatar name={p.name} out={out} className="size-6 text-[0.6rem]" />
               {p.id === publicState.winner && <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />}
-              {out && <AvatarBadge icon={SkullIcon} tone="red" size="sm" />}
             </span>
-            <span className={cn('truncate font-medium', out && 'line-through')}>{me ? 'You' : p.name}</span>
+            {/* The name at full strength, and the word beside it: the stripe never says Out alone. */}
+            <span className="truncate font-medium">{me ? 'You' : p.name}</span>
+            {out && <span className="shrink-0 font-bold text-pink">Out</span>}
           </li>
         )
       })}
