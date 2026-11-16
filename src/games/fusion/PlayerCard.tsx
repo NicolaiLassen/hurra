@@ -45,7 +45,7 @@ export default function PlayerCard({ game, publicState, myAnswers, view, open }:
               <span className="truncate text-lg leading-tight font-bold">{game.title}</span>
               <Badge className="shrink-0">Live</Badge>
             </span>
-            <span className="block text-sm text-muted-foreground tabular-nums">{status}</span>
+            <span className="block text-sm text-muted-foreground">{status}</span>
           </span>
           <CaretRightIcon className="size-5 shrink-0 text-muted-foreground" />
         </button>

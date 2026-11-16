@@ -39,7 +39,7 @@ function Status({
       {pub.phase === 'voting' ? (
         <>
           <p className="text-2xl font-bold short:text-xl">Vote on your phone</p>
-          <p className="text-lg text-muted-foreground tabular-nums short:text-base">
+          <p className="text-lg text-muted-foreground short:text-base">
             {plural(total, 'picture')}, {plural(votes, 'vote')}
           </p>
           <div className="h-2 overflow-hidden rounded-full bg-white/10" role="img" aria-label={`${Math.round(share * 100)}% voted`}>
@@ -50,7 +50,7 @@ function Status({
           </div>
         </>
       ) : (
-        <p className="text-xl font-bold tabular-nums short:text-lg">
+        <p className="text-xl font-bold short:text-lg">
           {pub.phase === 'locked' ? `Voting closed. ${revealed} of ${total} revealed` : 'The reveal is done'}
         </p>
       )}

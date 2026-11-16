@@ -102,7 +102,7 @@ export default function PlayerView({
           )}
           <div className="min-w-0">
             <p className="font-bold">{pub.phase === 'locked' ? 'Voting is closed. Watch the TV.' : 'That was the reveal!'}</p>
-            <p className="text-sm text-muted-foreground tabular-nums">
+            <p className="text-sm text-muted-foreground">
               {pub.phase === 'locked' ? `${revealed} of ${total} revealed. ` : ''}
               You have {plural(points, 'point')}.
             </p>

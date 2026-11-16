@@ -238,8 +238,8 @@ function TopFive({ pub, nameOf }: { pub: QuizPublicState; nameOf: (id: string) =
             <span className="w-5 text-right text-sm font-bold text-muted-foreground tabular-nums">{row.rank}</span>
             <Avatar name={nameOf(row.playerId)} className="size-7 text-xs" />
             <span className="min-w-0 flex-1 truncate font-medium">{nameOf(row.playerId)}</span>
-            {row.gained > 0 && <span className="text-sm font-semibold text-confetti-teal tabular-nums">+{formatNumber(row.gained)}</span>}
-            <span className="font-bold text-primary tabular-nums">{formatNumber(row.points)}</span>
+            {row.gained > 0 && <span className="text-sm font-semibold text-confetti-teal">+{formatNumber(row.gained)}</span>}
+            <span className="font-bold text-primary">{formatNumber(row.points)}</span>
           </li>
         ))}
       </ol>

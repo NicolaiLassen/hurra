@@ -49,7 +49,7 @@ export default function IssuedCodeView({ code, className }: { code: IssuedCodeSt
       ) : expired ? (
         <p className="text-sm text-muted-foreground">This code has expired.</p>
       ) : code.issued ? (
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <ClockIcon className="shrink-0" />
           Works for {formatCountdown(left)}
         </p>

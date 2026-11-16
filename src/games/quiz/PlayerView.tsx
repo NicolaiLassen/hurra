@@ -226,7 +226,7 @@ function Revealed({
           <CheckCircleIcon weight="duotone" className="mx-auto size-14 text-confetti-teal" />
           <p className="text-4xl font-black">Right!</p>
           {last && (
-            <p className="inline-block rounded-full bg-primary px-4 py-1 text-2xl font-black text-primary-foreground tabular-nums">
+            <p className="inline-block rounded-full bg-primary px-4 py-1 text-2xl font-black text-primary-foreground">
               +{formatNumber(last.points)}
             </p>
           )}
@@ -322,7 +322,7 @@ function Standing({
               <span className="w-5 text-right font-black text-muted-foreground tabular-nums">{row.rank}</span>
               <Avatar name={nameOf(row.playerId)} className="size-8 text-xs" />
               <span className="min-w-0 flex-1 truncate font-semibold">{nameOf(row.playerId)}</span>
-              <span className="font-black text-primary tabular-nums">{formatNumber(row.points)}</span>
+              <span className="font-black text-primary">{formatNumber(row.points)}</span>
             </li>
           ))}
         </ol>

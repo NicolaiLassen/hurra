@@ -196,7 +196,7 @@ function MiniScreen({ scene, now }: { scene: TvScene; now: number }) {
       )}
     >
       <SceneIcon weight="duotone" className="size-7 sm:size-9" />
-      <span className="flex items-center gap-1 text-[0.65rem] font-bold tracking-wider uppercase tabular-nums sm:text-xs">
+      <span className="flex items-center gap-1 text-[0.65rem] font-bold tracking-wider uppercase sm:text-xs">
         {scene.kind === 'live' && <span className="size-1.5 animate-pulse rounded-full bg-confetti-teal motion-reduce:animate-none" />}
         {label}
       </span>

@@ -94,7 +94,7 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
               )}
               <Avatar name={nameOf(row.playerId)} className={step.avatar} />
               <p className="mt-3 w-full truncate text-center text-3xl font-bold short:mt-2 short:text-2xl">{nameOf(row.playerId)}</p>
-              <p className={cn('text-4xl font-black tabular-nums short:text-3xl', step.points)}>{formatNumber(row.points)}</p>
+              <p className={cn('text-4xl font-black short:text-3xl', step.points)}>{formatNumber(row.points)}</p>
               <div className={cn('mt-3 grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent', step.pedestal)}>
                 <span className={cn('text-6xl font-black opacity-70 short:text-4xl', step.points)}>{row.rank}</span>
               </div>
@@ -110,7 +110,7 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
               <span className="w-7 text-right text-xl font-bold text-muted-foreground tabular-nums">{row.rank}</span>
               <Avatar name={nameOf(row.playerId)} className="size-8 text-xs" />
               <span className="max-w-48 truncate text-xl font-semibold">{nameOf(row.playerId)}</span>
-              <span className="text-xl font-black text-primary tabular-nums">{formatNumber(row.points)}</span>
+              <span className="text-xl font-black text-primary">{formatNumber(row.points)}</span>
             </li>
           ))}
         </ol>

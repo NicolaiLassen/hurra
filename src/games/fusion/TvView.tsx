@@ -308,7 +308,7 @@ function RevealMoment({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1.4 }}
-                className="text-4xl text-muted-foreground tabular-nums short:text-3xl"
+                className="text-4xl text-muted-foreground short:text-3xl"
               >
                 {countsLine(revealed)}
               </motion.p>

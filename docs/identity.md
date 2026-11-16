@@ -67,6 +67,12 @@ dialogs and sheets stand on raised, not on the menus' overlay.
   - `wide`: 125 percent wide, 900. The big words.
   - `tv-num`: 62 percent condensed, 800, tabular figures. Numbers and names.
 - `stripes` draws the popper's gold and pink stripes, the mark of the hunt.
+- `tabular-nums` only on figures alone: a score, a count, a rank. Schibsted
+  Grotesk's tabular comma, full stop, colon and semicolon are as wide as a
+  digit, so 21:40, 2,350, 2.9 s or a sentence would open gaps ("21 : 40").
+  A time or a figure with a separator that must keep its width, a clock or a
+  count running up, is set in `tv-num`, whose tabular figures leave
+  punctuation narrow.
 
 TV sizes, at 1080p. Nothing on the TV is under 28 px. On short screens
 (`short:`, 960 px tall or less: 1440 by 900 and 720p) each size steps down one

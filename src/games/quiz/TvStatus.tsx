@@ -61,7 +61,7 @@ export default function TvStatus({ game, players, publicState, tallies, serverNo
             {joinNames(leaders.map((row) => nameOf(row.playerId)))} {verb}
           </span>
           {pub?.phase === 'done' && <CrownIcon weight="fill" className="shrink-0 text-primary" />}
-          <span className="shrink-0 text-xl font-black text-primary tabular-nums">{formatNumber(leaders[0].points)}</span>
+          <span className="shrink-0 text-xl font-black text-primary">{formatNumber(leaders[0].points)}</span>
         </p>
       ) : (
         <p className="text-lg text-muted-foreground">No points yet.</p>

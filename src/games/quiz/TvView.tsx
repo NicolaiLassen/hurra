@@ -198,7 +198,7 @@ function Revealed({ pub, players }: { pub: QuizPublicState; players: Player[] })
                 >
                   <Avatar name={nameOf(fast.playerId)} className="size-11 text-base short:size-9" />
                   <span className="truncate text-2xl font-bold short:text-xl">{nameOf(fast.playerId)}</span>
-                  <span className="shrink-0 text-2xl font-black text-confetti-teal tabular-nums short:text-xl">{formatSeconds(fast.ms)}</span>
+                  <span className="shrink-0 text-2xl font-black text-confetti-teal short:text-xl">{formatSeconds(fast.ms)}</span>
                 </motion.li>
               ))}
             </ol>
@@ -268,7 +268,7 @@ function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[]
                       initial={{ opacity: 0, y: 12, scale: 0.6 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ type: 'spring', stiffness: 320, damping: 18 }}
-                      className="shrink-0 rounded-full bg-confetti-teal px-4 py-1 text-2xl font-black text-background tabular-nums short:text-xl"
+                      className="shrink-0 rounded-full bg-confetti-teal px-4 py-1 text-2xl font-black text-background short:text-xl"
                     >
                       +{formatNumber(row.gained)}
                     </motion.span>
@@ -278,7 +278,7 @@ function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[]
                     initial={{ scale: moved ? 1.3 : 1 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 14 }}
-                    className="w-44 shrink-0 text-right text-5xl font-black text-primary tabular-nums short:w-36 short:text-4xl"
+                    className="w-44 shrink-0 text-right text-5xl font-black text-primary short:w-36 short:text-4xl"
                   >
                     {formatNumber(row.points)}
                   </motion.span>

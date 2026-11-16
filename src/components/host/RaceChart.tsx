@@ -125,7 +125,7 @@ export default function RaceChart({ doc }: { doc: Pick<RecapDoc, 'race' | 'stand
                     x={x(tick)}
                     y={top + plotHeight + 18}
                     textAnchor="middle"
-                    className="fill-muted-foreground text-[11px] tabular-nums"
+                    className="fill-muted-foreground text-[11px]"
                   >
                     {clockTime(tick)}
                   </text>
@@ -137,7 +137,7 @@ export default function RaceChart({ doc }: { doc: Pick<RecapDoc, 'race' | 'stand
                     x={x(tick)}
                     y={top + plotHeight + 18}
                     textAnchor={i === 0 ? 'start' : 'end'}
-                    className="fill-muted-foreground text-[11px] tabular-nums"
+                    className="fill-muted-foreground text-[11px]"
                   >
                     {clockTime(tick)}
                   </text>
@@ -238,7 +238,7 @@ export default function RaceChart({ doc }: { doc: Pick<RecapDoc, 'race' | 'stand
             className="pointer-events-none absolute z-10 w-44 rounded-lg bg-popover p-2.5 text-xs shadow-xl ring-1 ring-foreground/10"
             style={{ top, left: flip ? undefined : crosshair + 12, right: flip ? width - crosshair + 12 : undefined }}
           >
-            <p className="mb-1.5 font-medium text-muted-foreground tabular-nums">{clockTime(times[active])}</p>
+            <p className="mb-1.5 font-medium text-muted-foreground">{clockTime(times[active])}</p>
             <ol className="grid gap-1">
               {ranked.map((s) => (
                 <li key={s.playerId} className="flex items-center gap-2">
@@ -308,14 +308,14 @@ function RaceTable({ times, series }: { times: number[]; series: RaceSeries[] })
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-foreground/5 tabular-nums">
+        <tbody className="divide-y divide-foreground/5">
           {times.map((at, i) => (
             <tr key={`${at}-${i}`}>
               <th scope="row" className="px-3 py-1.5 text-left font-normal text-muted-foreground">
                 {clockTime(at)}
               </th>
               {series.map((s) => (
-                <td key={s.playerId} className="px-3 py-1.5 text-right">
+                <td key={s.playerId} className="px-3 py-1.5 text-right tabular-nums">
                   {formatCount(s.values[i])}
                 </td>
               ))}

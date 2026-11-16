@@ -71,7 +71,7 @@ export default function HostView({ session, game, players, state, publicState, t
   return (
     <div className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-lg font-semibold tabular-nums">
+        <p className="text-lg font-semibold">
           {pub.phase === 'voting'
             ? `${plural(totalVotes(tallies), 'vote')} on ${plural(total, 'picture')}`
             : pub.phase === 'locked'
@@ -216,7 +216,7 @@ function PictureRow({
       <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="size-12 shrink-0 rounded-lg" numberClassName="text-xl" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">{picture.label}</p>
-        <p className="text-sm text-muted-foreground tabular-nums">
+        <p className="text-sm text-muted-foreground">
           {result
             ? result.voters === 0
               ? 'Nobody voted on it'

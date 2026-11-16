@@ -165,7 +165,7 @@ function NumbersSlide({ doc, partyName }: { doc: RecapDoc; partyName: string }) 
               className={cn(CARD, 'flex w-72 flex-col items-center gap-3 px-6 py-8 short:w-60 short:py-6')}
             >
               <Icon weight="duotone" className="size-12 text-primary short:size-10" />
-              <CountUp value={tile.value} className="text-8xl leading-none font-black tabular-nums short:text-7xl" />
+              <CountUp value={tile.value} className="text-8xl leading-none tv-num short:text-7xl" />
               <span className="text-2xl text-muted-foreground short:text-xl">{tile.label}</span>
             </motion.li>
           )
@@ -225,7 +225,7 @@ function RaceSlide({ doc }: { doc: RecapDoc }) {
           <Eyebrow>Points through the night, top {current.rows.length}</Eyebrow>
           <h2 className="mt-2 text-7xl font-black tracking-tight short:text-6xl">The race</h2>
         </div>
-        <p className="text-7xl font-black text-muted-foreground/50 tabular-nums short:text-6xl">{clockTime(current.at)}</p>
+        <p className="text-7xl text-muted-foreground/50 tv-num short:text-6xl">{clockTime(current.at)}</p>
       </div>
       <ol className="grid min-h-0 flex-1 content-center gap-3 short:gap-2">
         {current.rows.map((row, i) => (
@@ -346,7 +346,7 @@ function LeadsSlide({ doc }: { doc: RecapDoc }) {
             className="relative flex min-w-0 items-center gap-6 short:gap-4"
           >
             <span aria-hidden className="absolute top-1/2 -left-[3.2rem] size-6 -translate-y-1/2 rounded-full bg-primary ring-4 ring-background short:-left-[2.7rem] short:size-5" />
-            <span className="w-32 shrink-0 text-4xl font-black text-muted-foreground tabular-nums short:w-28 short:text-3xl">{clockTime(lead.at)}</span>
+            <span className="w-32 shrink-0 text-4xl font-black text-muted-foreground short:w-28 short:text-3xl">{clockTime(lead.at)}</span>
             <Avatar name={lead.name} className="size-14 text-xl short:size-11 short:text-base" />
             <span className="min-w-0 truncate text-5xl font-bold short:text-4xl">{lead.name}</span>
             <span className="shrink-0 text-3xl text-muted-foreground short:text-2xl">took the lead</span>

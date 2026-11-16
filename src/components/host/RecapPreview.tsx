@@ -145,7 +145,7 @@ function Chapter({ chapter, tone }: { chapter: RecapDoc['chapters'][number]; ton
             {chapter.title}
             {chapter.round > 1 && <span className="font-normal text-muted-foreground"> · round {chapter.round}</span>}
           </h3>
-          <p className="text-sm text-muted-foreground tabular-nums">
+          <p className="text-sm text-muted-foreground">
             {timeSpan(chapter.startedAt, chapter.finishedAt)}
             {chapter.finishedBy === 'host' && ', ended by you'}
           </p>
@@ -287,7 +287,7 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
           <ol className="grid gap-[2cqw] border-l-[0.8cqw] border-primary/40 pl-[3cqw]">
             {leads.map((lead) => (
               <li key={`${lead.at}:${lead.playerId}`} className="flex min-w-0 items-center gap-[2cqw] text-[4.5cqw]">
-                <span className="shrink-0 text-muted-foreground tabular-nums">{clockTime(lead.at)}</span>
+                <span className="shrink-0 text-muted-foreground">{clockTime(lead.at)}</span>
                 <span className="truncate font-bold">{lead.name}</span>
               </li>
             ))}
@@ -352,7 +352,7 @@ function YourNightPreview({ doc }: { doc: RecapDoc }) {
               <SelectContent>
                 {doc.standings.map((row) => (
                   <SelectItem key={row.playerId} value={row.playerId}>
-                    <span className="w-6 text-right text-muted-foreground tabular-nums">{row.rank}.</span>
+                    <span className="w-6 text-right text-muted-foreground">{row.rank}.</span>
                     {row.name}
                   </SelectItem>
                 ))}
@@ -415,7 +415,7 @@ function Timeline({ doc, tones }: { doc: RecapDoc; tones: Map<string, Tone> }) {
                 <li key={i} className="relative flex gap-3 py-2">
                   <time
                     dateTime={new Date(entry.at).toISOString()}
-                    className="w-10 shrink-0 pt-1 text-right text-xs font-semibold text-muted-foreground tabular-nums"
+                    className="w-10 shrink-0 pt-1 text-right text-xs font-semibold text-muted-foreground"
                   >
                     {clockTime(entry.at)}
                   </time>
