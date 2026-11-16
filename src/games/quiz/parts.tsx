@@ -114,7 +114,7 @@ export function AnsweredDots({
             className={cn(
               'rounded-full transition-[background-color,box-shadow] duration-500',
               dotSize(dots, screen),
-              i < count ? 'bg-primary shadow-[0_0_10px_rgb(245_197_66/0.45)]' : 'bg-white/10',
+              i < count ? 'bg-primary shadow-[0_0_10px_color-mix(in_oklab,var(--color-gold)_45%,transparent)]' : 'bg-white/10',
             )}
           />
         ))}

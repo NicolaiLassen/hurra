@@ -269,7 +269,7 @@ function Podium({
                 className="flex w-full flex-col items-center"
               >
                 {row.rank === 1 && (
-                  <CrownIcon data-crown="" weight="fill" className={cn('mb-1 text-primary drop-shadow-[0_0_20px_rgb(245_197_66/0.6)]', look.crown)} />
+                  <CrownIcon data-crown="" weight="fill" className={cn('mb-1 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]', look.crown)} />
                 )}
                 <div className="relative">
                   <Avatar name={row.name} className={cn(look.avatars[slot], tone.ring)} />

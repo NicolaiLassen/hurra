@@ -90,7 +90,7 @@ function Faces({ players, crown }: { players: Award['players']; crown: boolean }
           {crown && (
             <CrownIcon
               weight="fill"
-              className={cn('absolute left-1/2 -translate-x-1/2 text-primary drop-shadow-[0_0_8px_rgb(245_197_66/0.6)]', one ? '-top-4 size-5' : '-top-3.5 size-4')}
+              className={cn('absolute left-1/2 -translate-x-1/2 text-primary drop-shadow-[0_0_8px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]', one ? '-top-4 size-5' : '-top-3.5 size-4')}
             />
           )}
         </span>

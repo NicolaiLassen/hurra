@@ -189,7 +189,7 @@ function PictureCard({
       onClick={onOpen}
       className={cn(
         'w-full overflow-hidden rounded-2xl bg-card text-left ring-1 ring-foreground/10 transition-shadow',
-        latest && 'ring-2 ring-confetti-violet shadow-[0_0_24px_rgb(167_139_250/0.35)]',
+        latest && 'ring-2 ring-confetti-violet shadow-[0_0_24px_color-mix(in_oklab,var(--confetti-violet)_35%,transparent)]',
       )}
     >
       <div className="relative">

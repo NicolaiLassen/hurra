@@ -283,7 +283,7 @@ function ChapterSlide({ doc, index }: { doc: RecapDoc; index: number }) {
                 <Avatar name={w.name} className="size-28 text-4xl ring-4 ring-background short:size-20 short:text-3xl" />
                 <CrownIcon
                   weight="fill"
-                  className="absolute -top-9 left-1/2 size-12 -translate-x-1/2 text-primary drop-shadow-[0_0_18px_rgb(245_197_66/0.6)] short:-top-7 short:size-9"
+                  className="absolute -top-9 left-1/2 size-12 -translate-x-1/2 text-primary drop-shadow-[0_0_18px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:-top-7 short:size-9"
                 />
               </div>
             ))}
@@ -389,7 +389,7 @@ function PodiumSlide({ doc }: { doc: RecapDoc }) {
           initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotate: -4 }}
           animate={{ opacity: 1, scale: 1, rotate: -2 }}
           transition={reduce ? { duration: 0.4 } : { type: 'spring', stiffness: 280, damping: 14 }}
-          className="mt-3 text-8xl font-black tracking-tight text-balance text-primary [text-shadow:0_0_40px_rgb(245_197_66/0.4)] short:text-7xl"
+          className="mt-3 text-8xl font-black tracking-tight text-balance text-primary [text-shadow:0_0_40px_color-mix(in_oklab,var(--color-gold)_40%,transparent)] short:text-7xl"
         >
           Hurra for {listNames(winners)}!
         </motion.h2>
@@ -408,7 +408,7 @@ function PodiumSlide({ doc }: { doc: RecapDoc }) {
               className="flex w-72 flex-col items-center short:w-60"
             >
               {place === 1 && (
-                <CrownIcon weight="fill" className="mb-2 size-14 text-primary drop-shadow-[0_0_20px_rgb(245_197_66/0.6)] short:size-10" />
+                <CrownIcon weight="fill" className="mb-2 size-14 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:size-10" />
               )}
               <Avatar name={row.name} className={step.avatar} />
               <p className="mt-3 w-full truncate text-center text-3xl font-bold short:mt-2 short:text-2xl">{row.name}</p>

@@ -226,9 +226,12 @@ screen has moved.
 - **[src/lib/tokens.test.ts](../src/lib/tokens.test.ts)** fails on a stock
   Tailwind hue with a shade anywhere in src (any utility, with variants and
   opacity, in a CSS variable, a `theme()` call or a class built around
-  `${hue}`), and on a raw hex colour outside src/index.css. Its short allow
-  list gives each exception's reason (a canvas fill, a chart's palette). A
-  new colour is a new token in index.css.
+  `${hue}`), and on a raw colour outside src/index.css: a hex, or numbers in
+  a colour function (`rgb(245_197_66/0.6)`, `hsl()`, `oklch()`). A glow at
+  part strength mixes the token instead:
+  `color-mix(in_oklab,var(--color-gold)_60%,transparent)`. Its short allow
+  lists give each exception's reason (a canvas fill, a chart's palette, the
+  dev builds' drawn faces). A new colour is a new token in index.css.
 - **[src/lib/utils.test.ts](../src/lib/utils.test.ts):** `cn` merges classes
   by tailwind-merge's rules, which know only Tailwind's own scales. Untaught,
   `cn('text-paper', 'text-tv-question')` keeps only the size. A new size,

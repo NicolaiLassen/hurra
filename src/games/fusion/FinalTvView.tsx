@@ -62,7 +62,7 @@ export default function FinalTvView({ game, players, publicState }: TvViewProps<
                   {crowned && (
                     <CrownIcon
                       weight="fill"
-                      className="absolute -top-9 left-1/2 size-14 -translate-x-1/2 text-primary drop-shadow-[0_0_18px_rgb(245_197_66/0.6)]"
+                      className="absolute -top-9 left-1/2 size-14 -translate-x-1/2 text-primary drop-shadow-[0_0_18px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]"
                     />
                   )}
                 </div>

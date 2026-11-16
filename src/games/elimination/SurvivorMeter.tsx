@@ -65,7 +65,7 @@ export default function SurvivorMeter({
             key={i}
             className={cn(
               'flex-1 rounded-full transition-colors duration-700',
-              i < alive ? 'bg-primary shadow-[0_0_10px_rgb(245_197_66/0.35)]' : 'bg-white/10',
+              i < alive ? 'bg-primary shadow-[0_0_10px_color-mix(in_oklab,var(--color-gold)_35%,transparent)]' : 'bg-white/10',
             )}
           />
         ))}

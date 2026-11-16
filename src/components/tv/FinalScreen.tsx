@@ -54,7 +54,7 @@ export default function FinalScreen({ game, players, gamePoints, feed }: TvViewP
                   <Avatar name={p.name} className="size-32 text-5xl ring-4 ring-background short:size-24 short:text-4xl" />
                   <CrownIcon
                     weight="fill"
-                    className="absolute -top-10 left-1/2 size-14 -translate-x-1/2 text-primary drop-shadow-[0_0_20px_rgb(245_197_66/0.6)] short:-top-8 short:size-11"
+                    className="absolute -top-10 left-1/2 size-14 -translate-x-1/2 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:-top-8 short:size-11"
                   />
                 </div>
               ))}

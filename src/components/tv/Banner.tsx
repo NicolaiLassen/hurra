@@ -31,7 +31,7 @@ export default function Banner({ item, eyebrow }: { item: FeedItem | undefined; 
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 32 }}
             transition={reduceMotion ? { duration: 0.2 } : spring}
-            className={cn('max-w-4xl rounded-3xl 2xl:max-w-5xl', item.interrupt && 'shadow-[0_0_64px_rgb(245_197_66/0.35)]')}
+            className={cn('max-w-4xl rounded-3xl 2xl:max-w-5xl', item.interrupt && 'shadow-[0_0_64px_color-mix(in_oklab,var(--color-gold)_35%,transparent)]')}
           >
             <Callout
               size="tv"

@@ -1,8 +1,8 @@
 // The palette guard (docs/identity.md). src/index.css resets Tailwind's stock
 // palette (--color-*: initial), and Tailwind drops a class whose colour no
 // longer exists without a word: bg-amber-600 would simply draw nothing. So this
-// fails on a stock hue class anywhere in src, and on a raw hex colour outside
-// src/index.css, where Hurra's colours live.
+// fails on a stock hue class anywhere in src, and on a raw colour (a hex, or
+// numbers in rgb() and the like) outside src/index.css, where Hurra's colours live.
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,11 +35,25 @@ const STOCK_CLASS = new RegExp(`(?<=[-.])(?:${STOCK_HUES.join('|')})[-.]${SHADE}
  */
 const HEX = /(?<![0-9A-Za-z&#])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9A-Za-z-])/gi
 
+/**
+ * A colour written as numbers in a CSS colour function, rgb(245_197_66/0.6) or
+ * hsl(${hue} 42% 30%): it bypasses the tokens as a hex does. A function of a
+ * token passes: color-mix(in_oklab,var(--color-gold)_60%,transparent).
+ */
+const COLOR_FN = /(?<![0-9A-Za-z])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((?=\s*[\d.$-])/gi
+
 /** Files that may hold raw hex colours, each with its reason. Keep it short. */
 const HEX_ALLOWED: Record<string, string> = {
   'index.css': "Hurra's colours are defined here",
   'lib/media.ts': 'a canvas fill for the transparent parts of uploaded pictures: a canvas cannot read CSS variables',
   'components/host/recapView.ts': "the recap race chart's validated categorical palette, one line per guest, not identity colours",
+  [THIS_FILE]: "this guard's own examples",
+}
+
+/** Files that may write colours as numbers in a colour function, each with its reason. */
+const COLOR_FN_ALLOWED: Record<string, string> = {
+  'index.css': "Hurra's colours are defined here",
+  'lib/photos.tsx': 'the drawn sample faces of dev builds, a hue per name',
   [THIS_FILE]: "this guard's own examples",
 }
 
@@ -116,6 +130,26 @@ describe('the palette guard', () => {
     }
   })
 
+  it('knows a colour written as numbers from a function of a token', () => {
+    for (const color of [
+      'drop-shadow-[0_0_20px_rgb(245_197_66/0.6)]',
+      'rgba(0, 0, 0, 0.4)',
+      'fill="hsl(${hue} 42% 30%)"',
+      'bg-[oklch(0.8_0.15_90)]',
+      '[text-shadow:0_0_40px_rgb(.96_.77_.26)]',
+    ]) {
+      expect(matches(color, COLOR_FN), color).toHaveLength(1)
+    }
+    for (const text of [
+      'drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]',
+      'bg-[radial-gradient(80%_70%_at_50%_0%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent)]',
+      'rgb(var(--x))',
+      'the hsl() function',
+    ]) {
+      expect(matches(text, COLOR_FN), text).toEqual([])
+    }
+  })
+
   it("names every hue in Tailwind's own palette", () => {
     const theme = readFileSync(new URL('../../node_modules/tailwindcss/theme.css', import.meta.url), 'utf8')
     const hues = new Set(Array.from(theme.matchAll(/--color-([a-z]+)-50:/g), (match) => match[1]))
@@ -148,10 +182,19 @@ describe("src uses only Hurra's colours", () => {
     expect(files.filter((file) => !(file in HEX_ALLOWED)).flatMap((file) => findings(file, HEX))).toEqual([])
   })
 
+  it('has no colour written as numbers in a colour function outside the allowed files', () => {
+    expect(files.filter((file) => !(file in COLOR_FN_ALLOWED)).flatMap((file) => findings(file, COLOR_FN))).toEqual([])
+  })
+
   it('keeps only exceptions that are still needed', () => {
-    for (const file of Object.keys(HEX_ALLOWED)) {
-      expect(files, file).toContain(file)
-      expect(findings(file, HEX).length, `${file} holds no hex colour any more: drop it from HEX_ALLOWED`).toBeGreaterThan(0)
+    for (const [allowed, pattern, name] of [
+      [HEX_ALLOWED, HEX, 'HEX_ALLOWED'],
+      [COLOR_FN_ALLOWED, COLOR_FN, 'COLOR_FN_ALLOWED'],
+    ] as const) {
+      for (const file of Object.keys(allowed).filter((file) => file !== 'index.css')) {
+        expect(files, file).toContain(file)
+        expect(findings(file, pattern).length, `${file} needs no exception any more: drop it from ${name}`).toBeGreaterThan(0)
+      }
     }
   })
 })

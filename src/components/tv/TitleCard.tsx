@@ -52,7 +52,7 @@ export default function TitleCard({ game }: { game: SessionGame | null }) {
             </motion.p>
             <motion.span
               {...rise(0.15)}
-              className="grid size-44 place-items-center rounded-[3rem] bg-primary/15 shadow-[0_0_80px_rgb(245_197_66/0.25)] ring-2 ring-primary/40 short:size-36 short:rounded-[2.5rem]"
+              className="grid size-44 place-items-center rounded-[3rem] bg-primary/15 shadow-[0_0_80px_color-mix(in_oklab,var(--color-gold)_25%,transparent)] ring-2 ring-primary/40 short:size-36 short:rounded-[2.5rem]"
             >
               <Icon weight="duotone" className="size-24 text-primary short:size-20" />
             </motion.span>

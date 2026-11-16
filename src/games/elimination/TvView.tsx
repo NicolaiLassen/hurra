@@ -39,7 +39,7 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
           <div className="flex shrink-0 items-center gap-5">
             <CrownIcon
               weight="duotone"
-              className="size-24 shrink-0 text-primary drop-shadow-[0_0_24px_rgb(245_197_66/0.5)] short:size-16"
+              className="size-24 shrink-0 text-primary drop-shadow-[0_0_24px_color-mix(in_oklab,var(--color-gold)_50%,transparent)] short:size-16"
             />
             <div className="min-w-0">
               {finished && <FinalResult />}

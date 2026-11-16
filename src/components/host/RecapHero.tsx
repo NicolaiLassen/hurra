@@ -52,7 +52,7 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
           </h1>
           {headline && (
             <div className="duration-500 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
-              <p className="mt-5 text-4xl leading-[1.05] font-black tracking-tight text-balance break-words text-primary [text-shadow:0_0_36px_rgb(245_197_66/0.35)] sm:text-5xl">
+              <p className="mt-5 text-4xl leading-[1.05] font-black tracking-tight text-balance break-words text-primary [text-shadow:0_0_36px_color-mix(in_oklab,var(--color-gold)_35%,transparent)] sm:text-5xl">
                 {headline.title}
               </p>
               <p className="mt-3 max-w-xl text-base text-pretty text-muted-foreground sm:text-lg">{headline.line}</p>
@@ -128,7 +128,7 @@ function Podium({ doc }: { doc: RecapDoc }) {
                 style={{ animationDelay: '850ms' }}
                 className="duration-500 ease-out animate-in fill-mode-both zoom-in-50 fade-in -spin-in-12 motion-reduce:animate-none"
               >
-                <CrownIcon weight="fill" className="mb-1 size-8 text-primary drop-shadow-[0_0_14px_rgb(245_197_66/0.6)]" />
+                <CrownIcon weight="fill" className="mb-1 size-8 text-primary drop-shadow-[0_0_14px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]" />
               </span>
             )}
             <Avatar name={row.name} className={step.avatar} />

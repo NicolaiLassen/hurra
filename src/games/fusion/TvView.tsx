@@ -152,7 +152,7 @@ function Tile({
     <li
       className={cn(
         '@container relative overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/10 transition-shadow duration-700',
-        latest && 'ring-4 ring-confetti-violet shadow-[0_0_40px_rgb(167_139_250/0.45)]',
+        latest && 'ring-4 ring-confetti-violet shadow-[0_0_40px_color-mix(in_oklab,var(--confetti-violet)_45%,transparent)]',
       )}
     >
       <PictureArt
