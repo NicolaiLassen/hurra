@@ -1,6 +1,6 @@
 // The quiz's own look, shared by its screens. Hurra's style, not a copy of any
-// quiz show: stacked option rows on dark cards, a letter badge per option in
-// the four confetti colours (the badges only), a gold bar draining along the
+// quiz show: stacked option rows on dark cards, a tilted letter chip per option
+// in the quiz key's four colours (the chips only), a gold bar draining along the
 // question card, and a row of gold dots counting answers.
 
 export const LETTERS = ['A', 'B', 'C', 'D'] as const
@@ -8,12 +8,16 @@ export const LETTERS = ['A', 'B', 'C', 'D'] as const
 /** "A" for option 0. */
 export const letterOf = (index: number) => LETTERS[index] ?? String(index + 1)
 
-/** Gold, pink, teal and violet, on the letter badges only. */
+/**
+ * The quiz key: A coral, B pink, C teal, D violet, in ink, always with the
+ * letter and always in this order. Gold stays out of the key, so it keeps its
+ * one meaning on every screen (docs/identity.md).
+ */
 export const LETTER_TONES = [
-  'bg-primary text-primary-foreground',
-  'bg-confetti-pink text-background',
-  'bg-confetti-teal text-background',
-  'bg-confetti-violet text-background',
+  'bg-key-a text-ink',
+  'bg-key-b text-ink',
+  'bg-key-c text-ink',
+  'bg-key-d text-ink',
 ] as const
 
 /** Each badge sits at its own small tilt, like confetti that just landed. */

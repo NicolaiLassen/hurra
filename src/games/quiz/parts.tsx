@@ -3,13 +3,13 @@ import { useReducedMotionPreference, useServerTime } from '@/games/quiz/clock'
 import { dotSize, LETTER_TILTS, LETTER_TONES, letterOf, URGENT_MS } from '@/games/quiz/look'
 import { cn } from '@/lib/utils'
 
-/** An option's letter on its confetti colour. Size and corners come from `className`. */
+/** An option's letter on its key colour, in wide Archivo. Size and corners come from `className`. */
 export function LetterBadge({ index, className }: { index: number; className?: string }) {
   return (
     <span
       aria-hidden
       className={cn(
-        'grid shrink-0 place-items-center font-black',
+        'wide grid shrink-0 place-items-center',
         LETTER_TONES[index % LETTER_TONES.length],
         LETTER_TILTS[index % LETTER_TILTS.length],
         className,
