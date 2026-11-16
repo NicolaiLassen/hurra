@@ -19,10 +19,11 @@ type Games = { nowPlaying: SessionGame | null; running: SessionGame[]; finished:
  * on the stage when it has no screen of its own ("Now playing"), the games in
  * the background ("Also running"), and the games that finished lately as
  * chips. It sits beside the podium, in the `room` the board measured, so the
- * standings below keep their height; cards that don't fit become Live chips.
- * Under a small party's join card every game is a chip, in as many groups as
- * fit the height the card leaves (`chipsHeight`), so the chips never push that
- * column out of the room.
+ * standings below keep their height; cards that don't fit become Live chips,
+ * and the chips use the whole room before they wrap or shorten. Under a small
+ * party's join card every game is a chip, in as many groups as fit the height
+ * the card leaves (`chipsHeight`), so the chips never push that column out of
+ * the room.
  */
 export default function Strip({
   room,
@@ -48,7 +49,8 @@ export default function Strip({
   }
 
   return (
-    <div data-fit="strip" className="flex min-w-0 flex-col gap-4 short:gap-3" style={{ maxWidth: room }}>
+    // As wide as its cards and chips want, up to the room: a grid track would otherwise give chips only part of it.
+    <div data-fit="strip" className="flex w-max min-w-0 flex-col gap-4 short:gap-3" style={{ maxWidth: room }}>
       {fit > 0 && (
         <div className="flex items-start gap-4">
           {shownPlaying && (
