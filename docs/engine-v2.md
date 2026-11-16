@@ -2734,6 +2734,9 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
 /** A badge on a player's profile, shown on phones, the host page and the TV. Unchanged. */
 export type ProfileBadge = { icon: Icon; label: string; tone?: 'gold' | 'pink' | 'teal' | 'violet' }
 
+/** A screen made with lazyScreen: `preload()` loads its file now. Added after the switch-over. */
+type Preloadable = { preload?: () => void }
+
 export type GameModule<G extends AnyGame = AnyGame> = {
   logic: G
   name: string
@@ -2748,10 +2751,10 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   ResultView?: ComponentType<ResultViewProps<G>>
   /** The game's panel in the host control room. */
   HostView?: ComponentType<HostViewProps<G>>
-  /** The TV stage while live (load it lazily). Default: the standings with "Now playing". */
-  TvView?: ComponentType<TvViewProps<G>>
-  /** The TV's final screen (lazily). Default: TvView with finished, else a generic winners screen. */
-  FinalTvView?: ComponentType<TvViewProps<G>>
+  /** The TV stage while live: `lazyScreen(() => import('./TvView'))`. Default: the standings with "Now playing". */
+  TvView?: ComponentType<TvViewProps<G>> & Preloadable
+  /** The TV's final screen (with lazyScreen too). Default: TvView with finished, else a generic winners screen. */
+  FinalTvView?: ComponentType<TvViewProps<G>> & Preloadable
   /** The TV rail card while in the background. Default: title, live time, this game's leader. */
   TvStatus?: ComponentType<TvStatusProps<G>>
   /** The settings editor; saves to game_settings (hosts only). */
@@ -2766,6 +2769,9 @@ export type GameModule<G extends AnyGame = AnyGame> = {
 
 /** Type-checks a module against its own game, then widens it for the registry. Unchanged. */
 export function defineGameModule<G extends AnyGame>(module: GameModule<G>): GameModule
+
+/** A TV screen that loads on demand, for TvView and FinalTvView (7.2). Added after the switch-over. */
+export { lazyScreen } from '@/lib/lazyPage'
 ```
 
 Every v1 prop still exists, so today's views compile unchanged. Game views
@@ -2970,6 +2976,15 @@ even with devtools: it reads exactly what a guest reads.
 **Timers.** `useWakeSync({ delayMs: 250 })` (5.10, 4.5): the TV's sync for
 each live game at `wake_at + 250 ms`, with the shared rate limit and backoff.
 
+**Deploys.** **Changed after the switch-over (16 Nov):** the TV opens once and
+runs all evening, and a deploy meanwhile removes the files of the app it runs.
+The games' `TvView` and `FinalTvView` load on demand (`lazyScreen`, 6), so the
+TV loads them all as it opens (`preloadTvScreens`): a module the page has
+loaded stays in it, so no game reaches the stage as "Now playing" because its
+screen's file is gone. Should a screen's file be gone all the same when it
+shows (its preload failed), the TV loads the new app at its own address, as
+the host pages do (`loadPage`, 7.4), and its sound then waits for a tap again.
+
 **Sound effects volume.** **Changed after the switch-over (15 Nov):** the TV
 plays its sounds at the party's `sound_volume` (0 to 100, which the host sets
 in the control room, 7.3), so a computer that plays the party music as well
@@ -3169,7 +3184,8 @@ game if live, else the newest live game. New: Move to a new phone.
   "'text/html' is not a valid JavaScript MIME type", which now counts too, and
   the error notice reads it as a lost connection, as it does Chrome's words.
   Safari also keeps the old page in its back/forward cache, its navigation
-  still loading, so an old page that Back brings back loads afresh.
+  still loading, so an old page that Back brings back loads afresh. The TV's
+  game screens go the same way (7.2).
 - **From the loader straight to the night.** The night (`fetchRawRecap`) is read
   alongside the live snapshot, not after it, and the page holds the loader until
   it is in: never the page around a night still on its way. The read on arrival
@@ -3644,11 +3660,15 @@ beside its name, the thumb's name and value text, rendered to static HTML, also
 inside the control room), and `setSoundVolume` in
 `queries.test.ts`.
 
-**Changed after the switch-over (16 Nov):** a page whose file a deploy removed
-(7.4) has `lazyPage.test.ts` (Safari's words for it among the browsers', the
-reload with a stand-in browser, and an old page that Back brings out of the
-back/forward cache loading afresh) and `layout.test.ts` (the error notice
-reads every browser's words for it as a lost connection).
+**Changed after the switch-over (16 Nov):** a page or TV screen whose file a
+deploy removed (7.2, 7.4) has `lazyPage.test.ts` (Safari's words for it among
+the browsers', the reload with a stand-in browser, and an old page that Back
+brings out of the back/forward cache loading afresh; `lazyScreen` loads its
+file when preloaded, reloads at the same address when the file is gone, and
+stays quiet on any other failure), `registry.test.ts` (every game's TV screens
+come from `lazyScreen`, and `preloadTvScreens` loads each one) and
+`layout.test.ts` (the error notice reads every browser's words for it as a lost
+connection).
 
 ### 9.2 Integration tests (`npm run test:integration`, local stack)
 

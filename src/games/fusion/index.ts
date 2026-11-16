@@ -1,5 +1,4 @@
 import { DetectiveIcon } from '@phosphor-icons/react'
-import { lazy } from 'react'
 import ConfigEditor from '@/games/fusion/ConfigEditor'
 import HostView from '@/games/fusion/HostView'
 import { FusionGame, type FusionProfile } from '@/games/fusion/logic'
@@ -7,7 +6,7 @@ import PlayerCard from '@/games/fusion/PlayerCard'
 import PlayerView from '@/games/fusion/PlayerView'
 import ResultView from '@/games/fusion/ResultView'
 import TvStatus from '@/games/fusion/TvStatus'
-import { defineGameModule, type ProfileBadge } from '@/games/types'
+import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
 // Participant fusion (docs/engine-v2.md, 8.4): printed portraits that fuse two
 // guests, voted on from phones in the background, revealed one by one on the TV.
@@ -21,8 +20,8 @@ export const fusion = defineGameModule({
   ResultView,
   HostView,
   // Animated with motion; loading them lazily keeps that off guests' phones.
-  TvView: lazy(() => import('@/games/fusion/TvView')),
-  FinalTvView: lazy(() => import('@/games/fusion/FinalTvView')),
+  TvView: lazyScreen(() => import('@/games/fusion/TvView')),
+  FinalTvView: lazyScreen(() => import('@/games/fusion/FinalTvView')),
   TvStatus,
   ConfigEditor,
   // The TV view plays each reveal itself, so its announcements only bring their sound there.

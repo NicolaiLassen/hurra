@@ -1,10 +1,11 @@
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { Loading } from '@/components/layout'
 import QueryGate from '@/components/QueryGate'
 import PairingScreen from '@/components/tv/PairingScreen'
 import { OTHER_PARTY } from '@/components/tv/pairing'
 import TvScreen from '@/components/tv/TvScreen'
+import { preloadTvScreens } from '@/games/registry'
 import { ensureSignedIn, isHost } from '@/lib/auth'
 import { claimScreen, sessionByCode } from '@/lib/queries'
 import { useScreenWakeLock } from '@/lib/screenWakeLock'
@@ -75,6 +76,8 @@ function PairedTv({ party, host, mirror }: { party: PublicSession; host: boolean
   useWakeSync({ delayMs: 250 })
   // It runs all evening: no dimming or sleep while it shows.
   useScreenWakeLock()
+  // Deploys included: every game's TV screens load now, while their files are on the site.
+  useEffect(() => preloadTvScreens(), [])
   // In a host's own browser, the control room shows "TV open in this browser".
   useAnnounceTvTab(party.join_code, host)
 

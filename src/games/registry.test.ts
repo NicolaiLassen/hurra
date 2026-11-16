@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { gameBots } from './bots'
 import { botExample, checkGameContract } from './core/contract'
 import { GameError } from './core/Game'
 import { jsonbRoundTrip } from './core/testing'
 import { gameLogic } from './logic'
-import { gameModules } from './registry'
+import { gameModules, preloadTvScreens } from './registry'
 
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
 const NOT_READY = "This game isn't ready yet"
@@ -14,6 +14,18 @@ it('registers the four games, in order, with their logic, screens and bots', () 
   expect(gameModules.map((m) => m.logic.type)).toEqual([...gameLogic.keys()])
   expect([...gameBots.keys()]).toEqual([...gameLogic.keys()])
   for (const m of gameModules) expect(m.logic.constructor, m.logic.type).toBe(gameLogic.get(m.logic.type)!.constructor)
+})
+
+it("makes every game's TV screens with lazyScreen, and the TV loads them all as it opens", () => {
+  const screens = gameModules.flatMap((m) => [m.TvView, m.FinalTvView].flatMap((view) => (view ? [{ type: m.logic.type, view }] : [])))
+  expect(screens).not.toHaveLength(0)
+  const preloads = screens.map(({ type, view }) => {
+    expect(view.preload, type).toBeTypeOf('function')
+    return vi.spyOn(view, 'preload').mockImplementation(() => {})
+  })
+  preloadTvScreens()
+  for (const preload of preloads) expect(preload).toHaveBeenCalledTimes(1)
+  for (const preload of preloads) preload.mockRestore()
 })
 
 describe.each([...gameLogic.values()].map((logic) => [logic.type, logic] as const))('%s', (type, logic) => {

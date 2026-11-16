@@ -1,5 +1,4 @@
 import { CrownIcon, DetectiveIcon, SwordIcon } from '@phosphor-icons/react'
-import { lazy } from 'react'
 import ConfigEditor from '@/games/elimination/ConfigEditor'
 import HostView from '@/games/elimination/HostView'
 import { EliminationGame, type EliminationProfile } from '@/games/elimination/logic'
@@ -7,7 +6,7 @@ import PlayerCard from '@/games/elimination/PlayerCard'
 import PlayerView from '@/games/elimination/PlayerView'
 import ResultView from '@/games/elimination/ResultView'
 import TvStatus from '@/games/elimination/TvStatus'
-import { defineGameModule, type ProfileBadge } from '@/games/types'
+import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
 // Runs in the background all evening (its logic's presentation): phones show
 // PlayerCard while another game holds the main card, and the TV its TvStatus
@@ -24,7 +23,7 @@ export const elimination = defineGameModule({
   ResultView,
   HostView,
   // Animated with motion; loading it lazily keeps that off guests' phones.
-  TvView: lazy(() => import('@/games/elimination/TvView')),
+  TvView: lazyScreen(() => import('@/games/elimination/TvView')),
   // CSS only (no motion), so it can sit in the TV's rail without a lazy load.
   TvStatus,
   ConfigEditor,

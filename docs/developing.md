@@ -163,7 +163,7 @@ each optional but the first:
 | `PlayerCard` | A whole compact card while another game holds the main card ("Also running"); `open()` shows the full `PlayerView` in a sheet. |
 | `ResultView` | The phone's result card once the game finishes. |
 | `HostView` | The game's controls in the host control room, with the full `state`, the `config` and host `act`. |
-| `TvView`, `FinalTvView` | The TV stage while live, and its final screen (load them lazily). Without them the TV shows the standings or a generic winners screen. |
+| `TvView`, `FinalTvView` | The TV stage while live, and its final screen: `lazyScreen(() => import('./TvView'))`, which the TV loads as it opens. Without them the TV shows the standings or a generic winners screen. |
 | `TvStatus` | A whole card for the TV's rail while the game runs in the background. |
 | `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. |
 

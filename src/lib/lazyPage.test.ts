@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isMissingCode, loadPage, type Reloader } from './lazyPage'
+import { isMissingCode, lazyScreen, loadPage, type Reloader } from './lazyPage'
 
 // What Chrome said when the host pressed Recap in a control room opened before a
 // deploy: the old app asked for the recap page's old file, which the deploy removed.
@@ -109,5 +109,33 @@ describe('a page loaded on demand', () => {
       browser.pageshow[0]({ persisted })
       expect(browser.location.reload).toHaveBeenCalledTimes(persisted ? 1 : 0)
     }
+  })
+})
+
+describe('a TV screen loaded on demand', () => {
+  /** A screen whose file doesn't load. */
+  const failing = (error: Error) => lazyScreen<object>(() => Promise.reject(error))
+
+  it('loads its file when preloaded, before any deploy can take it away', async () => {
+    const load = vi.fn(async () => ({ default: () => null }))
+    const screen = lazyScreen(load)
+    expect(load).not.toHaveBeenCalled()
+    await screen.preload()
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads the new app at the same address when its file is gone all the same', async () => {
+    const browser = fakeBrowser()
+    expect(await settled(failing(SAFARI_GONE).preload())).toBe(false)
+    expect(browser.location.reload).toHaveBeenCalledTimes(1)
+    expect(browser.location.assign).not.toHaveBeenCalled()
+  })
+
+  it('stays quiet when a preload fails otherwise: the screen tries again when it shows', async () => {
+    await expect(failing(new Error('boom')).preload()).resolves.toBeUndefined()
+    const browser = fakeBrowser()
+    vi.stubGlobal('navigator', { onLine: false })
+    await expect(failing(GONE).preload()).resolves.toBeUndefined()
+    expect(browser.location.reload).not.toHaveBeenCalled()
   })
 })

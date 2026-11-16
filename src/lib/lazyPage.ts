@@ -1,12 +1,12 @@
-// The host's pages load on demand (router.tsx). A deploy replaces the site's
-// files, and a tab opened before it still runs the old app, which asks for a
-// page by its old file name (assets/Recap-<hash>.js). That file is gone, the
-// site answers with its index.html, and the import fails: the host pressed
-// Recap and got "Something went wrong" until Retry reloaded the tab. So a page
-// whose file fails to load while the site answers loads the new app straight
-// at the address the host was going to, under the loader, and the page shows
-// right after it.
-import type { ComponentType } from 'react'
+// The host's pages load on demand (router.tsx), and so do the games' TV
+// screens (lazyScreen). A deploy replaces the site's files, and a tab opened
+// before it still runs the old app, which asks for a page by its old file name
+// (assets/Recap-<hash>.js). That file is gone, the site answers with its
+// index.html, and the import fails: the host pressed Recap and got "Something
+// went wrong" until Retry reloaded the tab. So a page whose file fails to load
+// while the site answers loads the new app straight at the address the host
+// was going to, under the loader, and the page shows right after it.
+import { lazy, type ComponentType } from 'react'
 
 /**
  * What browsers say when a module's file didn't load, and Vite's preload of its
@@ -89,4 +89,22 @@ export async function loadPage<T>(
 /** A route's `lazy` for a page module with a default export; `destination` as for loadPage. */
 export function lazyPage(load: () => Promise<{ default: ComponentType }>, destination?: () => string | null) {
   return async () => ({ Component: (await loadPage(load, destination)).default })
+}
+
+/**
+ * A screen that loads on demand, as React's `lazy`, plus `preload()` to load
+ * its file now. The TV runs all evening, deploys included, so it loads every
+ * game's TV screens as it opens (preloadTvScreens in src/games/registry.ts): a
+ * module the page has loaded stays in it, and no later deploy can take it away.
+ * A screen whose file is gone all the same loads the new app at this address
+ * (loadPage). A preload that fails for another reason stays quiet: the screen
+ * tries again when it shows. Game modules get it from @/games/types.
+ */
+export function lazyScreen<P>(load: () => Promise<{ default: ComponentType<P> }>) {
+  const screen = () => loadPage(load)
+  return Object.assign(lazy(screen), {
+    preload: async () => {
+      await screen().catch(() => {})
+    },
+  })
 }

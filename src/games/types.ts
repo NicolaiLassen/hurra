@@ -117,6 +117,9 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
 /** A badge on a player's profile, shown on phones, the host page and the TV. */
 export type ProfileBadge = { icon: Icon; label: string; tone?: 'gold' | 'pink' | 'teal' | 'violet' }
 
+/** A screen made with lazyScreen: `preload()` loads its file now. */
+type Preloadable = { preload?: () => void }
+
 export type GameModule<G extends AnyGame = AnyGame> = {
   logic: G
   name: string
@@ -136,10 +139,14 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   ResultView?: ComponentType<ResultViewProps<G>>
   /** The game's panel in the host control room. */
   HostView?: ComponentType<HostViewProps<G>>
-  /** The TV stage while live (load it lazily). Default: the standings with "Now playing". */
-  TvView?: ComponentType<TvViewProps<G>>
-  /** The TV's final screen (lazily). Default: TvView with finished, else a generic winners screen. */
-  FinalTvView?: ComponentType<TvViewProps<G>>
+  /**
+   * The TV stage while live: `lazyScreen(() => import('./TvView'))`, so guests'
+   * phones never download it and the TV loads it as it opens. Default: the
+   * standings with "Now playing".
+   */
+  TvView?: ComponentType<TvViewProps<G>> & Preloadable
+  /** The TV's final screen (with lazyScreen too). Default: TvView with finished, else a generic winners screen. */
+  FinalTvView?: ComponentType<TvViewProps<G>> & Preloadable
   /**
    * The TV rail card while in the background. Default: title, live time, this
    * game's leader. A whole card, drawn in place of the default: its chrome, icon
@@ -160,3 +167,10 @@ export type GameModule<G extends AnyGame = AnyGame> = {
 export function defineGameModule<G extends AnyGame>(module: GameModule<G>): GameModule {
   return module as unknown as GameModule
 }
+
+/**
+ * A TV screen that loads on demand, for TvView and FinalTvView. The TV loads
+ * them all as it opens, so a deploy later in the evening can't take their files
+ * away; one gone all the same reloads the TV into the new app (src/lib/lazyPage.ts).
+ */
+export { lazyScreen } from '@/lib/lazyPage'
