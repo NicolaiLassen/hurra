@@ -9,8 +9,9 @@ import { listNames, type RawRecap, type RecapDoc } from '@/lib/recap'
 
 /**
  * The race's colours: the validated dark categorical steps (the dataviz
- * reference palette, checked against the card surface #1b1830: every check
- * passes, worst adjacent CVD ΔE 8.4, normal-vision 19.3, all above 3:1).
+ * reference palette, checked against the card surface, now the raised
+ * #1e1a16: every check passes, worst adjacent CVD ΔE 8.4, normal-vision 19.3,
+ * all above 3:1, the lowest 3.5). A chart's palette, not identity colours.
  * Assigned in this order to the final top 8, so a guest keeps their colour.
  */
 export const RACE_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'] as const

@@ -88,8 +88,8 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
 const ORDER = ['order-2', 'order-1', 'order-3']
 const STEPS = [
   { avatar: 'size-16 text-xl ring-4 ring-primary', pedestal: 'h-20 from-primary/45', points: 'text-primary' },
-  { avatar: 'size-12 text-base ring-[3px] ring-slate-300/80', pedestal: 'h-14 from-slate-300/25', points: 'text-slate-200' },
-  { avatar: 'size-12 text-base ring-[3px] ring-amber-600/80', pedestal: 'h-10 from-amber-600/30', points: 'text-amber-500' },
+  { avatar: 'size-12 text-base ring-[3px] ring-paper/80', pedestal: 'h-14 from-paper/25', points: 'text-paper' },
+  { avatar: 'size-12 text-base ring-[3px] ring-paper-2/80', pedestal: 'h-10 from-paper-2/30', points: 'text-paper-2' },
 ]
 
 /**

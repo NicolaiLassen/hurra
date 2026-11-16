@@ -7,11 +7,87 @@
 @import "@fontsource-variable/archivo/wdth.css";
 @import "@fontsource-variable/schibsted-grotesk";
 
-/* Hurra's own theme (docs/identity.md). It sits above the shadcn mapping below. */
+/* Hurra's own theme (docs/identity.md). It sits above the shadcn mapping below,
+   so the reset clears only Tailwind's stock palette. src/lib/tokens.test.ts fails
+   on a stock colour class (Tailwind would drop it without a word) and on a raw
+   hex colour outside this file. */
 @theme {
+  /* Only Hurra's colours exist. White and black stay for QR quiet zones and scrims. */
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Surfaces: one warm studio black, lighter with elevation, told apart by value, not hairlines. */
+  --color-ground: #14110e;   /* every page */
+  --color-raised: #1e1a16;   /* the band, the host header and panels, the phone's code bar */
+  --color-overlay: #29241e;  /* answer tiles, secondary buttons, menus */
+  --color-rule: #3a332a;     /* the only line colour: quiet buttons, empty pips, inputs */
+
+  /* Text on the ground: 15.9, 10.3 and 6.6 to 1. Ink on every colour: 6.9 to 1 or more. */
+  --color-paper: #f2ebde;    /* primary text, straps, podium steps, the QR block */
+  --color-paper-2: #c9bfae;  /* secondary text */
+  --color-paper-3: #a39885;  /* ranks and log times, 28 px and up on the TV */
+  --color-ink: #15120e;      /* text on paper, gold, pink, the key and the guest colours */
+
+  /* Jobs */
+  --color-gold: #f5c542;     /* on air, the leader or winner, the one next step per screen */
+  --color-gold-rim: #b7791f; /* pressed gold only, never text */
+  --color-pink: #ff6fae;     /* the hunt: Last one standing, Out, scan */
+  --color-danger: #f2603f;   /* destructive host actions only (5.4 to 1 on raised) */
+
+  /* The quiz key: always with its letter and in its fixed place, never gold.
+     B, C and D stay where they are today. Pink and teal stay on a diagonal. */
+  --color-key-a: #ff9670;
+  --color-key-b: #ff6fae;
+  --color-key-c: #4fd1c5;
+  --color-key-d: #a78bfa;
+
+  /* Guest colours: identity only (tokens, a guest's own phone, the winner's field). */
+  --color-guest-coral: #ff9670;
+  --color-guest-teal: #4fd1c5;
+  --color-guest-violet: #a78bfa;
+  --color-guest-sky: #78bcff;
+  --color-guest-lime: #bbdf62;
+  --color-guest-paper: #f2ebde;
+
   /* Type: Archivo, stretched wide and narrow, is the on-air voice; Schibsted Grotesk is for reading. */
   --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Archivo Variable', 'Schibsted Grotesk Variable', sans-serif;
+
+  /* TV sizes at 1080p; short: steps each one down. Nothing on the TV is under 28 px. */
+  --text-tv-count: 15.625rem;   --text-tv-count--line-height: 0.8;     /* 250 px countdown */
+  --text-tv-lead: 12.5rem;      --text-tv-lead--line-height: 0.82;     /* 200 px leader's points */
+  --text-tv-cheer: 11rem;       --text-tv-cheer--line-height: 0.9;     /* 176 px winner's cheer */
+  --text-tv-code: 5.75rem;      --text-tv-code--line-height: 0.95;     /* 92 px join code */
+  --text-tv-question: 5.375rem; --text-tv-question--line-height: 1.04; /* 86 px, two lines at most */
+  --text-tv-answer: 4.125rem;   --text-tv-answer--line-height: 1.1;    /* 66 px */
+  --text-tv-score: 3.75rem;     --text-tv-score--line-height: 1;       /* 60 px top five points */
+  --text-tv-name: 3.125rem;     --text-tv-name--line-height: 1.1;      /* 50 px top five names */
+  --text-tv-field: 2.0625rem;   --text-tv-field--line-height: 1.2;     /* 33 px field names */
+  --text-tv-body: 2rem;         --text-tv-body--line-height: 1.3;      /* 32 px band and commentary */
+  --text-tv-tab: 1.875rem;      --text-tv-tab--line-height: 1;         /* 30 px tabs */
+  --text-tv-floor: 1.75rem;     --text-tv-floor--line-height: 1.25;    /* 28 px: Out, small labels */
+
+  /* Phone sizes */
+  --text-phone-key: 5.75rem;     /* 92 px answer letters */
+  --text-phone-place: 2.5rem;    /* 40 px your place */
+  --text-phone-head: 1.625rem;   /* 26 px */
+  --text-phone-action: 1.125rem; /* 18 px, in 54 px buttons */
+
+  /* Corner radius by role */
+  --radius-token: 14%;       /* every player token */
+  --radius-chip: 0.25rem;    /* letter chips, tally chips */
+  --radius-tile: 0.375rem;   /* TV answer tiles */
+  --radius-control: 0.5rem;  /* host buttons and inputs */
+  --radius-phone: 0.875rem;  /* phone tiles and buttons */
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-tab: cubic-bezier(0.34, 1.4, 0.64, 1); /* the one small overshoot, tabs only */
+  --animate-strap-in: strap-in 220ms var(--ease-out) both;
+  --animate-tab-land: tab-land 180ms var(--ease-tab) both;
+  @keyframes strap-in { from { clip-path: inset(0 100% 0 0); } }
+  @keyframes tab-land { from { rotate: 6deg; scale: 1.08; opacity: 0; } }
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -63,38 +139,41 @@
    - hero and empty states only: size-12 to size-24 (duotone or fill)
    The TV scoreboard is read from across the room, so it goes up a step or two. */
 
-/* The app is dark-only (index.html sets class="dark"): a night-time party
-   palette with gold as the primary colour. */
+/* The app is dark-only (index.html sets class="dark"). The shadcn slots keep
+   their @theme inline mapping; their values now point at the brand. The old
+   names stay as aliases until the last screen has moved. */
 :root {
-  --background: #0f0d1a;
-  --foreground: #f5f3ff;
-  --card: #1b1830;
-  --card-foreground: #f5f3ff;
-  --popover: #1b1830;
-  --popover-foreground: #f5f3ff;
-  --primary: #f5c542;
-  --primary-foreground: #0f0d1a;
-  --secondary: #2a2645;
-  --secondary-foreground: #f5f3ff;
-  --muted: #24203d;
-  --muted-foreground: #a9a3c7;
-  --accent: #2a2645;
-  --accent-foreground: #f5f3ff;
-  --destructive: #ff6b6b;
-  --border: rgb(255 255 255 / 10%);
-  --input: rgb(255 255 255 / 14%);
-  --ring: #f5c542;
-  --radius: 0.75rem;
-  /* Accent colours from the app icon, used next to gold for party touches. */
-  --confetti-pink: #ff6fae;
-  --confetti-teal: #4fd1c5;
-  --confetti-violet: #a78bfa;
+  --background: #14110e; --foreground: #f2ebde;
+  --card: #1e1a16; --card-foreground: #f2ebde;
+  --popover: #29241e; --popover-foreground: #f2ebde;
+  --primary: #f5c542; --primary-foreground: #15120e;
+  --secondary: #29241e; --secondary-foreground: #f2ebde;
+  --muted: #1e1a16; --muted-foreground: #c9bfae;
+  --accent: #29241e; --accent-foreground: #f2ebde;
+  --destructive: #f2603f;
+  --border: #3a332a; --input: #3a332a; --ring: #f5c542;
+  --radius: 0.5rem;
+  --confetti-pink: #ff6fae; --confetti-teal: #4fd1c5; --confetti-violet: #a78bfa;
 }
+
+/* Type styles as utilities. Each sets its own weight, so don't pair them with font-bold and the like. */
+@utility tv-num { font-family: var(--font-display); font-stretch: 62%; font-weight: 800; font-variant-numeric: tabular-nums; }
+@utility on-air { font-family: var(--font-display); font-stretch: 125%; font-weight: 900; text-transform: uppercase; }
+@utility wide { font-family: var(--font-display); font-stretch: 125%; font-weight: 900; }
+@utility stripes { background: repeating-linear-gradient(-45deg, var(--color-gold) 0 13px, var(--color-pink) 13px 22px); }
 
 @layer base {
   html {
     color-scheme: dark;
+    accent-color: var(--color-gold);
+    caret-color: var(--color-gold);
+    scrollbar-color: var(--color-rule) var(--color-ground);
     @apply font-sans;
+  }
+
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-ink);
   }
 
   body {

@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils'
 
-const PODIUM = ['bg-primary text-primary-foreground', 'bg-slate-300 text-background', 'bg-amber-600 text-background']
+// Gold for the leader, then paper and paper-2: the steps are told apart by value (docs/identity.md).
+const PODIUM = ['bg-gold text-ink', 'bg-paper text-ink', 'bg-paper-2 text-ink']
 
-/** A rank in a coin: gold, silver and bronze for the top three. */
+/** A rank in a coin: gold, then paper and paper-2 for the top three. */
 export default function RankBadge({ rank, className }: { rank: number; className?: string }) {
   return (
     <span

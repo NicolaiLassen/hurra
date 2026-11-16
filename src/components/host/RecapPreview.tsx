@@ -210,7 +210,7 @@ function TvPeek({ doc, note }: { doc: RecapDoc; note: string }) {
 }
 
 const MINI_BARS = ['bg-primary', 'bg-confetti-pink', 'bg-confetti-teal', 'bg-confetti-violet']
-const PEDESTALS = ['h-[14cqw] from-primary/50', 'h-[10cqw] from-slate-300/30', 'h-[7cqw] from-amber-600/40']
+const PEDESTALS = ['h-[14cqw] from-primary/50', 'h-[10cqw] from-paper/30', 'h-[7cqw] from-paper-2/40']
 
 /**
  * A slide in miniature: the same parts as the TV draws. Sizes are in cqw (a
@@ -371,7 +371,7 @@ function YourNightPreview({ doc }: { doc: RecapDoc }) {
 /** A plain phone: a dark bezel with its island, and a screen that scrolls like the guest's. */
 function PhoneFrame({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <figure aria-label={label} className="mx-auto w-full max-w-[19rem] rounded-[2.75rem] bg-[#06050b] p-2.5 shadow-2xl ring-1 shadow-black/50 ring-white/12">
+    <figure aria-label={label} className="mx-auto w-full max-w-[19rem] rounded-[2.75rem] bg-black p-2.5 shadow-2xl ring-1 shadow-black/50 ring-white/12">
       <div className="relative h-[34rem] overflow-y-auto overscroll-contain rounded-[2.2rem] bg-background [scrollbar-width:none]">
         <div aria-hidden className="sticky top-0 z-10 flex justify-center bg-linear-to-b from-background via-background/90 to-transparent pt-2.5 pb-3">
           <span className="h-5 w-20 rounded-full bg-black ring-1 ring-white/5" />

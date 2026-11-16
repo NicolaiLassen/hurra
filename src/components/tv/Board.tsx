@@ -138,11 +138,11 @@ const PODIUM_SIZE: Record<BoardTier, PodiumSize> = { few: 'hero', small: 'roomy'
 
 // Left to right: 2nd, 1st, 3rd.
 const PODIUM_SLOTS = [1, 0, 2]
-/** Gold, silver and bronze. */
+/** Gold for the leader, then paper and paper-2: the steps are told apart by value. */
 const PLACE_TONE = [
   { ring: 'ring-primary', points: 'text-primary', pedestal: 'from-primary/40' },
-  { ring: 'ring-slate-300/80', points: 'text-slate-200', pedestal: 'from-slate-300/25' },
-  { ring: 'ring-amber-600/80', points: 'text-amber-500', pedestal: 'from-amber-600/30' },
+  { ring: 'ring-paper/80', points: 'text-paper', pedestal: 'from-paper/25' },
+  { ring: 'ring-paper-2/80', points: 'text-paper-2', pedestal: 'from-paper-2/30' },
 ]
 
 /** A podium size: first place first in `avatars` and `pedestals`, with `short:` for 1440 by 900. */

@@ -361,8 +361,8 @@ function LeadsSlide({ doc }: { doc: RecapDoc }) {
 const PODIUM_SLOTS = [1, 0, 2]
 const PODIUM_STEPS = [
   { avatar: 'size-36 text-5xl ring-[6px] ring-primary short:size-28 short:text-4xl', pedestal: 'h-56 from-primary/45 short:h-36', points: 'text-primary' },
-  { avatar: 'size-28 text-4xl ring-4 ring-slate-300/80 short:size-20 short:text-3xl', pedestal: 'h-40 from-slate-300/25 short:h-24', points: 'text-slate-200' },
-  { avatar: 'size-28 text-4xl ring-4 ring-amber-600/80 short:size-20 short:text-3xl', pedestal: 'h-28 from-amber-600/30 short:h-16', points: 'text-amber-500' },
+  { avatar: 'size-28 text-4xl ring-4 ring-paper/80 short:size-20 short:text-3xl', pedestal: 'h-40 from-paper/25 short:h-24', points: 'text-paper' },
+  { avatar: 'size-28 text-4xl ring-4 ring-paper-2/80 short:size-20 short:text-3xl', pedestal: 'h-28 from-paper-2/30 short:h-16', points: 'text-paper-2' },
 ]
 
 /** The recaps whose podium has cheered on this TV: a fanfare once per version, not on every loop. */

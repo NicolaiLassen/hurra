@@ -20,8 +20,8 @@ const FULL_MAX_BYTES = 400_000
 /** 0.82 first, stepping down to 0.6 until the full image is under 400 KB. */
 export const FULL_QUALITIES = [0.82, 0.76, 0.7, 0.65, 0.6] as const
 const THUMB_QUALITY = 0.8
-/** Transparent parts of a PNG land on the night sky, not on black. */
-const BACKDROP = '#0f0d1a'
+/** Transparent parts of a PNG land on the studio ground (--color-ground in src/index.css), not on black. */
+const BACKDROP = '#14110e'
 
 export const UNREADABLE_IMAGE = "This image can't be read here. Use a JPEG or PNG."
 

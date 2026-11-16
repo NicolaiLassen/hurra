@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 const spring = { type: 'spring', stiffness: 220, damping: 22 } as const
 
-// By rank (ties share a step): gold, silver, bronze.
+// By rank (ties share a step): gold for the leader, then paper and paper-2.
 const STEPS = [
   {
     avatar: 'size-36 text-5xl ring-[6px] ring-primary short:size-28 short:text-4xl',
@@ -15,14 +15,14 @@ const STEPS = [
     points: 'text-primary',
   },
   {
-    avatar: 'size-28 text-4xl ring-4 ring-slate-300/80 short:size-20 short:text-3xl',
-    pedestal: 'h-36 from-slate-300/25 short:h-20',
-    points: 'text-slate-200',
+    avatar: 'size-28 text-4xl ring-4 ring-paper/80 short:size-20 short:text-3xl',
+    pedestal: 'h-36 from-paper/25 short:h-20',
+    points: 'text-paper',
   },
   {
-    avatar: 'size-28 text-4xl ring-4 ring-amber-600/80 short:size-20 short:text-3xl',
-    pedestal: 'h-24 from-amber-600/30 short:h-14',
-    points: 'text-amber-500',
+    avatar: 'size-28 text-4xl ring-4 ring-paper-2/80 short:size-20 short:text-3xl',
+    pedestal: 'h-24 from-paper-2/30 short:h-14',
+    points: 'text-paper-2',
   },
 ]
 // Left to right: the second row, the first, the third.
