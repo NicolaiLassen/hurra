@@ -12,8 +12,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // The one next step on a screen: gold, darker while pressed.
-        default: "bg-gold text-ink hover:bg-gold/90 active:bg-gold-rim",
+        // The one next step on a screen: gold, darker while pressed. Gold only
+        // while the step can be taken: disabled (or busy), it is a plain overlay
+        // bar, not gold at half strength, which on the ground is an olive brown.
+        default: "bg-gold text-ink hover:bg-gold/90 active:bg-gold-rim disabled:bg-overlay disabled:text-paper-3 disabled:opacity-100",
         // Quiet: a rule outline, no fill.
         outline:
           "border-[1.5px] border-rule bg-transparent hover:bg-overlay hover:text-paper aria-expanded:bg-overlay aria-expanded:text-paper",
