@@ -48,6 +48,34 @@ type SaveState = Omit<PhotoSave, 'save' | 'retry' | 'remove'>
 /** A prepared photo on its way, with its path and its preview. */
 type Prepared = { photo: Blob; path: string; url: string }
 
+/** The longest a photo change waits for the one before it: keepOnly's list and delete have no timeout of their own. */
+const CHANGE_WAIT_MAX_MS = 60_000
+/** Each player's last photo change on this phone, while it runs. */
+const changes = new Map<string, Promise<unknown>>()
+
+/**
+ * Runs `change` once the player's change before it on this phone has settled,
+ * worked or not, or after 60 s at most; another player's change never waits.
+ * The join step's save goes on after Skip for now, and the phone home's
+ * sheet saves with a hook of its own: in this order the later pick is set
+ * last (setMyPhoto waits out the throttle), and each save's cleanup is done
+ * before the next one uploads, so neither deletes the other's file.
+ */
+export function afterEarlierChange<T>(playerId: string, change: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<void>((resolve) => (timer = setTimeout(resolve, CHANGE_WAIT_MAX_MS)))
+  const earlier = changes.get(playerId) ?? Promise.resolve()
+  const next = Promise.race([earlier, late])
+    .finally(() => clearTimeout(timer))
+    .then(change, change)
+  changes.set(playerId, next)
+  const forget = () => {
+    if (changes.get(playerId) === next) changes.delete(playerId)
+  }
+  void next.then(forget, forget)
+  return next
+}
+
 /**
  * preparePhoto, then setMyPhoto; or removeMyPhoto. After a failure with
  * status 0 it keeps the prepared JPEG and its path, and `retry` uploads that
@@ -58,7 +86,9 @@ type Prepared = { photo: Blob; path: string; url: string }
  * (the sheet passes refresh). Revokes its object URLs when replaced and on
  * unmount. A save takes at most about 31 s on a dead connection (two upload
  * attempts of 15 s, 4.2) plus 8 s per call (4.3), and a quick second photo
- * waits out the throttle, a few seconds at most.
+ * waits out the throttle, a few seconds at most. Each change first waits for
+ * the player's change before it on this phone (afterEarlierChange), still
+ * 'saving' or 'removing' meanwhile.
  */
 export function usePhotoSave(player: Pick<PlayerRow, 'id' | 'session_id'>, onChanged?: () => void): PhotoSave {
   const [state, setState] = useState<SaveState>({ status: 'idle', preview: null, savedPath: null, error: null, canRetry: false })
@@ -115,7 +145,7 @@ export function usePhotoSave(player: Pick<PlayerRow, 'id' | 'session_id'>, onCha
 
   async function send(prepared: Prepared): Promise<boolean> {
     try {
-      const path = await setMyPhoto(player, prepared.photo, prepared.path)
+      const path = await afterEarlierChange(player.id, () => setMyPhoto(player, prepared.photo, prepared.path))
       if (saved.current !== prepared.url) revoke(saved.current)
       saved.current = prepared.url
       kept.current = null
@@ -164,7 +194,7 @@ export function usePhotoSave(player: Pick<PlayerRow, 'id' | 'session_id'>, onCha
       const shown = saved.current
       setState((s) => ({ ...s, status: 'removing', preview: shown, error: null, canRetry: false }))
       try {
-        await removeMyPhoto(player)
+        await afterEarlierChange(player.id, () => removeMyPhoto(player))
       } catch (error) {
         return failed(error, null, 'remove')
       }
