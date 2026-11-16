@@ -26,7 +26,7 @@ const badgeVariants = cva(
         // A quiet state as a plain word ("Done", "Ready").
         ghost: "text-paper-2 [a]:hover:bg-overlay",
         link: "text-paper underline decoration-paper-3 underline-offset-4 hover:decoration-paper",
-        // The hunt (Last one standing): "Out", "Running since 20:30".
+        // The hunt: "Out", "Running since 20:30".
         hunt: "text-pink [a]:hover:bg-overlay",
       },
     },

@@ -21,7 +21,7 @@ const SIZES = {
 /**
  * A status mark on a token's bottom right corner, such as a crown for the
  * winner. Put it next to the Avatar inside a `relative` wrapper; it stays
- * within a few pixels of the token. Out of Last one standing is no badge: the
+ * within a few pixels of the token. Being knocked out is no badge: the
  * token's own pink stripe (Avatar's `out`) and the word Out say it.
  */
 export default function AvatarBadge({

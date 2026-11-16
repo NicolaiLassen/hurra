@@ -3,7 +3,7 @@
 // docs/identity.md's acceptance test: the fixtures' 24 guests with the real
 // Avatar at the sizes the screens use (38 px in the TV's field, 64 px in the
 // top five and on the podium, 120 and 200 px as heroes), with and without a
-// photo, in and out of Last one standing. The photos are the dev builds'
+// photo, in and knocked out. The photos are the dev builds'
 // drawn faces, found the way every screen finds one: by name, through the
 // party's photo index.
 import type { ReactNode } from 'react'
@@ -49,7 +49,7 @@ export default function TokenSheet() {
         <p className="mt-3.5 max-w-[1500px] text-[26px] leading-[1.35] font-medium text-paper-2">
           A photo when there is one, with a band in the guest's colour. Without a photo, the guest's colour and their
           piece, one of the logo's confetti pieces. From 96 px the whole first name, never cropped. A pink stripe, and
-          the word Out beside the name, when they are out of Last one standing.
+          the word Out beside the name, when they are knocked out.
         </p>
 
         <Label note="the name is always printed beside it">TV field, 38 px</Label>

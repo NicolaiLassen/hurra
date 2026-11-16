@@ -19,8 +19,8 @@ const drawn = new Set<string>()
  *   with their piece in ink; from 96 px up, their whole first name instead,
  *   fitted and never cut. A container query on the token picks between them,
  *   so the token follows whatever size it is drawn at, short: steps included.
- * - `out` (out of Last one standing): one pink stripe across it, over a
- *   dimmed piece or photo. A name stays at full strength.
+ * - `out` (knocked out of the game on screen): one pink stripe across it,
+ *   over a dimmed piece or photo. A name stays at full strength.
  *
  * Colour and piece come from guestLook (src/lib/guest.ts), keyed on the name,
  * so the TV, every phone and the host room agree. The photo comes from the
@@ -40,7 +40,7 @@ export default function Avatar({
   name: string
   playerId?: string
   src?: string | null
-  /** Out of Last one standing: the pink stripe. Print the word Out beside the name too. */
+  /** Knocked out of the game on screen (the hunt): the pink stripe. Print the word Out beside the name too. */
   out?: boolean
   className?: string
 }) {

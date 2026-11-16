@@ -32,7 +32,7 @@
   /* Jobs */
   --color-gold: #f5c542;     /* on air, the leader or winner, the one next step per screen */
   --color-gold-rim: #b7791f; /* pressed gold only, never text */
-  --color-pink: #ff6fae;     /* the hunt: Last one standing, Out, scan */
+  --color-pink: #ff6fae;     /* the hunt: its tab, Out, scan */
   --color-danger: #f2603f;   /* destructive host actions only (5.4 to 1 on raised) */
 
   /* The quiz key: always with its letter and in its fixed place, never gold.
