@@ -34,7 +34,7 @@ export default function PlayerCard({ game, publicState, myAnswers, view, open }:
         <button
           type="button"
           onClick={open}
-          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-overlay/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <span className="sr-only">Open</span>
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-confetti-violet/15 text-confetti-violet">

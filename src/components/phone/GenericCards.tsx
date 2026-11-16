@@ -20,7 +20,7 @@ export function GenericPlayerCard({ game, icon, open }: { game: SessionGame; ico
         <button
           type="button"
           onClick={open}
-          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-overlay/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <GameIcon icon={icon} />
           <span className="min-w-0 flex-1">

@@ -334,7 +334,7 @@ function FinishedLately({
                 <button
                   type="button"
                   onClick={() => onOpen(game.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-overlay/50 focus-visible:bg-overlay/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset"
                 >
                   <span
                     className={
