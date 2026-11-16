@@ -750,7 +750,8 @@ another phone" when it wakes, not "You're no longer in X" (5.4, 7.1).
 **Changed after the switch-over (15 Nov):** the session also carries
 `sound_volume` (0 to 100), the TV's sound effects volume (7.2), added by
 `20261115230000_tv_sound_volume.sql`, which replaces the function with its
-whole body plus that one key. Every screen gets it; only the TV uses it.
+whole body plus that one key. Every screen gets it; the TV plays at it (7.2)
+and the control room shows it (7.3).
 
 **`session_recap(p_session_id uuid) returns jsonb`**, stable, plpgsql,
 invoker. Hosts only: anyone else gets `PT403` "Only hosts can read this". The
@@ -2977,7 +2978,9 @@ applies it when the TV opens and on every change, in a layout effect, so
 before any sound of that render starts. `setEffectsVolume` moves the master
 gain to 0.8 times `(volume / 100)^(5/3)` over 0.15 s, never in a jump: 50% is
 10 dB down and sounds about half as loud, 25% is 20 dB down, and at 0 no sound
-starts at all. A change while the TV shows plays one coin (1 s, about as loud
+starts at all. While the TV's audio is still locked or suspended, its clock
+stands still, so a change sets the level at once instead (nothing is audible
+yet), and the first sound after the tap plays at it. A change while the TV shows plays one coin (1 s, about as loud
 as most effects) once the gain has reached the new level, so the host hears
 it in the room; the level the TV opens with plays nothing, and changes close
 together play it once. Every TV screen follows it: paired TVs, the host's
@@ -3628,7 +3631,8 @@ after the running one, and keeps going after one that throws; `stillHeld` keeps
 the host's level through an older one arriving and gives way once the snapshot
 has it, or to a newer one once it saved), `sound.test.ts` (against a stand-in for Web Audio:
 the master gain starts at a volume set before unlocking, ramps to a new one,
-reaches 0, starts nothing at 0, and a preview plays one coin after the ramp),
+sets a change made while suspended at once, reaches 0, starts nothing at 0, and
+a preview plays one coin after the ramp),
 `TvSoundControl.test.ts` (the slider filled to the party's level, the level
 beside its name, the thumb's name and value text, rendered to static HTML, also
 inside the control room), and `setSoundVolume` in

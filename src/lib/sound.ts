@@ -186,6 +186,13 @@ export function setEffectsVolume(volume: number) {
   const at = context.currentTime
   const { gain } = output
   gain.cancelScheduledValues(at)
+  // A locked or suspended context's clock stands still, so a ramp would play
+  // out after it resumes, from the old level: set the new one at once (nothing
+  // is audible yet, so it can't click).
+  if (context.state !== 'running') {
+    gain.setValueAtTime(masterGain(), at)
+    return
+  }
   gain.setValueAtTime(gain.value, at)
   gain.linearRampToValueAtTime(masterGain(), at + VOLUME_RAMP_SECONDS)
 }

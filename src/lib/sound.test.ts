@@ -133,6 +133,18 @@ describe('setEffectsVolume', () => {
     expect(master().calls).toHaveLength(3)
   })
 
+  it('sets a change made while audio is suspended at once, so sound starts at the new level', async () => {
+    const sound = await player()
+    await sound.unlockAudio()
+    contexts[0].state = 'suspended'
+    sound.setEffectsVolume(25)
+    expect(master().calls).toEqual([
+      ['cancel', 12],
+      ['set', 0.8 * soundVolumeGain(25), 12],
+    ])
+    expect(master().value).toBeCloseTo(0.8 * soundVolumeGain(25))
+  })
+
   it('takes 0 all the way to silence', async () => {
     const sound = await player()
     await sound.unlockAudio()
