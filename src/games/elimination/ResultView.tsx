@@ -1,4 +1,4 @@
-import { CrownIcon, SkullIcon, TrophyIcon } from '@phosphor-icons/react'
+import { CrownIcon, TrophyIcon } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
@@ -45,8 +45,10 @@ export default function ResultView({ game, player, players, publicState, view, g
   if (view?.status === 'out') {
     const how = view.method === 'catch' ? `caught you trying “${view.task}”` : `got you with “${view.task}”`
     return (
-      <Moment tone="red" icon={<SkullIcon weight="duotone" className="mx-auto size-14 text-destructive" />} points={points}>
-        <p className="text-2xl font-black">You're out</p>
+      <Moment tone="out" icon={<Avatar name={player.name} playerId={player.id} out className="mx-auto size-14" />} points={points}>
+        <p className="text-2xl font-black">
+          You're <span className="text-pink">out</span>
+        </p>
         <p className="text-muted-foreground">
           {view.by ? `${nameOf(view.by)} ${how}.` : 'You left this round early.'}
           {knockouts > 0 && ` You knocked out ${knockouts} before that.`}
@@ -87,25 +89,24 @@ export default function ResultView({ game, player, players, publicState, view, g
   )
 }
 
-/** One personal result: a tinted panel with a big icon, the words, and the points this round gave. */
+/**
+ * One personal result: a panel with a big icon, the words, and the points this
+ * round gave. Gold for a win; out in the hunt's pink (your token with the
+ * stripe, on the overlay step), never danger red.
+ */
 function Moment({
   tone,
   icon,
   points,
   children,
 }: {
-  tone: 'gold' | 'red'
+  tone: 'gold' | 'out'
   icon: ReactNode
   points: number
   children: ReactNode
 }) {
   return (
-    <div
-      className={cn(
-        'space-y-3 rounded-3xl p-6 text-center ring-1',
-        tone === 'gold' ? 'bg-primary/15 ring-primary/40' : 'bg-destructive/10 ring-destructive/30',
-      )}
-    >
+    <div className={cn('space-y-3 rounded-3xl p-6 text-center', tone === 'gold' ? 'bg-primary/15 ring-1 ring-primary/40' : 'bg-overlay')}>
       {icon}
       {children}
       {points > 0 && (

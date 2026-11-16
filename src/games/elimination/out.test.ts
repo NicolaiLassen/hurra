@@ -8,6 +8,7 @@ import { createElement, type ComponentType } from 'react'
 import { prerender } from 'react-dom/static'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EliminationPublicState } from '@/games/elimination/logic'
+import ResultView from '@/games/elimination/ResultView'
 import TvView from '@/games/elimination/TvView'
 import WhoIsLeft from '@/games/elimination/WhoIsLeft'
 import type { Player } from '@/lib/types'
@@ -114,5 +115,21 @@ describe('a knocked-out guest in Last one standing', () => {
     expect(rows.Ana).toMatch(AT_THE_FLOOR)
     expect(rows.Bo).not.toContain('data-out')
     expect(rows.Bo).not.toContain('>Out<')
+  })
+
+  it("is the hunt's pink on the guest's own phone, never danger red", async () => {
+    // Clara's round is over: Ana got her. Her own token wears the stripe, and the word is pink.
+    const clara = players[2]
+    const markup = await html(ResultView as ComponentType<never>, {
+      game: { id: 'g', title: 'Last one standing', winners: ['bo'] },
+      player: clara,
+      players,
+      publicState,
+      view: { status: 'out', by: 'ana', method: 'tag', task: 'Get someone to hum a tune', knockouts: 0 },
+      gamePoints: {},
+    })
+    expect(markup).toContain('data-stripe=""')
+    expect(markup).toMatch(/You&#x27;re <span class="text-pink">out<\/span>/)
+    expect(markup).not.toMatch(/destructive|danger/)
   })
 })

@@ -1,5 +1,6 @@
-import { CrownIcon, DetectiveIcon, QrCodeIcon, SkullIcon, SwordIcon } from '@phosphor-icons/react'
+import { CrownIcon, DetectiveIcon, QrCodeIcon, SwordIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
+import Avatar from '@/components/Avatar'
 import SecretCard from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
 import KnockoutFlow from '@/games/elimination/KnockoutFlow'
@@ -59,10 +60,13 @@ export default function PlayerView({
       )}
 
       {view?.status === 'out' && (
-        <div className="space-y-4 rounded-3xl bg-destructive/10 p-6 text-center ring-1 ring-destructive/30">
-          <SkullIcon weight="duotone" className="mx-auto size-16 text-destructive" />
+        // The hunt's pink, as on the TV: your own token with the stripe, and the word. Never danger red.
+        <div className="space-y-4 rounded-3xl bg-overlay p-6 text-center">
+          <Avatar name={player.name} playerId={player.id} out className="mx-auto size-16" />
           <div>
-            <p className="text-3xl font-black">You're out</p>
+            <p className="text-3xl font-black">
+              You're <span className="text-pink">out</span>
+            </p>
             <p className="mt-2 text-muted-foreground">
               {view.method === 'catch'
                 ? `${nameOf(view.by)} caught you trying “${view.task}”`
