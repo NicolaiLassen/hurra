@@ -68,4 +68,12 @@ describe('cardsThatStack', () => {
   it('counts cards not measured yet as fitting', () => {
     expect(cardsThatStack([0, 0, 0], 100, 16, 40)).toBe(3)
   })
+
+  it('keeps the chip groups under a small party\'s join card that fit, from the top', () => {
+    // 1280 by 720 leaves 152 px under the card: Now playing (60) fits, Also running (3 lines, 148) after it does not.
+    expect(cardsThatStack([60, 148], 152, 16, 0)).toBe(1)
+    expect(cardsThatStack([148], 152, 16, 0)).toBe(1)
+    // 1440 by 900 leaves 332 px: both fit.
+    expect(cardsThatStack([60, 148], 332, 16, 0)).toBe(2)
+  })
 })

@@ -1,13 +1,13 @@
 import { TrophyIcon } from '@phosphor-icons/react'
 import { motion } from 'motion/react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import RankBadge from '@/components/RankBadge'
 import type { Ranked } from '@/components/tv/Board'
 import { ChipRow, FinishedChip, LiveChip } from '@/components/tv/Chips'
 import { cardsThatStack } from '@/components/tv/fit'
 import { CARD, RAIL, spring } from '@/components/tv/look'
-import { Eyebrow, GainBubble, Points } from '@/components/tv/parts'
+import { Eyebrow, GainBubble, Measured, Points } from '@/components/tv/parts'
 import StatusCard from '@/components/tv/StatusCard'
 import type { Gains } from '@/components/tv/useGains'
 import type { Player, SessionGame } from '@/lib/types'
@@ -115,34 +115,12 @@ function AlsoRunning({ games }: { games: SessionGame[] }) {
       <div ref={regionRef} className="relative min-h-0 flex-1 overflow-hidden">
         <div className="flex flex-col gap-4">
           {games.map((game, i) => (
-            <Measured key={game.id} id={game.id} hidden={i >= shown} onHeight={report}>
+            <Measured key={game.id} id={game.id} hidden={i >= shown} onHeight={report} fit="card">
               <StatusCard game={game} />
             </Measured>
           ))}
         </div>
       </div>
     </section>
-  )
-}
-
-function Measured({
-  id,
-  hidden,
-  onHeight,
-  children,
-}: {
-  id: string
-  hidden: boolean
-  onHeight: (id: string, height: number) => void
-  children: ReactNode
-}) {
-  const [ref, size] = useElementSize<HTMLDivElement>()
-  useEffect(() => {
-    if (size.height > 0) onHeight(id, size.height)
-  }, [id, size.height, onHeight])
-  return (
-    <div ref={ref} data-fit={hidden ? undefined : 'card'} aria-hidden={hidden || undefined} className={cn(hidden && 'invisible absolute inset-x-0 top-0')}>
-      {children}
-    </div>
   )
 }

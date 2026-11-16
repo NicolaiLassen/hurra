@@ -36,8 +36,9 @@ const ONE_COLUMN_MIN = 768
  *   join card end. The podium narrows while they show, and moves left when
  *   they need more room; a single column of rows stays under it.
  * `strip` draws the status cards in the room it is given (px), so the rows
- * keep their height on a 1440 by 900 screen with 45 guests, or only chips
- * (`chipsOnly`), so the column under the join card fits any screen.
+ * keep their height on a 1440 by 900 screen with 45 guests, or, under the
+ * join card, only the chips that fit the height the card leaves
+ * (`chipsHeight`), so the chips never push that column out of the room.
  */
 export default function Board({
   rows,
@@ -47,7 +48,7 @@ export default function Board({
 }: {
   rows: Ranked[]
   gains: Gains
-  strip?: (room: number, chipsOnly: boolean) => ReactNode
+  strip?: (room: number, chipsHeight?: number) => ReactNode
   /** The join code for a small party's big join card; the header then leaves its own out (`joinCardPlace` in scene.ts). */
   invite?: string | null
 }) {
@@ -66,7 +67,7 @@ export default function Board({
   // Under the join card the chips get its width; anywhere else the cards get what the podium leaves.
   const room = inviting ? inviteBox.width : Math.max(0, band.width - (hasPodium ? podium.width + (few ? HERO_GAP : BAND_GAP) : 0))
   // All measured first, so the cards never flash in at the wrong count.
-  const measured = band.width > 0 && (!hasPodium || podium.width > 0) && (!inviting || inviteBox.width > 0)
+  const measured = band.width > 0 && (!hasPodium || podium.width > 0) && (!inviting || (inviteBox.width > 0 && area.height > 0))
   // Where the podium's middle is, so a single column of rows stands under it even when the cards push it left.
   const podiumMiddle = podium.width > 0 ? left.width + podium.width / 2 : area.width / 2
 
@@ -94,16 +95,18 @@ export default function Board({
             )}
             {few
               ? (inviting || strip) && (
-                  <div className="flex shrink-0 flex-col gap-6 short:gap-4">
+                  <div className="flex shrink-0 flex-col">
                     {inviting && (
+                      // The card and the space under it, measured, so the chips know the height left on either screen.
                       <div ref={inviteRef}>
                         <JoinInvite joinCode={invite} />
+                        {strip && <div aria-hidden className="h-6 short:h-4" />}
                       </div>
                     )}
-                    {strip && measured && strip(room, inviting)}
+                    {strip && measured && strip(room, inviting ? Math.max(0, area.height - inviteBox.height) : undefined)}
                   </div>
                 )
-              : strip && measured && <div className="col-start-3 row-start-1 flex justify-end pl-8">{strip(room, false)}</div>}
+              : strip && measured && <div className="col-start-3 row-start-1 flex justify-end pl-8">{strip(room)}</div>}
           </div>
           {rest.length > 0 && (
             <>
@@ -188,7 +191,7 @@ const PODIUM: Record<PodiumSize, PodiumLook> = {
     ],
     name: 'mt-4 text-4xl short:mt-2 short:text-3xl',
     points: 'text-6xl short:text-5xl',
-    badges: 'mt-3',
+    badges: 'mt-3 short:hidden',
     floor: 'mt-4 short:mt-3',
     pedestals: ['h-36 short:h-24', 'h-24 short:h-16', 'h-16 short:h-10'],
     rank: 'text-6xl short:text-5xl',

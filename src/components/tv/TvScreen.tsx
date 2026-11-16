@@ -108,8 +108,8 @@ function Screen({
   const nowPlaying = area.kind === 'board' ? area.nowPlaying : null
   const strip =
     !over && (nowPlaying || running.length > 0 || finished.length > 0)
-      ? (room: number, chipsOnly: boolean) => (
-          <Strip room={room} chipsOnly={chipsOnly} nowPlaying={nowPlaying} running={running} finished={finished} players={players} />
+      ? (room: number, chipsHeight?: number) => (
+          <Strip room={room} chipsHeight={chipsHeight} nowPlaying={nowPlaying} running={running} finished={finished} players={players} />
         )
       : undefined
 
