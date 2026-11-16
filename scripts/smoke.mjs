@@ -18,8 +18,12 @@
 // pairing a TV; pings on private topics (a rename reaches a guest, an answer
 // reaches the host as a tally, a guest's forged broadcast reaches nobody);
 // secrets (game settings, states and the log stay host-only, the quiz's
-// answer stays out of public state until its reveal); Last one standing in the background with a knockout; a 2-question
-// quiz on the stage to its crown, with the final-screen spotlight; fusion
+// answer stays out of public state until its reveal); guest photos (a guest's
+// photo reaches the TV and the other phones and is public, another guest can't
+// upload into her folder or set her photo, a PNG, a 70 KB file and a second
+// photo at once are refused, the host's Remove photo reaches the room); Last
+// one standing in the background with a knockout; a 2-question quiz on the
+// stage to its crown, with the final-screen spotlight; fusion
 // with one picture from votes to its reveal; a host award and its undo;
 // moving a player to a new phone; the recap read, published and read back by
 // a guest; a game-media upload; unpairing the TV; deleting the party.
@@ -53,7 +57,7 @@ if (!local) {
 const options = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(API_URL, SECRET_KEY, options)
 const stamp = Date.now().toString(36).toUpperCase()
-const made = { users: new Set(), sessionId: null, media: [], clients: [] }
+const made = { users: new Set(), sessionId: null, media: [], photos: [], clients: [] }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const startedAt = Date.now()
 let failures = 0
@@ -299,6 +303,56 @@ try {
     check(screenSettings.error !== null || screenSettings.data.length === 0, 'the TV reads no game settings')
   })
 
+  // Guest photos (docs/guest-photos.md, 8.3) ----------------------------------------------------------
+  await step('guest photos', async () => {
+    const ana = guests.Ana
+    const photos = (who) => who.client.storage.from('player-photos')
+    // Every path goes into made.photos before its upload, so the cleanup deletes whatever got through.
+    const newPath = () => {
+      const path = `${sessionId}/${ana.player.id}/${crypto.randomUUID()}.jpg`
+      made.photos.push(path)
+      return path
+    }
+    const upload = (who, path, body = TINY_JPEG, contentType = 'image/jpeg') =>
+      photos(who).upload(path, body, { contentType, upsert: false, cacheControl: '3600' })
+    const setAnasPhoto = (who, path) => who.client.rpc('set_my_photo', { p_player_id: ana.player.id, p_path: path })
+
+    const photo = newPath()
+    await data(upload(ana, photo), 'photo upload')
+    const setAt = Date.now()
+    const set = await data(setAnasPhoto(ana, photo), 'set_my_photo')
+    check(set.photo === photo && set.previous === null, 'Ana uploads a photo into her own folder and sets it')
+    const heard = await tvStage.waitFor('changed', setAt)
+    check(true, `the TV hears it on the stage topic in ${heard.at - setAt} ms`)
+    const seen = await snapshot(guests.Bo, sessionId, 'phone')
+    check(seen.players.find((p) => p.id === ana.player.id)?.photo === photo, "Bo's snapshot has Ana's photo")
+    const served = await fetch(photos(ana).getPublicUrl(photo).data.publicUrl)
+    check(served.status === 200 && served.headers.get('content-type') === 'image/jpeg', 'its public URL serves a JPEG')
+
+    const intruder = await refusal(upload(guests.Bo, newPath()))
+    check(intruder !== null, `Bo's upload into Ana's folder is refused (${intruder?.statusCode})`)
+    const notHis = await refusal(setAnasPhoto(guests.Bo, photo))
+    check(notHis?.details === 'not_your_player', "Bo may not set Ana's photo (not_your_player)")
+    const png = await refusal(upload(ana, newPath(), TINY_JPEG, 'image/png'))
+    check(png !== null, `a stated PNG is refused (${png?.statusCode})`)
+    const big = await refusal(upload(ana, newPath(), Buffer.concat([TINY_JPEG, Buffer.alloc(70 * 1024)])))
+    check(big !== null, `a 70 KB upload is refused (${big?.statusCode})`)
+    const second = newPath()
+    await data(upload(ana, second), 'second photo upload')
+    const soon = await refusal(setAnasPhoto(ana, second))
+    check(soon?.details === 'too_soon', 'a second photo at once answers too_soon')
+
+    const removedAt = Date.now()
+    const removed = await data(host.client.rpc('host_remove_photo', { p_player_id: ana.player.id }), 'host_remove_photo')
+    check(removed.previous === photo, "the host's Remove photo returns the photo's path")
+    await anaRoom.waitFor('changed', removedAt)
+    check(true, "Ana's room topic hears it")
+    const after = await snapshot(guests.Bo, sessionId, 'phone')
+    check(after.players.find((p) => p.id === ana.player.id)?.photo === null, "Bo's snapshot has no photo for Ana")
+    const deleted = await data(photos(host).remove([photo]), 'host deletes the photo')
+    check(deleted.length === 1, 'the host deletes the file')
+  })
+
   // Last one standing in the background ---------------------------------------------------------
   await step('Last one standing in the background, with a knockout', async () => {
     await engine(host, { type: 'start', gameId: games.elimination, stage: false })
@@ -499,6 +553,10 @@ try {
   if (made.media.length > 0) {
     const { error } = await admin.storage.from('game-media').remove(made.media)
     log(error ? `  could not delete the uploaded image: ${error.message}` : `  deleted ${made.media.length} uploaded image`)
+  }
+  if (made.photos.length > 0) {
+    const { data: removed, error } = await admin.storage.from('player-photos').remove(made.photos)
+    log(error ? `  could not delete the photos: ${error.message}` : `  deleted ${removed.length} uploaded photo file${removed.length === 1 ? '' : 's'}`)
   }
   if (made.sessionId) {
     const { error } = await admin.from('sessions').delete().eq('id', made.sessionId)
