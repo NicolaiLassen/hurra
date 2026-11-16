@@ -82,10 +82,12 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
           </ol>
         </Panel>
 
-        {/* Shrinks (and shows three instead of five) when the screen is short, never past the board. */}
-        <Panel title="Latest" className="min-h-0 overflow-hidden">
+        {/* Takes the room left, never past the board, and shows as many of the latest five as fit
+            whole (three at most when the screen is short): one that doesn't fit wraps out of
+            sight in the list's second column instead of being cut through. */}
+        <Panel title="Latest" className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {feed.length === 0 && <p className="text-lg text-muted-foreground">Waiting for the first knockout…</p>}
-          <ul className="grid grid-cols-1 gap-3">
+          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-3 overflow-hidden">
             <AnimatePresence initial={false}>
               {feed.slice(0, 5).map((k) => (
                 <motion.li
@@ -95,12 +97,12 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0 }}
                   transition={spring}
-                  className="flex gap-3 short:nth-[n+4]:hidden"
+                  className="flex w-full gap-3 short:nth-[n+4]:hidden"
                 >
                   <MethodIcon method={k.method} className="mt-1 size-6 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-semibold">{knockoutLine(k, nameOf)}</p>
-                    {k.task && <p className="truncate text-muted-foreground">“{k.task}”</p>}
+                    {k.task && <p className="line-clamp-2 text-muted-foreground">“{k.task}”</p>}
                   </div>
                 </motion.li>
               ))}
