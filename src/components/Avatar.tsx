@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Piece from '@/components/Piece'
-import { GUEST_BG, guestLook, slateLines, slateSize } from '@/lib/guest'
+import { GUEST_BG, guestLook, SLATE_LINE_HEIGHT, SLATE_TILT_DEG, slateLines, slateSize } from '@/lib/guest'
 import { PLACEHOLDER_NAMES, usePlayerPhoto } from '@/lib/photoIndex'
 import { cn } from '@/lib/utils'
 
@@ -78,10 +78,15 @@ export default function Avatar({
         <Piece kind={piece} className={cn('size-[62cqi]', hasName && '@min-[96px]:hidden', out && 'opacity-50')} />
       )}
       {!covered && hasName && (
+        // The tilt and line height come from the constants slateSize fits by, so what is drawn is what was fitted.
         <span
           data-slate=""
-          className="hidden -rotate-4 text-center font-display leading-[0.9] font-black tracking-[-0.01em] whitespace-nowrap font-stretch-62% @min-[96px]:block"
-          style={{ fontSize: `${(slateSize(lines) * 100).toFixed(2)}cqi` }}
+          className="hidden text-center font-display font-black tracking-[-0.01em] whitespace-nowrap font-stretch-62% @min-[96px]:block"
+          style={{
+            fontSize: `${(slateSize(lines) * 100).toFixed(2)}cqi`,
+            lineHeight: SLATE_LINE_HEIGHT,
+            rotate: `${-SLATE_TILT_DEG}deg`,
+          }}
         >
           {lines.map((line, i) => (
             <span key={i} className="block">

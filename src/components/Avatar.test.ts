@@ -7,7 +7,7 @@ import { createElement, type ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
 import { describe, expect, it } from 'vitest'
 import Avatar from '@/components/Avatar'
-import { GUEST_BG, guestLook, slateSize } from '@/lib/guest'
+import { GUEST_BG, guestLook, SLATE_LINE_HEIGHT, SLATE_TILT_DEG, slateSize } from '@/lib/guest'
 import { photoIndex, photoKey, PhotosContext } from '@/lib/photoIndex'
 
 const ANA = 'a0000000-0000-4000-8000-000000000001'
@@ -104,9 +104,14 @@ describe('Avatar', () => {
     expect(christoffer).not.toMatch(/>CB</)
     const own = slate(christoffer)?.[0] ?? ''
     expect(own).toMatch(/class="hidden [^"]*@min-\[96px\]:block/)
+    // The face, width and weight Archivo's advance table was measured at, and the
+    // tilt and line height the fit counts with.
     expect(own).toContain('font-display')
     expect(own).toContain('font-stretch-62%')
+    expect(own).toContain('font-black')
     expect(own).toContain(`font-size:${(slateSize(['Christoffer']) * 100).toFixed(2)}cqi`)
+    expect(own).toContain(`line-height:${SLATE_LINE_HEIGHT}`)
+    expect(own).toContain(`rotate:${-SLATE_TILT_DEG}deg`)
 
     // A hyphenated name breaks after the hyphen.
     const marieLouise = await inParty({ name: 'Marie-Louise Christensen' })
