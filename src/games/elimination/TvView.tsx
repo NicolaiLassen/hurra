@@ -6,13 +6,16 @@ import AvatarBadge from '@/components/AvatarBadge'
 import type { EliminationGame, EliminationPublicState, PublicKnockout } from '@/games/elimination/logic'
 import { knockoutLine, nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
 import SurvivorMeter from '@/games/elimination/SurvivorMeter'
+import { tileLayout, type TileSize } from '@/games/elimination/tiles'
 import type { TvViewProps } from '@/games/types'
-import { fitGrid } from '@/lib/fitGrid'
 import type { Player } from '@/lib/types'
 import { useElementSize } from '@/lib/useElementSize'
 import { cn } from '@/lib/utils'
 
 const spring = { type: 'spring', stiffness: 260, damping: 26 } as const
+
+/** The word beside a knocked-out guest's name: pink, at the TV's floor (28 px, docs/identity.md). */
+const OUT_WORD = 'shrink-0 text-tv-floor leading-none font-bold text-pink'
 
 /**
  * The TV while Last one standing holds the stage: who is left, who got whom,
@@ -102,31 +105,18 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
   )
 }
 
-// Tile sizes for the player grid, largest first (rem): the biggest one whose
-// rows all fit the space left on the screen is used, so 8 players get big
-// tiles and a party of 45 still fits on a 1080p TV as chips.
-const TILE_SIZES = [
-  { size: 'large', minWidth: 10, height: 9.5, gap: 0.75 },
-  { size: 'medium', minWidth: 7.75, height: 8, gap: 0.75 },
-  { size: 'chip', minWidth: 12.5, height: 3.25, gap: 0.5 },
-  { size: 'mini', minWidth: 9.5, height: 2.5, gap: 0.5 },
-] as const
-
-type TileSize = (typeof TILE_SIZES)[number]['size']
-/** The narrowest a squeezed tile column gets (rem), so a name keeps a few letters. */
-const SQUEEZED_MIN_REM = 6
-/** Below this column width (rem) a squeezed tile drops its avatar to give the name room. */
-const AVATAR_MIN_REM = 8
-
-// Heights match TILE_SIZES, so the fit maths holds.
+// Heights match TILE_SIZES (src/games/elimination/tiles.ts), so the fit maths
+// holds. A tile with `byName` gives a knocked-out guest a second line, which
+// the word Out leads: the name keeps the whole first line. A mini tile has one
+// line, so the word sits beside the name, in the room the method icon had.
 const TILE_STYLE: Record<
   TileSize,
   { tile: string; avatar: string; badge: 'sm' | 'md' | 'lg'; name: string; stacked: boolean; byName: boolean }
 > = {
-  large: { tile: 'h-38 flex-col justify-center gap-2 p-3', avatar: 'size-16 text-xl', badge: 'lg', name: 'text-lg', stacked: true, byName: true },
-  medium: { tile: 'h-32 flex-col justify-center gap-1.5 p-2.5', avatar: 'size-12 text-base', badge: 'md', name: 'text-base', stacked: true, byName: true },
-  chip: { tile: 'h-13 gap-3 px-3', avatar: 'size-9 text-sm', badge: 'sm', name: 'text-base', stacked: false, byName: true },
-  mini: { tile: 'h-10 gap-2 px-2.5', avatar: 'size-7 text-xs', badge: 'sm', name: 'text-sm', stacked: false, byName: false },
+  large: { tile: 'h-38 flex-col justify-center gap-2 p-3', avatar: 'size-16', badge: 'lg', name: 'text-lg', stacked: true, byName: true },
+  medium: { tile: 'h-32 flex-col justify-center gap-1.5 p-2.5', avatar: 'size-12', badge: 'md', name: 'text-base', stacked: true, byName: true },
+  chip: { tile: 'h-13 gap-3 px-3', avatar: 'size-9', badge: 'sm', name: 'text-base', stacked: false, byName: true },
+  mini: { tile: 'h-10 gap-2 px-2.5', avatar: 'size-7', badge: 'sm', name: 'text-sm', stacked: false, byName: false },
 }
 
 function PlayerTiles({
@@ -140,46 +130,26 @@ function PlayerTiles({
 }) {
   const [ref, { width, height }] = useElementSize<HTMLDivElement>()
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  const fit = fitGrid(
-    players.length,
-    width,
-    height,
-    TILE_SIZES.map((t) => ({ ...t, minWidth: t.minWidth * rem, height: t.height * rem, gap: t.gap * rem })),
-  )
-  // Even the smallest tiles don't fit: keep the rows that do and spread everyone
-  // over more, narrower columns, so nobody still in drops off the screen. But
-  // never narrower than SQUEEZED_MIN_REM, or the names have no room left: past
-  // that the last tiles are cut, and those are the players who are out (sorted
-  // last). Once a column is too narrow for an avatar beside the name, the avatar
-  // goes, so the name keeps its room.
-  const rowsThatFit = Math.max(1, Math.floor((height + fit.option.gap) / (fit.option.height + fit.option.gap)))
-  const maxColumns = Math.max(1, Math.floor((width + fit.option.gap) / (SQUEEZED_MIN_REM * rem + fit.option.gap)))
-  const columns = fit.fits ? fit.columns : Math.min(maxColumns, Math.ceil(players.length / rowsThatFit))
-  const columnWidth = (width - (columns - 1) * fit.option.gap) / columns
-  const squeezed = !fit.fits && columnWidth < AVATAR_MIN_REM * rem
   const { outBy, winner, feed } = publicState
   // Players still in first, then those who are out, latest first: each knockout
   // moves one tile (animated) from the end of the first group to the start of the
-  // second.
+  // second. So when tiles are cut for room (tileLayout), they are those of guests
+  // who are out, whole rows at a time.
   const latest = feed.map((k) => k.target)
   const outOrder = (id: string) => {
     const i = latest.indexOf(id)
     return i === -1 ? latest.length + players.findIndex((p) => p.id === id) : i
   }
-  const ordered = [
-    ...players.filter((p) => !outBy[p.id]),
-    ...players.filter((p) => outBy[p.id]).sort((a, b) => outOrder(a.id) - outOrder(b.id)),
-  ]
-  const style = TILE_STYLE[fit.option.size]
+  const stillIn = players.filter((p) => !outBy[p.id])
+  const ordered = [...stillIn, ...players.filter((p) => outBy[p.id]).sort((a, b) => outOrder(a.id) - outOrder(b.id))]
+  const { size, gap, columns, squeezed, shown } = tileLayout(ordered.length, stillIn.length, width, height, rem)
+  const style = TILE_STYLE[size]
 
   return (
     <div ref={ref} className="min-h-0 flex-1 overflow-hidden">
       {width > 0 && (
-        <ul
-          className="grid content-start"
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: fit.option.gap }}
-        >
-          {ordered.map((p) => {
+        <ul className="grid content-start" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap }}>
+          {ordered.slice(0, shown).map((p) => {
             const knockedOut = outBy[p.id]
             const isWinner = p.id === winner
             return (
@@ -199,24 +169,24 @@ function PlayerTiles({
                   {isWinner && <AvatarBadge icon={CrownIcon} tone="gold" size={style.badge} />}
                 </div>
                 <div className={cn('min-w-0', style.stacked ? 'w-full text-center' : 'flex-1')}>
-                  {/* The name at full strength, and the word beside it: the stripe never says Out alone. */}
-                  <p className={cn('flex min-w-0 items-baseline gap-1.5 font-semibold', style.name, style.stacked && 'justify-center')}>
+                  {/* The name at full strength, with the word Out by it: the stripe never says Out alone. */}
+                  <p className={cn('flex min-w-0 items-baseline gap-2 font-semibold', style.name, style.stacked && 'justify-center')}>
                     <span className="truncate">{p.name}</span>
-                    {knockedOut && <span className="shrink-0 font-bold text-pink">Out</span>}
+                    {knockedOut && !style.byName && <span className={OUT_WORD}>Out</span>}
                   </p>
                   {knockedOut && style.byName && (
                     <p
                       className={cn(
-                        'flex max-w-full items-center gap-1 text-xs text-muted-foreground',
+                        'flex max-w-full items-center gap-1.5 text-xs text-muted-foreground',
                         style.stacked && 'justify-center',
                       )}
                     >
+                      <span className={OUT_WORD}>Out</span>
                       <MethodIcon method={knockedOut.method} className="size-3.5 shrink-0" />
                       <span className="truncate">{nameOf(knockedOut.by)}</span>
                     </p>
                   )}
                 </div>
-                {knockedOut && !style.byName && <MethodIcon method={knockedOut.method} className="size-3.5 shrink-0" />}
               </motion.li>
             )
           })}
