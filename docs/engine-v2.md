@@ -3163,7 +3163,13 @@ game if live, else the newest live game. New: Move to a new phone.
   going to (the URL changes only once a page is in, so it comes from the
   navigation under way), under the loader. A second missing file within a
   minute, or no answer from the site, shows the error with Retry as before, so
-  a broken deploy or a dropped connection never loops.
+  a broken deploy or a dropped connection never loops. **Changed after the
+  switch-over (16 Nov):** Safari, and so every iPhone browser, words it
+  differently: for the site's `index.html` in place of the file it says
+  "'text/html' is not a valid JavaScript MIME type", which now counts too, and
+  the error notice reads it as a lost connection, as it does Chrome's words.
+  Safari also keeps the old page in its back/forward cache, its navigation
+  still loading, so an old page that Back brings back loads afresh.
 - **From the loader straight to the night.** The night (`fetchRawRecap`) is read
   alongside the live snapshot, not after it, and the page holds the loader until
   it is in: never the page around a night still on its way. The read on arrival
@@ -3637,6 +3643,12 @@ a preview plays one coin after the ramp),
 beside its name, the thumb's name and value text, rendered to static HTML, also
 inside the control room), and `setSoundVolume` in
 `queries.test.ts`.
+
+**Changed after the switch-over (16 Nov):** a page whose file a deploy removed
+(7.4) has `lazyPage.test.ts` (Safari's words for it among the browsers', the
+reload with a stand-in browser, and an old page that Back brings out of the
+back/forward cache loading afresh) and `layout.test.ts` (the error notice
+reads every browser's words for it as a lost connection).
 
 ### 9.2 Integration tests (`npm run test:integration`, local stack)
 

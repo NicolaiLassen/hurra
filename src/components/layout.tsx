@@ -54,10 +54,11 @@ export function Notice({ title, children, actions }: { title: string; children?:
 /**
  * What browsers say when a request never got an answer (Chrome, Firefox,
  * Safari), including a lazy chunk that didn't load (e.g. on bad Wi-Fi, or an old
- * chunk name after a deploy, which a reload fixes).
+ * chunk name after a deploy, which a reload fixes; Safari then says the site's
+ * index.html "is not a valid JavaScript MIME type").
  */
 const NETWORK_ERROR =
-  /failed to fetch|networkerror|load failed|network request failed|importing a module script failed|dynamically imported module/i
+  /failed to fetch|networkerror|load failed|network request failed|importing a module script failed|dynamically imported module|is not a valid javascript mime type/i
 
 /** A query that failed, with Retry (a page reload when there's no query to retry). */
 export function ErrorNotice({ error, onRetry }: { error: Error; onRetry?: () => void }) {

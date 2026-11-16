@@ -8,8 +8,14 @@
 // right after it.
 import type { ComponentType } from 'react'
 
-/** What browsers say when a module's file didn't load (Chrome, Firefox, Safari), and Vite's preload of its CSS. */
-const MISSING_CODE = /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|unable to preload css/i
+/**
+ * What browsers say when a module's file didn't load, and Vite's preload of its
+ * CSS. Chrome and Firefox say the same whatever came back. Safari (every iPhone
+ * browser) says "Importing a module script failed." for a 404 or no answer, and
+ * for the site's index.html in the file's place, which is how Netlify answers a
+ * file a deploy removed: "'text/html' is not a valid JavaScript MIME type."
+ */
+const MISSING_CODE = /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|is not a valid javascript mime type|unable to preload css/i
 
 export function isMissingCode(error: unknown): boolean {
   return MISSING_CODE.test(error instanceof Error ? error.message : String(error))
@@ -46,8 +52,18 @@ const browserReloader: Reloader = {
       // Nowhere to remember it, so no way to stop a loop: the error shows, and Retry reloads.
       return false
     }
-    if (href) window.location.assign(href)
-    else window.location.reload()
+    if (href) {
+      // Back may bring this old app out of the browser's back/forward cache,
+      // its navigation still loading (Safari keeps it there): it loads afresh instead.
+      window.addEventListener(
+        'pageshow',
+        (event) => {
+          if (event.persisted) window.location.reload()
+        },
+        { once: true },
+      )
+      window.location.assign(href)
+    } else window.location.reload()
     return true
   },
 }
