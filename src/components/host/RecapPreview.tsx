@@ -27,6 +27,7 @@ import {
   type TvPeekSlide,
 } from '@/components/host/recapView'
 import YourNight from '@/components/phone/YourNight'
+import { PLACE_TONES } from '@/components/placeTones'
 import { numberTiles, raceFrames, shownLeadChanges } from '@/components/tv/recapSlides'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -210,7 +211,8 @@ function TvPeek({ doc, note }: { doc: RecapDoc; note: string }) {
 }
 
 const MINI_BARS = ['bg-primary', 'bg-confetti-pink', 'bg-confetti-teal', 'bg-confetti-violet']
-const PEDESTALS = ['h-[14cqw] from-primary/50', 'h-[10cqw] from-paper/30', 'h-[7cqw] from-paper-2/40']
+/** The steps' heights; their colours are the place tones (src/components/placeTones.ts). */
+const PEDESTALS = ['h-[14cqw]', 'h-[10cqw]', 'h-[7cqw]']
 
 /**
  * A slide in miniature: the same parts as the TV draws. Sizes are in cqw (a
@@ -311,7 +313,7 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
               <div key={top[i].playerId} className="flex w-[17cqw] flex-col items-center">
                 {places[i].place === 1 && <CrownIcon weight="fill" className="size-[5cqw] text-primary" />}
                 <Avatar name={top[i].name} className={cn(places[i].step === 0 ? 'size-[10cqw] text-[4cqw]' : 'size-[8cqw] text-[3.5cqw]')} />
-                <span className={cn('mt-[1.5cqw] w-full rounded-t-[1.5cqw] bg-linear-to-b to-transparent', PEDESTALS[places[i].step])} />
+                <span className={cn('mt-[1.5cqw] w-full rounded-t-[1.5cqw] bg-linear-to-b to-transparent', PEDESTALS[places[i].step], PLACE_TONES[places[i].step].step)} />
               </div>
             ))}
           </div>

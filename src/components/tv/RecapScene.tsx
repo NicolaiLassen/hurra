@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import AnnouncementIconView from '@/components/AnnouncementIconView'
 import Avatar from '@/components/Avatar'
 import Logo from '@/components/Logo'
+import { placeTone } from '@/components/placeTones'
 import { CARD } from '@/components/tv/look'
 import { Eyebrow } from '@/components/tv/parts'
 import {
@@ -359,10 +360,11 @@ function LeadsSlide({ doc }: { doc: RecapDoc }) {
 
 // Left to right: 2nd, 1st, 3rd.
 const PODIUM_SLOTS = [1, 0, 2]
+// In the place tones (src/components/placeTones.ts).
 const PODIUM_STEPS = [
-  { avatar: 'size-36 text-5xl ring-[6px] ring-primary short:size-28 short:text-4xl', pedestal: 'h-56 from-primary/45 short:h-36', points: 'text-primary' },
-  { avatar: 'size-28 text-4xl ring-4 ring-paper/80 short:size-20 short:text-3xl', pedestal: 'h-40 from-paper/25 short:h-24', points: 'text-paper' },
-  { avatar: 'size-28 text-4xl ring-4 ring-paper-2/80 short:size-20 short:text-3xl', pedestal: 'h-28 from-paper-2/30 short:h-16', points: 'text-paper-2' },
+  { avatar: 'size-36 text-5xl ring-[6px] short:size-28 short:text-4xl', pedestal: 'h-56 short:h-36' },
+  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-40 short:h-24' },
+  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-28 short:h-16' },
 ]
 
 /** The recaps whose podium has cheered on this TV: a fanfare once per version, not on every loop. */
@@ -399,6 +401,7 @@ function PodiumSlide({ doc }: { doc: RecapDoc }) {
           const row = top[slot]
           const place = rank.get(row.playerId) ?? slot + 1
           const step = PODIUM_STEPS[Math.min(place, 3) - 1]
+          const tone = placeTone(place)
           return (
             <motion.div
               key={row.playerId}
@@ -410,11 +413,11 @@ function PodiumSlide({ doc }: { doc: RecapDoc }) {
               {place === 1 && (
                 <CrownIcon weight="fill" className="mb-2 size-14 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:size-10" />
               )}
-              <Avatar name={row.name} className={step.avatar} />
+              <Avatar name={row.name} className={cn(step.avatar, tone.ring)} />
               <p className="mt-3 w-full truncate text-center text-3xl font-bold short:mt-2 short:text-2xl">{row.name}</p>
-              <p className={cn('text-4xl font-black tabular-nums short:text-3xl', step.points)}>{row.points}</p>
-              <div className={cn('mt-3 grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent', step.pedestal)}>
-                <span className={cn('text-6xl font-black opacity-70 short:text-4xl', step.points)}>{place}</span>
+              <p className={cn('text-4xl font-black tabular-nums short:text-3xl', tone.text)}>{row.points}</p>
+              <div className={cn('mt-3 grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent', step.pedestal, tone.step)}>
+                <span className={cn('text-6xl font-black opacity-70 short:text-4xl', tone.text)}>{place}</span>
               </div>
             </motion.div>
           )

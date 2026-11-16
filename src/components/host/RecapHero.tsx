@@ -12,6 +12,7 @@ import {
 import type { CSSProperties, ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { formatCount, nightHeadline, ordinal, podiumPlaces } from '@/components/host/recapView'
+import { PLACE_TONES } from '@/components/placeTones'
 import { numberTiles, type NumberTile } from '@/components/tv/recapSlides'
 import type { RecapDoc } from '@/lib/recap'
 import { cn } from '@/lib/utils'
@@ -86,10 +87,11 @@ export default function RecapHero({ doc, partyName, children }: { doc: RecapDoc 
 
 // The list is in place order, for screen readers; on screen, left to right: 2nd, 1st, 3rd.
 const ORDER = ['order-2', 'order-1', 'order-3']
+// In the place tones (src/components/placeTones.ts).
 const STEPS = [
-  { avatar: 'size-16 text-xl ring-4 ring-primary', pedestal: 'h-20 from-primary/45', points: 'text-primary' },
-  { avatar: 'size-12 text-base ring-[3px] ring-paper/80', pedestal: 'h-14 from-paper/25', points: 'text-paper' },
-  { avatar: 'size-12 text-base ring-[3px] ring-paper-2/80', pedestal: 'h-10 from-paper-2/30', points: 'text-paper-2' },
+  { avatar: 'size-16 text-xl ring-4', pedestal: 'h-20' },
+  { avatar: 'size-12 text-base ring-[3px]', pedestal: 'h-14' },
+  { avatar: 'size-12 text-base ring-[3px]', pedestal: 'h-10' },
 ]
 
 /**
@@ -111,6 +113,7 @@ function Podium({ doc }: { doc: RecapDoc }) {
       {places.map((guest, slot) => {
         const { row, place } = guest
         const step = STEPS[guest.step]
+        const tone = PLACE_TONES[guest.step]
         return (
           <li
             key={row.playerId}
@@ -131,14 +134,14 @@ function Podium({ doc }: { doc: RecapDoc }) {
                 <CrownIcon weight="fill" className="mb-1 size-8 text-primary drop-shadow-[0_0_14px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]" />
               </span>
             )}
-            <Avatar name={row.name} className={step.avatar} />
+            <Avatar name={row.name} className={cn(step.avatar, tone.ring)} />
             <p className="mt-2 w-full truncate text-center text-sm font-semibold">{row.name}</p>
-            <p className={cn('text-lg leading-tight font-black', step.points)}>
+            <p className={cn('text-lg leading-tight font-black', tone.text)}>
               {formatCount(row.points)}
               <span className="sr-only">{row.points === 1 ? ' point' : ' points'}</span>
             </p>
-            <div className={cn('mt-2 grid w-full place-items-center rounded-t-xl bg-linear-to-b to-transparent', step.pedestal)}>
-              <span aria-hidden className={cn('text-2xl font-black opacity-70', step.points)}>
+            <div className={cn('mt-2 grid w-full place-items-center rounded-t-xl bg-linear-to-b to-transparent', step.pedestal, tone.step)}>
+              <span aria-hidden className={cn('text-2xl font-black opacity-70', tone.text)}>
                 {place}
               </span>
             </div>

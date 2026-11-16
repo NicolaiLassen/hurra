@@ -1,29 +1,18 @@
 import { CrownIcon, TrophyIcon } from '@phosphor-icons/react'
 import { motion, useReducedMotion } from 'motion/react'
 import Avatar from '@/components/Avatar'
+import { placeTone } from '@/components/placeTones'
 import { formatNumber, joinNames, type QuizPublicState } from '@/games/quiz/logic'
 import type { Player, SessionGame } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const spring = { type: 'spring', stiffness: 220, damping: 22 } as const
 
-// By rank (ties share a step): gold for the leader, then paper and paper-2.
+// By rank (ties share a step), in the place tones (src/components/placeTones.ts).
 const STEPS = [
-  {
-    avatar: 'size-36 text-5xl ring-[6px] ring-primary short:size-28 short:text-4xl',
-    pedestal: 'h-52 from-primary/45 short:h-32',
-    points: 'text-primary',
-  },
-  {
-    avatar: 'size-28 text-4xl ring-4 ring-paper/80 short:size-20 short:text-3xl',
-    pedestal: 'h-36 from-paper/25 short:h-20',
-    points: 'text-paper',
-  },
-  {
-    avatar: 'size-28 text-4xl ring-4 ring-paper-2/80 short:size-20 short:text-3xl',
-    pedestal: 'h-24 from-paper-2/30 short:h-14',
-    points: 'text-paper-2',
-  },
+  { avatar: 'size-36 text-5xl ring-[6px] short:size-28 short:text-4xl', pedestal: 'h-52 short:h-32' },
+  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-36 short:h-20' },
+  { avatar: 'size-28 text-4xl ring-4 short:size-20 short:text-3xl', pedestal: 'h-24 short:h-14' },
 ]
 // Left to right: the second row, the first, the third.
 const SLOTS = [1, 0, 2]
@@ -78,6 +67,7 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
         {SLOTS.filter((slot) => slot < top.length).map((slot) => {
           const row = top[slot]
           const step = STEPS[Math.min(row.rank, 3) - 1]
+          const tone = placeTone(row.rank)
           return (
             <motion.div
               key={row.playerId}
@@ -92,11 +82,11 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
                   className="mb-2 size-14 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)] short:size-10"
                 />
               )}
-              <Avatar name={nameOf(row.playerId)} className={step.avatar} />
+              <Avatar name={nameOf(row.playerId)} className={cn(step.avatar, tone.ring)} />
               <p className="mt-3 w-full truncate text-center text-3xl font-bold short:mt-2 short:text-2xl">{nameOf(row.playerId)}</p>
-              <p className={cn('text-4xl font-black short:text-3xl', step.points)}>{formatNumber(row.points)}</p>
-              <div className={cn('mt-3 grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent', step.pedestal)}>
-                <span className={cn('text-6xl font-black opacity-70 short:text-4xl', step.points)}>{row.rank}</span>
+              <p className={cn('text-4xl font-black short:text-3xl', tone.text)}>{formatNumber(row.points)}</p>
+              <div className={cn('mt-3 grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent', step.pedestal, tone.step)}>
+                <span className={cn('text-6xl font-black opacity-70 short:text-4xl', tone.text)}>{row.rank}</span>
               </div>
             </motion.div>
           )

@@ -2,6 +2,7 @@ import { CrownIcon } from '@phosphor-icons/react'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import type { ReactNode, Ref } from 'react'
 import Avatar from '@/components/Avatar'
+import { placeTone } from '@/components/placeTones'
 import ProfileBadges from '@/components/ProfileBadges'
 import Qr from '@/components/Qr'
 import { BADGES_MIN_WIDTH, boardTier, COLUMN_GAP, rowLayout, rowLayoutsFor, type BoardTier, type RowLayout } from '@/components/tv/fit'
@@ -138,12 +139,6 @@ const PODIUM_SIZE: Record<BoardTier, PodiumSize> = { few: 'hero', small: 'roomy'
 
 // Left to right: 2nd, 1st, 3rd.
 const PODIUM_SLOTS = [1, 0, 2]
-/** Gold for the leader, then paper and paper-2: the steps are told apart by value. */
-const PLACE_TONE = [
-  { ring: 'ring-primary', points: 'text-primary', pedestal: 'from-primary/40' },
-  { ring: 'ring-paper/80', points: 'text-paper', pedestal: 'from-paper/25' },
-  { ring: 'ring-paper-2/80', points: 'text-paper-2', pedestal: 'from-paper-2/30' },
-]
 
 /** A podium size: first place first in `avatars` and `pedestals`, with `short:` for 1440 by 900. */
 type PodiumLook = {
@@ -256,7 +251,7 @@ function Podium({
       {PODIUM_SLOTS.filter((slot) => slot < rows.length).map((slot) => {
         const row = rows[slot]
         // Ties share a place: a guest level with the leader is gold and crowned on any step.
-        const tone = PLACE_TONE[Math.min(row.rank, 3) - 1]
+        const tone = placeTone(row.rank)
         return (
           <div key={slot} data-fit="podium" className={cn('flex min-w-0 flex-col items-center', step)}>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -276,7 +271,7 @@ function Podium({
                   <GainBubble gain={gains[row.player_id]} className="-top-2 -right-8" />
                 </div>
                 <p className={cn('w-full truncate text-center font-bold', look.name)}>{row.name}</p>
-                <Points value={row.points} className={cn('font-black', look.points, tone.points)} />
+                <Points value={row.points} className={cn('font-black', look.points, tone.text)} />
                 <ProfileBadges profile={row.profile} size="lg" className={cn('justify-center', look.badges)} />
               </motion.div>
             </AnimatePresence>
@@ -285,10 +280,10 @@ function Podium({
                 'grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent',
                 look.floor,
                 look.pedestals[slot],
-                tone.pedestal,
+                tone.step,
               )}
             >
-              <span className={cn('font-black opacity-70', look.rank, tone.points)}>{row.rank}</span>
+              <span className={cn('font-black opacity-70', look.rank, tone.text)}>{row.rank}</span>
             </div>
           </div>
         )
