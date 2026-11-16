@@ -142,7 +142,8 @@
 /* The app is dark-only (index.html sets class="dark"). The shadcn slots keep
    their @theme inline mapping; their values point at the brand's tokens, so a
    token changed above changes them too. The old names stay as aliases until
-   the last screen has moved. */
+   the last screen has moved. A menu is overlay, so its highlighted item
+   (accent) is the rule step above it. */
 :root {
   --background: var(--color-ground); --foreground: var(--color-paper);
   --card: var(--color-raised); --card-foreground: var(--color-paper);
@@ -150,7 +151,7 @@
   --primary: var(--color-gold); --primary-foreground: var(--color-ink);
   --secondary: var(--color-overlay); --secondary-foreground: var(--color-paper);
   --muted: var(--color-raised); --muted-foreground: var(--color-paper-2);
-  --accent: var(--color-overlay); --accent-foreground: var(--color-paper);
+  --accent: var(--color-rule); --accent-foreground: var(--color-paper);
   --destructive: var(--color-danger);
   --border: var(--color-rule); --input: var(--color-rule); --ring: var(--color-gold);
   --radius: 0.5rem;

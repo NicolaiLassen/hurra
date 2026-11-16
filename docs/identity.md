@@ -41,7 +41,7 @@ by hairlines: no glass (transparency or blur) and no ring around a panel.
 | `ground` | `#14110e` | Every page, the TV's backdrop |
 | `raised` | `#1e1a16` | The band, the host header and panels, cards, the TV's cards |
 | `overlay` | `#29241e` | Answer tiles, secondary buttons, menus, fields |
-| `rule` | `#3a332a` | The only line colour: quiet buttons, empty pips, field borders |
+| `rule` | `#3a332a` | The only line colour: quiet buttons, empty pips, field borders; and a menu's highlighted item |
 
 ## Text
 
@@ -200,7 +200,8 @@ screen has moved.
 | --- | --- |
 | `background` | `ground` |
 | `card`, `muted` | `raised` |
-| `popover`, `secondary`, `accent` | `overlay` |
+| `popover`, `secondary` | `overlay` |
+| `accent` | `rule` (a menu's highlighted item) |
 | `border`, `input` | `rule` |
 | `foreground`, `card-foreground`, `popover-foreground`, `secondary-foreground`, `accent-foreground` | `paper` |
 | `muted-foreground` | `paper-2` |
