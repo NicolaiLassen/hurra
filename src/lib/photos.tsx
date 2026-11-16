@@ -118,14 +118,14 @@ export function PlayerPhotosProvider({ players, children }: { players: readonly 
   return <PhotosContext.Provider value={value}>{children}</PhotosContext.Provider>
 }
 
-/** What a phone says when a photo couldn't be saved (6.1, 6.2). */
-export function photoErrorMessage(error: unknown): string {
+/** What a phone says when a photo couldn't be saved, or removed (6.1, 6.2). */
+export function photoErrorMessage(error: unknown, action: 'save' | 'remove' = 'save'): string {
   if (error instanceof Error && error.message === UNREADABLE_PHOTO) return UNREADABLE_PHOTO
   if (error instanceof GameCallError) {
-    if (error.status === 0) return "Couldn't save your photo. Check your connection and try again."
+    if (error.status === 0) return `Couldn't ${action} your photo. Check your connection and try again.`
     if (error.status === 413) return 'That photo is too big. Try another one.'
     if (error.code === 'too_soon') return 'Wait a moment, then try again.'
     if (error.code === 'archived') return 'This party is over'
   }
-  return "Couldn't save your photo. Try again."
+  return `Couldn't ${action} your photo. Try again.`
 }

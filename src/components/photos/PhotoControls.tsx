@@ -106,9 +106,9 @@ export function usePhotoSave(player: Pick<PlayerRow, 'id' | 'session_id'>, onCha
       busy.current = false
     }
   }
-  function failed(error: unknown, retry: Prepared | null): false {
+  function failed(error: unknown, retry: Prepared | null, action: 'save' | 'remove' = 'save'): false {
     const shown = retry?.url ?? saved.current
-    const message = photoErrorMessage(error)
+    const message = photoErrorMessage(error, action)
     setState((s) => ({ ...s, status: 'failed', preview: shown, error: message, canRetry: retry !== null }))
     return false
   }
@@ -166,7 +166,7 @@ export function usePhotoSave(player: Pick<PlayerRow, 'id' | 'session_id'>, onCha
       try {
         await removeMyPhoto(player)
       } catch (error) {
-        return failed(error, null)
+        return failed(error, null, 'remove')
       }
       revoke(saved.current)
       saved.current = null

@@ -157,6 +157,15 @@ describe('photoErrorMessage', () => {
     expect(photoErrorMessage(new Error('Something else'))).toBe(generic)
     expect(photoErrorMessage('a string')).toBe(generic)
   })
+
+  it('a removal that failed says remove, not save', () => {
+    const lost = new GameCallError("Couldn't reach the party. Check your connection and try again.", 0, 'unavailable')
+    expect(photoErrorMessage(lost, 'remove')).toBe("Couldn't remove your photo. Check your connection and try again.")
+    expect(photoErrorMessage(new GameCallError("That isn't your player", 403, 'not_your_player'), 'remove')).toBe(
+      "Couldn't remove your photo. Try again.",
+    )
+    expect(photoErrorMessage(new Error('Something else'), 'remove')).toBe("Couldn't remove your photo. Try again.")
+  })
 })
 
 describe('PlayerPhotosProvider', () => {
