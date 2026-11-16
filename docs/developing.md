@@ -24,8 +24,8 @@ screen connects, for guests, the host and the TV, is in
   bold by default via `IconContext` in [src/main.tsx](../src/main.tsx)). The
   TV animates with `motion`, loaded only on the TV page and the games' TV
   screens, so phones never download it; only its `MotionConfig`, which makes
-  every animation follow the device's reduced motion setting, wraps the whole
-  app. The app icon is
+  every motion animation follow the device's reduced motion setting, wraps the
+  whole app (a CSS animation carries its own `motion-reduce:` classes). The app icon is
   [public/favicon.svg](../public/favicon.svg); the PNGs next to it are rendered from it.
 - **Sound:** phones and the TV download their sounds when they open and decode
   them into memory with the Web Audio API

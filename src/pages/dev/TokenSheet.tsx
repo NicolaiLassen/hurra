@@ -1,11 +1,11 @@
 // Dev builds only: router.tsx adds /dev/tokens under import.meta.env.DEV, so a
 // production build has neither the route nor this file. The token sheet,
 // docs/identity.md's acceptance test: the fixtures' 24 guests with the real
-// Avatar at the sizes the screens use (38 px in the TV's field, 64 px in the
-// top five and on the podium, 120 and 200 px as heroes), with and without a
-// photo, in and knocked out. The photos are the dev builds'
-// drawn faces, found the way every screen finds one: by name, through the
-// party's photo index.
+// Avatar at the sizes the screens use (24 to 32 px in lists and rows, 38 px
+// in the TV's field, 64 px in the top five and on the podium, 120 and 200 px
+// as heroes), with and without a photo, in and knocked out. The photos are the
+// dev builds' drawn faces, found the way every screen finds one: by name,
+// through the party's photo index.
 import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { devTv } from '@/components/tv/devFixture'
@@ -58,6 +58,15 @@ export default function TokenSheet() {
             <Token key={name} name={name} size="size-[38px]" photo={hasPhoto(i)} out={fieldOut(i)} />
           ))}
         </Row>
+
+        <Label note="phone and host lists, the board's rows; where the stripe is thinnest">Lists, 24, 28 and 32 px</Label>
+        {['size-6', 'size-7', 'size-8'].map((size) => (
+          <Row key={size}>
+            {GUESTS.slice(0, 12).map((name, i) => (
+              <Token key={name} name={name} size={size} photo={hasPhoto(i)} out={i >= 8} />
+            ))}
+          </Row>
+        ))}
 
         <Label>TV top five and the podium, 64 px</Label>
         <Row>
