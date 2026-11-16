@@ -18,6 +18,7 @@ import {
   nightAwards,
   nightHeadline,
   ordinal,
+  podiumPlaces,
   RACE_COLORS,
   raceSeries,
   recapScreen,
@@ -226,6 +227,32 @@ describe('nightHeadline', () => {
   it('waits for the first points', () => {
     expect(nightHeadline(nightOf({ Ana: 0, Bo: 0 })).title).toBe('The night is young')
     expect(nightHeadline(nightOf({ Ana: 0 }, [chapter('Quiz', [], [], false)])).line).toBe('Nobody has scored yet.')
+  })
+})
+
+describe('podiumPlaces', () => {
+  const placed = (doc: RecapDoc) => podiumPlaces(doc).map((p) => [p.row.name, p.place, p.step])
+
+  it('puts the top three on the first, second and third steps, in place order', () => {
+    expect(placed(nightOf({ Ana: 18, Bo: 12, Cy: 5, Dee: 1 }))).toEqual([
+      ['Ana', 1, 0],
+      ['Bo', 2, 1],
+      ['Cy', 3, 2],
+    ])
+  })
+
+  it('crowns everyone tied first on the top step, as the TV does, and shares the second step in a tie for second', () => {
+    expect(placed(fixtureRecapDoc())).toEqual([
+      ['Bo', 1, 0],
+      ['Freja', 1, 0],
+      ['Maja', 1, 0],
+    ])
+    expect(placed(nightOf({ Ana: 18, Bo: 12, Cy: 12 }))).toEqual([
+      ['Ana', 1, 0],
+      ['Bo', 2, 1],
+      ['Cy', 2, 1],
+    ])
+    expect(podiumPlaces(nightOf({ Ana: 0 }))).toEqual([])
   })
 })
 

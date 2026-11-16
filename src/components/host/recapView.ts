@@ -231,6 +231,22 @@ export function nightLeaders(doc: Pick<RecapDoc, 'standings'>): RecapDoc['standi
   return doc.standings.filter((row) => row.rank === 1 && row.points > 0)
 }
 
+/** A guest on the podium: their place in the standings, and their step (0 is the top one). */
+export type PodiumPlace = { row: RecapDoc['podium'][number]; place: number; step: number }
+
+/**
+ * The top three in place order, as the TV's last slide has them: the place
+ * comes from the standings, so everyone tied first is crowned on the top step,
+ * and a tie for second shares the second step.
+ */
+export function podiumPlaces(doc: Pick<RecapDoc, 'podium' | 'standings'>): PodiumPlace[] {
+  const rank = new Map(doc.standings.map((row) => [row.playerId, row.rank]))
+  return doc.podium.slice(0, 3).map((row, i) => {
+    const place = rank.get(row.playerId) ?? i + 1
+    return { row, place, step: Math.min(place, 3) - 1 }
+  })
+}
+
 /** The hero's headline and the line under it. Present tense while a round still runs. */
 export function nightHeadline(doc: Pick<RecapDoc, 'standings' | 'chapters'>): { title: string; line: string } {
   const leaders = nightLeaders(doc)

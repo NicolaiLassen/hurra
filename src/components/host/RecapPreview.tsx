@@ -20,6 +20,7 @@ import {
   formatCount,
   gameTones,
   nightAwards,
+  podiumPlaces,
   timeSpan,
   TONE_TEXT,
   tvPeek,
@@ -297,6 +298,8 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
     }
     case 'podium': {
       const top = doc.podium.slice(0, 3)
+      // Place and step from the standings, as the TV has them: everyone tied first is crowned.
+      const places = podiumPlaces(doc)
       const order = [1, 0, 2].filter((i) => i < top.length)
       body = (
         <div className="grid h-full grid-rows-[auto_1fr] px-[6cqw] pt-[5cqw]">
@@ -306,9 +309,9 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
           <div className="flex items-end justify-center gap-[3cqw]">
             {order.map((i) => (
               <div key={top[i].playerId} className="flex w-[17cqw] flex-col items-center">
-                {i === 0 && <CrownIcon weight="fill" className="size-[5cqw] text-primary" />}
-                <Avatar name={top[i].name} className={cn(i === 0 ? 'size-[10cqw] text-[4cqw]' : 'size-[8cqw] text-[3.5cqw]')} />
-                <span className={cn('mt-[1.5cqw] w-full rounded-t-[1.5cqw] bg-linear-to-b to-transparent', PEDESTALS[i])} />
+                {places[i].place === 1 && <CrownIcon weight="fill" className="size-[5cqw] text-primary" />}
+                <Avatar name={top[i].name} className={cn(places[i].step === 0 ? 'size-[10cqw] text-[4cqw]' : 'size-[8cqw] text-[3.5cqw]')} />
+                <span className={cn('mt-[1.5cqw] w-full rounded-t-[1.5cqw] bg-linear-to-b to-transparent', PEDESTALS[places[i].step])} />
               </div>
             ))}
           </div>
