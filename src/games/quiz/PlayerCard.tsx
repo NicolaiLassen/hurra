@@ -1,20 +1,23 @@
-import { CaretRightIcon, QuestionIcon } from '@phosphor-icons/react'
-import { Badge } from '@/components/ui/badge'
+import { CaretRightIcon } from '@phosphor-icons/react'
+import { useId } from 'react'
+import { ordinal } from '@/components/phone/text'
+import { SectionHead } from '@/components/phone/Strap'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { useServerTime } from '@/games/quiz/clock'
 import { formatNumber, type QuizGame } from '@/games/quiz/logic'
 import { letterOf } from '@/games/quiz/look'
-import { SecondsLeft } from '@/games/quiz/parts'
+import { TimeLeft } from '@/games/quiz/phoneParts'
 import { choiceIndex, readPublic, readView } from '@/games/quiz/read'
 import type { PlayerCardProps } from '@/games/types'
 
 /**
- * The quiz while another game holds the phone's main card: what is happening
- * in one line, and an Answer now button while a question is open. A whole
- * card, title and Live badge included; tapping the header opens the full view.
+ * The quiz's section on the phone home while another game holds the main
+ * card: its tab (gold while the TV shows it), what is happening in one line
+ * on a row that opens the full view, and an outlined Answer now while a
+ * question is open. Show my code stays the home's one gold step.
  */
-export default function PlayerCard({ game, publicState, view: rawView, myAnswers, prompts, serverNow, open }: PlayerCardProps<QuizGame>) {
+export default function PlayerCard({ game, publicState, view: rawView, myAnswers, prompts, serverNow, onStage, open }: PlayerCardProps<QuizGame>) {
+  const id = useId()
   const pub = readPublic(publicState)
   const view = readView(rawView)
   const question = pub?.phase === 'question' ? pub.question : null
@@ -30,38 +33,28 @@ export default function PlayerCard({ game, publicState, view: rawView, myAnswers
   else if (pub.phase === 'question') {
     status = mine !== null ? `Locked in: ${letterOf(mine)}` : answerable ? `Question ${pub.index + 1} of ${pub.total} is open` : "Time's up"
   } else if (pub.phase === 'reveal' && last) {
-    status = last.points > 0 ? `Right! +${formatNumber(last.points)}` : `Not this time. It was ${letterOf(last.correct)}.`
+    status = last.points > 0 ? `You got it, +${formatNumber(last.points)}` : `Not this time. It was ${letterOf(last.correct)}.`
   } else if (pub.phase === 'done') status = 'The quiz is over'
-  else status = view?.rank ? `You're #${view.rank} with ${formatNumber(view.quizPoints)}` : 'Waiting for the next question'
+  else status = view?.rank ? `You're ${ordinal(view.rank)}, with ${formatNumber(view.quizPoints)}` : 'Waiting for the next question'
 
   return (
-    <Card>
-      <CardContent className="grid grid-cols-1 gap-4">
-        <button
-          type="button"
-          onClick={open}
-          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-overlay/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <span className="sr-only">Open</span>
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
-            <QuestionIcon weight="duotone" className="size-6" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <span className="truncate text-lg leading-tight font-bold">{game.title}</span>
-              <Badge className="shrink-0">Live</Badge>
-            </span>
-            <span className="block truncate text-sm text-muted-foreground">{status}</span>
-          </span>
-          <CaretRightIcon className="size-5 shrink-0 text-muted-foreground" />
-        </button>
-        {answerable && question && (
-          <Button size="xl" className="w-full" onClick={open}>
-            Answer now
-            <SecondsLeft endsAt={question.endsAt} serverNow={serverNow} suffix=" s" className="text-primary-foreground" />
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+    <section aria-labelledby={id} className="grid grid-cols-1 gap-3">
+      <SectionHead id={id} tab={game.title} tone={onStage ? 'air' : 'plain'} />
+      <button
+        type="button"
+        onClick={open}
+        className="flex min-h-14 w-full items-center gap-3 rounded-phone bg-overlay px-4 py-2.5 text-left transition-colors hover:bg-rule focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none"
+      >
+        <span className="min-w-0 flex-1 truncate text-[17px] font-bold">{status}</span>
+        <span className="sr-only">Open</span>
+        <CaretRightIcon className="size-5 shrink-0 text-paper-2" />
+      </button>
+      {answerable && question && (
+        <Button size="xl" variant="outline" className="w-full justify-between" onClick={open}>
+          Answer now
+          <TimeLeft endsAt={question.endsAt} serverNow={serverNow} />
+        </Button>
+      )}
+    </section>
   )
 }

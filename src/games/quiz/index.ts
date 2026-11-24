@@ -4,6 +4,7 @@ import HostView from '@/games/quiz/HostView'
 import { QuizGame, type QuizProfile } from '@/games/quiz/logic'
 import PlayerCard from '@/games/quiz/PlayerCard'
 import PlayerView from '@/games/quiz/PlayerView'
+import { readPublic } from '@/games/quiz/read'
 import ResultView from '@/games/quiz/ResultView'
 import TvStatus from '@/games/quiz/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
@@ -24,6 +25,14 @@ export const quiz = defineGameModule({
   ConfigEditor,
   // The TV view shows each moment itself, so its announcements only sound there.
   stageBanners: 'sound-only',
+  // The phone's strap over the quiz: which question it is on.
+  phoneStrap: (publicState) => {
+    const pub = readPublic(publicState)
+    if (!pub || pub.index < 0) return null
+    if (pub.phase === 'question' || pub.phase === 'reveal') return `Question ${pub.index + 1} of ${pub.total}`
+    if (pub.phase === 'leaderboard') return `After question ${pub.index + 1} of ${pub.total}`
+    return null
+  },
   profileBadges: (data) => {
     const { wins = 0 } = data as QuizProfile
     const badges: ProfileBadge[] = []

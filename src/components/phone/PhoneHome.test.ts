@@ -21,20 +21,30 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 
 const ENTITIES: Record<string, string> = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' }
 
-/** The text of some static HTML, one space between elements. */
-async function textOf(tree: ReactElement): Promise<string> {
+/** Some static HTML. */
+async function markupOf(tree: ReactElement): Promise<string> {
   const errors: unknown[] = []
   const { prelude } = await prerender(tree, { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
-  const html = await new Response(prelude).text()
-  return html
+  return new Response(prelude).text()
+}
+
+/** Plain text from markup, one space between elements. */
+const plain = (html: string) =>
+  html
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#x27;|&quot;|&amp;|&lt;|&gt;|&nbsp;/g, (entity) => ENTITIES[entity])
     .replace(/\s+/g, ' ')
-}
+
+/** The text of some static HTML, one space between elements. */
+const textOf = async (tree: ReactElement) => plain(await markupOf(tree))
 
 /** The phone home over a fixture scene (or any snapshot), as Sofie's phone shows it. */
 async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
+  return plain(await phoneMarkup(scene, url, recap))
+}
+
+async function phoneMarkup(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
   const lobby = fixtureSnapshot('lobby', 'phone')
   const home = createElement(PhoneHome, {
     party: lobby.session!,
@@ -48,7 +58,7 @@ async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', reca
     fixture: typeof scene === 'string' ? fixtureSnapshot(scene, 'phone') : scene,
     children: home,
   })
-  return textOf(createElement(MemoryRouter, { initialEntries: [url] }, createElement(FixtureMode.Provider, { value: true }, live)))
+  return markupOf(createElement(MemoryRouter, { initialEntries: [url] }, createElement(FixtureMode.Provider, { value: true }, live)))
 }
 
 describe('the phone home', () => {
@@ -61,11 +71,20 @@ describe('the phone home', () => {
     expect(text).not.toContain('Also running')
   })
 
-  it('a quiz question on the TV: the main card says so and shows the question to answer', async () => {
-    const text = await phone('quiz-question')
-    expect(text).toContain('Quiz On the TV')
-    expect(text).toContain('What is the capital of Denmark?')
-    expect(text).toContain('Copenhagen')
+  it('a quiz question on the TV: letters only, with the question number on the strap', async () => {
+    const html = await phoneMarkup('quiz-question')
+    const text = plain(html)
+    // The quiz's own strap words (phoneStrap), where the strap said "On the TV" before it had them.
+    expect(text).toContain('Quiz Question 3 of 10')
+    expect(text).toContain('The question is on the TV.')
+    // The quiz opens its prompts with `final`, so the first tap counts, and the phone says so.
+    expect(text).toContain('Tap the letter of your answer. Your first tap counts.')
+    expect(text).toContain('Show the answers here')
+    // The question and the answers stay on the TV until this phone asks for them.
+    expect(text).not.toContain('What is the capital of Denmark?')
+    expect(text).not.toContain('Copenhagen')
+    // Four tiles, named by their letters.
+    expect([...html.matchAll(/data-answer-tile="" aria-label="([A-D])"/g)].map(([, letter]) => letter)).toEqual(['A', 'B', 'C', 'D'])
     expect(text).not.toContain('Locked in')
     // The code bar steps aside while the timed question is open, so it covers no answer.
     expect(text).not.toContain('Show my code')
@@ -73,9 +92,12 @@ describe('the phone home', () => {
 
   it('the quiz reveal and leaderboard stay on the main card, with the code bar back', async () => {
     const reveal = await phone('quiz-reveal')
-    expect(reveal).toContain('Quiz On the TV')
+    expect(reveal).toContain('Quiz Question 3 of 10')
+    // Sofie picked Copenhagen: right, in words and with no exclamation mark.
+    expect(reveal).toContain('You got it.')
+    expect(reveal).not.toContain('!')
     expect(reveal).toContain('Show my code')
-    expect(await phone('quiz-leaderboard')).toContain('Leaderboard after question 3 of 10')
+    expect(await phone('quiz-leaderboard')).toContain('Quiz After question 3 of 10')
   })
 
   it('fusion voting off the TV is "Now playing"; locked on the TV is "On the TV"', async () => {
@@ -96,7 +118,7 @@ describe('the phone home', () => {
 
   it('several games: the stage game is main, the background games are compact cards', async () => {
     const text = await phone('background')
-    expect(text).toContain('Quiz On the TV')
+    expect(text).toContain('Quiz Question 3 of 10')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
     expect(text).toContain('Last one standing')
