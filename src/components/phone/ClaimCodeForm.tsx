@@ -43,7 +43,7 @@ export default function ClaimCodeForm({
         here && player.session_id === here.id ? here.join_code : (await getPlayerByCode(player.code))?.session.join_code
       if (!joinCode) throw new Error("Your player is on this phone now, but its party didn't load. Open the party's join link.")
       rememberJoinCode(joinCode)
-      toast.success(`Welcome back, ${player.name}!`, { description: 'Your points came with you.' })
+      toast.success(`Welcome back, ${player.name}.`, { description: 'Your points came with you.' })
       navigate(`/play/${joinCode}`, { replace: true })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))

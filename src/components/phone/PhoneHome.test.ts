@@ -1,9 +1,9 @@
 // The phone home over every fixture scene (src/lib/fixtures.ts, docs/engine-v2.md
-// 5.11), as Sofie's phone reads it: which card is main and what it says, the
-// compact cards of background games, the result card, "Your night", and the
-// notices for a guest who is no longer in the party. Rendered to static HTML
-// under Node: no effects run, so this checks what the page shows on its first
-// render of each snapshot.
+// 5.11), as Sofie's phone reads it: which card is main and what it says, On
+// the TV, the sections of background games, the result card, "Your night",
+// the one gold step, and the notices for a guest who is no longer in the
+// party. Rendered to static HTML under Node: no effects run, so this checks
+// what the page shows on its first render of each snapshot.
 import { createElement, type ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
 import { MemoryRouter } from 'react-router'
@@ -39,6 +39,13 @@ const plain = (html: string) =>
 
 /** The text of some static HTML, one space between elements. */
 const textOf = async (tree: ReactElement) => plain(await markupOf(tree))
+
+/** The section headings (h2) in order, as text. */
+const headings = (html: string) => [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map(([, inner]) => plain(inner).trim())
+
+/** The gold buttons (Button's default variant: the one next step on a screen), as text. */
+const goldButtons = (html: string) =>
+  [...html.matchAll(/<button data-slot="button" data-variant="default"[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
 
 /** The phone home over a fixture scene (or any snapshot), as Sofie's phone shows it. */
 async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
@@ -105,10 +112,10 @@ describe('the phone home', () => {
     expect(await phone('quiz-leaderboard')).toContain('Quiz After question 3 of 10')
   })
 
-  it('fusion voting off the TV is "Now playing"; locked on the TV is "On the TV"', async () => {
+  it('fusion voting off the TV is its own section with an outlined Vote; locked on the TV is "On the TV"', async () => {
     const voting = await phone('fusion-voting')
-    expect(voting).toContain('Who is fused? Live')
-    expect(voting).toContain('Vote on the pictures')
+    expect(voting).toContain('Who is fused? Vote on the pictures: 5 of 6 done')
+    expect(voting).not.toContain('Live')
     expect(await phone('fusion-locked')).toContain('Who is fused? On the TV')
   })
 
@@ -128,7 +135,9 @@ describe('the phone home', () => {
     expect(text).toContain('Quiz Question 3 of 10')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
-    // The quiz on the main card, then each game running underneath: fusion (started first), then Last one standing.
+    // Each game running underneath has its own section, headed by its tab: the
+    // quiz on the main card, then fusion (started first), then Last one standing.
+    expect(headings(html)).toEqual(['Quiz', 'Who is fused?', 'Last one standing'])
     expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Who is fused?'))
     expect(text.indexOf('Who is fused?')).toBeLessThan(text.indexOf('Last one standing'))
     expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Standings'))
@@ -138,6 +147,19 @@ describe('the phone home', () => {
     expect(text).toContain(`Last one standing Who is left You're still in. 8 of 12 left. Mads got Oscar at ${clockTime(latest.at)}.`)
     expect(text).toContain('Your secret task')
     expect(text).toContain('Got someone? Scan their code')
+  })
+
+  it("has one gold step at most: Show my code, never a game's button or a Live chip", async () => {
+    for (const scene of ['lobby', 'quiz-reveal', 'quiz-leaderboard', 'fusion-voting', 'final'] as const) {
+      const html = await phoneMarkup(scene)
+      expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
+      expect(html, scene).not.toMatch(/data-slot="badge" data-variant="default"/)
+    }
+    // While the quiz's timed question is open, the code bar steps aside: no gold button at all,
+    // and the hunt's Scan and fusion's Vote stay outlined.
+    const background = await phoneMarkup('background')
+    expect(goldButtons(background)).toEqual([])
+    expect(background).not.toMatch(/data-slot="badge" data-variant="default"/)
   })
 
   it('a removed guest: no longer in the party, with Join again', async () => {

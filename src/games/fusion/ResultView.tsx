@@ -5,7 +5,7 @@ import { listNames, plural, type FusionGame } from '@/games/fusion/logic'
 import { nameOf, publicOf } from '@/games/fusion/view'
 import type { ResultViewProps } from '@/games/types'
 
-/** The phone's result once fusion is over: "You have the sharpest eye!", or who did and how you did. */
+/** The phone's result once fusion is over: "You have the sharpest eye.", or who did and how you did. */
 export default function ResultView({ game, player, players, publicState, view, gamePoints }: ResultViewProps<FusionGame>) {
   const pub = publicOf(publicState)
   const winners = game.winners
@@ -18,12 +18,12 @@ export default function ResultView({ game, player, players, publicState, view, g
 
   if (won) {
     return (
-      <div className="space-y-3 rounded-3xl bg-primary/15 p-6 text-center ring-1 ring-primary/40">
-        <CrownIcon weight="duotone" className="mx-auto size-16 text-primary" />
-        <p className="text-3xl font-black">{winners.length > 1 ? 'You share the sharpest eye!' : 'You have the sharpest eye!'}</p>
+      <div className="space-y-3 rounded-phone bg-raised p-6 text-center">
+        <CrownIcon weight="fill" className="mx-auto size-14 text-gold" />
+        <p className="text-3xl font-black">{winners.length > 1 ? 'You share the sharpest eye.' : 'You have the sharpest eye.'}</p>
         <p className="text-muted-foreground">
           {plural(points, 'point')}
-          {both > 0 ? `, both people right on ${plural(both, 'picture')}` : ''}. Face detective!
+          {both > 0 ? `, both people right on ${plural(both, 'picture')}` : ''}. Face detective.
         </p>
       </div>
     )
@@ -36,7 +36,7 @@ export default function ResultView({ game, player, players, publicState, view, g
           <span className="flex shrink-0 -space-x-2">
             {winners.slice(0, 3).map((id) => (
               <span key={id} className="relative">
-                <Avatar name={nameOf(players, id)} className="size-10 ring-2 ring-card" />
+                <Avatar name={nameOf(players, id)} playerId={id} className="size-10 ring-2 ring-ground" />
                 <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />
               </span>
             ))}
@@ -51,7 +51,7 @@ export default function ResultView({ game, player, players, publicState, view, g
           Nobody scored this time
         </p>
       )}
-      <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
+      <div className="rounded-phone bg-raised p-4">
         <p className="text-2xl font-black tabular-nums">You scored {plural(points, 'point')}</p>
         <p className="text-sm text-muted-foreground">
           {revealed > 0

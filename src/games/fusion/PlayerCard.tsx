@@ -1,17 +1,19 @@
-import { CaretRightIcon, DetectiveIcon, LockKeyIcon } from '@phosphor-icons/react'
-import { Badge } from '@/components/ui/badge'
+import { CaretRightIcon, DetectiveIcon } from '@phosphor-icons/react'
+import { useId } from 'react'
+import { SectionHead } from '@/components/phone/Strap'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { plural, type FusionGame } from '@/games/fusion/logic'
 import { choiceOf, publicOf } from '@/games/fusion/view'
 import type { PlayerCardProps } from '@/games/types'
 
 /**
- * The compact card while another game holds the phone's main card: how far
- * your voting is, and Vote. A whole card, title and Live badge included, like
- * the phone's generic one; tapping its header opens the full view.
+ * Fusion's section on the phone home while another game holds the main card:
+ * its tab (gold while the TV shows it), how far your voting is on a row that
+ * opens the full view, and an outlined Vote while pictures wait for you. Show
+ * my code stays the home's one gold step.
  */
-export default function PlayerCard({ game, publicState, myAnswers, view, open }: PlayerCardProps<FusionGame>) {
+export default function PlayerCard({ game, publicState, myAnswers, view, onStage, open }: PlayerCardProps<FusionGame>) {
+  const id = useId()
   const pub = publicOf(publicState)
   const total = pub?.pictures.length ?? 0
   const voted = pub?.pictures.filter((p) => choiceOf(myAnswers[p.key]) !== null).length ?? 0
@@ -28,34 +30,23 @@ export default function PlayerCard({ game, publicState, myAnswers, view, open }:
   }
 
   return (
-    <Card>
-      {/* grid-cols-1: the column may shrink, so a long title truncates instead of widening the card. */}
-      <CardContent className="grid grid-cols-1 gap-4">
-        <button
-          type="button"
-          onClick={open}
-          className="-m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-overlay/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <span className="sr-only">Open</span>
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-confetti-violet/15 text-confetti-violet">
-            {!pub || voting ? <DetectiveIcon weight="duotone" className="size-6" /> : <LockKeyIcon weight="duotone" className="size-6" />}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <span className="truncate text-lg leading-tight font-bold">{game.title}</span>
-              <Badge className="shrink-0">Live</Badge>
-            </span>
-            <span className="block text-sm text-muted-foreground">{status}</span>
-          </span>
-          <CaretRightIcon className="size-5 shrink-0 text-muted-foreground" />
-        </button>
-        {voting && !allVoted && (
-          <Button size="lg" className="w-full" onClick={open}>
-            <DetectiveIcon />
-            Vote
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+    <section aria-labelledby={id} className="grid grid-cols-1 gap-3">
+      <SectionHead id={id} tab={game.title} tone={onStage ? 'air' : 'plain'} />
+      <button
+        type="button"
+        onClick={open}
+        className="flex min-h-14 w-full items-center gap-3 rounded-phone bg-overlay px-4 py-2.5 text-left transition-colors hover:bg-rule focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none"
+      >
+        <span className="min-w-0 flex-1 text-[17px] leading-snug font-bold">{status}</span>
+        <span className="sr-only">Open</span>
+        <CaretRightIcon className="size-5 shrink-0 text-paper-2" />
+      </button>
+      {voting && !allVoted && (
+        <Button size="xl" variant="outline" className="w-full" onClick={open}>
+          <DetectiveIcon className="size-5" />
+          Vote
+        </Button>
+      )}
+    </section>
   )
 }

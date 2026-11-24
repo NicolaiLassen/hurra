@@ -40,7 +40,7 @@ export default function ResultView({ game, player, players, gamePoints }: Result
       <div className="min-w-0">
         {won ? (
           <>
-            <p className="font-semibold text-primary">{tied ? 'You share the top spot!' : "You're the top scorer!"}</p>
+            <p className="font-semibold text-primary">{tied ? 'You share the top spot.' : "You're the top scorer."}</p>
             <p className="text-sm text-muted-foreground">
               {tied
                 ? `${nameList(['You', ...others.map((p) => p.name)])} scored ${pointsLabel(leaders.points)} each.`
