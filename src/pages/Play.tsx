@@ -26,7 +26,7 @@ export default function Play() {
   if (FixturePlay && scene !== null) {
     return (
       <Suspense fallback={<Loading />}>
-        <FixturePlay scene={scene} />
+        <FixturePlay scene={scene} players={params.has('players') ? Number(params.get('players')) : null} />
       </Suspense>
     )
   }
