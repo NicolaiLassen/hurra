@@ -23,11 +23,13 @@ export function wonLine(playerId: string, games: readonly SessionGame[], afterNa
 
 /**
  * The leader against the next place: "2 ahead of Ana", or "Level with Luna"
- * when others share first. Null for a party of one.
+ * when others share first, or "Nobody has scored yet" before anyone has.
+ * Null for a party of one.
  */
 export function aheadLine(rows: readonly Row[]): string | null {
   const [leader, ...rest] = rows
   if (!leader || rest.length === 0) return null
+  if (rows.every((row) => row.points === 0)) return 'Nobody has scored yet'
   const level = rest.filter((row) => row.points === leader.points)
   if (level.length > 0) return `Level with ${listNames(level.map((row) => row.name))}`
   const next = rest.filter((row) => row.points === rest[0].points)

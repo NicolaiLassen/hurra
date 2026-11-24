@@ -57,6 +57,10 @@ describe('aheadLine', () => {
     expect(aheadLine([rows[0], { ...rows[1], points: 14 }, rows[2]])).toBe('Level with Ana')
   })
 
+  it('says when nobody has scored yet', () => {
+    expect(aheadLine(rows.map((row) => ({ ...row, points: 0 })))).toBe('Nobody has scored yet')
+  })
+
   it('says nothing for a party of one', () => {
     expect(aheadLine([rows[0]])).toBeNull()
   })
