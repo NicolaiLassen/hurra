@@ -15,7 +15,7 @@ export default function Scan() {
 
   return (
     <Screen>
-      <h1 className="mb-6 text-3xl font-bold">Scan a player</h1>
+      <h1 className="mb-6 text-3xl font-extrabold">Scan a player</h1>
       <QrScanner onCode={(code) => navigate(`/p/${code}${suffix}`)} />
     </Screen>
   )

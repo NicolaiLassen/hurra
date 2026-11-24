@@ -26,7 +26,8 @@ export default function IssuedCodeView({ code, className }: { code: IssuedCodeSt
             <span
               key={i}
               aria-hidden
-              className="grid h-14 w-11 place-items-center rounded-xl bg-muted font-mono text-3xl font-black text-primary ring-1 ring-foreground/10 sm:h-16 sm:w-12 sm:text-4xl"
+              // The code face on solid tiles, in paper: it is typed, not tapped, so not gold (docs/identity.md).
+              className="grid h-14 w-11 place-items-center rounded-control bg-overlay font-mono text-3xl font-extrabold text-paper sm:h-16 sm:w-12 sm:text-4xl"
             >
               {char}
             </span>
@@ -36,7 +37,7 @@ export default function IssuedCodeView({ code, className }: { code: IssuedCodeSt
         // Holds the code's place while it is issued, so the dialog doesn't jump.
         <p className="flex gap-1.5 sm:gap-2" aria-hidden>
           {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} className="h-14 w-11 animate-pulse rounded-xl bg-muted sm:h-16 sm:w-12" />
+            <span key={i} className="h-14 w-11 animate-pulse rounded-control bg-overlay motion-reduce:animate-none sm:h-16 sm:w-12" />
           ))}
         </p>
       )}

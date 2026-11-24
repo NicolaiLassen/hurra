@@ -1,20 +1,23 @@
 import { Badge } from '@/components/ui/badge'
-import type { GameStatus } from '@/lib/types'
+import type { GameStatus, Session } from '@/lib/types'
 
-export type GameState = GameStatus | 'archived'
+/** A game's status, whether a party takes new guests, or that either is archived. */
+export type GameState = GameStatus | Session['status'] | 'archived'
 
 const CHIP: Record<GameState, { label: string; variant: 'secondary' | 'outline' | 'ghost' }> = {
   pending: { label: 'Not started', variant: 'ghost' },
   active: { label: 'Live', variant: 'secondary' },
   finished: { label: 'Done', variant: 'ghost' },
   archived: { label: 'Archived', variant: 'outline' },
+  open: { label: 'Open', variant: 'secondary' },
+  closed: { label: 'Closed', variant: 'ghost' },
 }
 
 /**
- * A game's state in the control room, as a word (docs/identity.md): Live on
- * the overlay, Done and Not started as plain words, Archived in a rule
- * outline. Never gold: in the host room gold is the one next step, and On the
- * TV, which is on air.
+ * A game's or a party's state in the host pages, as a word (docs/identity.md):
+ * Live and Open on the overlay, Done, Not started and Closed as plain words,
+ * Archived in a rule outline. Never gold: in the host room gold is the one
+ * next step, and On the TV, which is on air.
  */
 export default function StateChip({ state, className }: { state: GameState; className?: string }) {
   const { label, variant } = CHIP[state]

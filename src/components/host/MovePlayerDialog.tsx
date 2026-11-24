@@ -62,7 +62,7 @@ function MovePlayer({ player, joinCode }: { player: MovingPlayer; joinCode: stri
       </DialogHeader>
       <IssuedCodeView code={code} className="py-1" />
       <div className="grid gap-2">
-        <div className="flex items-center gap-4 rounded-xl bg-muted/60 p-3">
+        <div className="flex items-center gap-4 rounded-lg bg-overlay p-3">
           <Qr value={joinUrl(joinCode)} size={88} />
           <p className="min-w-0 text-sm text-muted-foreground">The new phone can scan this to open the join link.</p>
         </div>

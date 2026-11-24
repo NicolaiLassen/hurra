@@ -1,9 +1,9 @@
 import { CaretDownIcon, CaretRightIcon, PlusIcon } from '@phosphor-icons/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import StateChip from '@/components/host/StateChip'
 import { errorMessage } from '@/components/host/hostCalls'
 import { Screen } from '@/components/layout'
-import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -149,7 +149,7 @@ export default function HostHome() {
             Archived ({archived.length})
           </Button>
           {showArchived && (
-            <ul className="mt-2 grid grid-cols-1 gap-2 opacity-80">
+            <ul className="mt-2 grid grid-cols-1 gap-2">
               {archived.map((s) => (
                 <SessionCard key={s.id} session={s} onChanged={(change) => changed(s.id, change)} />
               ))}
@@ -164,13 +164,13 @@ export default function HostHome() {
 function SessionCard({ session, onChanged }: { session: HostSessionRow; onChanged: (change: SessionChange) => void }) {
   return (
     <li>
-      <Card size="sm" className="transition-colors has-[a:hover]:ring-primary/50">
+      <Card size="sm" className="transition-colors has-[a:hover]:bg-overlay">
         <CardContent className="flex items-center gap-2">
           <Link to={`/host/s/${session.id}`} className="flex min-w-0 flex-1 items-center justify-between gap-4">
-            <span className="truncate text-base font-semibold">{session.name}</span>
+            <span className="truncate text-base font-bold">{session.name}</span>
             <span className="flex shrink-0 items-center gap-2">
-              <span className="font-mono text-muted-foreground">{session.join_code}</span>
-              <StatusBadge status={session.archived_at ? 'archived' : session.status} />
+              <span className="font-mono font-bold text-paper-2">{session.join_code}</span>
+              <StateChip state={session.archived_at ? 'archived' : session.status} />
             </span>
           </Link>
           <SessionMenu session={session} onChanged={onChanged} />
