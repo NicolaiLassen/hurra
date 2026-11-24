@@ -53,16 +53,16 @@ export default function PairingScreen({ partyName, onPair }: { partyName: string
   const busy = state !== 'idle'
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col items-center justify-center gap-10 overflow-hidden p-10 text-center short:gap-8">
+    <main className="relative isolate flex min-h-dvh flex-col items-center justify-center gap-12 overflow-hidden px-[5vw] py-[5vh] text-center short:gap-8">
       <Backdrop />
-      <div className="flex flex-col items-center gap-5 short:gap-4">
-        <Logo className="size-24 short:size-20" />
-        <h1 className="max-w-5xl text-6xl font-black tracking-tight text-balance short:text-5xl">{partyName}</h1>
+      <div className="flex max-w-full flex-col items-center gap-6 short:gap-4">
+        <Logo className="size-24 ring-0 short:size-18" />
+        <h1 className="max-w-[80rem] wide text-tv-question text-balance break-words text-paper short:text-tv-answer">{partyName}</h1>
       </div>
 
-      <form onSubmit={submit} className="flex flex-col items-center gap-6 short:gap-5">
-        <p className="flex items-center gap-3 text-3xl font-bold short:text-2xl">
-          <TelevisionSimpleIcon weight="duotone" className="size-9 text-primary short:size-8" />
+      <form onSubmit={submit} className="flex flex-col items-center gap-8 short:gap-6">
+        <p className="flex items-center gap-4 text-tv-name font-bold text-paper short:text-tv-band">
+          <TelevisionSimpleIcon weight="fill" className="shrink-0 text-paper-2" />
           Pair this screen
         </p>
 
@@ -89,27 +89,32 @@ export default function PairingScreen({ partyName, onPair }: { partyName: string
             {Array.from({ length: CODE_LENGTH }, (_, i) => {
               const active = focused && !busy && i === Math.min(code.length, CODE_LENGTH - 1)
               return (
+                // A field's edge is found before it is focused (docs/identity.md, Primitives):
+                // paper-3 on the overlay box, paper once filled, gold where the next character goes.
                 <span
                   key={i}
                   className={cn(
-                    'relative grid h-28 w-22 place-items-center rounded-2xl bg-card/90 font-mono text-6xl font-black ring-2 transition-[box-shadow,color] short:h-24 short:w-19 short:text-5xl',
-                    error ? 'ring-destructive/70' : active ? 'ring-primary' : code[i] ? 'ring-foreground/25' : 'ring-foreground/10',
-                    state === 'paired' && 'text-confetti-teal ring-confetti-teal/70',
+                    'relative grid h-28 w-22 place-items-center rounded-tile border-[3px] bg-overlay font-mono text-tv-answer font-extrabold text-paper transition-colors short:h-24 short:w-19 short:text-tv-score',
+                    error ? 'border-paper' : active ? 'border-gold' : code[i] ? 'border-paper-2' : 'border-paper-3/60',
                   )}
                 >
                   {code[i] ?? ''}
-                  {active && !code[i] && <span className="absolute h-14 w-1 animate-pulse rounded-full bg-primary short:h-12" />}
+                  {active && !code[i] && <span className="absolute h-14 w-1 animate-pulse bg-gold motion-reduce:animate-none short:h-12" />}
                 </span>
               )
             })}
           </span>
         </label>
 
-        <p id="pairing-help" role={error ? 'alert' : undefined} className={cn('min-h-9 text-2xl short:text-xl', error ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+        <p
+          id="pairing-help"
+          role={error ? 'alert' : undefined}
+          className={cn('min-h-10 text-tv-tab short:text-tv-floor', error ? 'font-semibold text-paper' : 'text-paper-2')}
+        >
           {error ??
             (state === 'paired' ? (
-              <span className="flex items-center gap-2 text-confetti-teal">
-                <CheckCircleIcon weight="fill" />
+              <span className="flex items-center gap-3 font-semibold text-paper">
+                <CheckCircleIcon weight="fill" className="shrink-0" />
                 Paired. Opening the party…
               </span>
             ) : state === 'pairing' ? (
@@ -119,7 +124,7 @@ export default function PairingScreen({ partyName, onPair }: { partyName: string
             ))}
         </p>
 
-        <Button type="submit" size="xl" className="min-w-56 text-xl" disabled={busy || code.length !== CODE_LENGTH}>
+        <Button type="submit" className="h-16 min-w-64 rounded-tile px-10 text-tv-tab short:h-14 short:text-tv-floor" disabled={busy || code.length !== CODE_LENGTH}>
           Pair
         </Button>
       </form>
