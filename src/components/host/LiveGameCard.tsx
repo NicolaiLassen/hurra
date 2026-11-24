@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react'
 import Confirm from '@/components/Confirm'
 import GameViewBoundary from '@/components/host/GameViewBoundary'
 import { useHostAct, useHostCall } from '@/components/host/hostCalls'
-import StatusBadge from '@/components/StatusBadge'
+import StateChip from '@/components/host/StateChip'
+import { clockTime } from '@/components/tv/clock'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -42,24 +43,22 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
   }
 
   return (
-    <Card className={cn(onStage && 'ring-primary/40')}>
+    // No ring or wash for the game on the TV: its gold On the TV chip says it (docs/identity.md).
+    <Card>
       <CardHeader className="flex flex-wrap items-center gap-x-3 gap-y-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+        <span className="grid size-10 shrink-0 place-items-center rounded-control bg-overlay text-paper-2">
           <GameIcon weight="duotone" className="size-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-lg leading-snug font-semibold">{game.title}</h3>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            <StatusBadge status="active" />
-            {onStage ? (
-              <Badge variant="outline" className="border-primary/50 text-primary">
-                <TelevisionSimpleIcon />
-                On the TV
-              </Badge>
-            ) : (
-              <span className="text-xs text-muted-foreground">In the background</span>
-            )}
-            {held && held.round > 1 && <span className="text-xs text-muted-foreground">Round {held.round}</span>}
+          <h3 className="truncate text-lg leading-snug font-extrabold">{game.title}</h3>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-paper-2">
+            {onStage ? <Badge>On the TV</Badge> : <StateChip state="active" />}
+            {/* The start the database holds, as a clock time (docs/identity.md). */}
+            <span>
+              {onStage ? 'Live' : 'In the background'}
+              {game.started_at !== null && ` since ${clockTime(game.started_at)}`}
+            </span>
+            {held && held.round > 1 && <span>Round {held.round}</span>}
           </p>
         </div>
         {/* Beside the title on a laptop; on a phone a row of their own, under it, so the title keeps its room. */}
@@ -82,7 +81,7 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
             confirmLabel="End"
             onConfirm={() => void run('end', () => callGame({ type: 'end', gameId: game.id }))}
           >
-            <Button variant="secondary" size="lg" isPending={pending === 'end'} disabled={pending !== null}>
+            <Button variant="outline" size="lg" isPending={pending === 'end'} disabled={pending !== null}>
               <StopIcon />
               End
             </Button>
@@ -99,13 +98,13 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
         </Button>
       </CardHeader>
       {open && (
-        <CardContent className="min-w-0 border-t pt-4">
+        <CardContent className="min-w-0 border-t border-rule pt-4">
           {!gameModule ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-paper-2">
               This app doesn't know the game type “{game.game_type}”. End it here, or reload once the app is updated.
             </p>
           ) : !HostView ? (
-            <p className="text-sm text-muted-foreground">{game.title} runs by itself: it has no controls of its own.</p>
+            <p className="text-sm text-paper-2">{game.title} runs by itself: it has no controls of its own.</p>
           ) : (
             <GameViewBoundary title={game.title}>
               <HostView

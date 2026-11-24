@@ -30,8 +30,9 @@ export default function JoinCard({ session, className }: { session: Pick<Session
           <Qr value={joinUrl(session.join_code)} size={200} />
         </div>
         <div>
-          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">Join code</p>
-          <p className="font-mono text-3xl font-black tracking-[0.2em] text-primary">{session.join_code}</p>
+          <p className="text-sm font-bold text-paper-2">Join code</p>
+          {/* The code face (Archivo at 87.5 percent, so 0 and O differ), in paper: gold is the room's next step. */}
+          <p className="font-mono text-4xl leading-tight font-extrabold tracking-[0.04em] text-paper">{session.join_code}</p>
         </div>
         <Button variant="secondary" size="lg" className="w-full" onClick={() => void copyJoinLink(session.join_code)}>
           <CopyIcon />
