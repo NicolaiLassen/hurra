@@ -1,25 +1,26 @@
-import {
-  CheckCircleIcon,
-  CircleNotchIcon,
-  HourglassHighIcon,
-  LockSimpleIcon,
-  QuestionIcon,
-  TrophyIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react'
-import { useState } from 'react'
+import { CheckIcon } from '@phosphor-icons/react'
+import { useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
+import { ordinal } from '@/components/phone/text'
+import { Button } from '@/components/ui/button'
+import { isLocked, NO_PICK, ruleLine, sendPick, shownChoice, type PickState } from '@/games/quiz/answer'
 import { useMomentSound, useServerTime } from '@/games/quiz/clock'
 import { formatNumber, promptKey, type QuizGame, type QuizPlayerView, type QuizPublicState } from '@/games/quiz/logic'
 import { FRESH_MS, letterOf, momentId } from '@/games/quiz/look'
-import { DrainBar, LetterBadge, SecondsLeft } from '@/games/quiz/parts'
+import { LetterBadge } from '@/games/quiz/parts'
+import { AnswerTile, KeyChips, TimeLeft, type TileState } from '@/games/quiz/phoneParts'
 import { choiceIndex, readPublic, readView } from '@/games/quiz/read'
+import { useShowAnswers } from '@/games/quiz/showAnswers'
 import type { PlayerViewProps } from '@/games/types'
 import type { AnswerPayload, Player, PromptState, SessionGame, SubmitResult } from '@/lib/types'
-import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
-/** The quiz on a guest's phone: big options to tap, then how it went and where you stand. */
+// The quiz on a guest's phone (docs/identity.md, The quiz on a phone). The
+// phone draws the strap above it ("Question 3 of 10", phoneStrap in index.ts).
+// During a question: letters only, since the question is on the TV, unless
+// this phone asked to see the answers too; a tap shows at once and then locks
+// in. Then how it went, and where you stand. Gold only for the leader.
+
 export default function PlayerView({
   game,
   players,
@@ -34,7 +35,7 @@ export default function PlayerView({
 }: PlayerViewProps<QuizGame>) {
   const pub = readPublic(publicState)
   const view = readView(rawView)
-  if (!pub) return <p className="py-8 text-center text-muted-foreground">Getting the quiz ready…</p>
+  if (!pub) return <p className="py-8 text-center text-paper-2">Getting the quiz ready…</p>
 
   switch (pub.phase) {
     case 'lobby':
@@ -57,9 +58,8 @@ export default function PlayerView({
       return <Standing pub={pub} view={view} players={players} player={player} onStage={onStage} />
     case 'done':
       return (
-        <div className="space-y-4 py-2 text-center">
-          <TrophyIcon weight="duotone" className="mx-auto size-14 text-primary" />
-          <p className="text-2xl font-black">The quiz is over</p>
+        <div className="grid gap-2">
+          <p className="text-phone-head leading-tight font-extrabold">The quiz is over.</p>
           <MyRank view={view} more={false} />
         </div>
       )
@@ -68,23 +68,26 @@ export default function PlayerView({
 
 function Lobby({ total, onStage }: { total: number; onStage: boolean }) {
   return (
-    <div className="space-y-4 py-2 text-center">
-      <span className="mx-auto grid size-20 rotate-3 place-items-center rounded-3xl bg-primary/15 ring-1 ring-primary/40">
-        <QuestionIcon weight="duotone" className="size-11 text-primary" />
-      </span>
+    <div className="grid gap-4">
+      <KeyChips />
       <div>
-        <p className="text-3xl font-black">Quiz time!</p>
+        <p className="text-phone-head leading-tight font-extrabold">Quiz time.</p>
         <p className="mt-1 text-lg font-semibold">{onStage ? 'Watch the TV.' : 'The host starts the first question soon.'}</p>
       </div>
-      <p className="text-muted-foreground">
-        {total} {total === 1 ? 'question' : 'questions'}. You answer here on your phone: a right answer scores 500 to
-        1,000 points, and the faster you are, the more you get.
+      <p className="text-paper-2">
+        {total} {total === 1 ? 'question' : 'questions'}. The questions are on the TV and you answer here: a right answer
+        scores 500 to 1,000 points, and the faster you are, the more you get.
       </p>
     </div>
   )
 }
 
-/** A question: the options as big buttons, locked once your answer is in. */
+/**
+ * A question: "The question is on the TV.", how answering works, the four
+ * letters as big tiles, the seconds left, and "Show the answers here". A tap
+ * shows the tile picked at once, then locked in once the database has it;
+ * a refusal rolls it back with the reason.
+ */
 function Answering({
   pub,
   prompt,
@@ -101,96 +104,76 @@ function Answering({
   serverNow: () => number
 }) {
   const question = pub.question!
-  // Shown from the moment the database took it, until the next read brings it back in myAnswers.
-  const [sent, setSent] = useState<number | null>(null)
-  const [sending, setSending] = useState<number | null>(null)
-  const locked = choiceIndex(saved) ?? sent
-  const now = useServerTime(serverNow, 250, locked === null)
+  const [pick, setPick] = useState<PickState>(NO_PICK)
+  const [showAnswers, setShowAnswers] = useShowAnswers()
+  // The quiz opens its prompts with `final`: the first answer counts (submit_answer refuses a second).
+  const final = prompt?.spec.kind === 'choice' ? prompt.spec.final === true : true
+  const chosen = shownChoice(saved, pick)
+  const locked = isLocked(saved, pick)
+  const sending = pick.kind === 'sending'
+  const now = useServerTime(serverNow, 250, chosen === null || !final)
   const over = now >= question.endsAt || (prompt?.closed_at ?? null) !== null
-  const open = locked === null && sending === null && !over
+  const open = !over && !sending && (chosen === null || !final)
+  // A second tap before the first one's render can't send twice.
+  const inFlight = useRef(false)
 
-  async function pick(choice: number) {
-    if (!open) return
-    setSending(choice)
-    try {
-      const result = await submit(question.key, { choice: [String(choice)] })
-      setSent(choiceIndex(result.answer) ?? choice)
-    } catch (error) {
-      toast.error((error as Error).message)
-    } finally {
-      setSending(null)
-    }
+  function tap(choice: number) {
+    if (!open || inFlight.current) return
+    inFlight.current = true
+    void sendPick(question.key, choice, submit, setPick).finally(() => {
+      inFlight.current = false
+    })
   }
 
+  const stateOf = (i: number): TileState => {
+    if (i === chosen) return sending ? 'sending' : locked ? 'locked' : 'open'
+    if (open) return 'open'
+    return 'faded'
+  }
+
+  let line: string
+  if (chosen !== null && sending) line = `Sending ${letterOf(chosen)}…`
+  else if (chosen !== null && final) {
+    line = `Locked in: ${letterOf(chosen)}. ${onStage ? 'The answer comes up on the TV.' : 'The answer comes up soon.'}`
+  } else if (chosen !== null && !over) line = `You picked ${letterOf(chosen)}. You can change it until the time is up.`
+  else if (chosen !== null) line = `Your answer: ${letterOf(chosen)}. The answer comes up soon.`
+  else if (over) line = "Time's up. No answer from you this time."
+  else if (pick.kind === 'refused') line = `${pick.message} Tap again.`
+  else line = ruleLine(final, !showAnswers)
+
   return (
-    <div className="space-y-4">
-      <div className="flex min-h-7 items-baseline justify-between gap-3">
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-          Question {pub.index + 1} of {pub.total}
+    <div className="grid gap-6">
+      <div className="grid gap-1.5">
+        <p className="text-phone-head leading-tight font-extrabold text-balance break-words">
+          {showAnswers ? question.text : 'The question is on the TV.'}
         </p>
-        {/* Once time is up without an answer (none saved or still on its way), the note under the options says so. */}
-        {(locked !== null || sending !== null || !over) && (
-          <SecondsLeft endsAt={question.endsAt} serverNow={serverNow} suffix=" s" className="text-lg" />
-        )}
-      </div>
-      <p className="text-xl leading-snug font-bold text-balance">{question.text}</p>
-      <DrainBar startsAt={prompt?.opened_at ?? null} endsAt={question.endsAt} serverNow={serverNow} className="h-2 rounded-full" />
-
-      <div className="grid gap-2.5" role="group" aria-label="Your answer">
-        {question.options.map((option, i) => {
-          const chosen = locked === i
-          return (
-            <button
-              key={i}
-              type="button"
-              disabled={!open}
-              aria-pressed={chosen}
-              onClick={() => void pick(i)}
-              className={cn(
-                'flex min-h-16 w-full items-center gap-3 rounded-2xl bg-secondary/70 p-3 pr-4 text-left ring-1 ring-white/10 transition-[transform,opacity,background-color] duration-200',
-                open && 'hover:bg-secondary active:scale-[0.98]',
-                chosen && 'bg-primary/15 ring-2 ring-primary',
-                locked !== null && !chosen && 'opacity-40',
-                locked === null && over && 'opacity-50',
-                sending === i && 'animate-pulse bg-secondary',
-              )}
-            >
-              <LetterBadge index={i} className="size-11 rounded-xl text-xl" />
-              <span className="min-w-0 flex-1 text-lg leading-snug font-semibold break-words">{option}</span>
-              {sending === i && <CircleNotchIcon className="size-5 shrink-0 animate-spin text-muted-foreground" />}
-              {chosen && <LockSimpleIcon weight="fill" className="size-5 shrink-0 text-primary" />}
-            </button>
-          )
-        })}
+        {/* Two lines kept for it, so the tiles stay put as it changes. */}
+        <p role="status" className="min-h-[2lh] text-[1.0625rem] leading-snug text-paper-2">
+          {line}
+        </p>
       </div>
 
-      {locked !== null ? (
-        <div className="space-y-1 text-center">
-          <p className="flex items-center justify-center gap-2 text-lg font-bold text-primary">
-            <LockSimpleIcon weight="fill" />
-            Locked in: {letterOf(locked)}
-          </p>
-          <p className="text-sm text-muted-foreground">{onStage ? 'The answer comes up on the TV.' : 'The answer comes up soon.'}</p>
-        </div>
-      ) : over && sending === null ? (
-        // An answer still on its way may yet count (the database takes it until closes_at, a second later): "Sending" until it settles.
-        <div className="space-y-1 text-center">
-          <p className="flex items-center justify-center gap-2 text-lg font-bold text-confetti-pink">
-            <HourglassHighIcon weight="fill" />
-            Time's up
-          </p>
-          <p className="text-sm text-muted-foreground">No answer from you this time.</p>
-        </div>
-      ) : (
-        <p className="text-center text-sm text-muted-foreground">
-          {sending !== null ? 'Sending your answer…' : 'Tap your answer. The first tap counts.'}
-        </p>
-      )}
+      <div role="group" aria-label="Your answer" className={cn('grid gap-3', showAnswers ? 'grid-cols-1' : 'grid-cols-2')}>
+        {question.options.map((option, i) => (
+          <AnswerTile key={i} index={i} option={showAnswers ? option : null} state={stateOf(i)} onPick={() => tap(i)} />
+        ))}
+      </div>
+
+      <div className="flex min-h-11 items-center justify-between gap-4">
+        <TimeLeft endsAt={question.endsAt} serverNow={serverNow} />
+        <Button
+          variant="link"
+          className="-mr-1 h-11 px-1 text-[1.0625rem] font-bold"
+          onClick={() => setShowAnswers(!showAnswers)}
+        >
+          {showAnswers ? 'Letters only' : 'Show the answers here'}
+        </Button>
+      </div>
     </div>
   )
 }
 
-/** The reveal on your phone: right or not, your points, and the answer. */
+/** The reveal on your phone: right or not, your points, the answer, and how everyone answered. */
 function Revealed({
   game,
   pub,
@@ -215,55 +198,52 @@ function Revealed({
   const [revealedAt] = useState(() => prompts.find((p) => p.key === key)?.revealed_at ?? serverNow())
   // Coin for your right answer, the sad trombone for a wrong one or none: once, at the reveal.
   useMomentSound(serverNow() - revealedAt < FRESH_MS ? momentId(game, key, 'result') : null, right ? 'coin' : 'sad')
+  const it = correct >= 0 ? `It was ${letterOf(correct)}${options[correct] ? `: ${options[correct]}` : ''}.` : null
 
   return (
-    <div className="space-y-5">
-      <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-        Question {pub.index + 1} of {pub.total}
-      </p>
-      {right ? (
-        <div className="animate-in space-y-2 rounded-3xl bg-confetti-teal/10 p-5 text-center ring-1 ring-confetti-teal/40 duration-300 zoom-in-95 fade-in-0 motion-reduce:animate-none">
-          <CheckCircleIcon weight="duotone" className="mx-auto size-14 text-confetti-teal" />
-          <p className="text-4xl font-black">Right!</p>
-          {last && (
-            <p className="inline-block rounded-full bg-primary px-4 py-1 text-2xl font-black text-primary-foreground">
-              +{formatNumber(last.points)}
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="animate-in space-y-2 rounded-3xl bg-confetti-pink/10 p-5 text-center ring-1 ring-confetti-pink/30 duration-300 fade-in-0 motion-reduce:animate-none">
-          <XCircleIcon weight="duotone" className="mx-auto size-14 text-confetti-pink" />
-          <p className="text-3xl font-black">{mine === null ? 'No answer this time.' : 'Not this time.'}</p>
-          {correct >= 0 && (
-            <p className="text-lg text-muted-foreground">
-              It was <span className="font-bold text-foreground">{letterOf(correct)}</span>
-              {options[correct] ? `: ${options[correct]}` : ''}.
-            </p>
-          )}
-        </div>
-      )}
+    <div className="grid gap-6">
+      <div className="grid gap-1.5 duration-300 animate-in fade-in-0 motion-reduce:animate-none">
+        <p className="text-phone-head leading-tight font-extrabold">
+          {right ? 'You got it.' : mine === null ? 'No answer this time.' : 'Not this time.'}
+        </p>
+        {right && last ? (
+          <p className="flex items-baseline gap-2 text-[1.0625rem] font-semibold text-paper-2">
+            <span className="text-[1.875rem] leading-none text-paper tv-num">+{formatNumber(last.points)}</span>
+            quiz points for {letterOf(mine ?? correct)}
+          </p>
+        ) : (
+          <p className="text-[1.0625rem] leading-snug text-paper-2">
+            {mine !== null && `You picked ${letterOf(mine)}. `}
+            {it}
+          </p>
+        )}
+      </div>
 
       {options.length > 0 && (
         <ul className="grid gap-2" aria-label="How everyone answered">
-          {options.map((option, i) => (
-            <li
-              key={i}
-              className={cn(
-                'flex items-center gap-3 rounded-2xl bg-secondary/50 p-2.5 pr-4 ring-1 ring-white/10',
-                i === correct && 'bg-primary/15 ring-2 ring-primary',
-                i !== correct && 'opacity-60',
-              )}
-            >
-              <LetterBadge index={i} className="size-8 rounded-lg text-base" />
-              <span className="min-w-0 flex-1 truncate font-semibold">{option}</span>
-              {i === mine && <span className="shrink-0 text-xs font-semibold text-muted-foreground">You</span>}
-              {i === correct && <CheckCircleIcon weight="fill" className="size-5 shrink-0 text-primary" />}
-              <span className="w-6 shrink-0 text-right text-sm font-bold text-muted-foreground tabular-nums">
-                {pub.reveal?.counts[i] ?? ''}
-              </span>
-            </li>
-          ))}
+          {options.map((option, i) => {
+            const isRight = i === correct
+            return (
+              <li
+                key={i}
+                className={cn(
+                  'flex min-h-14 items-center gap-3 rounded-phone py-2 pr-4 pl-2',
+                  isRight ? 'bg-paper text-ink' : 'bg-overlay',
+                )}
+              >
+                <LetterBadge index={i} className="size-10 rounded-chip text-xl leading-none" />
+                <span className="min-w-0 flex-1 leading-snug font-bold break-words">
+                  {option}
+                  {isRight && <span className="sr-only">, the right answer</span>}
+                </span>
+                {i === mine && <span className={cn('shrink-0 text-sm font-bold', isRight ? 'text-ink' : 'text-paper-2')}>You</span>}
+                {isRight && <CheckIcon weight="bold" aria-hidden className="size-5 shrink-0" />}
+                <span className={cn('w-7 shrink-0 text-right text-xl leading-none tv-num', isRight ? 'text-ink' : 'text-paper-2')}>
+                  {pub.reveal?.counts[i] ?? ''}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -272,7 +252,7 @@ function Revealed({
   )
 }
 
-/** Between questions: where you stand, and the top three. */
+/** Between questions: where you stand in the quiz, and its top three. */
 function Standing({
   pub,
   view,
@@ -291,46 +271,42 @@ function Standing({
   const asked = pub.index + 1
 
   return (
-    <div className="space-y-5">
-      <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-        Leaderboard after question {asked} of {pub.total}
-      </p>
-      <div className="space-y-1 text-center">
+    <div className="grid gap-6">
+      <div className="grid gap-1">
         {view?.rank ? (
-          <>
-            <p className="text-6xl font-black text-primary tabular-nums">#{view.rank}</p>
-            <p className="text-lg font-semibold">{formatNumber(view.quizPoints)} quiz points</p>
-          </>
+          <p className="flex items-baseline gap-2.5">
+            <span className={cn('text-phone-place leading-none wide', view.rank === 1 && 'text-gold')}>{ordinal(view.rank)}</span>
+            <span className="text-[1.875rem] leading-none tv-num">{formatNumber(view.quizPoints)}</span>
+            <span className="font-semibold text-paper-2">quiz points</span>
+          </p>
         ) : (
-          <p className="text-2xl font-black">No quiz points yet</p>
+          <p className="text-phone-head leading-tight font-extrabold">No quiz points yet</p>
         )}
-        <p className="text-sm text-muted-foreground">
-          {view ? `${view.right} of ${asked} right so far` : `${asked} of ${pub.total} questions asked`}
-        </p>
+        <p className="text-paper-2">{view ? `${view.right} of ${asked} right so far` : `${asked} of ${pub.total} questions asked`}</p>
       </div>
 
       {top.length > 0 && (
-        <ol className="grid gap-2">
-          {top.map((row) => (
-            <li
-              key={row.playerId}
-              className={cn(
-                'flex items-center gap-3 rounded-2xl bg-secondary/50 p-2.5 pr-4 ring-1 ring-white/10',
-                row.playerId === player.id && 'ring-2 ring-primary',
-              )}
-            >
-              <span className="w-5 text-right font-black text-muted-foreground tabular-nums">{row.rank}</span>
-              <Avatar name={nameOf(row.playerId)} className="size-8" />
-              <span className="min-w-0 flex-1 truncate font-semibold">{nameOf(row.playerId)}</span>
-              <span className="font-black text-primary">{formatNumber(row.points)}</span>
-            </li>
-          ))}
+        <ol className="grid gap-1" aria-label="The quiz's top three">
+          {top.map((row) => {
+            const me = row.playerId === player.id
+            return (
+              <li key={row.playerId} className={cn('flex min-h-12 items-center gap-3 rounded-phone px-2.5 py-1.5', me && 'bg-overlay')}>
+                <span className="w-5 text-right text-xl leading-none text-paper-3 tv-num">{row.rank}</span>
+                <Avatar name={nameOf(row.playerId)} playerId={row.playerId} className="size-8" />
+                <span className={cn('min-w-0 flex-1 truncate', me ? 'font-bold' : 'font-medium')}>
+                  {nameOf(row.playerId)}
+                  {me && <span className="font-normal text-paper-2"> (you)</span>}
+                </span>
+                <span className={cn('text-xl leading-none tv-num', row.rank === 1 && 'text-gold')}>{formatNumber(row.points)}</span>
+              </li>
+            )
+          })}
         </ol>
       )}
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="text-paper-2">
         {asked >= pub.total
-          ? 'That was the last question. The winner is crowned soon!'
+          ? 'That was the last question. The winner is crowned soon.'
           : onStage
             ? 'The next question is coming up. Watch the TV.'
             : 'The next question is coming up.'}
@@ -339,17 +315,18 @@ function Standing({
   )
 }
 
-/** "You're #4 with 2,350". `more`: questions are still to come. */
+/** "You're 4th in the quiz, with 2,350". `more`: questions are still to come. Gold only for the leader. */
 function MyRank({ view, more }: { view: QuizPlayerView | null; more: boolean }) {
   if (!view) return null
   return (
-    <p className="text-center text-lg font-semibold">
+    <p className="text-lg font-semibold">
       {view.rank ? (
         <>
-          You're <span className="text-primary">#{view.rank}</span> with {formatNumber(view.quizPoints)}
+          You're <span className={cn(view.rank === 1 && 'text-gold')}>{ordinal(view.rank)}</span> in the quiz, with{' '}
+          {formatNumber(view.quizPoints)}
         </>
       ) : (
-        <span className="text-muted-foreground">
+        <span className="text-paper-2">
           {more ? 'No quiz points yet. The next question is your chance.' : 'No quiz points for you this time.'}
         </span>
       )}

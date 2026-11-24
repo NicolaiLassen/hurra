@@ -1,16 +1,21 @@
-import { CrownIcon, DetectiveIcon, QrCodeIcon, SwordIcon } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { CrownIcon, DetectiveIcon, ScanIcon, SwordIcon } from '@phosphor-icons/react'
+import { useId, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import SecretCard from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
+import { huntHeading, huntLine } from '@/games/elimination/hunt'
 import KnockoutFlow from '@/games/elimination/KnockoutFlow'
 import type { EliminationGame } from '@/games/elimination/logic'
-import { nameFrom, roundRoster } from '@/games/elimination/roster'
-import SurvivorMeter from '@/games/elimination/SurvivorMeter'
+import { nameFrom } from '@/games/elimination/roster'
 import WhoIsLeft from '@/games/elimination/WhoIsLeft'
 import type { PlayerViewProps } from '@/games/types'
 
-/** The whole game on a phone: the phone draws the card around it and its header. */
+/**
+ * The whole hunt on a phone (the main card, or the sheet opened from its
+ * section): where you stand and the latest knockout at its time, your task
+ * and the outlined Scan, how tag and catch work, and everyone dealt in with
+ * Out beside the ones knocked out. The phone draws the strap above it.
+ */
 export default function PlayerView({
   player,
   players,
@@ -20,89 +25,78 @@ export default function PlayerView({
   scannedCode,
   onScanHandled,
 }: PlayerViewProps<EliminationGame>) {
+  const listId = useId()
   const [scanning, setScanning] = useState(false)
   const nameOf = nameFrom(players)
-  const { standing, total } = roundRoster(players, publicState)
+  const line = huntLine(players, publicState, view, player.id)
+  const out = view?.status === 'out'
+  const won = view?.status === 'winner'
 
   return (
-    <div className="space-y-5">
-      <SurvivorMeter alive={standing.length} total={total} />
-
-      {view === undefined && <p className="py-8 text-center text-muted-foreground">Dealing tasks…</p>}
+    <div className="grid grid-cols-1 gap-6">
+      <div className="flex min-w-0 items-center gap-3.5">
+        {(out || won) && <Avatar name={player.name} playerId={player.id} out={out} className="size-16 shrink-0" />}
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-phone-head leading-tight font-extrabold">
+            {won && <CrownIcon weight="fill" aria-hidden className="size-6 shrink-0 text-gold" />}
+            {out ? (
+              <span>
+                You're <span className="text-pink">out</span>.
+              </span>
+            ) : (
+              huntHeading(view, publicState)
+            )}
+          </p>
+          {line && <p className="mt-1 text-[1.0625rem] leading-snug text-paper-2">{line}</p>}
+        </div>
+      </div>
 
       {view?.status === 'alive' && (
         <>
-          <SecretCard label="task">{view.task}</SecretCard>
-          <Button size="xl" className="w-full" onClick={() => setScanning(true)}>
-            <QrCodeIcon />
-            Got someone? Scan their code
-          </Button>
-          <ul className="grid gap-2.5 text-sm text-muted-foreground">
+          <div className="grid gap-3">
+            <SecretCard label="task">{view.task}</SecretCard>
+            <Button size="xl" variant="outline" className="w-full" onClick={() => setScanning(true)}>
+              <ScanIcon weight="bold" className="size-5 text-pink" />
+              Got someone? Scan their code
+            </Button>
+          </div>
+          <ul className="grid gap-2.5 text-paper-2">
             <li className="flex gap-2.5">
-              <SwordIcon weight="duotone" className="mt-0.5 size-5 shrink-0 text-confetti-pink" />
+              <SwordIcon weight="duotone" className="mt-0.5 size-5 shrink-0 text-pink" />
               <span>
-                <span className="font-semibold text-foreground">Tag:</span> get someone to do your task. They're out and
-                their task is yours.
+                <span className="font-semibold text-paper">Tag:</span> get someone to do your task. They're out and their
+                task is yours.
               </span>
             </li>
             <li className="flex gap-2.5">
-              <DetectiveIcon weight="duotone" className="mt-0.5 size-5 shrink-0 text-confetti-teal" />
+              <DetectiveIcon weight="duotone" className="mt-0.5 size-5 shrink-0 text-pink" />
               <span>
-                <span className="font-semibold text-foreground">Catch:</span> spot someone trying their task on you.
-                They're out and you keep yours.
+                <span className="font-semibold text-paper">Catch:</span> spot someone trying their task on you. They're
+                out and you keep yours.
               </span>
             </li>
           </ul>
-          {view.knockouts > 0 && (
-            <p className="text-center text-sm font-semibold">You've knocked out {view.knockouts} so far.</p>
-          )}
+          {view.knockouts > 0 && <p className="font-semibold">You've knocked out {view.knockouts} so far.</p>}
         </>
       )}
 
-      {view?.status === 'out' && (
-        // The hunt's pink, as on the TV: your own token with the stripe, and the word. Never danger red.
-        <div className="space-y-4 rounded-3xl bg-overlay p-6 text-center">
-          <Avatar name={player.name} playerId={player.id} out className="mx-auto size-16" />
-          <div>
-            <p className="text-3xl font-black">
-              You're <span className="text-pink">out</span>
-            </p>
-            <p className="mt-2 text-muted-foreground">
-              {view.method === 'catch'
-                ? `${nameOf(view.by)} caught you trying “${view.task}”`
-                : `${nameOf(view.by)} got you with “${view.task}”`}
-            </p>
-          </div>
-          <p className="text-sm">
-            {publicState.winner ? (
-              <span className="inline-flex items-center gap-1.5">
-                <CrownIcon weight="fill" className="text-primary" />
-                {nameOf(publicState.winner)} is the last one standing.
-              </span>
-            ) : (
-              `${standing.length} still standing. Cheer them on!`
-            )}
-            {view.knockouts > 0 && ` You knocked out ${view.knockouts} before that.`}
-          </p>
-        </div>
-      )}
-
-      {view?.status === 'winner' && (
-        <div className="space-y-3 rounded-3xl bg-primary/15 p-6 text-center ring-1 ring-primary/40">
-          <CrownIcon weight="duotone" className="mx-auto size-16 text-primary" />
-          <p className="text-3xl font-black">Last one standing!</p>
-          <p className="text-muted-foreground">You knocked out {view.knockouts} and nobody got you.</p>
-        </div>
-      )}
-
-      {(view === null || view?.status === 'spectator') && (
-        <p className="py-6 text-center text-muted-foreground">
-          This round started before you joined. You'll be dealt in next time.
+      {out && (
+        <p className="text-paper-2">
+          {view.method === 'catch' ? `${nameOf(view.by)} caught you trying “${view.task}”.` : `${nameOf(view.by)} got you with “${view.task}”.`}
+          {view.knockouts > 0 && ` You knocked out ${view.knockouts} before that.`}
         </p>
       )}
 
-      <section className="space-y-2 border-t pt-4">
-        <h3 className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">Players</h3>
+      {won && <p className="text-paper-2">You knocked out {view.knockouts} and nobody got you.</p>}
+
+      {(view === null || view?.status === 'spectator') && (
+        <p className="text-paper-2">This round started before you joined. You'll be dealt in next time.</p>
+      )}
+
+      <section aria-labelledby={listId} className="grid gap-2.5">
+        <h3 id={listId} className="text-sm on-air text-paper-2">
+          Who is left
+        </h3>
         <WhoIsLeft players={players} publicState={publicState} meId={player.id} />
       </section>
 

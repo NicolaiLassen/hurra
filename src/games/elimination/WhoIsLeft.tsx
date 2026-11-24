@@ -5,7 +5,7 @@ import type { EliminationPublicState } from '@/games/elimination/logic'
 import type { Player } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** Everyone dealt in: who's still standing first, then who's out, with you marked. */
+/** Everyone dealt in: who's still standing first, then who's out (the stripe and the word), with you as You. */
 export default function WhoIsLeft({
   players,
   publicState,
@@ -27,18 +27,14 @@ export default function WhoIsLeft({
         return (
           <li
             key={p.id}
-            className={cn(
-              'flex max-w-full items-center gap-1.5 rounded-md py-0.5 pr-2.5 pl-0.5 text-sm transition-colors duration-700',
-              out ? 'bg-white/5' : 'bg-white/10',
-              me && 'ring-1 ring-primary/60',
-            )}
+            className="flex max-w-full items-center gap-1.5 rounded-chip bg-overlay py-0.5 pr-2.5 pl-0.5 text-sm"
           >
             <span className="relative">
-              <Avatar name={p.name} out={out} className="size-6" />
+              <Avatar name={p.name} playerId={p.id} out={out} className="size-6" />
               {p.id === publicState.winner && <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />}
             </span>
             {/* The name at full strength, and the word beside it: the stripe never says Out alone. */}
-            <span className="truncate font-medium">{me ? 'You' : p.name}</span>
+            <span className={cn('truncate', me ? 'font-bold' : 'font-medium')}>{me ? 'You' : p.name}</span>
             {out && <span className="shrink-0 font-bold text-pink">Out</span>}
           </li>
         )

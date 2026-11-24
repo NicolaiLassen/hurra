@@ -73,7 +73,7 @@ export default function PlayerView({
           <div className="flex items-start gap-3">
             <DetectiveIcon weight="duotone" className="size-8 shrink-0 text-confetti-violet" />
             <div className="min-w-0">
-              <p className="font-bold">{voted === total ? 'All voted!' : 'Who is fused in each picture?'}</p>
+              <p className="font-bold">{voted === total ? 'All voted.' : 'Who is fused in each picture?'}</p>
               <p className="text-sm text-muted-foreground">
                 {voted === total
                   ? 'You can still change a vote until the host locks voting.'
@@ -101,7 +101,7 @@ export default function PlayerView({
             <TrophyIcon weight="duotone" className="size-8 shrink-0 text-primary" />
           )}
           <div className="min-w-0">
-            <p className="font-bold">{pub.phase === 'locked' ? 'Voting is closed. Watch the TV.' : 'That was the reveal!'}</p>
+            <p className="font-bold">{pub.phase === 'locked' ? 'Voting is closed. Watch the TV.' : 'That was the reveal.'}</p>
             <p className="text-sm text-muted-foreground">
               {pub.phase === 'locked' ? `${revealed} of ${total} revealed. ` : ''}
               You have {plural(points, 'point')}.
@@ -200,7 +200,7 @@ function PictureCard({
           </span>
         ) : vote ? (
           <span
-            className="absolute top-2 right-2 grid size-7 place-items-center rounded-full bg-primary text-primary-foreground"
+            className="absolute top-2 right-2 grid size-7 place-items-center rounded-full bg-paper text-ink"
             aria-label="Voted"
           >
             {open ? <CheckIcon weight="bold" /> : <LockKeyIcon weight="bold" />}
@@ -220,7 +220,7 @@ function PictureCard({
               className="text-sm"
               avatarClassName="size-6"
             />
-            <p className={cn('text-xs', gotPoints ? 'font-semibold text-primary' : 'text-muted-foreground')}>{outcome}</p>
+            <p className={cn('text-xs', gotPoints ? 'font-semibold text-paper' : 'text-muted-foreground')}>{outcome}</p>
           </>
         ) : vote ? (
           <>

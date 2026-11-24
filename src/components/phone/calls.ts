@@ -35,7 +35,7 @@ export function usePhoneCalls(gameId: string): {
 
   const submit = useCallback(
     async (key: string, answer: AnswerPayload): Promise<SubmitResult> => {
-      if (fixture) return { accepted: true, answer, at: serverNow(), ms: 0 }
+      if (fixture) return fixtureSubmit(answer, serverNow())
       const result = await submitAnswer(gameId, key, answer)
       refresh()
       return result
@@ -44,6 +44,21 @@ export function usePhoneCalls(gameId: string): {
   )
 
   return { act, submit }
+}
+
+/**
+ * A fixture's answer (dev builds only): taken at once, or with `&submit=slow`
+ * in the page's URL after 3 s, and with `&submit=refuse` refused after 1 s,
+ * so the phone's sending state and its rollback can be seen.
+ */
+async function fixtureSubmit(answer: AnswerPayload, at: number): Promise<SubmitResult> {
+  const mode = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('submit')
+  if (mode === 'slow') await new Promise((resolve) => setTimeout(resolve, 3000))
+  if (mode === 'refuse') {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    throw new Error('Too late, answers are closed')
+  }
+  return { accepted: true, answer, at, ms: 0 }
 }
 
 /** A game type's icon: the module's own, or the controller for a type this phone doesn't know. */

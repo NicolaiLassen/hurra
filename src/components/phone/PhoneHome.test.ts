@@ -1,9 +1,9 @@
 // The phone home over every fixture scene (src/lib/fixtures.ts, docs/engine-v2.md
-// 5.11), as Sofie's phone reads it: which card is main and what it says, the
-// compact cards of background games, the result card, "Your night", and the
-// notices for a guest who is no longer in the party. Rendered to static HTML
-// under Node: no effects run, so this checks what the page shows on its first
-// render of each snapshot.
+// 5.11), as Sofie's phone reads it: which card is main and what it says, On
+// the TV, the sections of background games, the result card, "Your night",
+// the one gold step, and the notices for a guest who is no longer in the
+// party. Rendered to static HTML under Node: no effects run, so this checks
+// what the page shows on its first render of each snapshot.
 import { createElement, type ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
 import { MemoryRouter } from 'react-router'
@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { FixtureMode } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
 import PhoneHome from '@/components/phone/PhoneHome'
+import { clockTime } from '@/components/phone/text'
 import { FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SESSION_ID, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import type { RecapDoc } from '@/lib/recap'
 import type { Snapshot } from '@/lib/types'
@@ -21,20 +22,37 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 
 const ENTITIES: Record<string, string> = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' }
 
-/** The text of some static HTML, one space between elements. */
-async function textOf(tree: ReactElement): Promise<string> {
+/** Some static HTML. */
+async function markupOf(tree: ReactElement): Promise<string> {
   const errors: unknown[] = []
   const { prelude } = await prerender(tree, { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
-  const html = await new Response(prelude).text()
-  return html
+  return new Response(prelude).text()
+}
+
+/** Plain text from markup, one space between elements. */
+const plain = (html: string) =>
+  html
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#x27;|&quot;|&amp;|&lt;|&gt;|&nbsp;/g, (entity) => ENTITIES[entity])
     .replace(/\s+/g, ' ')
-}
+
+/** The text of some static HTML, one space between elements. */
+const textOf = async (tree: ReactElement) => plain(await markupOf(tree))
+
+/** The section headings (h2) in order, as text. */
+const headings = (html: string) => [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map(([, inner]) => plain(inner).trim())
+
+/** The gold buttons (Button's default variant: the one next step on a screen), as text. */
+const goldButtons = (html: string) =>
+  [...html.matchAll(/<button data-slot="button" data-variant="default"[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
 
 /** The phone home over a fixture scene (or any snapshot), as Sofie's phone shows it. */
 async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
+  return plain(await phoneMarkup(scene, url, recap))
+}
+
+async function phoneMarkup(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
   const lobby = fixtureSnapshot('lobby', 'phone')
   const home = createElement(PhoneHome, {
     party: lobby.session!,
@@ -48,24 +66,37 @@ async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', reca
     fixture: typeof scene === 'string' ? fixtureSnapshot(scene, 'phone') : scene,
     children: home,
   })
-  return textOf(createElement(MemoryRouter, { initialEntries: [url] }, createElement(FixtureMode.Provider, { value: true }, live)))
+  return markupOf(createElement(MemoryRouter, { initialEntries: [url] }, createElement(FixtureMode.Provider, { value: true }, live)))
 }
 
 describe('the phone home', () => {
-  it('lobby: you are in, with the standings and the code bar', async () => {
+  it('lobby: you are in, your place, On the TV, the standings and the code bar', async () => {
     const text = await phone('lobby')
     expect(text).toContain("You're in.")
     expect(text).toContain('12 players here')
     expect(text).toContain('Standings')
     expect(text).toContain('Show my code')
-    expect(text).not.toContain('Also running')
+    // On the TV: Now, then the games still to come in the host's running order.
+    expect(text).toContain('On the TV Now The night so far Next Last one standing Later Quiz Then 1 more')
+    // Your place leads, On the TV follows, the standings sit below them.
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('On the TV'))
+    expect(text.indexOf('On the TV')).toBeLessThan(text.indexOf('Standings'))
   })
 
-  it('a quiz question on the TV: the main card says so and shows the question to answer', async () => {
-    const text = await phone('quiz-question')
-    expect(text).toContain('Quiz On the TV')
-    expect(text).toContain('What is the capital of Denmark?')
-    expect(text).toContain('Copenhagen')
+  it('a quiz question on the TV: letters only, with the question number on the strap', async () => {
+    const html = await phoneMarkup('quiz-question')
+    const text = plain(html)
+    // The quiz's own strap words (phoneStrap), where the strap said "On the TV" before it had them.
+    expect(text).toContain('Quiz Question 3 of 10')
+    expect(text).toContain('The question is on the TV.')
+    // The quiz opens its prompts with `final`, so the first tap counts, and the phone says so.
+    expect(text).toContain('Tap the letter of your answer. Your first tap counts.')
+    expect(text).toContain('Show the answers here')
+    // The question and the answers stay on the TV until this phone asks for them.
+    expect(text).not.toContain('What is the capital of Denmark?')
+    expect(text).not.toContain('Copenhagen')
+    // Four tiles, named by their letters.
+    expect([...html.matchAll(/data-answer-tile="" aria-label="([A-D])"/g)].map(([, letter]) => letter)).toEqual(['A', 'B', 'C', 'D'])
     expect(text).not.toContain('Locked in')
     // The code bar steps aside while the timed question is open, so it covers no answer.
     expect(text).not.toContain('Show my code')
@@ -73,15 +104,18 @@ describe('the phone home', () => {
 
   it('the quiz reveal and leaderboard stay on the main card, with the code bar back', async () => {
     const reveal = await phone('quiz-reveal')
-    expect(reveal).toContain('Quiz On the TV')
+    expect(reveal).toContain('Quiz Question 3 of 10')
+    // Sofie picked Copenhagen: right, in words and with no exclamation mark.
+    expect(reveal).toContain('You got it.')
+    expect(reveal).not.toContain('!')
     expect(reveal).toContain('Show my code')
-    expect(await phone('quiz-leaderboard')).toContain('Leaderboard after question 3 of 10')
+    expect(await phone('quiz-leaderboard')).toContain('Quiz After question 3 of 10')
   })
 
-  it('fusion voting off the TV is "Now playing"; locked on the TV is "On the TV"', async () => {
+  it('fusion voting off the TV is its own section with an outlined Vote; locked on the TV is "On the TV"', async () => {
     const voting = await phone('fusion-voting')
-    expect(voting).toContain('Who is fused? Live')
-    expect(voting).toContain('Vote on the pictures')
+    expect(voting).toContain('Who is fused? Vote on the pictures: 5 of 6 done')
+    expect(voting).not.toContain('Live')
     expect(await phone('fusion-locked')).toContain('Who is fused? On the TV')
   })
 
@@ -94,13 +128,38 @@ describe('the phone home', () => {
     expect(text).toContain('Waiting for the next game')
   })
 
-  it('several games: the stage game is main, the background games are compact cards', async () => {
-    const text = await phone('background')
-    expect(text).toContain('Quiz On the TV')
+  it('several games: the stage game is main, then each background game in its own section, oldest start first', async () => {
+    const snapshot = fixtureSnapshot('background', 'phone')
+    const html = await phoneMarkup(snapshot)
+    const text = plain(html)
+    expect(text).toContain('Quiz Question 3 of 10')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
-    expect(text).toContain('Last one standing')
-    expect(text).toContain('Who is fused?')
+    // Each game running underneath has its own section, headed by its tab: the
+    // quiz on the main card, then fusion (started first), then Last one standing.
+    expect(headings(html)).toEqual(['Quiz', 'Who is fused?', 'Last one standing'])
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Who is fused?'))
+    expect(text.indexOf('Who is fused?')).toBeLessThan(text.indexOf('Last one standing'))
+    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Standings'))
+    // The hunt's section: where Sofie stands, how many are left and the latest knockout at its time.
+    const hunt = snapshot.games.find((g) => g.game_type === 'elimination')!
+    const [latest] = (hunt.public_state as { feed: { at: number }[] }).feed
+    expect(text).toContain(`Last one standing Who is left You're still in. 8 of 12 left. Mads got Oscar at ${clockTime(latest.at)}.`)
+    expect(text).toContain('Your secret task')
+    expect(text).toContain('Got someone? Scan their code')
+  })
+
+  it("has one gold step at most: Show my code, never a game's button or a Live chip", async () => {
+    for (const scene of ['lobby', 'quiz-reveal', 'quiz-leaderboard', 'fusion-voting', 'final'] as const) {
+      const html = await phoneMarkup(scene)
+      expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
+      expect(html, scene).not.toMatch(/data-slot="badge" data-variant="default"/)
+    }
+    // While the quiz's timed question is open, the code bar steps aside: no gold button at all,
+    // and the hunt's Scan and fusion's Vote stay outlined.
+    const background = await phoneMarkup('background')
+    expect(goldButtons(background)).toEqual([])
+    expect(background).not.toMatch(/data-slot="badge" data-variant="default"/)
   })
 
   it('a removed guest: no longer in the party, with Join again', async () => {

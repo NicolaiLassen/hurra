@@ -148,7 +148,7 @@ export default function MyPhotoButton({
         ) : note ? (
           // The same key as the text: one live region, so the change is read out.
           <SheetDescription key="text" aria-live="polite" className="mt-5 flex items-center justify-center gap-2 text-base font-semibold text-foreground">
-            <CheckCircleIcon weight="fill" className="size-5 shrink-0 text-confetti-teal" />
+            <CheckCircleIcon weight="fill" className="size-5 shrink-0 text-paper" />
             {note}
           </SheetDescription>
         ) : (
