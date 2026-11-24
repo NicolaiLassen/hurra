@@ -241,8 +241,9 @@ edges never cuts anything off. Games play inside it and get it for free.
 - **The way in** (`joinPlace` in scene.ts, [Join.tsx](../src/components/tv/Join.tsx)):
   before anyone joins, the lobby is one big QR code; for 1 to 3 guests the
   board's own big join card; for a bigger party the join block (the QR code on
-  its white quiet zone, the code and the address) beside the podium; on the
-  stage only the band's code. Codes are paper, never gold, and the address is
+  its white quiet zone, the code and the address) beside the podium; while a
+  game holds the stage (also one without a screen of its own, whose card
+  stands beside the podium) only the band's code. Codes are paper, never gold, and the address is
   always the running page's own origin.
 - **News** ([news.ts](../src/components/tv/news.ts) routes it): big news is
   a strap across the whole top row for 8 seconds, over the programme strap

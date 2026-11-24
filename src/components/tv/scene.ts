@@ -45,7 +45,9 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
  * - `qr`: the join block beside the podium, the QR code on its white quiet
  *   zone with the code, on a bigger party's standings;
  * - `code`: "Join with HURRA30" at the band's right, while a game holds the
- *   stage, so the game keeps the room.
+ *   stage, so the game keeps the room; also on the standings while a game
+ *   without a screen of its own holds the stage, whose card then stands
+ *   beside the podium.
  * Nowhere before anyone has joined (the lobby is one big QR code already), on
  * the recap, or while joining is closed.
  */
@@ -55,7 +57,8 @@ export function joinPlace(area: MainArea, open: boolean, guests: number): JoinPl
   if (!open || area.kind === 'recap') return null
   if (area.kind === 'stage') return 'code'
   if (guests === 0) return null
-  return boardTier(guests) === 'few' ? 'board' : 'qr'
+  if (boardTier(guests) === 'few') return 'board'
+  return area.nowPlaying ? 'code' : 'qr'
 }
 
 /** The names of a game's winners who are still in the party, in the order the game gave them. */

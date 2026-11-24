@@ -93,6 +93,13 @@ describe('joinPlace', () => {
     expect(joinPlace(stage, true, 45)).toBe('code')
   })
 
+  it('gives the band the code while a game without a screen of its own holds the stage, since its card stands beside the podium', () => {
+    const pong = { kind: 'board', over: false, nowPlaying: game('p', { game_type: 'in-person', title: 'Beer pong' }) } as const
+    expect(joinPlace(pong, true, 24)).toBe('code')
+    // A small party still gets the board's big join card.
+    expect(joinPlace(pong, true, 2)).toBe('board')
+  })
+
   it('shows none while joining is closed, on the recap, or before anyone joined (the lobby is a QR code already)', () => {
     expect(joinPlace(board, false, 2)).toBeNull()
     expect(joinPlace(stage, false, 12)).toBeNull()
