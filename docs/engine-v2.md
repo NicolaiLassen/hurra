@@ -3521,21 +3521,19 @@ questions; the host crowns the winner.
 - **Badges**: `wins` as "Quiz champion" (`TrophyIcon`, gold). `icon:
   QuestionIcon`.
 
-**The look: original, Hurra's own.** Not Kahoot's shapes, colours, music or
-layout: no 2 by 2 grid of four coloured answer tiles, no triangle, diamond,
-circle and square symbols, no red, blue, yellow and green, no purple backdrop,
-no circular countdown, no music. Instead:
+**The look: original, Hurra's own** (docs/identity.md, The quiz on the TV).
+Not Kahoot's shapes, colours, music or layout: no coloured answer tiles, no
+triangle, diamond, circle and square symbols, no red, blue, yellow and green,
+no purple backdrop, no circular countdown, no music. Instead:
 
-- the question is a large dark card (`bg-card`) on the plain studio ground
-  (the night sky and its falling confetti until November 16); the countdown
-  is a gold bar draining along the bottom edge of that card, turning pink in
-  the last 5 s;
-- the 2 to 4 options are full-width rows stacked under the question, each a
-  dark card with a letter badge (A to D) and the option text. The four
-  confetti colours (gold, pink, teal, violet) colour the letter badges only;
-- the answered count is a row of small circles, one per guest, filling in gold
-  as answers arrive, with "31 of 45" beside it. Counts only: the circles carry
-  no names or faces, so nobody can tell who hasn't answered;
+- the question is large type on the plain studio ground, beside one big
+  countdown figure that is paper and turns gold for the last 5 s;
+- the 2 to 4 options are dark tiles in a 2 by 2 grid, each with a tilted
+  letter chip (A to D) and the option text. The quiz key (A coral, B pink,
+  C teal, D violet) colours the letter chips only; the tiles stay dark;
+- the answered count is a row of tilted paper pips, one per guest, filling in
+  as answers arrive, with "31 of 45 have answered" beside it. Counts only: the
+  pips carry no names or faces, so nobody can tell who hasn't answered;
 - sounds come only from the library and are played by the views, once per
   question (3.5): whoosh when a question appears and the tick-tock over the countdown's last 1.6 s, its bell on zero (scheduled by the database clock; an early Reveal now cancels it)
   (TV), coin for your right answer and sad for a wrong one or none (phone).
@@ -3545,13 +3543,15 @@ no circular countdown, no music. Instead:
 
 **Screens.**
 
-- **TV** (`TvView`): lobby: "N questions. Answer on your phone." Question:
-  "Question 3 of 10", the question card with its draining bar, the option
-  rows, the circles. When the countdown ends: "Time's up". Reveal: each option
-  row fills like a bar to its count, the right one gold with a check, the
-  wrong ones dimmed; the 3 fastest right answers with their times.
-  Leaderboard: the top 5 quiz points with "+850" gains and animated rank
-  changes. `FinalTvView`: the top 3 on a podium with confetti and "Hurra!".
+- **TV** (`TvView`): lobby: "N questions. Answer on your phone." Question
+  (the strap says "Question 3 of 10"): the question, the countdown figure,
+  the option tiles, the pips. When the countdown ends: "Time's up". Reveal:
+  the right answer's tile on paper with a check and how many picked it, the
+  others stepped back with their counts; how many got it right and the 3
+  fastest right answers with their times. Leaderboard: "The quiz so far", the
+  top 5 quiz points with "+850" gains and animated rank changes.
+  `FinalTvView`: "Hurra for Ana", the line that saves the third hurra for the
+  night's winner, and the top 3 on paper steps with the logo's confetti.
 - **Phone** (`PlayerView`): lobby: "Quiz time! Watch the TV." Question: the
   options as big full-width buttons with their letters and texts (phones show
   the text, not only the letter) and the countdown bar; the buttons are
@@ -4391,7 +4391,7 @@ committed file.
   moment, the Transit podium, the Vimeo live studio for the control room, the
   Luma guest list, the Lapse show-and-scan code screen, the Xbox TV code
   screen for pairing the TV, and the Deezer quiz timer for the idea of time
-  draining (the quiz draws it as a bar). More in `.design/brand/online/` and
+  draining (the quiz shows it as one big figure). More in `.design/brand/online/` and
   `.design/brand/audit/`.
 
 ### 12.4 Glossary
@@ -4441,7 +4441,7 @@ committed file.
 | The rehearsal hard-coding games | Game bots; Node-safe client code; vitest; the secret-key guards; no password in the repo (2.13, 3.6, 9.3) |
 | Pings missing after `game_load` closes; retries across a restart | `game_load` pings the room; `env.round` (2.8, 3.3, 4.3) |
 | Wrong default winners | This round's points with awards; nobody when the top is 0 (3.3, 8) |
-| The quiz looking like Kahoot | Stacked option rows, a draining gold bar, counting circles, one title card (8.3) |
+| The quiz looking like Kahoot | Dark tiles with only the letter chips in the key, one countdown figure, counting pips, one title card (8.3) |
 | Jittered speed points; unclear sound triggers | `prompt: true` pings skip the jitter; sounds from views, once per moment (2.8, 3.5, 5.4) |
 | Small contradictions | The result card stays until the next game; member hooks run as system; `game.start` data aligned; prompt specs are public; the `interrupt` flag (2.14, 3.3, 3.5, 5.5, 7.2) |
 | Sources only under a temp folder | `.design/`, relative paths (12.3) |

@@ -11,7 +11,8 @@ block in [src/index.css](../src/index.css), and the approved
 **Contents:** [Colour jobs](#colour-jobs) · [Surfaces](#surfaces) ·
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
-[The TV's frame](#the-tvs-frame) · [Old names](#old-names) · [Guards](#guards) ·
+[The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
+[Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
@@ -77,7 +78,10 @@ dialogs and sheets stand on raised, not on the menus' overlay.
 TV sizes, at 1080p. Nothing on the TV is under 28 px. On short screens
 (`short:`, 960 px tall or less: 1440 by 900 and 720p) each size steps down one
 place in this list, so `text-tv-question short:text-tv-answer`; the floor has
-no step below it.
+no step below it. A screen that holds a hero figure and a full layout at once
+(the quiz's question) may step once more on low screens (`low:`, 800 px tall
+or less: 720p and 768p), `low:text-tv-name`, never below the floor: 28 px on
+a 720p screen is 42 at 1080p.
 
 | Class | px | For |
 | --- | --- | --- |
@@ -124,7 +128,8 @@ screens not yet moved.
   only.
 - `animate-strap-in`: a strap wipes in from its left edge (220 ms).
   `animate-tab-land`: a tab lands from 6 degrees and 1.08 scale (180 ms).
-- Only tabs, letter chips and hero tokens tilt. Rows never do.
+- Only tabs, letter chips, hero tokens and the quiz's answer pips tilt. Rows
+  never do.
 - `MotionConfig reducedMotion="user"` wraps the app
   ([src/main.tsx](../src/main.tsx)): with reduced motion on, motion's
   animations skip moves and scales and keep fades. CSS animations need their
@@ -267,6 +272,54 @@ edges never cuts anything off. Games play inside it and get it for free.
   "Reconnecting"), never a coloured dot. It is quiet in `paper-3` at a small
   size and sits outside the safe area: the one place on the TV under the
   28 px floor, because nobody watches it from the sofa.
+
+## The quiz on the TV
+
+The quiz's stage screens ([src/games/quiz/TvView.tsx](../src/games/quiz/TvView.tsx),
+[Podium.tsx](../src/games/quiz/Podium.tsx), with their sizes in
+[look.ts](../src/games/quiz/look.ts) and the parts phones and the host page
+share in [parts.tsx](../src/games/quiz/parts.tsx)). The strap says where the
+quiz is ("Question 3 of 10"), so the stage never repeats it.
+
+- **The question:** Schibsted Grotesk at 800, `text-tv-question` (86 px), two
+  lines at most. It starts at the largest size and steps down
+  (`QUESTION_STEPS`, each with its `short:` and `low:` step) while it takes a
+  third line, measured before paint. Only a question past about 150
+  characters on a short screen reaches the floor and wraps to a third line.
+- **The answers:** a 2 by 2 grid of `overlay` tiles (`rounded-tile`), A and B
+  on top, C and D below, the same places as on every phone; true or false is
+  one row. Each tile has its tilted letter chip in the key (`LetterBadge`,
+  `rounded-chip`, the letter in `wide`) and the answer in the reading face at
+  700, `text-tv-answer` (66 px). All answers share one size, the largest at
+  which each fits its tile without breaking a word (`OPTION_STEPS`).
+- **The countdown:** one figure in `tv-num` at `text-tv-count` (250 px) with
+  "seconds left" under it, in place of a bar. Paper, gold only for the last
+  5 seconds (`URGENT_MS`) while the tick-tock plays, `paper-3` with "Time's
+  up". Everywhere else the countdown follows the same rule: `SecondsLeft` and
+  `DrainBar` are paper, gold for the last seconds; never pink, which is the
+  hunt's.
+- **The pips:** one tilted paper square per guest, filled as they answer (an
+  empty one is a `rule` outline), with "17 of 24 have answered": counts only,
+  never names. They shrink to fit their row, so 45 guests still fit on one
+  line. The host page's dots are small paper squares.
+- **The reveal:** the question and tiles stay. The right answer's tile turns
+  `paper` with ink, a check and how many picked it; the others step back to
+  `raised` with their chip in `rule` and `paper-3` text. Never fade a key
+  colour with opacity: on the ground it turns to mud. Then "6 of 11 got it
+  right" and the fastest right answers, times in `tv-num`, where the pips
+  were.
+- **The leaderboard** after each question ("The quiz so far"): solid `raised`
+  rows, the leader's rank and points gold and everyone else's paper, a gain
+  on an `overlay` chip.
+- **The final:** "Hurra for Ana" in `wide` beside the winner's tilted token,
+  "Won the quiz with 2,748 points." with the points gold, and "The third hurra
+  is saved for the night's winner." The top three stand on `paper` steps of
+  clearly different heights, the place in `wide`, the winner's points on
+  gold. Confetti is the logo's pieces in the logo's colours, behind the words.
+- **Room:** the question screen fits the stage with two band lines at every
+  size (444 px at 720p). The night's top five is not on the TV during a
+  question; if it is wanted, it joins the band as one slim line (The TV's
+  frame).
 
 ## Old names
 
