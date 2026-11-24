@@ -1,55 +1,70 @@
-import type { ReactNode } from 'react'
 import Logo from '@/components/Logo'
-import Qr from '@/components/Qr'
+import { clockTime } from '@/components/tv/clock'
+import { Tab } from '@/components/tv/onAir'
 import type { SceneLine } from '@/components/tv/scene'
-import { joinUrl } from '@/lib/urls'
+import { GameStatus } from '@/components/tv/StatusCard'
+import type { SessionGame } from '@/lib/types'
 
 /**
- * The TV's header: the logo, the party's name and a line saying what is on
- * ("Now on stage: Quiz", "Last game: Mads won Quiz"), with the join card while
- * joining is open.
+ * The top of the TV's frame (docs/identity.md, The TV's frame): at the left
+ * the programme strap, a tilted gold tab with one word for what is on and a
+ * paper strap saying where it is ("Question 3 of 10", "Quiz then Who is
+ * fused?"); at the right the bug, the party's name, the time of night and the
+ * logo. Big news takes this row's whole width for a moment (Banner).
  */
-export default function Header({
-  name,
-  line,
-  icon,
-  joinCode,
-}: {
-  name: string
-  line: SceneLine
-  icon: ReactNode
-  /** The join card's code, or null to leave it out (joining closed, nobody here yet). */
-  joinCode: string | null
-}) {
+export default function Header({ line, name, now }: { line: SceneLine; name: string; now: number }) {
   return (
-    <header className="flex shrink-0 items-start justify-between gap-8">
-      <div className="flex min-w-0 items-center gap-5">
-        <Logo className="size-16 shrink-0 lg:size-20 short:size-14" />
-        <div className="min-w-0">
-          <h1 className="truncate text-4xl font-black tracking-tight lg:text-6xl short:text-4xl">{name}</h1>
-          <p className="mt-2 flex min-w-0 items-center gap-3 text-xl text-muted-foreground lg:text-2xl short:mt-1 short:text-xl">
-            <span className="flex shrink-0 [&>svg]:size-6 short:[&>svg]:size-5">{icon}</span>
-            <span className="min-w-0 truncate">
-              {line.lead}
-              {line.strong && <span className="font-semibold text-foreground"> {line.strong}</span>}
-            </span>
-          </p>
-        </div>
-      </div>
-      {joinCode && <JoinCard joinCode={joinCode} />}
+    <header className="flex h-16 shrink-0 items-center justify-between gap-12 short:h-14 short:gap-8">
+      <Strap line={line} />
+      <Bug name={name} now={now} />
     </header>
   )
 }
 
-function JoinCard({ joinCode }: { joinCode: string }) {
+/** The tab and the paper strap. The strap's words end in an ellipsis when they run out of room. */
+function Strap({ line }: { line: SceneLine }) {
   return (
-    // A smaller code on short screens leaves the rail room for one more card.
-    <div className="flex shrink-0 items-center gap-4 rounded-3xl bg-card/80 p-3 pr-6 ring-1 ring-foreground/10 backdrop-blur short:[&_svg]:size-22">
-      <Qr value={joinUrl(joinCode)} size={104} />
-      <div>
-        <p className="text-lg text-muted-foreground short:text-base">Join the game</p>
-        <p className="font-mono text-3xl font-black tracking-widest text-primary short:text-2xl">{joinCode}</p>
-      </div>
+    <div data-frame="strap" className="flex min-w-0 items-center">
+      <Tab size="strap" className="max-w-[36rem] shrink-0">
+        {line.tab}
+      </Tab>
+      <p className="-ml-1 flex h-14 min-w-0 items-center bg-paper px-6 text-tv-body text-ink short:h-12 short:px-5 short:text-tv-tab">
+        <span className="min-w-0 truncate">
+          {line.game ? (
+            <span className="font-semibold">
+              <GameWords game={line.game} />
+            </span>
+          ) : (
+            <>
+              {line.strong && <span className="font-bold">{line.strong}</span>}
+              {line.rest && <span className="font-normal text-ink/75"> {line.rest}</span>}
+            </>
+          )}
+        </span>
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The stage game's own strap words (its TvStatus `strap` variant). A game
+ * without them gets the time it started, a time the database holds, or
+ * "Final result" once it is over.
+ */
+function GameWords({ game }: { game: SessionGame }) {
+  const plain = game.status === 'finished' ? 'Final result' : game.started_at !== null ? `Running since ${clockTime(game.started_at)}` : 'Starting'
+  return <GameStatus game={game} variant="strap" fallback={plain} />
+}
+
+/** The party's name, the time of night and the logo, like a channel's corner bug. A long name ends in an ellipsis. */
+function Bug({ name, now }: { name: string; now: number }) {
+  return (
+    <div data-frame="bug" className="flex min-w-0 shrink-0 items-center gap-6 short:gap-5">
+      <p className="max-w-[26rem] min-w-0 truncate text-tv-tab font-medium text-paper-2 short:max-w-[20rem] short:text-tv-floor">{name}</p>
+      <time dateTime={new Date(now).toISOString()} className="shrink-0 tv-num text-tv-band text-paper short:text-tv-field">
+        {clockTime(now)}
+      </time>
+      <Logo className="size-15 shrink-0 ring-0 short:size-12" />
     </div>
   )
 }

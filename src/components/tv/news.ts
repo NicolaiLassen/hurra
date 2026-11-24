@@ -5,15 +5,24 @@ import type { SoundName } from '@/games/core/sounds'
 import { strongestSound } from '@/lib/soundPolicy'
 import type { FeedItem } from '@/lib/types'
 
+/**
+ * An announcement's words as the TV says them: without the exclamation marks
+ * a game may end its news with ("Bo is the last one standing!"). The TV keeps
+ * its one exclamation mark for the winner's screen (docs/identity.md).
+ */
+export function onAirText(text: string): string {
+  return text.replace(/\s*!+\s*$/, '').replace(/!+(\s)/g, '.$1')
+}
+
 /** How long an announcement stays on the banner. */
 export const BANNER_MS = 8000
-/** How long a line stays on the ticker. */
+/** How long a line stays on the ticker (the band's event line). */
 export const TICKER_MS = 20_000
 
 /**
- * - banner: the banner at the bottom, with its sound (or the default pop)
+ * - banner: the news strap across the top of the TV, with its sound (or the default pop)
  * - sound: only its sound: the stage game's own view shows the moment
- * - ticker: the quiet line under the rail, without sound
+ * - ticker: the quiet event line in the band, without sound
  * - skip: nothing (the recap is playing)
  */
 export type NewsRoute = 'banner' | 'sound' | 'ticker' | 'skip'

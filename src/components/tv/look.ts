@@ -5,10 +5,7 @@ export const spring: Transition = { type: 'spring', stiffness: 260, damping: 28 
 
 /**
  * The TV's card chrome: a solid raised surface, told apart from the ground by
- * value, with no blur and no ring (docs/identity.md). The games' rail cards
+ * value, with no blur and no ring (docs/identity.md). The games' status cards
  * (their TvStatus) draw the same.
  */
 export const CARD = 'rounded-3xl bg-raised'
-
-/** The rail's width, beside a game's screen. */
-export const RAIL = 'w-96 short:w-88'

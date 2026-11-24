@@ -1,8 +1,9 @@
-import { DeviceMobileIcon, GameControllerIcon } from '@phosphor-icons/react'
+import { DeviceMobileIcon } from '@phosphor-icons/react'
 import { memo, Suspense, useMemo } from 'react'
 import { LoadingPart } from '@/components/layout'
 import Contained from '@/components/Contained'
 import FinalScreen from '@/components/tv/FinalScreen'
+import { Tab } from '@/components/tv/onAir'
 import { getGameModule } from '@/games/registry'
 import type { TvViewProps } from '@/games/types'
 import { gameMediaUrl } from '@/lib/media'
@@ -58,19 +59,13 @@ export default memo(StageView)
 /** A live game whose screen failed: what it is, and where to play it. */
 function NowPlaying({ game }: { game: SessionGame }) {
   const module = getGameModule(game.game_type)
-  const Icon = module?.icon ?? GameControllerIcon
   return (
-    <div className="m-auto flex max-w-4xl flex-col items-center gap-6 text-center">
-      <span className="grid size-32 place-items-center rounded-[2.25rem] bg-primary/15 ring-2 ring-primary/40 short:size-24">
-        <Icon weight="duotone" className="size-16 text-primary short:size-12" />
-      </span>
-      <div>
-        <p className="text-2xl font-semibold tracking-widest text-muted-foreground uppercase short:text-xl">Now playing</p>
-        <h2 className="mt-2 text-7xl font-black tracking-tight short:text-6xl">{game.title}</h2>
-        {module?.description && <p className="mt-4 text-3xl text-balance text-muted-foreground short:text-2xl">{module.description}</p>}
-      </div>
-      <p className="flex items-center gap-3 text-3xl font-semibold short:text-2xl">
-        <DeviceMobileIcon weight="duotone" className="text-primary" />
+    <div className="m-auto flex max-w-[80rem] flex-col items-start gap-8 short:gap-6">
+      <Tab size="strap">Now playing</Tab>
+      <h2 className="wide text-tv-question text-paper short:text-tv-answer">{game.title}</h2>
+      {module?.description && <p className="text-tv-name text-balance text-paper-2 short:text-tv-band">{module.description}</p>}
+      <p className="flex items-center gap-4 text-tv-name font-semibold text-paper short:text-tv-band">
+        <DeviceMobileIcon weight="fill" className="shrink-0 text-paper-2" />
         Play along on your phone
       </p>
     </div>

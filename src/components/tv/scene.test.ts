@@ -3,8 +3,9 @@ import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
 import {
   byOldestStart,
+  comingUp,
   freshStage,
-  joinCardPlace,
+  joinPlace,
   mainArea,
   resultLine,
   runningFor,
@@ -77,46 +78,66 @@ describe('mainArea', () => {
   })
 })
 
-describe('joinCardPlace', () => {
+describe('joinPlace', () => {
   const board = { kind: 'board', over: false, nowPlaying: null } as const
   const stage = { kind: 'stage', game: game('q'), finished: false } as const
 
   it('puts the big join card on the board while the standings show 1 to 3 guests', () => {
-    expect([1, 2, 3].map((guests) => joinCardPlace(board, true, guests))).toEqual(['board', 'board', 'board'])
+    expect([1, 2, 3].map((guests) => joinPlace(board, true, guests))).toEqual(['board', 'board', 'board'])
   })
 
-  it('keeps it in the header for a bigger party, and while a game holds the stage', () => {
-    expect(joinCardPlace(board, true, 4)).toBe('header')
-    expect(joinCardPlace(board, true, 45)).toBe('header')
-    expect(joinCardPlace(stage, true, 2)).toBe('header')
+  it("gives a bigger party's standings the join block beside the podium, and a game on the stage only the code", () => {
+    expect(joinPlace(board, true, 4)).toBe('qr')
+    expect(joinPlace(board, true, 45)).toBe('qr')
+    expect(joinPlace(stage, true, 2)).toBe('code')
+    expect(joinPlace(stage, true, 45)).toBe('code')
   })
 
-  it('shows none while joining is closed, or before anyone joined (the empty board is a QR code already)', () => {
-    expect(joinCardPlace(board, false, 2)).toBeNull()
-    expect(joinCardPlace(stage, false, 12)).toBeNull()
-    expect(joinCardPlace(board, true, 0)).toBeNull()
+  it('shows none while joining is closed, on the recap, or before anyone joined (the lobby is a QR code already)', () => {
+    expect(joinPlace(board, false, 2)).toBeNull()
+    expect(joinPlace(stage, false, 12)).toBeNull()
+    expect(joinPlace({ kind: 'recap' }, true, 12)).toBeNull()
+    expect(joinPlace(board, true, 0)).toBeNull()
   })
 })
 
-describe('the scene line', () => {
+describe('the programme strap', () => {
   const finished = game('q', { status: 'finished', finished_at: NOW - MIN, winners: ['mads'] })
+  const pending = (id: string, title: string, position: number, patch: Partial<SessionGame> = {}) =>
+    game(id, { title, position, status: 'pending', started_at: null, ...patch })
 
-  it('names the stage game while it is live or on its final screen', () => {
-    expect(sceneLine({ kind: 'live', game: game('q') }, PLAYERS)).toEqual({ lead: 'Now on stage:', strong: 'Quiz' })
-    expect(sceneLine({ kind: 'final', game: finished, until: NOW + MIN }, PLAYERS)).toEqual({ lead: 'Final result:', strong: 'Quiz' })
+  it("puts the stage game's title on the tab and leaves the strap to the game, live or on its final screen", () => {
+    const quiz = game('q')
+    expect(sceneLine({ kind: 'live', game: quiz }, PLAYERS, [quiz])).toEqual({ tab: 'Quiz', game: quiz })
+    expect(sceneLine({ kind: 'final', game: finished, until: NOW + MIN }, PLAYERS, [finished])).toEqual({ tab: 'Quiz', game: finished })
   })
 
-  it('says how the last game went until the next one starts', () => {
-    expect(sceneLine({ kind: 'standings', lastGame: finished }, PLAYERS)).toEqual({ lead: 'Last game:', strong: 'Mads won Quiz' })
-    expect(sceneLine({ kind: 'standings', lastGame: null }, PLAYERS)).toEqual({ lead: 'Live scoreboard' })
+  it("says what is next between games, in the host's order, with the one after it", () => {
+    const games = [pending('f', 'Who is fused?', 3), finished, pending('q2', 'Quiz', 2), pending('p', 'Beer pong', 4)]
+    expect(sceneLine({ kind: 'standings', lastGame: finished }, PLAYERS, games)).toEqual({
+      tab: 'Next',
+      strong: 'Quiz',
+      rest: 'then Who is fused?',
+    })
+    expect(sceneLine({ kind: 'standings', lastGame: null }, PLAYERS, [pending('f', 'Who is fused?', 3)])).toEqual({
+      tab: 'Next',
+      strong: 'Who is fused?',
+    })
+  })
+
+  it('says how the last game went when nothing is left to come', () => {
+    expect(sceneLine({ kind: 'standings', lastGame: finished }, PLAYERS, [finished])).toEqual({ tab: 'Standings', strong: 'Mads won Quiz' })
+    expect(sceneLine({ kind: 'standings', lastGame: null }, PLAYERS, [])).toEqual({ tab: 'Standings', strong: 'The scoreboard' })
   })
 
   it('has its own words for the end of the party and the recap', () => {
-    const scenes: [TvScene, string][] = [
-      [{ kind: 'over' }, 'Final standings'],
-      [{ kind: 'recap' }, 'Recap of the night'],
-    ]
-    for (const [scene, lead] of scenes) expect(sceneLine(scene, PLAYERS)).toEqual({ lead })
+    expect(sceneLine({ kind: 'over' }, PLAYERS, [])).toEqual({ tab: 'The end', strong: 'Final standings' })
+    expect(sceneLine({ kind: 'recap' }, PLAYERS, [])).toEqual({ tab: 'Recap', strong: 'Recap of the night' })
+  })
+
+  it('leaves out games that started, finished or were archived from what comes up', () => {
+    const games = [pending('a', 'Archived', 1, { archived_at: NOW }), game('live'), finished, pending('n', 'Next one', 5)]
+    expect(comingUp(games).map((g) => g.id)).toEqual(['n'])
   })
 })
 

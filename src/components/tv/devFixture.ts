@@ -10,6 +10,7 @@
 // &later=<seconds>   the clock moved on (a final screen's 3 minutes run out)
 // &news=banner|ticker|interrupt|stage|points   arrives 1.5 s after the page opens
 // &host=1            a host's own browser: "Host preview"
+// &name=<text>       the party's name (a long one checks the bug's ellipsis)
 // &slide=<n>         the recap opens on slide n (from 0)
 // On the pairing screen (fixture=removed), the code TV2026 pairs; any other is refused.
 import { FIXTURE_NOW, fixtureRecapDoc, fixtureSnapshot, isFixtureScene, type FixtureScene } from '@/lib/fixtures'
@@ -55,6 +56,8 @@ export function devTv(search: URLSearchParams): DevTv | null {
   if (search.get('fresh') === '1' && snapshot.session) {
     snapshot = { ...snapshot, session: { ...snapshot.session, spotlight_at: snapshot.now - 500 } }
   }
+  const name = search.get('name')
+  if (name && snapshot.session) snapshot = { ...snapshot, session: { ...snapshot.session, name } }
   const later = Number(search.get('later'))
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
   return {

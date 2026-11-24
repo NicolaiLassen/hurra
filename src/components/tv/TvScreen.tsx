@@ -1,17 +1,17 @@
-import { CrownIcon, GameControllerIcon, RankingIcon, TrophyIcon } from '@phosphor-icons/react'
 import { useMemo } from 'react'
 import Backdrop from '@/components/tv/Backdrop'
+import Band from '@/components/tv/Band'
 import Banner from '@/components/tv/Banner'
-import Board, { EmptyBoard } from '@/components/tv/Board'
+import Board from '@/components/tv/Board'
 import Corner from '@/components/tv/Corner'
 import Header from '@/components/tv/Header'
+import { JoinBlock } from '@/components/tv/Join'
+import Lobby from '@/components/tv/Lobby'
 import type { NewsStage } from '@/components/tv/news'
-import Rail from '@/components/tv/Rail'
 import RecapScene from '@/components/tv/RecapScene'
-import { byOldestStart, joinCardPlace, mainArea, sceneLine } from '@/components/tv/scene'
+import { byOldestStart, joinPlace, mainArea, sceneLine } from '@/components/tv/scene'
 import StageView from '@/components/tv/StageView'
 import Strip from '@/components/tv/Strip'
-import Ticker from '@/components/tv/Ticker'
 import TitleCard from '@/components/tv/TitleCard'
 import { useEffectsVolume } from '@/components/tv/useEffectsVolume'
 import { useGains } from '@/components/tv/useGains'
@@ -29,13 +29,15 @@ const hasTvView = (gameType: string) => !!getGameModule(gameType)?.TvView
 const stageBannersOf = (gameType: string) => getGameModule(gameType)?.stageBanners ?? 'banner'
 
 /**
- * The TV once paired (docs/engine-v2.md, 7.2): the scene from stage.ts decides
- * what fills the screen. A game's own screen takes the stage with the rail
- * beside it (the day's top 5, the games in the background, the ones that
- * finished lately); between games the podium and standings, with the status
- * cards in a strip beside the podium; the recap full screen. Announcements
- * become the banner, a sound, or the ticker (news.ts). Reads the nearest
- * LiveSessionProvider, whose snapshot must be a member's.
+ * The TV once paired (docs/engine-v2.md, 7.2), in its on-air frame
+ * (docs/identity.md, The TV's frame): the programme strap and the bug at the
+ * top, the stage at full width, and one band at the bottom with the games
+ * running in the background and the way in, all inside the 5 percent safe
+ * area. The scene from stage.ts decides what fills the stage: a game's own
+ * screen, the podium and standings between games, the lobby's QR code before
+ * anyone joins; the recap takes the whole screen. Announcements become the
+ * news strap across the top, a sound, or the band's event line (news.ts).
+ * Reads the nearest LiveSessionProvider, whose snapshot must be a member's.
  */
 export default function TvScreen({
   hostPreview,
@@ -86,9 +88,9 @@ function Screen({
   const gains = useGains(snapshot.standings)
   const over = session.archived_at !== null
   const open = session.status === 'open' && !over
-  const joinCard = joinCardPlace(area, open, ranked.length)
+  const join = joinPlace(area, open, ranked.length)
 
-  // The game on the stage, and what runs beside it.
+  // The game on the stage, and what runs underneath it.
   const stageId = area.kind === 'stage' ? area.game.id : area.kind === 'board' ? (area.nowPlaying?.id ?? null) : null
   const running = backgroundGames(snapshot)
     .filter((g) => g.id !== stageId)
@@ -105,62 +107,50 @@ function Screen({
   const titleCard = useTitleCard(shown, session, now)
   const titleOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.title
 
+  // The band has the games in the background. Beside the podium: a bigger
+  // party's join block, the game on the stage without a screen of its own, and
+  // the games that finished lately.
   const nowPlaying = area.kind === 'board' ? area.nowPlaying : null
+  const chips = !over && (nowPlaying !== null || finished.length > 0)
   const strip =
-    !over && (nowPlaying || running.length > 0 || finished.length > 0)
+    join === 'qr' || chips
       ? (room: number, chipsHeight?: number) => (
-          <Strip room={room} chipsHeight={chipsHeight} nowPlaying={nowPlaying} running={running} finished={finished} players={players} />
+          <div className="flex min-w-0 flex-col items-end gap-6 short:gap-4" style={{ maxWidth: room }}>
+            {join === 'qr' && <JoinBlock code={session.join_code} />}
+            {chips && <Strip room={room} chipsHeight={chipsHeight} nowPlaying={nowPlaying} running={[]} finished={finished} players={players} />}
+          </div>
         )
       : undefined
 
   return (
-    // The bottom gutter keeps the corner controls (and the ticker) clear of the board.
-    <main className="relative isolate flex h-dvh flex-col gap-8 overflow-hidden p-10 pb-16 short:gap-6 short:p-8 short:pb-16">
+    <main className="relative isolate flex h-dvh flex-col overflow-hidden px-[5vw] py-[5vh]">
       <Backdrop />
       {area.kind === 'recap' && recap ? (
         <RecapScene doc={recap} partyName={session.name} startAt={recapSlide} />
       ) : (
         <>
-          <Header
-            name={session.name}
-            line={sceneLine(shown, players)}
-            icon={<SceneIcon scene={shown} />}
-            joinCode={joinCard === 'header' ? session.join_code : null}
+          <Header line={sceneLine(shown, players, snapshot.games)} name={session.name} now={now} />
+          {/* Clipped at its edges, so a scene that runs out of room never paints over the band. */}
+          <section data-frame="stage" data-fit="stage" className="mt-10 mb-8 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden short:mt-6 short:mb-5">
+            {area.kind === 'stage' ? (
+              <StageView game={area.game} finished={area.finished} />
+            ) : ranked.length === 0 ? (
+              <Lobby joinCode={session.join_code} open={open} over={over} />
+            ) : (
+              <Board rows={ranked} gains={gains} strip={strip} invite={join === 'board' ? session.join_code : null} />
+            )}
+          </section>
+          <Band
+            games={over ? [] : running}
+            joinCode={join === 'code' ? session.join_code : null}
+            ticker={ticker}
+            sourceOf={titleOf}
           />
-          {area.kind === 'stage' ? (
-            <div className="flex min-h-0 flex-1 gap-8 short:gap-6">
-              <section data-fit="stage" className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <StageView game={area.game} finished={area.finished} />
-              </section>
-              <Rail top={ranked.slice(0, 5)} gains={gains} running={running} finished={finished} players={players} />
-            </div>
-          ) : ranked.length === 0 ? (
-            <EmptyBoard joinCode={session.join_code} open={open} over={over} />
-          ) : (
-            <Board rows={ranked} gains={gains} strip={strip} invite={joinCard === 'board' ? session.join_code : null} />
-          )}
         </>
       )}
-      {area.kind === 'stage' && <Ticker item={ticker} source={titleOf(ticker?.game_id)} />}
       <TitleCard game={titleCard} />
-      <Banner item={banner} eyebrow={titleOf(banner?.game_id)} />
+      <Banner item={banner} source={titleOf(banner?.game_id)} />
       <Corner live={connected && pings === 'ok'} hostPreview={hostPreview} />
     </main>
   )
-}
-
-/** The icon before the header's scene line. */
-function SceneIcon({ scene }: { scene: TvScene }) {
-  switch (scene.kind) {
-    case 'live': {
-      const Icon = getGameModule(scene.game.game_type)?.icon ?? GameControllerIcon
-      return <Icon weight="duotone" className="text-confetti-teal" />
-    }
-    case 'final':
-    case 'over':
-    case 'recap':
-      return <TrophyIcon weight="fill" className="text-primary" />
-    case 'standings':
-      return scene.lastGame ? <CrownIcon weight="fill" className="text-primary" /> : <RankingIcon weight="duotone" className="text-primary" />
-  }
 }

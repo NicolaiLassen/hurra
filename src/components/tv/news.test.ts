@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '@/lib/types'
-import { routeNews, takeNews, type NewsStage } from './news'
+import { onAirText, routeNews, takeNews, type NewsStage } from './news'
 
 let nextId = 1
 function item(patch: Partial<FeedItem> = {}): FeedItem {
@@ -89,5 +89,18 @@ describe('takeNews', () => {
 
   it('ignores sounds it has never heard of', () => {
     expect(takeNews([item({ sound: 'kazoo' })], BANNERS)).toEqual({ banner: expect.anything() })
+  })
+})
+
+describe('onAirText', () => {
+  it("drops a game's exclamation marks, since the TV keeps its one for the winner's screen", () => {
+    expect(onAirText('Bo is the last one standing!')).toBe('Bo is the last one standing')
+    expect(onAirText('Picture 3 was Ana and Bo!! ')).toBe('Picture 3 was Ana and Bo')
+    expect(onAirText("That's you! No points on your own picture.")).toBe("That's you. No points on your own picture.")
+  })
+
+  it('leaves calm news as it is', () => {
+    expect(onAirText('Clara got Frida')).toBe('Clara got Frida')
+    expect(onAirText('Voting is closed. 6 pictures')).toBe('Voting is closed. 6 pictures')
   })
 })

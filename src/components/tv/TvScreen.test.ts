@@ -1,7 +1,8 @@
 // The TV renders every fixture scene (src/lib/fixtures.ts, docs/engine-v2.md
 // 5.11) and the TV's own dev scenes, and says what is on: rendered to static
 // HTML under Node, so no effects run. Fit is checked in a browser instead
-// (the screenshots at 1920 by 1080 and 1440 by 900 with 8, 24 and 45 guests).
+// (the screenshots at 1920 by 1080, 1440 by 900 and 1280 by 720 with 1, 6,
+// 12, 24 and 45 guests).
 import { createElement } from 'react'
 import { prerender } from 'react-dom/static'
 import { describe, expect, it, vi } from 'vitest'
@@ -40,28 +41,59 @@ async function html(search: string): Promise<string> {
   return (await new Response(prelude).text()).replace(/<!-- -->/g, '')
 }
 
+/** The programme strap's words, tab first: "Next | Quiz then Who is fused?". */
+function strapOf(page: string): string {
+  const start = page.indexOf('data-frame="strap"')
+  if (start < 0) return ''
+  const words = page
+    .slice(start, page.indexOf('data-frame="bug"'))
+    .replace(/^[^>]*>/, '')
+    .replace(/<[^>]*$/, '')
+    .split(/<[^>]+>/)
+    .filter((part) => part.trim() !== '')
+  return [words[0], words.slice(1).join('').trim()].join(' | ')
+}
+
 describe('the TV scene for each fixture', () => {
   it.each([
-    ['fixture=lobby', 'Live scoreboard'],
-    ['fixture=quiz-question', 'Now on stage:<span class="font-semibold text-foreground"> Quiz'],
-    ['fixture=quiz-reveal', 'Now on stage:'],
-    ['fixture=quiz-leaderboard', 'Now on stage:'],
-    ['fixture=fusion-voting', 'Live scoreboard'],
-    ['fixture=fusion-locked', 'Now on stage:'],
-    ['fixture=fusion-reveal', 'Now on stage:'],
-    ['fixture=final', 'Final result:'],
-    ['fixture=background', 'Also running'],
-    ['fixture=archived', 'Final standings'],
-    ['fixture=standings', 'Last game:'],
-    ['fixture=between', 'Live scoreboard'],
-    ['fixture=pong', 'Now on stage:'],
-    ['fixture=pong-final', 'Final result'],
+    ['fixture=lobby', 'Next | Last one standing then Quiz'],
+    ['fixture=quiz-question', 'Quiz | Question 3 of 10'],
+    ['fixture=quiz-reveal', 'Quiz | Question 3 of 10'],
+    ['fixture=quiz-leaderboard', 'Quiz | After question 3 of 10'],
+    ['fixture=fusion-voting', 'Next | Last one standing then Quiz'],
+    ['fixture=fusion-locked', 'Who is fused? | Voting is closed'],
+    ['fixture=fusion-reveal', 'Who is fused? | 2 of 6 revealed'],
+    ['fixture=final', 'Last one standing | The final knockout'],
+    ['fixture=background', 'Quiz | Question 3 of 10'],
+    ['fixture=archived', 'The end | Final standings'],
+    ['fixture=standings', 'Next | Quiz then Who is fused?'],
+    ['fixture=between', 'Standings | The scoreboard'],
+    ['fixture=pong', 'Beer pong | Played in person'],
+    ['fixture=pong-final', 'Beer pong | Final result'],
+    ['fixture=background&players=45', 'Quiz | Question 3 of 10'],
+    ['fixture=final&players=45', 'Last one standing | The final knockout'],
+  ])('%s: the programme strap says what is on', async (search, expected) => {
+    expect(strapOf(await html(search))).toBe(expected)
+  })
+
+  it.each([
     ['fixture=empty', 'Scan to join'],
     ['fixture=recap', 'the night in numbers'],
-    ['fixture=background&players=45', 'Also running'],
     ['fixture=final&players=45', 'is the last one standing'],
   ])('%s', async (search, expected) => {
     await expect(html(search)).resolves.toContain(expected)
+  })
+
+  it('puts the games running underneath in the band, each in its own line', async () => {
+    const page = await html('fixture=background')
+    const band = page.slice(page.indexOf('data-frame="band"'), page.indexOf('</footer>'))
+    expect(band).toContain('Last one standing')
+    expect(band).toContain('Who is fused?')
+    expect(band.split('data-fit="band-line"').length - 1).toBe(2)
+    // The recap has no frame: no strap and no band.
+    const recap = await html('fixture=recap')
+    expect(recap).not.toContain('data-frame="strap"')
+    expect(recap).not.toContain('data-frame="band"')
   })
 
   it("shows a host's own browser as a preview", async () => {
@@ -69,26 +101,30 @@ describe('the TV scene for each fixture', () => {
   })
 
   it('hides the preview label in the tab Show the TV here opens, since that tab is the TV', async () => {
-    const page = await html('fixture=lobby&host=1&mirror=1')
+    const page = await html('fixture=quiz-question&host=1&mirror=1')
     expect(page).not.toContain('Host preview')
-    expect(page).toContain('Join the game')
+    expect(page).toContain('Join with')
   })
 
-  it('keeps the join card to an open party with guests', async () => {
-    await expect(html('fixture=lobby')).resolves.toContain('Join the game')
-    await expect(html('fixture=archived')).resolves.not.toContain('Join the game')
+  it('keeps the way in to an open party', async () => {
+    await expect(html('fixture=quiz-question')).resolves.toContain('Join with')
+    await expect(html('fixture=archived')).resolves.not.toContain('data-fit="join"')
+    await expect(html('fixture=archived')).resolves.not.toContain('data-fit="invite"')
   })
 
-  it('shows one join card: big on the board for 1 to 3 guests, in the header after that', async () => {
+  it("shows the way in once: the board's big card for 1 to 3 guests, beside the podium after that, the band's code on the stage", async () => {
     const count = (page: string, text: string) => page.split(text).length - 1
     const few = await html('fixture=standings&players=2')
-    expect(count(few, 'Join the game')).toBe(1)
-    expect(few).toContain('data-fit="invite"')
+    expect(count(few, 'data-fit="invite"')).toBe(1)
+    expect(few).not.toContain('Join with')
+    // Beside the podium the join block sits in the board's measured strip, which a static render leaves out; the band has no code.
     const more = await html('fixture=standings&players=4')
-    expect(count(more, 'Join the game')).toBe(1)
     expect(more).not.toContain('data-fit="invite"')
-    // A game on the stage keeps the header's card, whatever the party's size.
-    expect(count(await html('fixture=quiz-question&players=2'), 'Join the game')).toBe(1)
+    expect(more).not.toContain('Join with')
+    // A game on the stage keeps only the band's code, whatever the party's size.
+    const stage = await html('fixture=quiz-question&players=2')
+    expect(count(stage, 'Join with')).toBe(1)
+    expect(stage).not.toContain('data-fit="invite"')
   })
 
   it('crowns every guest tied for first on the podium, not only the middle step', async () => {

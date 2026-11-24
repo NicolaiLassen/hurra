@@ -49,22 +49,28 @@ export function Tab({
   )
 }
 
-/** The popper's gold and pink stripes beside a band line's tab: the mark of the hunt. */
-export function Stripes({ className }: { className?: string }) {
-  return <span aria-hidden className={cn('stripes -mr-0.5 h-15 w-10 shrink-0 rotate-[1.5deg] short:h-13 short:w-9', className)} />
+/** Stripes as high as the tab they stand beside. */
+const STRIPES_SIZE = {
+  strap: 'h-16 w-11 -rotate-2 short:h-14 short:w-10',
+  band: 'h-15 w-10 rotate-[1.5deg] short:h-13 short:w-9',
+} as const
+
+/** The popper's gold and pink stripes beside a pink tab: the mark of the hunt. */
+export function Stripes({ size = 'band', className }: { size?: keyof typeof STRIPES_SIZE; className?: string }) {
+  return <span aria-hidden className={cn('stripes -mr-0.5 shrink-0', STRIPES_SIZE[size], className)} />
 }
 
 /**
  * One line of the band: the tab (a Tab, with Stripes before it if it is the
  * hunt's), then what the line says, on one line that never wraps. 64 px high
- * on a 1080p TV, 56 on short screens; the tab takes at most 40 percent of it.
+ * on a 1080p TV, 56 on short screens; the tab takes at most 48 percent of it.
  * The line is a size container, so a detail can show only where it has room
  * (`hidden @min-[96rem]:inline`).
  */
 export function BandLine({ tab, className, children }: { tab: ReactNode; className?: string; children?: ReactNode }) {
   return (
     <div data-fit="band-line" className={cn('@container flex h-16 min-w-0 items-center short:h-14', className)}>
-      <div className="flex max-w-[40%] min-w-0 shrink-0 items-center">{tab}</div>
+      <div className="flex max-w-[48%] min-w-0 shrink-0 items-center">{tab}</div>
       <div className="flex min-w-0 flex-1 items-center gap-6.5 pl-7 short:gap-5 short:pl-5">{children}</div>
     </div>
   )

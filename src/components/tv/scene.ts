@@ -6,7 +6,7 @@ import { listNames } from '@/lib/recap'
 import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
 
-/** What fills the TV below its header. */
+/** What fills the TV's stage, between the programme strap and the band. */
 export type MainArea =
   /** The recap's slides, full screen. */
   | { kind: 'recap' }
@@ -15,7 +15,7 @@ export type MainArea =
    * or while a game without a TV view of its own is on the stage (`nowPlaying`).
    */
   | { kind: 'board'; over: boolean; nowPlaying: SessionGame | null }
-  /** A game's own screen, with the rail beside it: live, or its final screen. */
+  /** A game's own screen, the full width of the stage: live, or its final screen. */
   | { kind: 'stage'; game: SessionGame; finished: boolean }
 
 /** Which main area a scene gets. A finished game always has a final screen: its own, or the generic one. */
@@ -37,14 +37,25 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
 }
 
 /**
- * Where the join card shows while joining is open: on the board, big, while
- * the standings show 1 to 3 guests (boardTier `few`), so the first guests'
- * friends can scan it from across the room; in the header otherwise. Nowhere
- * before anyone has joined: the empty board is one big QR code already.
+ * Where the way in shows while joining is open (docs/identity.md, The TV's
+ * frame):
+ * - `board`: a small party's big join card on the board (1 to 3 guests,
+ *   boardTier `few`), so the first guests' friends can scan it from across
+ *   the room;
+ * - `qr`: the join block beside the podium, the QR code on its white quiet
+ *   zone with the code, on a bigger party's standings;
+ * - `code`: "Join with HURRA30" at the band's right, while a game holds the
+ *   stage, so the game keeps the room.
+ * Nowhere before anyone has joined (the lobby is one big QR code already), on
+ * the recap, or while joining is closed.
  */
-export function joinCardPlace(area: MainArea, open: boolean, guests: number): 'board' | 'header' | null {
-  if (!open || guests === 0) return null
-  return area.kind === 'board' && boardTier(guests) === 'few' ? 'board' : 'header'
+export type JoinPlace = 'board' | 'qr' | 'code'
+
+export function joinPlace(area: MainArea, open: boolean, guests: number): JoinPlace | null {
+  if (!open || area.kind === 'recap') return null
+  if (area.kind === 'stage') return 'code'
+  if (guests === 0) return null
+  return boardTier(guests) === 'few' ? 'board' : 'qr'
 }
 
 /** The names of a game's winners who are still in the party, in the order the game gave them. */
@@ -62,28 +73,44 @@ export function resultLine(game: SessionGame, players: readonly Player[]): strin
   return names.length > 0 ? `${listNames(names)} won ${game.title}` : `${game.title} is over`
 }
 
-/** The header's scene line: a lead, and the part in the foreground colour. */
-export type SceneLine = { lead: string; strong?: string }
+/**
+ * The programme strap at the top of the TV (docs/identity.md, The TV's
+ * frame): the tilted tab's one short word for what is on, and the paper
+ * strap's words, the part in full strength first. While a game holds the
+ * stage, `game` is set and its own strap words (its TvStatus `strap`
+ * variant) fill the strap.
+ */
+export type SceneLine = { tab: string; strong?: string; rest?: string; game?: SessionGame }
 
-export function sceneLine(scene: TvScene, players: readonly Player[]): SceneLine {
+export function sceneLine(scene: TvScene, players: readonly Player[], games: readonly SessionGame[]): SceneLine {
   switch (scene.kind) {
     case 'live':
-      return { lead: 'Now on stage:', strong: scene.game.title }
     case 'final':
-      return { lead: 'Final result:', strong: scene.game.title }
-    case 'standings':
-      return scene.lastGame ? { lead: 'Last game:', strong: resultLine(scene.lastGame, players) } : { lead: 'Live scoreboard' }
+      return { tab: scene.game.title, game: scene.game }
+    case 'standings': {
+      // What comes next, in the host's order; only what the data holds, so no planned times.
+      const [next, later] = comingUp(games)
+      if (next) return { tab: 'Next', strong: next.title, rest: later ? `then ${later.title}` : undefined }
+      return { tab: 'Standings', strong: scene.lastGame ? resultLine(scene.lastGame, players) : 'The scoreboard' }
+    }
     case 'over':
-      return { lead: 'Final standings' }
+      return { tab: 'The end', strong: 'Final standings' }
     case 'recap':
-      return { lead: 'Recap of the night' }
+      return { tab: 'Recap', strong: 'Recap of the night' }
   }
 }
 
+/** The games still to come, in the host's running order (position, then when they were added). */
+export function comingUp(games: readonly SessionGame[]): SessionGame[] {
+  return games
+    .filter((g) => g.status === 'pending' && g.archived_at === null)
+    .sort((a, b) => a.position - b.position || a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 /**
- * Oldest start first: the rail and the strip keep the evening-long game (Last
- * one standing) at the top, and a game started later joins below it instead of
- * pushing it down.
+ * Oldest start first: the band keeps the evening-long game (Last one standing)
+ * on its bottom line, and a game started later joins above it instead of
+ * moving it.
  */
 export function byOldestStart(a: SessionGame, b: SessionGame): number {
   return (a.started_at ?? 0) - (b.started_at ?? 0) || a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
