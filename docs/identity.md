@@ -224,10 +224,10 @@ edges never cuts anything off. Games play inside it and get it for free.
   an ellipsis), the time of night in `tv-num`, and the logo.
 - **The stage**: the full width between the strap and the band, clipped at
   its edges so a scene that runs out of room never paints over the band. What
-  a stage screen gets at 1080p: about 760 px of height with one band line and
-  696 with two; at 1440 by 900, 654 and 590; at 720p, 492 and 428.
+  a stage screen gets at 1080p: 800 px of height with one band line and 732
+  with two; at 1440 by 900, 666 and 606; at 720p, 504 and 444.
 - **The band** (bottom, [Band.tsx](../src/components/tv/Band.tsx)): one line
-  per game running in the background, each 64 px (56 on short screens) and
+  per game running in the background, each 60 px (52 on short screens) and
   never wrapping. A game draws its own line with its `TvStatus` `band`
   variant and the parts in [onAir.tsx](../src/components/tv/onAir.tsx)
   (`Tab`, `Stripes`, `BandLine`, `BandCount`, `BandText`, `BandSince`,

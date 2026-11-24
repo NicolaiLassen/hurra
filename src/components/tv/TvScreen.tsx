@@ -131,7 +131,7 @@ function Screen({
         <>
           <Header line={sceneLine(shown, players, snapshot.games)} name={session.name} now={now} />
           {/* Clipped at its edges, so a scene that runs out of room never paints over the band. */}
-          <section data-frame="stage" data-fit="stage" className="mt-10 mb-8 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden short:mt-6 short:mb-5">
+          <section data-frame="stage" data-fit="stage" className="mt-7 mb-5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden short:mt-5 short:mb-4">
             {area.kind === 'stage' ? (
               <StageView game={area.game} finished={area.finished} />
             ) : ranked.length === 0 ? (

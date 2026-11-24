@@ -64,7 +64,7 @@ export default function Band({
   return (
     <footer data-frame="band" className="flex min-w-0 shrink-0 items-end gap-10 short:gap-8" aria-label="Also on tonight">
       {/* Newest on top, so the evening-long game keeps the bottom line. */}
-      <div className="flex min-w-0 flex-1 flex-col-reverse gap-3 short:gap-2">{lines}</div>
+      <div className="flex min-w-0 flex-1 flex-col-reverse gap-2">{lines}</div>
       {joinCode && <JoinTag code={joinCode} />}
     </footer>
   )

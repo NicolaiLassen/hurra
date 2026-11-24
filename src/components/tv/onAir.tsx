@@ -23,7 +23,7 @@ export type TabTone = keyof typeof TAB_TONE
  */
 const TAB_SIZE = {
   strap: 'h-16 px-6 text-tv-tab -rotate-2 origin-[70%_50%] short:h-14 short:px-5 short:text-tv-floor',
-  band: 'h-15 px-5.5 text-tv-floor rotate-[1.5deg] short:h-13 short:px-4.5',
+  band: 'h-14 px-5.5 text-tv-floor rotate-[1.5deg] short:h-12 short:px-4.5',
 } as const
 
 /**
@@ -52,7 +52,7 @@ export function Tab({
 /** Stripes as high as the tab they stand beside. */
 const STRIPES_SIZE = {
   strap: 'h-16 w-11 -rotate-2 short:h-14 short:w-10',
-  band: 'h-15 w-10 rotate-[1.5deg] short:h-13 short:w-9',
+  band: 'h-14 w-10 rotate-[1.5deg] short:h-12 short:w-9',
 } as const
 
 /** The popper's gold and pink stripes beside a pink tab: the mark of the hunt. */
@@ -62,14 +62,14 @@ export function Stripes({ size = 'band', className }: { size?: keyof typeof STRI
 
 /**
  * One line of the band: the tab (a Tab, with Stripes before it if it is the
- * hunt's), then what the line says, on one line that never wraps. 64 px high
- * on a 1080p TV, 56 on short screens; the tab takes at most 48 percent of it.
+ * hunt's), then what the line says, on one line that never wraps. 60 px high
+ * on a 1080p TV, 52 on short screens; the tab takes at most 48 percent of it.
  * The line is a size container, so a detail can show only where it has room
  * (`hidden @min-[96rem]:inline`).
  */
 export function BandLine({ tab, className, children }: { tab: ReactNode; className?: string; children?: ReactNode }) {
   return (
-    <div data-fit="band-line" className={cn('@container flex h-16 min-w-0 items-center short:h-14', className)}>
+    <div data-fit="band-line" className={cn('@container flex h-15 min-w-0 items-center short:h-13', className)}>
       <div className="flex max-w-[48%] min-w-0 shrink-0 items-center">{tab}</div>
       <div className="flex min-w-0 flex-1 items-center gap-6.5 pl-7 short:gap-5 short:pl-5">{children}</div>
     </div>
