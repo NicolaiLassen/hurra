@@ -69,14 +69,16 @@ export function Strap({
 }) {
   return (
     <div className="flex min-h-11 items-center gap-3">
-      <div className="flex min-w-0 items-center">
-        <Heading id={headingId} className="relative z-10 max-w-[65%] shrink-0">
+      {/* A long name and its words don't share a narrow phone's line: the strap goes under the tab, whole. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-y-1.5">
+        {/* The tab overlaps the strap by its negative margin, so a strap that wraps under it starts flush. */}
+        <Heading id={headingId} className="relative z-10 -mr-1.5 max-w-full min-w-0">
           <Tab tone={tone} size="strap">
             {title}
           </Tab>
         </Heading>
         {line && (
-          <p className="-ml-1.5 h-[34px] min-w-0 truncate bg-paper pr-3.5 pl-[18px] text-[17px] leading-[34px] font-bold text-ink">{line}</p>
+          <p className="h-[34px] max-w-full min-w-0 truncate bg-paper pr-3.5 pl-[18px] text-[17px] leading-[34px] font-bold text-ink">{line}</p>
         )}
       </div>
       {aside && <div className="ml-auto shrink-0">{aside}</div>}
