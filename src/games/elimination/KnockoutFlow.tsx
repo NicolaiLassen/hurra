@@ -18,7 +18,6 @@ import type {
 } from '@/games/elimination/logic'
 import { toast } from '@/lib/toast'
 import type { Player } from '@/lib/types'
-import { cn } from '@/lib/utils'
 
 /**
  * How a knockout is made, from the full view or the compact card: the scan
@@ -114,7 +113,6 @@ export default function KnockoutFlow({
           <div className="grid gap-2">
             <Choice
               icon={SwordIcon}
-              tone="pink"
               title="They did my task"
               detail={view?.status === 'alive' ? `“${view.task}”` : undefined}
               disabled={busy}
@@ -122,7 +120,6 @@ export default function KnockoutFlow({
             />
             <Choice
               icon={DetectiveIcon}
-              tone="teal"
               title="I caught them trying theirs on me"
               detail="You keep your own task"
               disabled={busy}
@@ -159,16 +156,15 @@ function problemWith(
   return null
 }
 
+/** One answer to "What happened?": a solid overlay button with the hunt's pink icon. */
 function Choice({
   icon: ChoiceIcon,
-  tone,
   title,
   detail,
   disabled,
   onClick,
 }: {
   icon: Icon
-  tone: 'pink' | 'teal'
   title: string
   detail?: string
   disabled: boolean
@@ -179,20 +175,12 @@ function Choice({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 rounded-2xl p-4 text-left ring-1 transition-colors disabled:opacity-50',
-        tone === 'pink'
-          ? 'bg-confetti-pink/10 ring-confetti-pink/30 hover:bg-confetti-pink/20'
-          : 'bg-confetti-teal/10 ring-confetti-teal/30 hover:bg-confetti-teal/20',
-      )}
+      className="flex items-center gap-3 rounded-phone bg-overlay p-4 text-left transition-colors hover:bg-rule focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none disabled:opacity-50"
     >
-      <ChoiceIcon
-        weight="duotone"
-        className={cn('size-6 shrink-0', tone === 'pink' ? 'text-confetti-pink' : 'text-confetti-teal')}
-      />
+      <ChoiceIcon weight="duotone" className="size-6 shrink-0 text-pink" />
       <span>
         <span className="block font-bold">{title}</span>
-        {detail && <span className="block text-sm text-muted-foreground">{detail}</span>}
+        {detail && <span className="block text-sm text-paper-2">{detail}</span>}
       </span>
     </button>
   )

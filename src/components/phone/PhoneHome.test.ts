@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { FixtureMode } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
 import PhoneHome from '@/components/phone/PhoneHome'
+import { clockTime } from '@/components/phone/text'
 import { FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SESSION_ID, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import type { RecapDoc } from '@/lib/recap'
 import type { Snapshot } from '@/lib/types'
@@ -62,13 +63,17 @@ async function phoneMarkup(scene: FixtureScene | Snapshot, url = '/play/HURRA30'
 }
 
 describe('the phone home', () => {
-  it('lobby: you are in, with the standings and the code bar', async () => {
+  it('lobby: you are in, your place, On the TV, the standings and the code bar', async () => {
     const text = await phone('lobby')
     expect(text).toContain("You're in.")
     expect(text).toContain('12 players here')
     expect(text).toContain('Standings')
     expect(text).toContain('Show my code')
-    expect(text).not.toContain('Also running')
+    // On the TV: Now, then the games still to come in the host's running order.
+    expect(text).toContain('On the TV Now The night so far Next Last one standing Later Quiz Then 1 more')
+    // Your place leads, On the TV follows, the standings sit below them.
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('On the TV'))
+    expect(text.indexOf('On the TV')).toBeLessThan(text.indexOf('Standings'))
   })
 
   it('a quiz question on the TV: letters only, with the question number on the strap', async () => {
@@ -116,13 +121,23 @@ describe('the phone home', () => {
     expect(text).toContain('Waiting for the next game')
   })
 
-  it('several games: the stage game is main, the background games are compact cards', async () => {
-    const text = await phone('background')
+  it('several games: the stage game is main, then each background game in its own section, oldest start first', async () => {
+    const snapshot = fixtureSnapshot('background', 'phone')
+    const html = await phoneMarkup(snapshot)
+    const text = plain(html)
     expect(text).toContain('Quiz Question 3 of 10')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
-    expect(text).toContain('Last one standing')
-    expect(text).toContain('Who is fused?')
+    // The quiz on the main card, then each game running underneath: fusion (started first), then Last one standing.
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Who is fused?'))
+    expect(text.indexOf('Who is fused?')).toBeLessThan(text.indexOf('Last one standing'))
+    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Standings'))
+    // The hunt's section: where Sofie stands, how many are left and the latest knockout at its time.
+    const hunt = snapshot.games.find((g) => g.game_type === 'elimination')!
+    const [latest] = (hunt.public_state as { feed: { at: number }[] }).feed
+    expect(text).toContain(`Last one standing Who is left You're still in. 8 of 12 left. Mads got Oscar at ${clockTime(latest.at)}.`)
+    expect(text).toContain('Your secret task')
+    expect(text).toContain('Got someone? Scan their code')
   })
 
   it('a removed guest: no longer in the party, with Join again', async () => {
