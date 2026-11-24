@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { ChipRow, FinishedChip, LiveChip } from '@/components/tv/Chips'
 import { cardsThatFit, cardsThatStack } from '@/components/tv/fit'
-import { Eyebrow, Measured } from '@/components/tv/parts'
+import { Measured } from '@/components/tv/parts'
 import StatusCard from '@/components/tv/StatusCard'
 import type { Player, SessionGame } from '@/lib/types'
 
@@ -18,12 +18,11 @@ type Games = { nowPlaying: SessionGame | null; running: SessionGame[]; finished:
  * The status cards while the standings show (docs/engine-v2.md, 7.2): the game
  * on the stage when it has no screen of its own ("Now playing"), the games in
  * the background ("Also running"), and the games that finished lately as
- * chips. It sits beside the podium, in the `room` the board measured, so the
- * standings below keep their height; cards that don't fit become Live chips,
- * and the chips use the whole room before they wrap or shorten. Under a small
- * party's join card every game is a chip, in as many groups as fit the height
- * the card leaves (`chipsHeight`), so the chips never push that column out of
- * the room.
+ * chips. In the `room` the board measured: cards that don't fit become Live
+ * chips, and the chips use the whole room before they wrap or shorten. With
+ * `chipsHeight` (the board's room under its field) every game is a chip, in
+ * as many groups as fit that height, so the chips never push the field or
+ * the join block out of the room.
  */
 export default function Strip({
   room,
@@ -60,7 +59,7 @@ export default function Strip({
           )}
           {shownRunning.length > 0 && (
             <div className="grid gap-2">
-              <Eyebrow>Also running</Eyebrow>
+              <Label>Also running</Label>
               <div className="flex items-start gap-4">
                 {shownRunning.map((game) => (
                   <div key={game.id} data-fit="card" style={{ width }}>
@@ -74,7 +73,7 @@ export default function Strip({
       )}
       {(chips.length > 0 || finished.length > 0) && (
         <div className="grid gap-2">
-          {chips.length === 0 && <Eyebrow>Finished</Eyebrow>}
+          {chips.length === 0 && <Label>Finished</Label>}
           <ChipRow>
             {chips.map((game) => (
               <LiveChip key={game.id} game={game} />
@@ -89,10 +88,15 @@ export default function Strip({
   )
 }
 
+/** A group's label over its chips, at the TV's floor. */
+function Label({ children }: { children: ReactNode }) {
+  return <p className="text-tv-floor font-semibold text-paper-2">{children}</p>
+}
+
 function Group({ label, width, children }: { label: string; width: number; children: ReactNode }) {
   return (
     <div className="grid gap-2" data-fit="card" style={{ width }}>
-      <Eyebrow>{label}</Eyebrow>
+      <Label>{label}</Label>
       {children}
     </div>
   )
@@ -121,8 +125,8 @@ function ChipGroups({ room, height, nowPlaying, running, finished, players }: Ga
     <div data-fit="strip" className="relative flex min-w-0 flex-col gap-4" style={{ maxWidth: room }}>
       {groups.map((group, i) => (
         <Measured key={group.label} id={group.label} hidden={i >= shown} onHeight={report}>
-          <div className="grid gap-2">
-            <Eyebrow>{group.label}</Eyebrow>
+          <div className="grid gap-2.5">
+            <Label>{group.label}</Label>
             <ChipRow>{group.chips}</ChipRow>
           </div>
         </Measured>
