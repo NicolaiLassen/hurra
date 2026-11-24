@@ -11,6 +11,7 @@ block in [src/index.css](../src/index.css), and the approved
 **Contents:** [Colour jobs](#colour-jobs) · [Surfaces](#surfaces) ·
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
+[The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
 [Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
@@ -202,6 +203,66 @@ holds real browser widths the fit must never undercut.
 winner's crown in gold, or the camera on your own token before you add a
 photo in paper, since gold is a screen's one next step (Show my code on the
 phone home). Out is never a badge.
+
+## The standings
+
+The board between games ([src/components/tv/Board.tsx](../src/components/tv/Board.tsx))
+has two columns, both measured in [fit.ts](../src/components/tv/fit.ts), so it
+fills whatever stage the frame gives it:
+
+- **The leader's column:** the leader as a hero (their token at 264 px,
+  their points at `text-tv-lead` in gold, what they last won at its finish
+  time and their lead, "2 ahead of Ana"), the next five places large (names
+  at `text-tv-name`, points at `text-tv-score`), and one line on how the last
+  game moved the places ("Beer pong moved Luna up 4 places and Clara up 3.",
+  from that game's points, `placesMoved` in
+  [stage.ts](../src/lib/stage.ts)). A guest's name is printed beside the hero
+  only with a photo or the word Out: otherwise the slate says it.
+- **The field:** everyone else in plain rows on the ground, no cards and no
+  bars, in fit.ts's row layouts (the floor of 28 px in the smallest), filled
+  top to bottom. The join block stands under it while joining is open: the
+  QR code on paper, the code at `text-tv-code` and the page's own address.
+- **Movers** are a triangle and a count in `paper-2`, never green or red.
+- **Gold** is the leader's: their points, the crown, the rank and points of
+  anyone tied for first (everyone tied for first wears the crown). Nothing
+  else on the board is gold, not even the join code.
+- **Out:** the word in pink beside the name and the stripe on the token, for
+  everyone a live game's `knockedOut` hook names.
+- **When it doesn't fit:** places that don't fit under the hero join the
+  field, the leader's column narrows (half, then 44, then 38 percent), the
+  join block gives way to its one line, and as a last resort the field ends
+  in "and 17 more". No text goes under the floor to make room.
+
+## The winner's screen
+
+A game's winners ([src/components/tv/WinnerMoment.tsx](../src/components/tv/WinnerMoment.tsx)),
+for Last one standing and for any game whose final screen is the generic one
+([FinalScreen.tsx](../src/components/tv/FinalScreen.tsx)). A still layout:
+everything fades in, and only the confetti moves.
+
+- **The field:** the first winner's guest colour covers the top 65 percent of
+  the TV, behind the frame (a fixed layer under the stage, so no ancestor of
+  the stage may set a `transform` or `filter`). It carries
+  `data-tv-field="<colour>"`, so the frame can set its words in ink while it
+  shows, with `has-[[data-tv-field]]:`. Paper stays paper on it; ink reads
+  6.9 to 1 or more on every guest colour.
+- **On it, in ink:** the winner's photo, or their name slate inverted (their
+  colour on ink, so it stands out of a field of the same colour), tilted 4
+  degrees with a hard ink shadow; the cheer, "Hurra for Bo!", the product's
+  one exclamation mark, in `wide` at up to 176 px and fitted to the room; the
+  deck ("The last one in, with 7 knockouts.") and the last thing that
+  happened at its clock time.
+- **Beneath, on the ground:** "The night so far", what the game did to the
+  night ("Last one standing gave Bo 10 points and a 4 point lead over Ana.")
+  and, always, "The third hurra is saved for the night's winner."; and the
+  night's top three on paper steps of clearly different heights (a tie
+  shares a height), the game's points on them as a chip, gold for its winner.
+  On a short screen the tokens move onto the steps, the steps go to one row,
+  and the words drop the title, then the line, never the third hurra.
+- **Confetti** ([src/components/Confetti.tsx](../src/components/Confetti.tsx))
+  is only the logo's pieces in the logo's colours: the pink dot, the teal
+  curl, the violet wave and the gold star. It bursts once and is gone in
+  about three seconds; with reduced motion there is none.
 
 ## Old names
 
