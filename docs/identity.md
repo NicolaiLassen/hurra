@@ -11,6 +11,7 @@ block in [src/index.css](../src/index.css), and the approved
 **Contents:** [Colour jobs](#colour-jobs) · [Surfaces](#surfaces) ·
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
+[The phone](#the-phone) ·
 [Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
@@ -202,6 +203,63 @@ holds real browser widths the fit must never undercut.
 winner's crown in gold, or the camera on your own token before you add a
 photo in paper, since gold is a screen's one next step (Show my code on the
 phone home). Out is never a badge.
+
+## The phone
+
+The phone home, top to bottom: the header (the logo, the party, the sound),
+the game on the main card when one holds it, your token and place ("7th, 8
+points, 1 behind Felix and Luna"), On the TV (Now, Next and Later), each game
+running underneath in its own section (oldest start first, so Last one
+standing stays near the top all evening), what finished lately, Your night,
+the standings card below the fold, and Show my code in the thumb zone.
+
+- **One gold step.** Show my code is the home's one gold bar (the default
+  Button). A game's section carries no gold button and no gold Live chip:
+  its actions are `outline` Buttons (Scan, Vote, Answer now), and a row on
+  the overlay surface opens its full view. A section's tab is gold only while
+  the TV shows its game (on air), pink for the hunt, paper otherwise. While a
+  timed question holds the main card the bar steps aside, so that screen has
+  no gold button at all. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
+  checks it over the scenes.
+- **The strap** over a game: its tab and a paper strap with the game's own
+  words (`GameModule.phoneStrap`: "Question 3 of 10"), else "On the TV",
+  "Since 20:30" or "Finished at 22:41". A long name and its words wrap, the
+  strap under the tab, instead of cutting either.
+- **Copy:** no exclamation marks ("You're in.", "That's a wrap."), and only
+  times the database holds, as clock times.
+
+### The quiz on a phone
+
+- **During a question, letters only:** "The question is on the TV.", one line
+  on how answering works, taken from the prompt's own rule (the quiz opens its
+  prompts `final`, so "Your first tap counts."), four overlay tiles two by two
+  with each letter's tilted chip in the quiz key (sized by container units),
+  the seconds left in `tv-num` (gold for the last 5, as the TV's digit), and
+  "Show the answers here".
+- **Show the answers here** puts the question and the answers on the phone, as
+  rows. Each phone remembers it in localStorage (`hurra:quiz:show-answers`,
+  [showAnswers.ts](../src/games/quiz/showAnswers.ts)), behind try/catch; where
+  storage fails, the page keeps the choice in memory.
+- **A tap shows at once:** the picked tile turns paper and says Sending, the
+  others fade, before the database answers
+  ([answer.ts](../src/games/quiz/answer.ts)); then Locked in. A refusal rolls
+  the tile back, and the status line says why. A tile's accessible name is its
+  letter, with its answer when shown ("C: Copenhagen").
+- **The reveal:** "You got it." with the points in paper, "Not this time." or
+  "No answer this time.", then the answers as rows, the right one on paper
+  with a check. No teal panel. Gold only for the leader and the winner.
+
+### The hunt on a phone
+
+- **Its section:** the pink tab; "You're still in.", or "You're out." with your
+  token wearing the stripe and the word in pink; the line "18 of 24 left.
+  Clara got Frida at 22:41." from the feed's own times
+  ([hunt.ts](../src/games/elimination/hunt.ts)); the task card face down
+  (SecretCard) with the popper's stripes on its edge; and an outlined "Got
+  someone? Scan their code" with the scan icon in pink. "Who is left" opens
+  the full view.
+- **Results** stand on the raised surface, never on a gold or pink wash. The
+  winner's crown and words are gold; Out is pink.
 
 ## Old names
 
