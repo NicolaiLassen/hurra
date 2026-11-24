@@ -1,28 +1,32 @@
-import { CheckCircleIcon, LightningIcon, QuestionIcon } from '@phosphor-icons/react'
+import { CheckCircleIcon, CheckIcon, LightningIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { SOUNDS } from '@/games/core/sounds'
 import { useMomentSound, useMomentSoundAt, useServerTime } from '@/games/quiz/clock'
 import { formatNumber, formatSeconds, type QuizGame, type QuizPublicState } from '@/games/quiz/logic'
-import { FRESH_MS, LETTERS, momentId, tvOptionSize, tvQuestionSize } from '@/games/quiz/look'
-import { AnsweredDots, DrainBar, LetterBadge, SecondsLeft } from '@/games/quiz/parts'
+import { FRESH_MS, LETTERS, momentId, OPTION_STEPS, QUESTION_STEPS, tvOptionSize, tvQuestionSize, URGENT_MS } from '@/games/quiz/look'
+import { AnsweredDots, LetterBadge } from '@/games/quiz/parts'
 import QuizPodium from '@/games/quiz/Podium'
 import { readPublic } from '@/games/quiz/read'
 import type { TvViewProps } from '@/games/types'
 import type { Player, PromptState, SessionGame } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
+/** The house easing (docs/identity.md, Motion). */
+const EASE_OUT = [0.22, 1, 0.36, 1] as const
 const spring = { type: 'spring', stiffness: 260, damping: 26 } as const
 
 /**
- * The quiz on the TV stage: the lobby, each question with its draining bar and
- * the answers coming in, the reveal, and the leaderboard after each question.
- * It draws the moments itself, so its announcements only sound on the stage.
+ * The quiz on the TV stage (docs/identity.md, The quiz on the TV): the lobby,
+ * each question with its countdown and the answers coming in, the reveal, and
+ * the leaderboard after each question. The strap above says where the quiz is
+ * ("Question 3 of 10"), so the stage doesn't repeat it. It draws the moments
+ * itself, so its announcements only sound on the stage.
  */
 export default function TvView({ game, players, publicState, prompts, tallies, serverNow, finished }: TvViewProps<QuizGame>) {
   const pub = readPublic(publicState)
-  if (!pub) return <p className="m-auto text-3xl text-muted-foreground">Getting the quiz ready…</p>
+  if (!pub) return <Waiting>Getting the quiz ready…</Waiting>
   if (finished || pub.phase === 'done') return <QuizPodium game={game} players={players} pub={pub} />
 
   const prompt = pub.question ? prompts.find((p) => p.key === pub.question!.key) : undefined
@@ -34,34 +38,31 @@ export default function TvView({ game, players, publicState, prompts, tallies, s
         <Asking game={game} pub={pub} prompt={prompt} answered={tallies[pub.question.key] ?? 0} guests={players.length} serverNow={serverNow} />
       ) : null
     case 'reveal':
-      return pub.question && pub.reveal ? (
-        <Revealed pub={pub} players={players} />
-      ) : (
-        <p className="m-auto text-4xl text-muted-foreground">The answer is coming up…</p>
-      )
+      return pub.question && pub.reveal ? <Revealed pub={pub} players={players} /> : <Waiting>The answer is coming up…</Waiting>
     case 'leaderboard':
       return <Leaderboard key={pub.index} pub={pub} players={players} />
   }
 }
 
+function Waiting({ children }: { children: ReactNode }) {
+  return <p className="m-auto text-tv-name text-paper-2 short:text-tv-band low:text-tv-field">{children}</p>
+}
+
+/** Before the first question: what the quiz is and how it scores, with the four letters guests will see. */
 function Lobby({ total }: { total: number }) {
   return (
-    <div className="m-auto flex max-w-5xl flex-col items-center gap-8 text-center short:gap-6">
-      <span className="grid size-36 rotate-3 place-items-center rounded-[2.5rem] bg-primary/15 ring-2 ring-primary/40 short:size-28">
-        <QuestionIcon weight="duotone" className="size-20 text-primary short:size-16" />
-      </span>
-      <div>
-        <h2 className="text-8xl font-black tracking-tight short:text-7xl">Quiz time</h2>
-        <p className="mt-4 text-4xl text-muted-foreground short:text-3xl">
-          {total} {total === 1 ? 'question' : 'questions'}. Answer on your phone.
-        </p>
-      </div>
-      <div className="flex gap-4" aria-hidden>
+    <div className="my-auto flex max-w-[90rem] flex-col items-start gap-10 short:gap-7 low:gap-5">
+      {/* Inset a little, so the tilted chips' corners stay inside the safe area. */}
+      <div className="flex gap-6 px-1.5 short:gap-5" aria-hidden>
         {LETTERS.map((letter, i) => (
-          <LetterBadge key={letter} index={i} className="size-16 rounded-2xl text-3xl short:size-14" />
+          <LetterBadge key={letter} index={i} className="size-28 text-tv-question short:size-22 short:text-tv-answer low:size-16 low:text-tv-band" />
         ))}
       </div>
-      <p className="text-2xl text-muted-foreground short:text-xl">
+      <h2 className="wide text-tv-code text-paper short:text-tv-question low:text-tv-answer">Quiz time</h2>
+      <p className="text-tv-name font-semibold text-paper short:text-tv-band low:text-tv-field">
+        {total} {total === 1 ? 'question' : 'questions'}. Answer on your phone.
+      </p>
+      <p className="max-w-[72rem] text-tv-body text-balance text-paper-2 short:text-tv-tab low:text-tv-floor">
         A right answer scores 500 to 1,000 points. The faster you are, the more you get.
       </p>
     </div>
@@ -71,7 +72,11 @@ function Lobby({ total }: { total: number }) {
 /** The tick-tock's length: it starts this long before time runs out, so its bell lands on zero. */
 const TICKTOCK_MS = SOUNDS.ticktock.seconds * 1000
 
-/** A question on the screen: the card with its draining bar, the options, the dots filling in. */
+/**
+ * A question on the screen: the question with the countdown beside it, the
+ * answers in a 2 by 2 grid (A and B on top, C and D below, always in their
+ * places), and the pips filling in as guests answer.
+ */
 function Asking({
   game,
   pub,
@@ -94,36 +99,182 @@ function Asking({
   // time runs out. An early Reveal now unmounts this view first, which cancels it.
   useMomentSound(openedAt === null || now - openedAt < FRESH_MS ? momentId(game, question.key, 'asked') : null, 'whoosh')
   useMomentSoundAt(momentId(game, question.key, 'answer'), 'ticktock', question.endsAt - TICKTOCK_MS, serverNow)
-  const timeUp = now >= question.endsAt
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
-      <div className="flex shrink-0 items-baseline justify-between gap-6">
-        <Eyebrow>
-          Question {pub.index + 1} of {pub.total}
-        </Eyebrow>
-        <SecondsLeft endsAt={question.endsAt} serverNow={serverNow} className="text-5xl short:text-4xl" />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-start gap-12 short:gap-8">
+        <Question key={question.key} text={question.text} />
+        <Countdown left={question.endsAt - now} />
       </div>
-
-      <QuestionCard key={question.key} text={question.text}>
-        <DrainBar startsAt={openedAt} endsAt={question.endsAt} serverNow={serverNow} className="absolute inset-x-0 bottom-0 h-3 short:h-2" />
-      </QuestionCard>
-
-      <ol className="grid shrink-0 gap-4 short:gap-3">
-        {question.options.map((option, i) => (
-          <motion.li
-            key={`${question.key}-${i}`}
-            initial={{ opacity: 0, x: -24 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ ...spring, delay: 0.15 + i * 0.08 }}
-          >
-            <OptionRow index={i} text={option} size={tvOptionSize(question.options)} dimmed={timeUp} />
-          </motion.li>
-        ))}
-      </ol>
-
-      <AnsweredDots count={answered} total={guests} screen="tv" className="mt-auto shrink-0 text-3xl short:text-2xl" />
+      <Options key={question.key} options={question.options} />
+      <AnsweredDots count={answered} total={guests} screen="tv" className="mt-10 shrink-0 short:mt-6 low:mt-4" />
     </div>
+  )
+}
+
+/**
+ * The time left as one big figure in the condensed numerals, with "seconds
+ * left" under it. Paper, and gold only for its last seconds, while the
+ * tick-tock plays (the tick-tock's timing is Asking's, unchanged). Two figures
+ * wide, so the question beside it never moves.
+ */
+function Countdown({ left }: { left: number }) {
+  const seconds = Math.max(0, Math.ceil(left / 1000))
+  const over = seconds === 0
+  return (
+    <div role="timer" aria-label={over ? "Time's up" : `${seconds} seconds left`} className="flex shrink-0 flex-col items-end">
+      <span
+        aria-hidden
+        className={cn(
+          'min-w-[2ch] text-right tv-num text-tv-count transition-colors duration-300 short:text-tv-lead low:text-tv-cheer',
+          over ? 'text-paper-3' : left <= URGENT_MS ? 'text-gold' : 'text-paper',
+        )}
+      >
+        {seconds}
+      </span>
+      <span aria-hidden className="mt-1 text-tv-body font-semibold whitespace-nowrap text-paper-2 short:text-tv-tab low:text-tv-floor">
+        {over ? "Time's up" : seconds === 1 ? 'second left' : 'seconds left'}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Steps a size down, from `first` to `last`, while `tooBig` (a stable
+ * function) says the element doesn't fit. Measured after layout and before
+ * paint, so the bigger size is never seen, and again whenever the element's
+ * room changes (a line joins the band below the stage). It only steps down;
+ * key the component on its content, so new content starts again from its own
+ * first guess.
+ */
+function useStepDown<T extends HTMLElement>(first: number, last: number, tooBig: (el: T) => boolean) {
+  const ref = useRef<T>(null)
+  const [step, setStep] = useState(first)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (el && step < last && tooBig(el)) setStep(step + 1)
+  }, [step, last, tooBig])
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (tooBig(el)) setStep((s) => Math.min(last, s + 1))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [last, tooBig])
+  return [ref, step] as const
+}
+
+/** More than two lines: its height past two line heights. */
+const overTwoLines = (el: HTMLElement) => el.getBoundingClientRect().height > 2 * parseFloat(getComputedStyle(el).lineHeight) + 2
+
+/**
+ * The question in the reading face: 86 px at 1080p, two lines at most. It
+ * steps down while it takes a third line, so a long one gets the largest size
+ * that keeps it to two. Key it on the question.
+ */
+function Question({ text }: { text: string }) {
+  const [ref, step] = useStepDown<HTMLHeadingElement>(0, QUESTION_STEPS.length - 1, overTwoLines)
+  return (
+    <h2
+      ref={ref}
+      data-quiz-lines="question"
+      className={cn('min-w-0 flex-1 font-extrabold tracking-[-0.01em] text-balance break-words text-paper', QUESTION_STEPS[step], 'leading-[1.08]')}
+    >
+      {text}
+    </h2>
+  )
+}
+
+/** Any tile whose answer runs past its edges, or holds a word too long for its line. */
+const anyTileOverflows = (grid: HTMLElement) =>
+  Array.from(grid.querySelectorAll<HTMLElement>('[data-quiz-fit]')).some((tile) => {
+    const text = tile.querySelector<HTMLElement>('[data-quiz-text]')
+    return tile.scrollHeight > tile.clientHeight + 1 || (text !== null && text.scrollWidth > text.clientWidth + 1)
+  })
+
+/**
+ * The answers in a 2 by 2 grid of dark tiles, each with its tilted letter chip
+ * in the quiz key: A and B on top, C and D below, the same places as on every
+ * phone (true or false is one row). The grid takes the room the question
+ * leaves, up to the mockup's tile size; all the answers share one size, the
+ * largest at which each fits its tile without breaking a word. At the reveal
+ * (`reveal`), the right one comes forward on paper with a check and how many
+ * picked it, and the others step back to the darker raised surface with their
+ * counts. Key it on the question.
+ */
+function Options({ options, reveal }: { options: readonly string[]; reveal?: { correct: number; counts: readonly number[] } }) {
+  const reduce = useReducedMotion()
+  const [ref, step] = useStepDown<HTMLOListElement>(0, OPTION_STEPS.length - 1, anyTileOverflows)
+  return (
+    <ol
+      ref={ref}
+      className={cn(
+        'mt-10 grid min-h-0 flex-1 grid-cols-2 gap-7 short:mt-6 short:gap-5 low:mt-4 low:gap-3',
+        options.length > 2
+          ? 'max-h-[26rem] grid-rows-2 short:max-h-[21rem]'
+          : 'max-h-[calc((26rem-1.75rem)/2)] grid-rows-1 short:max-h-[calc((21rem-1.25rem)/2)]',
+      )}
+    >
+      {options.map((option, i) => {
+        const right = reveal !== undefined && i === reveal.correct
+        const back = reveal !== undefined && !right
+        const count = reveal?.counts[i] ?? 0
+        return (
+          <motion.li
+            key={i}
+            initial={reduce || reveal ? false : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: EASE_OUT, delay: 0.1 + i * 0.06 }}
+            data-quiz-fit={`option-${LETTERS[i] ?? i}`}
+            className={cn(
+              'flex min-h-0 min-w-0 items-center gap-10 overflow-hidden rounded-tile py-3 pr-8 pl-7 short:gap-7 short:pr-6 short:pl-5 low:gap-5 low:py-2 low:pl-4',
+              right ? 'bg-paper text-ink' : back ? 'bg-raised text-paper-3' : 'bg-overlay text-paper',
+            )}
+          >
+            <LetterBadge
+              index={i}
+              className={cn(
+                'size-32 text-tv-code short:size-24 short:text-tv-answer low:size-16 low:text-tv-band',
+                back && 'bg-rule text-paper-3',
+              )}
+            />
+            {/* Words break only between words; a word too long for its line steps the size down instead (the last size may break it). */}
+            <span
+              data-quiz-text
+              className={cn('min-w-0 flex-1 font-bold', step === OPTION_STEPS.length - 1 && 'break-words', OPTION_STEPS[step], 'leading-[1.1]')}
+            >
+              {option}
+            </span>
+            {reveal && (
+              <motion.span
+                initial={reduce ? { opacity: 0 } : { opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, ease: EASE_OUT, delay: reduce ? 0 : 0.25 + i * 0.08 }}
+                className="flex shrink-0 flex-col items-end whitespace-nowrap"
+              >
+                <Picked count={count} right={right} />
+              </motion.span>
+            )}
+          </motion.li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** How many picked an answer, stacked to stay narrow: the figure (with a check on the right one) over "picked it", or "Nobody". */
+function Picked({ count, right }: { count: number; right: boolean }) {
+  const words = 'text-tv-body font-semibold short:text-tv-tab low:text-tv-floor'
+  return (
+    <>
+      <span className="flex items-center gap-2.5 low:gap-1.5">
+        {right && <CheckIcon weight="bold" className="size-11 short:size-9 low:size-7" />}
+        {count > 0 ? <span className="tv-num text-tv-score short:text-tv-name low:text-tv-field">{count}</span> : <span className={words}>Nobody</span>}
+      </span>
+      {count > 0 && <span className={cn(words, 'leading-[1.1]')}>picked it</span>}
+    </>
   )
 }
 

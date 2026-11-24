@@ -106,6 +106,13 @@
     @slot;
   }
 }
+/* Low screens (720p and 768p): one step past short:, for the few TV screens
+   that hold a hero figure and a full layout at once (the quiz's question). */
+@custom-variant low {
+  @media (max-height: 800px) {
+    @slot;
+  }
+}
 
 @theme inline {
   --font-heading: var(--font-sans);
