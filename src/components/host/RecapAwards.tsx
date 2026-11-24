@@ -2,9 +2,8 @@ import { CrownIcon, GameControllerIcon, TrendUpIcon, TrophyIcon } from '@phospho
 import AnnouncementIconView from '@/components/AnnouncementIconView'
 import Avatar from '@/components/Avatar'
 import RecapSection from '@/components/host/RecapSection'
-import { TONE_TEXT, type Award } from '@/components/host/recapView'
+import type { Award } from '@/components/host/recapView'
 import { getGameModule } from '@/games/registry'
-import { CALLOUT_TONE } from '@/lib/callout'
 import { cn } from '@/lib/utils'
 
 /**
@@ -37,20 +36,14 @@ export default function RecapAwards({ awards }: { awards: Award[] }) {
 }
 
 function AwardCard({ award }: { award: Award }) {
-  const tone = CALLOUT_TONE[award.tone]
   const GameIcon = award.chapter ? (getGameModule(award.chapter.gameType)?.icon ?? GameControllerIcon) : null
   // A sentence stays whole under its game's title, so the game needn't be named twice.
   const gameLine = award.chapter && !award.label.startsWith(award.chapter.title)
   return (
-    <article
-      className={cn(
-        'relative flex h-full flex-col gap-3 overflow-hidden rounded-2xl bg-card p-4 ring-1 ring-foreground/10',
-        award.crown && 'bg-[linear-gradient(160deg,color-mix(in_oklch,var(--primary)_12%,var(--card)),var(--card)_55%)]',
-      )}
-    >
-      <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1', tone.bar)} />
-      <p className={cn('flex min-w-0 items-center gap-2 text-xs font-semibold tracking-widest uppercase', TONE_TEXT[award.tone])}>
-        <span className={cn('grid size-7 shrink-0 place-items-center rounded-full [&_svg]:size-4', tone.icon)}>
+    // A solid card: no wash for a win and no colour per game (docs/identity.md). A win shows by its gold crown.
+    <article className="relative flex h-full flex-col gap-3 overflow-hidden rounded-xl bg-raised p-4">
+      <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-paper-2">
+        <span className={cn('grid size-7 shrink-0 place-items-center rounded-full bg-overlay [&_svg]:size-4', award.crown && 'text-gold')}>
           {award.icon === 'climb' ? <TrendUpIcon weight="bold" /> : <AnnouncementIconView name={award.icon} />}
         </span>
         <span className="min-w-0 truncate">{award.label}</span>
@@ -58,12 +51,12 @@ function AwardCard({ award }: { award: Award }) {
       <div className="flex min-w-0 items-center gap-3">
         <Faces players={award.players} crown={award.crown} />
         <div className="min-w-0">
-          <p className="text-lg leading-tight font-bold text-balance break-words">{award.title}</p>
-          {award.detail && <p className="mt-0.5 text-sm text-muted-foreground">{award.detail}</p>}
+          <p className="text-lg leading-tight font-extrabold text-balance break-words">{award.title}</p>
+          {award.detail && <p className="mt-0.5 text-sm text-paper-2">{award.detail}</p>}
         </div>
       </div>
       {award.chapter && GameIcon && gameLine && (
-        <p className="mt-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="mt-auto flex min-w-0 items-center gap-1.5 text-xs text-paper-2">
           <GameIcon weight="duotone" className="size-3.5 shrink-0" />
           <span className="truncate">
             {award.chapter.title}
@@ -85,18 +78,14 @@ function Faces({ players, crown }: { players: Award['players']; crown: boolean }
     <div aria-hidden className={cn('flex shrink-0 items-end', !one && '-space-x-3', crown && 'pt-3')}>
       {shown.map((player) => (
         <span key={player.id} className="relative">
-          <Avatar name={player.name} className={cn('ring-3 ring-card', one ? 'size-12' : 'size-10')} />
-          {/* After the avatar, which is positioned too, so the crown paints over its ring. */}
-          {crown && (
-            <CrownIcon
-              weight="fill"
-              className={cn('absolute left-1/2 -translate-x-1/2 text-primary drop-shadow-[0_0_8px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]', one ? '-top-4 size-5' : '-top-3.5 size-4')}
-            />
-          )}
+          {/* The card's colour round each token keeps overlapping tokens apart. */}
+          <Avatar name={player.name} playerId={player.id} className={cn('ring-3 ring-raised', one ? 'size-12' : 'size-10')} />
+          {/* After the avatar, which is positioned too, so the crown paints over its edge. */}
+          {crown && <CrownIcon weight="fill" className={cn('absolute left-1/2 -translate-x-1/2 text-gold', one ? '-top-4 size-5' : '-top-3.5 size-4')} />}
         </span>
       ))}
       {more > 0 && (
-        <span className="grid size-10 place-items-center rounded-token bg-muted text-xs font-bold text-muted-foreground ring-3 ring-card">
+        <span className="grid size-10 place-items-center rounded-token bg-overlay text-xs font-bold text-paper-2 ring-3 ring-raised">
           +{more}
         </span>
       )}

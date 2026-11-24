@@ -1,5 +1,4 @@
 import { TimerIcon } from '@phosphor-icons/react'
-import Callout from '@/components/Callout'
 import type { SessionGame } from '@/lib/types'
 import { useWakeSync } from '@/lib/wakeSync'
 
@@ -17,13 +16,16 @@ export default function TimerWarnings({ games }: { games: SessionGame[] }) {
       {failing.map(({ gameId }) => {
         const title = games.find((g) => g.id === gameId)?.title ?? 'A game'
         return (
-          <Callout
-            key={gameId}
-            tone="red"
-            icon={<TimerIcon weight="fill" />}
-            title={`${title}'s timer isn't getting through.`}
-            detail="Use its buttons to move on by hand."
-          />
+          // A solid panel with the danger icon, not a toast's glass callout (docs/identity.md).
+          <div key={gameId} className="flex items-start gap-3 rounded-xl bg-raised p-4">
+            <span className="grid size-9 shrink-0 place-items-center rounded-control bg-overlay text-danger">
+              <TimerIcon weight="fill" className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-extrabold">{title}'s timer isn't getting through.</p>
+              <p className="mt-0.5 text-sm text-paper-2">Use its buttons to move on by hand.</p>
+            </div>
+          </div>
         )
       })}
     </div>

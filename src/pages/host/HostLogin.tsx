@@ -47,7 +47,7 @@ export default function HostLogin() {
       <Logo className="mx-auto mt-[10dvh] size-14" />
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="text-xl font-bold">Host login</CardTitle>
+          <CardTitle className="text-xl">Host login</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -86,7 +86,7 @@ export default function HostLogin() {
       </Card>
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Not the host?{' '}
-        <Link to="/" className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
+        <Link to="/" className="font-bold text-paper underline decoration-paper-3 underline-offset-4 hover:decoration-paper">
           Join the party
         </Link>
       </p>

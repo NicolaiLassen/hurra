@@ -1,14 +1,17 @@
 import { CaretDownIcon, PlayIcon, SpinnerIcon, StackIcon, TelevisionSimpleIcon } from '@phosphor-icons/react'
 import { useRef, useState } from 'react'
 import { useHostCall } from '@/components/host/hostCalls'
-import { startChoices, type StartChoice } from '@/components/host/scene'
+import { nextStartId, startChoices, type StartChoice } from '@/components/host/scene'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { getGameModule } from '@/games/registry'
 import { callGame, setSpotlight } from '@/lib/queries'
 import { toast } from '@/lib/toast'
 import type { SessionGame } from '@/lib/types'
-import { useLive } from '@/lib/useLive'
+import { tvScene } from '@/lib/stage'
+import { useTvTabOpen } from '@/lib/tvTab'
+import { useLive, useServerNow } from '@/lib/useLive'
+import { cn } from '@/lib/utils'
 
 /**
  * Start a game that hasn't run yet (docs/engine-v2.md, 7.3): a split button.
@@ -17,11 +20,19 @@ import { useLive } from '@/lib/useLive'
  * Disabled while the start is on its way, so a double tap can't deal it twice.
  * A start in the background says so, with Show on the TV right in the toast:
  * the TV keeps what it shows, which can look as if nothing started.
+ *
+ * Gold only on the game that is the room's one next step (nextStartId): the
+ * others are the overlay's secondary buttons (docs/identity.md).
  */
 export default function StartButton({ game }: { game: SessionGame }) {
   const [main, other] = startChoices(getGameModule(game.game_type)?.logic.presentation)
   const call = useHostCall()
-  const sessionId = useLive().snapshot?.session?.id
+  const snapshot = useLive().snapshot
+  const sessionId = snapshot?.session?.id
+  const now = useServerNow(1000)
+  const tvTab = useTvTabOpen(snapshot?.session?.join_code ?? '')
+  const next = snapshot ? nextStartId(snapshot, tvScene(snapshot, now), (snapshot.screens ?? 0) > 0 || tvTab) === game.id : false
+  const variant = next ? 'default' : 'secondary'
   const [pending, setPending] = useState(false)
   const inFlight = useRef(false)
 
@@ -44,7 +55,7 @@ export default function StartButton({ game }: { game: SessionGame }) {
 
   return (
     <div className="flex" role="group" aria-label={`Start ${game.title}`}>
-      <Button size="lg" className="rounded-r-none pr-3" isPending={pending} onClick={() => void start(main)}>
+      <Button size="lg" variant={variant} className="rounded-r-none pr-3" isPending={pending} onClick={() => void start(main)}>
         {pending ? <SpinnerIcon className="animate-spin" /> : <PlayIcon />}
         {main.label}
       </Button>
@@ -52,7 +63,8 @@ export default function StartButton({ game }: { game: SessionGame }) {
         <DropdownMenuTrigger asChild>
           <Button
             size="icon-lg"
-            className="rounded-l-none border-l-primary-foreground/25"
+            variant={variant}
+            className={cn('rounded-l-none', next ? 'border-l-ink/25' : 'border-l-rule')}
             disabled={pending}
             aria-label={`More ways to start ${game.title}`}
           >

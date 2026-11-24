@@ -32,14 +32,15 @@ async function markup(snapshot: Snapshot, node: ReactNode): Promise<string> {
 const text = (html: string) => html.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
 
 /**
- * The slider on screen: the level beside its name, how far the range is filled,
+ * The slider on screen: the level at the slider's end (after the name and its
+ * line, nothing else in between), how far the range is filled,
  * and what a screen reader hears on the thumb (its name and value text). Radix
  * draws the thumb itself only in a browser, so its position isn't checked here.
  */
 function slider(html: string) {
   const name = html.match(/role="slider"[^>]*aria-labelledby="([^"]+)"/)?.[1]
   return {
-    level: text(html).match(/TV sound effects (Off|\d+%)/)?.[1],
+    level: text(html).match(/TV sound effects Keep them under the party music\. Phones keep their own volume\. (Off|\d+%)/)?.[1],
     filled: 100 - Number(html.match(/data-slot="slider-range"[^>]*style="left:0%;right:([\d.]+)%"/)?.[1]),
     thumbName: name ? text(html.match(new RegExp(`id="${name}">([^<]*)<`))?.[1] ?? '').trim() : undefined,
     valueText: html.match(/role="slider"[^>]*aria-valuetext="([^"]*)"/)?.[1],
@@ -52,7 +53,7 @@ function control(volume: unknown) {
 }
 
 describe('the TV sound effects control', () => {
-  it("shows the party's level beside its name, with the slider filled to it", async () => {
+  it("shows the party's level at the slider's end, with the slider filled to it", async () => {
     const html = await control(50)
     expect(slider(html)).toEqual({ level: '50%', filled: 50, thumbName: 'TV sound effects', valueText: '50%' })
     expect(html).toContain('role="slider" aria-valuemin="0" aria-valuemax="100"')

@@ -13,8 +13,8 @@ block in [src/index.css](../src/index.css), and the approved
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
 [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
-[The phone](#the-phone) ·
-[Old names](#old-names) · [Guards](#guards) ·
+[The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
+[The host room](#the-host-room) ·
 [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
@@ -480,6 +480,37 @@ screen has moved.
   `cn('text-paper', 'text-tv-question')` keeps only the size. A new size,
   radius, easing or animation in index.css goes into `THEME_SCALES` in
   [src/lib/utils.ts](../src/lib/utils.ts), and the test fails until it does.
+
+## The host room
+
+The control room is a reskin of the same page: every function and every
+confirmation stays where it was. Its own rules:
+
+- **One gold step per item.** A game's host view has at most one gold button,
+  its next step (the quiz's Reveal now, Show the leaderboard, Next question or
+  Crown the winner). A step that skips ahead (skip the leaderboard, crown
+  early) goes in the menu beside it, behind the same confirmation, never next
+  to it. A program's Start is gold only on the game that is the room's next
+  step, `nextStartId` in
+  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
+  game not started, while a TV is open and shows the standings. Back to
+  standings is gold on a final screen, Pair a TV while no TV is open.
+- **States are words** on chips:
+  [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
+  (Live, Open on the overlay; Done, Not started, Closed as plain words;
+  Archived in a rule outline). The game on the TV wears the gold On the TV
+  chip, since it is on air, with the clock time it started (`started_at`).
+  The connection dot is paper with Live, an empty ring with Catching up.
+- **The player list** marks a knocked-out guest with the token's `out` stripe
+  and the word Out in pink, from `knockedOutIds` (the games' generic
+  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
+  in paper: no medal coins in the room. There is no Away tag: the app holds
+  no presence data for players.
+- **Numbers that change in place** (the TV sound level, the quiz's totals and
+  gains, answered counts) are `tv-num`, so their columns hold still.
+- **Wells:** a settings form or a question is an `overlay` well in a raised
+  panel; cards inside a well stand on `raised`, their fields on `overlay`.
+  Warnings and notes are solid panels with an icon, never a glass callout.
 
 ## The acceptance test
 

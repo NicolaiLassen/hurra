@@ -2,6 +2,7 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   CrownIcon,
+  DotsThreeIcon,
   EyeIcon,
   EyeSlashIcon,
   ListNumbersIcon,
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useServerTime } from '@/games/quiz/clock'
 import {
   formatNumber,
@@ -34,7 +36,7 @@ import {
   type QuizQuestion,
 } from '@/games/quiz/logic'
 import { letterOf } from '@/games/quiz/look'
-import { AnsweredDots, LetterBadge, SecondsLeft } from '@/games/quiz/parts'
+import { LetterBadge } from '@/games/quiz/parts'
 import { readPublic } from '@/games/quiz/read'
 import type { HostViewProps } from '@/games/types'
 import type { PromptState } from '@/lib/types'
@@ -44,17 +46,18 @@ type Step = { label: string; icon: Icon; action: QuizHostAction; close?: string[
 
 /**
  * The quiz in the host control room: the question on the TV, the answers
- * coming in, and one big button for the next step. Each step names the
- * question it was made for, so a double tap or a race with the timer does
- * nothing. The answers hide behind Show answers, since this phone is out in
- * the room.
+ * coming in, and one gold button for the next step (docs/identity.md), with
+ * the steps that skip ahead in the menu beside it, so nothing sits next to
+ * Reveal now. Each step names the question it was made for, so a double tap
+ * or a race with the timer does nothing. The answers hide behind Show
+ * answers, since this phone is out in the room.
  */
 export default function HostView({ players, publicState, state, config, tallies, prompts, serverNow, act }: HostViewProps<QuizGame>) {
   const [showAnswers, setShowAnswers] = useState(false)
   const [pending, setPending] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const pub = readPublic(publicState)
-  if (!pub) return <p className="text-muted-foreground">Getting the quiz ready…</p>
+  if (!pub) return <p className="text-paper-2">Getting the quiz ready…</p>
 
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const questions = Array.isArray(config?.questions) ? config.questions : null
@@ -82,15 +85,14 @@ export default function HostView({ players, publicState, state, config, tallies,
     // grid-cols-1: one column as wide as the panel, so long texts wrap instead of widening it.
     <div className="grid grid-cols-1 gap-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Badge size="lg" variant={pub.phase === 'question' ? 'default' : 'secondary'}>
+        {/* The phase as a word on the overlay: gold is the next step's. */}
+        <Badge size="lg" variant="secondary">
           {PHASE_LABEL[pub.phase]}
         </Badge>
-        <p className="text-lg font-semibold">
+        <p className="text-lg font-extrabold">
           {pub.phase === 'lobby' ? `${pub.total} questions` : pub.phase === 'done' ? 'The quiz is over' : `Question ${index + 1} of ${pub.total}`}
         </p>
-        {pub.phase === 'question' && pub.question && (
-          <SecondsLeft endsAt={pub.question.endsAt} serverNow={serverNow} suffix=" s left" className="text-lg" />
-        )}
+        {pub.phase === 'question' && pub.question && <SecondsLeft endsAt={pub.question.endsAt} serverNow={serverNow} />}
         <Button variant="ghost" className="ml-auto" onClick={() => setShowAnswers((shown) => !shown)}>
           {showAnswers ? <EyeSlashIcon /> : <EyeIcon />}
           {showAnswers ? 'Hide answers' : 'Show answers'}
@@ -101,39 +103,51 @@ export default function HostView({ players, publicState, state, config, tallies,
 
       {pub.phase === 'question' && (
         <div className="grid gap-1.5">
-          <AnsweredDots count={tallies[key] ?? 0} total={players.length} screen="host" className="text-sm" />
-          <p className="text-sm text-muted-foreground">It reveals by itself when time's up. Tap Reveal now once everyone has answered.</p>
+          <AnsweredPips count={tallies[key] ?? 0} total={players.length} />
+          <p className="text-sm text-paper-2">It reveals by itself when time's up. Tap Reveal now once everyone has answered.</p>
         </div>
       )}
       {pub.phase === 'reveal' && pub.reveal && (
-        <p className="text-sm text-muted-foreground">
-          <span className="font-bold text-foreground">{pub.reveal.rightCount}</span> of {pub.reveal.answered} got it right.{' '}
+        <p className="text-sm text-paper-2">
+          <span className="font-bold text-paper">{pub.reveal.rightCount}</span> of {pub.reveal.answered} got it right.{' '}
           <LeaderboardSoon revealedAt={state?.revealedAt ?? revealedAtOf(prompts, key)} serverNow={serverNow} />
         </p>
       )}
       {pub.phase === 'lobby' && (
-        <p className="text-sm text-muted-foreground">Start when the room is looking at the TV. Guests answer on their phones.</p>
+        <p className="text-sm text-paper-2">Start when the room is looking at the TV. Guests answer on their phones.</p>
       )}
 
-      {(main || extra) && (
-        <div className="grid gap-2 sm:flex">
+      {(main || extra || crownEarly) && (
+        <div className="flex items-center gap-2">
           {main && (
-            <Button size="xl" className="w-full sm:flex-1" isPending={pending} onClick={() => void send(main.action, main.close)}>
+            <Button size="lg" className="h-12 flex-1 text-base sm:h-11 sm:flex-none sm:px-6" isPending={pending} onClick={() => void send(main.action, main.close)}>
               <main.icon />
               {main.label}
             </Button>
           )}
-          {extra && (
-            <Button size="xl" variant="secondary" className="w-full sm:w-auto" isPending={pending} onClick={() => void send(extra.action)}>
-              <extra.icon />
-              {extra.label}
-            </Button>
-          )}
-          {crownEarly && (
-            <Button size="xl" variant="secondary" className="w-full sm:w-auto" isPending={pending} onClick={() => setConfirming(true)}>
-              <CrownIcon />
-              Crown the winner now
-            </Button>
+          {(extra || crownEarly) && (
+            // Not modal, so the crowning dialog it opens doesn't fight it for focus.
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="icon-lg" className="size-12 sm:size-11" disabled={pending} aria-label="More quiz steps">
+                  <DotsThreeIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-auto min-w-56">
+                {extra && (
+                  <DropdownMenuItem onSelect={() => void send(extra.action)}>
+                    <extra.icon />
+                    {extra.label}
+                  </DropdownMenuItem>
+                )}
+                {crownEarly && (
+                  <DropdownMenuItem onSelect={() => setConfirming(true)}>
+                    <CrownIcon />
+                    Crown the winner now…
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       )}
@@ -166,18 +180,21 @@ export default function HostView({ players, publicState, state, config, tallies,
   )
 }
 
-/** The big button for the next step, and a second one where skipping ahead makes sense. Each names its step. */
+/** The gold button for the next step, and in the menu beside it the step that skips ahead, where that makes sense. Each names its step. */
 function stepsFor(pub: QuizPublicState, key: string, last: boolean): { main: Step | null; extra: Step | null } {
   const { index } = pub
   const crown: Step = { label: 'Crown the winner', icon: CrownIcon, action: { type: 'finish' } }
   const next: Step = { label: 'Next question', icon: ArrowRightIcon, action: { type: 'next', from: index } }
+  // In the menu while the answer shows: they skip the leaderboard.
+  const skipToNext: Step = { label: 'Skip the leaderboard: next question', icon: ArrowRightIcon, action: { type: 'next', from: index } }
+  const skipToCrown: Step = { label: 'Skip the leaderboard: crown the winner', icon: CrownIcon, action: { type: 'finish' } }
   switch (pub.phase) {
     case 'lobby':
       return { main: { label: 'Start the first question', icon: PlayIcon, action: { type: 'next', from: index } }, extra: null }
     case 'question':
       return { main: { label: 'Reveal now', icon: EyeIcon, action: { type: 'reveal', index }, close: [key] }, extra: null }
     case 'reveal':
-      return { main: { label: 'Show the leaderboard', icon: ListNumbersIcon, action: { type: 'leaderboard', index } }, extra: last ? crown : next }
+      return { main: { label: 'Show the leaderboard', icon: ListNumbersIcon, action: { type: 'leaderboard', index } }, extra: last ? skipToCrown : skipToNext }
     case 'leaderboard':
       return { main: last ? crown : next, extra: null }
     case 'done':
@@ -193,30 +210,73 @@ const PHASE_LABEL: Record<QuizPublicState['phase'], string> = {
   done: 'Over',
 }
 
-/** The question on the TV, with its answer marked once revealed, or before that with Show answers. */
+/**
+ * The question on the TV, in a well, with its answer marked once revealed, or
+ * before that with Show answers: a step lighter and the word Right, never a
+ * colour alone (docs/identity.md).
+ */
 function Question({ pub, questions, showAnswers }: { pub: QuizPublicState; questions: QuizQuestion[] | null; showAnswers: boolean }) {
   const question = pub.question!
   const revealed = pub.reveal !== null
   const right = revealed ? pub.reveal!.correct : showAnswers ? (questions?.[pub.index]?.correct ?? -1) : -1
   return (
-    <section className="rounded-2xl bg-muted/40 p-4">
-      <p className="text-lg leading-snug font-semibold">{question.text}</p>
+    <section className="rounded-lg bg-overlay p-4">
+      <p className="text-lg leading-snug font-extrabold">{question.text}</p>
       <ol className="mt-3 grid gap-1.5">
         {question.options.map((option, i) => (
-          <li
-            key={i}
-            className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', i === right && 'bg-primary/15 ring-1 ring-primary/60')}
-          >
-            <LetterBadge index={i} className="size-7 rounded-lg text-sm" />
-            <span className="min-w-0 flex-1 break-words">{option}</span>
-            {i === right && <CheckCircleIcon weight="fill" className="size-5 shrink-0 text-primary" aria-label="The right answer" />}
-            {revealed && (
-              <span className="w-8 shrink-0 text-right text-sm font-bold text-muted-foreground tabular-nums">{pub.reveal!.counts[i] ?? 0}</span>
+          <li key={i} className={cn('flex items-center gap-2.5 rounded-control px-2 py-1.5', i === right && 'bg-rule')}>
+            <LetterBadge index={i} className="size-7 rounded-chip text-sm" />
+            <span className="min-w-0 flex-1 font-bold break-words">{option}</span>
+            {i === right && (
+              <span className="flex shrink-0 items-center gap-1 text-sm font-bold text-paper">
+                <CheckCircleIcon weight="fill" className="size-5" aria-hidden />
+                Right
+              </span>
             )}
+            {revealed && <span className="tv-num w-8 shrink-0 text-right text-lg text-paper-2">{pub.reveal!.counts[i] ?? 0}</span>}
           </li>
         ))}
       </ol>
     </section>
+  )
+}
+
+/** The time left on the question, its number in condensed numerals: "9 s left", then "Time's up". Paper, never gold or pink. */
+function SecondsLeft({ endsAt, serverNow }: { endsAt: number; serverNow: () => number }) {
+  const now = useServerTime(serverNow, 250)
+  const left = endsAt - now
+  if (left <= 0) return <span className="text-lg font-bold text-paper-2">Time's up</span>
+  return (
+    <span className="text-lg font-bold text-paper">
+      <span className="tv-num text-xl">{Math.ceil(left / 1000)}</span> s left
+    </span>
+  )
+}
+
+/**
+ * How many have answered: a square pip per guest, filled in paper as answers
+ * come in, with "6 of 12 have answered". Counts only, never names or faces, so
+ * nobody can tell who hasn't answered.
+ */
+function AnsweredPips({ count, total }: { count: number; total: number }) {
+  const pips = Math.max(total, count)
+  return (
+    <div className="flex items-center gap-3" role="img" aria-label={`${count} of ${pips} have answered`}>
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+        {Array.from({ length: pips }, (_, i) => (
+          <span
+            key={i}
+            className={cn('size-2.5 rounded-[2px] transition-colors duration-500', i < count ? 'bg-paper' : 'border-[1.5px] border-rule')}
+          />
+        ))}
+      </div>
+      <p className="shrink-0 text-sm whitespace-nowrap text-paper-2">
+        <span className="tv-num text-lg text-paper">
+          {count} of {pips}
+        </span>{' '}
+        have answered
+      </p>
+    </div>
   )
 }
 
@@ -228,18 +288,23 @@ function LeaderboardSoon({ revealedAt, serverNow }: { revealedAt: number | null;
   return <>{left > 0 ? `The leaderboard follows by itself in ${left} s.` : 'The leaderboard is coming up.'}</>
 }
 
+/**
+ * The quiz's top five. Gains and totals in condensed Archivo numerals, whose
+ * tabular figures keep the comma narrow (docs/identity.md, Type), so the
+ * columns hold still as the numbers change.
+ */
 function TopFive({ pub, nameOf }: { pub: QuizPublicState; nameOf: (id: string) => string }) {
   return (
     <section>
-      <h3 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">Quiz leaderboard</h3>
-      <ol className="divide-y">
+      <h3 className="mb-2 text-sm font-extrabold">Quiz leaderboard</h3>
+      <ol className="divide-y divide-rule">
         {pub.leaderboard.slice(0, 5).map((row) => (
           <li key={row.playerId} className="flex items-center gap-3 py-1.5">
-            <span className="w-5 text-right text-sm font-bold text-muted-foreground tabular-nums">{row.rank}</span>
-            <Avatar name={nameOf(row.playerId)} className="size-7" />
-            <span className="min-w-0 flex-1 truncate font-medium">{nameOf(row.playerId)}</span>
-            {row.gained > 0 && <span className="text-sm font-semibold text-confetti-teal">+{formatNumber(row.gained)}</span>}
-            <span className="font-bold text-primary">{formatNumber(row.points)}</span>
+            <span className="tv-num w-5 text-right text-base text-paper-3">{row.rank}</span>
+            <Avatar name={nameOf(row.playerId)} playerId={row.playerId} className="size-7" />
+            <span className="min-w-0 flex-1 truncate font-bold">{nameOf(row.playerId)}</span>
+            {row.gained > 0 && <span className="tv-num text-base text-paper-2">+{formatNumber(row.gained)}</span>}
+            <span className="tv-num min-w-14 text-right text-lg text-paper">{formatNumber(row.points)}</span>
           </li>
         ))}
       </ol>
@@ -249,28 +314,36 @@ function TopFive({ pub, nameOf }: { pub: QuizPublicState; nameOf: (id: string) =
 
 /** Every question with its answer: asked, on now, or still to come. */
 function AllQuestions({ questions, pub }: { questions: QuizQuestion[] | null; pub: QuizPublicState }) {
-  if (!questions) return <p className="text-sm text-muted-foreground">The answers aren't on this screen.</p>
+  if (!questions) return <p className="text-sm text-paper-2">The answers aren't on this screen.</p>
   return (
     <section>
-      <h3 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">All questions</h3>
-      <ol className="divide-y">
+      <h3 className="mb-2 text-sm font-extrabold">All questions</h3>
+      <ol className="divide-y divide-rule">
         {questions.map((q, i) => {
           const now = i === pub.index && pub.phase !== 'done' && pub.phase !== 'lobby'
           const asked = i < pub.index || (i === pub.index && pub.phase === 'done')
           return (
-            <li key={i} className={cn('flex gap-3 py-2', asked && 'opacity-60')}>
-              <span className="w-6 shrink-0 text-right text-sm font-bold text-muted-foreground tabular-nums">{i + 1}</span>
+            <li key={i} className={cn('flex gap-3 py-2', asked && 'text-paper-2')}>
+              <span className="tv-num w-6 shrink-0 text-right text-base text-paper-3">{i + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="leading-snug font-medium">{q.text}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <CheckCircleIcon weight="fill" className="shrink-0 text-primary" />
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-paper-2">
+                  <CheckCircleIcon weight="fill" className="shrink-0" />
                   <span className="min-w-0 break-words">
                     {letterOf(q.correct)}: {q.options[q.correct] ?? ''}
                   </span>
                 </p>
               </div>
-              {now && <Badge className="shrink-0">Now</Badge>}
-              {asked && <Badge variant="secondary" className="shrink-0">Asked</Badge>}
+              {now && (
+                <Badge variant="secondary" className="shrink-0">
+                  Now
+                </Badge>
+              )}
+              {asked && (
+                <Badge variant="ghost" className="shrink-0">
+                  Asked
+                </Badge>
+              )}
             </li>
           )
         })}

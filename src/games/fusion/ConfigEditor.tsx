@@ -173,15 +173,15 @@ function PictureRow({
   }
 
   return (
-    <li className="grid grid-cols-[auto_1fr] gap-3 rounded-xl bg-card p-3 ring-1 ring-foreground/10">
-      <div className="relative size-20 overflow-hidden rounded-lg bg-muted">
+    <li className="grid grid-cols-[auto_1fr] gap-3 rounded-lg bg-raised p-3">
+      <div className="relative size-20 overflow-hidden rounded-lg bg-overlay">
         {imageUrl ? (
           <img src={imageUrl} alt={`Picture ${n}`} width={400} height={400} className="size-full object-cover" />
         ) : (
           <span className="grid size-full place-items-center text-3xl font-black text-muted-foreground tabular-nums">{n}</span>
         )}
         {uploading && (
-          <span className="absolute inset-0 grid place-items-center bg-background/70 text-xs font-semibold">Uploading…</span>
+          <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-bold text-paper">Uploading…</span>
         )}
       </div>
 

@@ -21,8 +21,8 @@ import { errorMessage, useHostCall } from '@/components/host/hostCalls'
 import RenameDialog from '@/components/host/RenameDialog'
 import { nextPosition, winnersChip } from '@/components/host/scene'
 import StartButton from '@/components/host/StartButton'
+import StateChip from '@/components/host/StateChip'
 import { useDialogTarget } from '@/components/host/useDialogTarget'
-import StatusBadge from '@/components/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -105,7 +105,7 @@ export default function GamesPanel({
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-4">
         {program.length > 0 && (
-          <ul className="divide-y">
+          <ul className="divide-y divide-rule">
             {program.map((game) => (
               <GameRow
                 key={game.id}
@@ -122,7 +122,7 @@ export default function GamesPanel({
           <div>
             <Button
               variant="ghost"
-              className="-ml-2.5 text-muted-foreground"
+              className="-ml-2.5 text-paper-2"
               aria-expanded={showArchived}
               onClick={() => setShowArchived((open) => !open)}
             >
@@ -130,7 +130,7 @@ export default function GamesPanel({
               Archived ({archived.length})
             </Button>
             {showArchived && (
-              <ul className="divide-y opacity-80">
+              <ul className="divide-y divide-rule">
                 {archived.map((game) => (
                   <GameRow key={game.id} game={game} settingsOpen={false} onCloseSettings={() => {}} {...rowProps} />
                 ))}
@@ -223,17 +223,18 @@ function GameRow({
   return (
     <li className="grid grid-cols-1 gap-3 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <span className="grid size-9 shrink-0 place-items-center rounded-control bg-overlay text-paper-2">
           <GameIcon weight="duotone" className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{game.title}</p>
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <p className="truncate font-bold">{game.title}</p>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-paper-2">
             {/* The game type, unless the title already says it. */}
             {gameModule?.name !== game.title && <span>{gameModule?.name ?? `Unknown type “${game.game_type}”`}</span>}
             {chip && (
-              <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                <CrownIcon weight="fill" className="text-primary" />
+              <span className="inline-flex items-center gap-1 font-bold text-paper">
+                {/* The winner's crown: gold's job (docs/identity.md). */}
+                <CrownIcon weight="fill" className="text-gold" />
                 {chip}
               </span>
             )}
@@ -243,10 +244,7 @@ function GameRow({
         {/* Beside the title on a laptop; on a phone a row of their own, under it, so the title keeps its room. */}
         <div className="order-last flex w-full flex-wrap items-center gap-2 pl-12 sm:order-none sm:w-auto sm:pl-0">
           {/* A phone has no room to spare: its Start button says the game hasn't started. */}
-          <StatusBadge
-            status={archived ? 'archived' : game.status}
-            className={!archived && game.status === 'pending' ? 'max-sm:hidden' : undefined}
-          />
+          <StateChip state={archived ? 'archived' : game.status} className={!archived && game.status === 'pending' ? 'max-sm:hidden' : undefined} />
           {!archived && game.status === 'pending' && <StartButton game={game} />}
           {!archived && finished && <FinishedOnTv snapshot={snapshot} game={game} />}
         </div>
@@ -324,7 +322,8 @@ function FinishedOnTv({ snapshot, game }: { snapshot: Snapshot; game: SessionGam
   if (scene.kind === 'over') return null
   if (scene.kind === 'final' && scene.game.id === game.id) {
     return (
-      <Badge variant="outline" className="border-primary/50 text-primary">
+      // On air: gold's job (docs/identity.md).
+      <Badge>
         <TelevisionSimpleIcon />
         On the TV
       </Badge>
@@ -371,7 +370,7 @@ function AddGame({ sessionId, games }: { sessionId: string; games: SessionGame[]
 
   return (
     <form
-      className="grid gap-2 border-t pt-4 sm:grid-cols-[12rem_1fr_auto]"
+      className="grid gap-2 border-t border-rule pt-4 sm:grid-cols-[12rem_1fr_auto]"
       onSubmit={(e) => {
         e.preventDefault()
         void add()

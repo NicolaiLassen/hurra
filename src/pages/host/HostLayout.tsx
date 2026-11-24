@@ -24,7 +24,8 @@ export default function HostLayout() {
 
   return (
     <>
-      <header className="border-b">
+      {/* The host header stands on raised, told from the page by value, not a hairline (docs/identity.md). */}
+      <header className="bg-raised">
         <nav className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-2">
           <Button asChild variant="ghost" size="lg" className="font-bold">
             <Link to="/host">

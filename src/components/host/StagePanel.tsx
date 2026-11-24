@@ -70,12 +70,9 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
         <div className="flex items-start gap-4">
           <MiniScreen scene={scene} now={now} />
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              <TelevisionSimpleIcon className="size-3.5" />
-              On the TV now
-            </p>
-            <h2 className="mt-1 text-xl leading-tight font-bold break-words">{words.title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{words.detail}</p>
+            <p className="text-sm font-bold text-paper-2">On the TV now</p>
+            <h2 className="mt-0.5 text-xl leading-tight font-extrabold break-words">{words.title}</h2>
+            <p className="mt-1 text-sm text-paper-2">{words.detail}</p>
           </div>
         </div>
 
@@ -110,8 +107,9 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
         )}
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <span className={cn('size-2 rounded-full', screens > 0 || tvTab ? 'bg-confetti-teal' : 'bg-muted-foreground')} aria-hidden />
+          {/* The words say it: no coloured dot (docs/identity.md). */}
+          <p className={cn('flex items-center gap-2 text-sm font-bold', screens > 0 || tvTab ? 'text-paper' : 'text-paper-2')}>
+            <TelevisionSimpleIcon className="size-4 shrink-0 text-paper-2" aria-hidden />
             {screensLine(snapshot.screens, tvTab)}
           </p>
           <div className="ml-auto flex flex-wrap items-center gap-1">
@@ -142,7 +140,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
               joinCode={session.join_code}
               screens={snapshot.screens}
               label={screens > 0 ? 'Pair another TV' : 'Pair a TV'}
-              variant={screens > 0 ? 'ghost' : 'default'}
+              // Gold while no TV is open at all: then pairing is the room's next step (nextStartId waits for it).
+              variant={screens > 0 || tvTab ? 'ghost' : 'default'}
               size="default"
             />
           </div>
@@ -154,54 +153,48 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
   )
 }
 
-/** The scene as a tiny TV: the game's icon while it is live, a crown and the countdown on its final screen. */
+/**
+ * The scene as a tiny TV, in the TV's own frame: a tilted tab naming what is
+ * on air (gold, as on the TV's strap), and the scene's icon on the ground.
+ * The game's icon while it is live, a crown and the countdown on its final
+ * screen.
+ */
 function MiniScreen({ scene, now }: { scene: TvScene; now: number }) {
   let icon: Icon
   let label: string
-  let tone: string
   switch (scene.kind) {
     case 'live':
       icon = getGameModule(scene.game.game_type)?.icon ?? GameControllerIcon
       label = 'Live'
-      tone = 'text-confetti-teal ring-confetti-teal/50'
       break
     case 'final':
       icon = CrownIcon
       label = formatCountdown(scene.until - now)
-      tone = 'text-primary ring-primary/50'
       break
     case 'recap':
       icon = FilmStripIcon
       label = 'Recap'
-      tone = 'text-confetti-violet ring-confetti-violet/50'
       break
     case 'over':
       icon = TrophyIcon
       label = 'Final'
-      tone = 'text-primary ring-foreground/15'
       break
     case 'standings':
       icon = RankingIcon
       label = 'Standings'
-      tone = 'text-muted-foreground ring-foreground/15'
       break
   }
   const SceneIcon = icon
   return (
-    <div
-      aria-hidden
-      className={cn(
-        'relative grid aspect-video w-24 shrink-0 place-items-center content-center gap-1 rounded-lg bg-background ring-2 sm:w-32',
-        tone,
-      )}
-    >
-      <SceneIcon weight="duotone" className="size-7 sm:size-9" />
-      <span className="flex items-center gap-1 text-[0.65rem] font-bold tracking-wider uppercase sm:text-xs">
-        {scene.kind === 'live' && <span className="size-1.5 animate-pulse rounded-full bg-confetti-teal motion-reduce:animate-none" />}
-        {label}
-      </span>
+    <div aria-hidden className="relative mb-2 w-24 shrink-0 sm:w-32">
+      <div className="relative grid aspect-video place-items-center overflow-hidden rounded-lg border-[3px] border-overlay bg-ground text-paper-2">
+        <span className="on-air absolute top-1.5 left-1.5 -rotate-3 rounded-chip bg-gold px-1 py-px text-[0.5rem] leading-tight text-ink sm:text-[0.6rem]">
+          {label}
+        </span>
+        <SceneIcon weight="duotone" className="mt-2 size-7 sm:size-9" />
+      </div>
       {/* The stand, so it reads as a TV. */}
-      <span className="absolute -bottom-2 left-1/2 h-1 w-8 -translate-x-1/2 rounded-full bg-foreground/15" />
+      <span className="absolute -bottom-2 left-1/2 h-1 w-8 -translate-x-1/2 rounded-full bg-rule" />
     </div>
   )
 }

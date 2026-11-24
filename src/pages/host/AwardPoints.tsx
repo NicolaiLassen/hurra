@@ -9,7 +9,7 @@ import { useDialogTarget } from '@/components/host/useDialogTarget'
 import { Notice, Screen } from '@/components/layout'
 import ProfileBadges from '@/components/ProfileBadges'
 import QueryGate from '@/components/QueryGate'
-import StatusBadge from '@/components/StatusBadge'
+import StateChip from '@/components/host/StateChip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -128,7 +128,7 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
             <span className="truncate">{session.name}</span>
           </Link>
         </Button>
-        <Button asChild variant="ghost" size="lg" className="-mr-3 text-primary">
+        <Button asChild variant="ghost" size="lg" className="-mr-3">
           <Link to={scanNext}>
             <ScanIcon />
             Scan next
@@ -137,13 +137,13 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
       </nav>
 
       <header className="mt-4 flex items-center gap-3">
-        <Avatar name={player.name} className="size-14" />
+        <Avatar name={player.name} playerId={player.id} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="font-mono text-sm text-muted-foreground">{player.code}</p>
-          <h1 className="truncate text-3xl font-bold">{player.name}</h1>
+          <h1 className="truncate text-3xl font-extrabold">{player.name}</h1>
           <ProfileBadges profile={player.profile} className="mt-1" />
         </div>
-        <p className="text-4xl font-black text-primary tabular-nums">{points}</p>
+        <p className="tv-num text-5xl leading-none text-paper">{points}</p>
       </header>
 
       <Card className="mt-6">
@@ -159,7 +159,7 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
                 {games.map((g) => (
                   <SelectItem key={g.id} value={g.id}>
                     {g.title}
-                    {g.status === 'active' && <StatusBadge status="active" />}
+                    {g.status === 'active' && <StateChip state="active" />}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -171,7 +171,8 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
           </div>
           <div className="grid grid-cols-5 gap-2">
             {QUICK_POINTS.map((n) => (
-              <Button key={n} size="xl" className="px-0 text-lg" disabled={busy} onClick={() => void award(n)}>
+              // Five equal choices, so none of them is gold (docs/identity.md): the overlay, with condensed numerals.
+              <Button key={n} size="xl" variant="secondary" className="tv-num px-0 text-2xl" disabled={busy} onClick={() => void award(n)}>
                 +{n}
               </Button>
             ))}
@@ -200,12 +201,12 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
       </Card>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">History</h2>
+        <h2 className="mb-2 text-base font-extrabold">History</h2>
         {events?.length === 0 && <p className="text-sm text-muted-foreground">No points yet.</p>}
-        <ul className="divide-y">
+        <ul className="divide-y divide-rule">
           {events?.map((ev) => (
             <li key={ev.id} className="flex items-center gap-3 py-1.5">
-              <span className={`w-12 font-bold tabular-nums ${ev.points > 0 ? 'text-primary' : 'text-destructive'}`}>
+              <span className={`tv-num w-12 text-lg ${ev.points > 0 ? 'text-paper' : 'text-paper-2'}`}>
                 {formatPoints(ev.points)}
               </span>
               <span className="flex-1 truncate text-sm text-muted-foreground">
@@ -220,8 +221,8 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
         </ul>
       </section>
 
-      <section className="mt-8 border-t pt-6">
-        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">New phone?</h2>
+      <section className="mt-8 border-t border-rule pt-6">
+        <h2 className="text-base font-extrabold">New phone?</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           If {player.name} lost their phone or changed browser, move their player to the new one. Their points stay.
         </p>

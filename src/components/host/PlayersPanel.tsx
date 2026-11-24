@@ -6,7 +6,7 @@ import {
   PencilSimpleIcon,
   UserMinusIcon,
 } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import Avatar from '@/components/Avatar'
 import Confirm from '@/components/Confirm'
@@ -16,7 +16,7 @@ import RenameDialog from '@/components/host/RenameDialog'
 import { useDialogTarget } from '@/components/host/useDialogTarget'
 import { useRemovePhoto } from '@/components/photos/RemovePhoto'
 import ProfileBadges from '@/components/ProfileBadges'
-import RankBadge from '@/components/RankBadge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { knockedOutIds } from '@/games/registry'
 import { foldName, withRanks } from '@/lib/format'
 import { removePlayer, renamePlayer } from '@/lib/queries'
 import type { ScoreRow, Snapshot } from '@/lib/types'
@@ -37,9 +38,11 @@ import { cn } from '@/lib/utils'
 const SEARCH_FROM = 9
 
 /**
- * The guests by the day's points (docs/engine-v2.md, 7.3): rank, avatar, name,
+ * The guests by the day's points (docs/engine-v2.md, 7.3): rank, token, name,
  * badges and points. The name opens the award page; the row's menu renames,
- * moves the player to a new phone, or removes them.
+ * moves the player to a new phone, or removes them. A guest a live game has
+ * knocked out (the games' knockedOut hook) gets the pink stripe on their token
+ * and the word Out beside the points (docs/identity.md, The player token).
  */
 export default function PlayersPanel({ snapshot, className }: { snapshot: Snapshot; className?: string }) {
   const session = snapshot.session!
@@ -52,6 +55,7 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
   const removingPhoto = useRemovePhoto(snapshot)
 
   const rows = withRanks(snapshot.standings)
+  const out = useMemo(() => knockedOutIds(snapshot.games), [snapshot.games])
   // Folded like fusion's search: "soren" finds Søren, and plain letters find a full-width name.
   const needle = foldName(search)
   const shown = needle ? rows.filter((row) => foldName(row.name).includes(needle)) : rows
@@ -66,7 +70,7 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
         <CardContent className="grid gap-2">
           {rows.length >= SEARCH_FROM && (
             <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" />
+              <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-paper-2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -76,24 +80,30 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
               />
             </div>
           )}
-          {shown.length === 0 && <p className="py-2 text-sm text-muted-foreground">Nobody called “{search.trim()}”.</p>}
-          <ul className="divide-y">
+          {shown.length === 0 && <p className="py-2 text-sm text-paper-2">Nobody called “{search.trim()}”.</p>}
+          <ul className="divide-y divide-rule">
             {shown.map((row) => (
               <li key={row.player_id} className="flex items-center gap-2.5 py-1">
-                <RankBadge rank={row.rank} className="mx-0.5" />
-                <Avatar name={row.name} className="size-8" />
+                {/* A plain rank in condensed numerals, as on the TV's rows: no medal coins. */}
+                <span className="tv-num w-6 shrink-0 text-right text-base text-paper-3">{row.rank}</span>
+                <Avatar name={row.name} playerId={row.player_id} out={out.has(row.player_id)} className="size-7" />
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                   {/* Padded to a 32px tap target without making the row taller. */}
-                  <Link to={`/p/${row.code}`} className="truncate py-1.5 font-medium hover:text-primary">
+                  <Link to={`/p/${row.code}`} className="truncate py-1.5 font-bold hover:underline hover:decoration-paper-3 hover:underline-offset-4">
                     {row.name}
                   </Link>
                   <ProfileBadges profile={row.profile} />
                 </span>
-                <span className={cn('font-bold tabular-nums', row.points !== 0 ? 'text-primary' : 'text-muted-foreground')}>{row.points}</span>
+                {out.has(row.player_id) && (
+                  <Badge variant="hunt" className="px-0">
+                    Out
+                  </Badge>
+                )}
+                <span className={cn('tv-num w-8 shrink-0 text-right text-lg', row.points !== 0 ? 'text-paper' : 'text-paper-3')}>{row.points}</span>
                 {/* Not modal, so the dialogs it opens don't fight it for focus. */}
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground" aria-label={`More actions for ${row.name}`}>
+                    <Button variant="ghost" size="icon" className="text-paper-2" aria-label={`More actions for ${row.name}`}>
                       <DotsThreeIcon />
                     </Button>
                   </DropdownMenuTrigger>

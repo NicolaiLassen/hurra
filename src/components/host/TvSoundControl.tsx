@@ -8,7 +8,7 @@ import { type HeldLevel, newestOnly, soundVolumeOf, stillHeld } from '@/lib/soun
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
-/** Crossed out when off, more waves as it gets louder. */
+/** Crossed out when off, more waves as it gets louder: beside the slider, in paper, never gold (docs/identity.md). */
 function Speaker({ volume, className }: { volume: number; className?: string }) {
   if (volume <= 0) return <SpeakerSlashIcon className={className} />
   return volume <= 50 ? <SpeakerLowIcon className={className} /> : <SpeakerHighIcon className={className} />
@@ -16,7 +16,7 @@ function Speaker({ volume, className }: { volume: number; className?: string }) 
 
 /**
  * The TV's sound effects volume (docs/engine-v2.md, 7.3): a slider from Off to
- * 100% in steps of 5, with the level beside its name. Only TV screens follow it
+ * 100% in steps of 5, with the level beside it. Only TV screens follow it
  * (paired TVs and a TV tab of this browser), so a computer that plays the party
  * music as well can keep Hurra's sounds under the music; phones keep their own
  * volume. The level saves when the host lets go (or with each arrow key), one
@@ -65,39 +65,44 @@ export default function TvSoundControl({ sessionId, volume: stored, tvOpen }: { 
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3">
-      <div className="min-w-0 flex-1 basis-56">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <Speaker volume={shown} className={cn('size-4', shown > 0 ? 'text-primary' : 'text-muted-foreground')} />
+    <div className="grid gap-3 border-t pt-3">
+      <div className="min-w-0">
+        <p className="text-sm font-extrabold">
           <span id={labelId}>TV sound effects</span>
-          <span className="text-muted-foreground tabular-nums">{soundVolumeLabel(shown)}</span>
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">Keep them under the party music. Phones keep their own volume.</p>
+        <p className="mt-0.5 text-sm text-paper-2">Keep them under the party music. Phones keep their own volume.</p>
       </div>
-      <Slider
-        className="h-9 w-full sm:w-56"
-        min={0}
-        max={100}
-        step={5}
-        value={[shown]}
-        onPointerDown={() => (pointer.current = true)}
-        onKeyDown={() => (pointer.current = false)}
-        onValueChange={([level]) => {
-          if (!pointer.current) return
-          moved.current = level
-          setDragging(level)
-        }}
-        onPointerUp={() => {
-          const level = moved.current
-          moved.current = null
-          setDragging(null)
-          if (level !== null) save(level)
-        }}
-        onValueCommit={([level]) => {
-          if (!pointer.current) save(level)
-        }}
-        thumbProps={{ 'aria-labelledby': labelId, 'aria-valuetext': soundVolumeLabel(shown) }}
-      />
+      <div className="flex items-center gap-3">
+        <Speaker volume={shown} className="size-5 shrink-0 text-paper-2" />
+        <Slider
+          className="h-9 min-w-0 flex-1"
+          min={0}
+          max={100}
+          step={5}
+          value={[shown]}
+          onPointerDown={() => (pointer.current = true)}
+          onKeyDown={() => (pointer.current = false)}
+          onValueChange={([level]) => {
+            if (!pointer.current) return
+            moved.current = level
+            setDragging(level)
+          }}
+          onPointerUp={() => {
+            const level = moved.current
+            moved.current = null
+            setDragging(null)
+            if (level !== null) save(level)
+          }}
+          onValueCommit={([level]) => {
+            if (!pointer.current) save(level)
+          }}
+          thumbProps={{ 'aria-labelledby': labelId, 'aria-valuetext': soundVolumeLabel(shown) }}
+        />
+        {/* Condensed numerals, as wide for 5% as for 100%, so the slider never shifts while it moves. */}
+        <span className={cn('tv-num w-14 shrink-0 text-right text-2xl leading-none', shown > 0 ? 'text-paper' : 'text-paper-2')}>
+          {soundVolumeLabel(shown)}
+        </span>
+      </div>
     </div>
   )
 }

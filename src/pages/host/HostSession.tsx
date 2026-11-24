@@ -1,7 +1,6 @@
 import { ArchiveIcon, FilmStripIcon, LockIcon, LockOpenIcon } from '@phosphor-icons/react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import Callout from '@/components/Callout'
 import GamesPanel from '@/components/host/GamesPanel'
 import { useHostCall } from '@/components/host/hostCalls'
 import JoinCard from '@/components/host/JoinCard'
@@ -9,13 +8,13 @@ import LiveDot from '@/components/host/LiveDot'
 import LiveGameCard from '@/components/host/LiveGameCard'
 import PairTvButton from '@/components/host/PairTvButton'
 import PlayersPanel from '@/components/host/PlayersPanel'
-import { arrangeGames } from '@/components/host/scene'
+import { arrangeGames, partyLine } from '@/components/host/scene'
 import StagePanel from '@/components/host/StagePanel'
+import StateChip from '@/components/host/StateChip'
 import TimerWarnings from '@/components/host/TimerWarnings'
 import { useHostFixture } from '@/components/host/useHostFixture'
 import { Loading, Screen } from '@/components/layout'
 import QueryGate from '@/components/QueryGate'
-import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { setJoining } from '@/lib/queries'
 import type { Snapshot } from '@/lib/types'
@@ -73,12 +72,13 @@ function ControlRoom({ snapshot, live }: { snapshot: Snapshot; live: boolean }) 
     <Screen wide>
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-sm text-muted-foreground">
-            {session.join_code}
-            {over && <StatusBadge status="archived" className="font-sans" />}
+          <h1 className="truncate text-3xl font-extrabold">{session.name}</h1>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-paper-2">
+            <span className="font-mono text-lg leading-none font-extrabold tracking-[0.04em] text-paper">{session.join_code}</span>
+            <span>{partyLine(snapshot.players.length, session)}</span>
+            {over && <StateChip state="archived" />}
             <LiveDot />
           </p>
-          <h1 className="truncate text-3xl font-bold">{session.name}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!over && (
@@ -105,13 +105,18 @@ function ControlRoom({ snapshot, live }: { snapshot: Snapshot; live: boolean }) 
       </header>
 
       {over && (
-        <Callout
-          className="mt-6"
-          tone="violet"
-          icon={<ArchiveIcon weight="fill" />}
-          title="This party is archived"
-          detail="Joining is closed, phones say that's a wrap, and the TV shows the final standings. Unarchive it from the menu."
-        />
+        // A solid note, not a toast's callout: the room has no glass (docs/identity.md).
+        <section className="mt-6 flex items-start gap-3 rounded-xl bg-raised p-4" role="status">
+          <span className="grid size-9 shrink-0 place-items-center rounded-control bg-overlay text-paper-2">
+            <ArchiveIcon weight="fill" className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-extrabold">This party is archived</p>
+            <p className="mt-0.5 text-sm text-paper-2">
+              Joining is closed, phones say that's a wrap, and the TV shows the final standings. Unarchive it from the menu.
+            </p>
+          </div>
+        </section>
       )}
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -120,7 +125,7 @@ function ControlRoom({ snapshot, live }: { snapshot: Snapshot; live: boolean }) 
           {live && <TimerWarnings games={snapshot.games} />}
           {liveGames.length > 0 && (
             <section className="grid grid-cols-1 gap-4" aria-labelledby="live-games">
-              <h2 id="live-games" className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              <h2 id="live-games" className="text-base font-extrabold">
                 Live now ({liveGames.length})
               </h2>
               {liveGames.map((game) => (

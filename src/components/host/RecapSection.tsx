@@ -25,14 +25,14 @@ export default function RecapSection({
   children: ReactNode
 }) {
   return (
-    <section aria-labelledby={id} className={cn('min-w-0', card && 'rounded-2xl bg-card p-4 ring-1 ring-foreground/10 sm:p-6', className)}>
+    <section aria-labelledby={id} className={cn('min-w-0', card && 'rounded-xl bg-raised p-4 sm:p-6', className)}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h2 id={id} className="flex items-center gap-2 text-lg font-semibold">
-            <SectionIcon weight="duotone" className="size-5 shrink-0 text-primary" />
+          <h2 id={id} className="flex items-center gap-2 text-lg font-extrabold">
+            <SectionIcon weight="duotone" className="size-5 shrink-0 text-paper-2" />
             {title}
           </h2>
-          {note && <p className="mt-0.5 text-sm text-muted-foreground">{note}</p>}
+          {note && <p className="mt-0.5 text-sm text-paper-2">{note}</p>}
         </div>
         {action}
       </div>

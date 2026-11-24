@@ -7,6 +7,8 @@ import {
   defaultAwardGame,
   formatCountdown,
   nextPosition,
+  nextStartId,
+  partyLine,
   resultLine,
   screensLine,
   stageWords,
@@ -150,5 +152,41 @@ describe('arranging the games', () => {
   it('puts a new game last', () => {
     expect(nextPosition([])).toBe(0)
     expect(nextPosition([{ position: 0 }, { position: 4 }, { position: 2 }])).toBe(5)
+  })
+})
+
+describe('partyLine', () => {
+  it('counts the guests and says whether joining is open', () => {
+    expect(partyLine(12, { status: 'open', archived_at: null })).toBe('12 guests, joining is open')
+    expect(partyLine(1, { status: 'closed', archived_at: null })).toBe('1 guest, joining is closed')
+    expect(partyLine(0, { status: 'closed', archived_at: FIXTURE_NOW })).toBe('0 guests, the party is over')
+  })
+})
+
+describe('nextStartId', () => {
+  const at = (s: Snapshot) => tvScene(s, FIXTURE_NOW)
+
+  it('is the first game not started while the TV shows the standings', () => {
+    const s = fixtureSnapshot('lobby', 'host')
+    expect(nextStartId(s, at(s), true)).toBe(s.games.find((g) => g.title === 'Last one standing')!.id)
+  })
+
+  it('leaves the gold to Pair a TV while no TV is open', () => {
+    const s = fixtureSnapshot('lobby', 'host')
+    expect(nextStartId(s, at(s), false)).toBeNull()
+  })
+
+  it('leaves the gold to the game on the TV, a final screen, and an archived party', () => {
+    for (const scene of ['quiz-question', 'final', 'archived'] as const) {
+      const s = fixtureSnapshot(scene, 'host')
+      expect(nextStartId(s, at(s), true)).toBeNull()
+    }
+  })
+
+  it('still picks a start while a game runs in the background', () => {
+    const lobby = fixtureSnapshot('lobby', 'host')
+    const [first, ...rest] = lobby.games
+    const s: Snapshot = { ...lobby, games: [{ ...first, status: 'active', started_at: FIXTURE_NOW }, ...rest] }
+    expect(nextStartId(s, at(s), true)).toBe(rest[0].id)
   })
 })

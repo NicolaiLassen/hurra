@@ -96,7 +96,7 @@ function PairTv({
           On the TV laptop, open this address and type the code. This closes by itself once the TV is paired.
         </DialogDescription>
       </DialogHeader>
-      <div className="flex items-center gap-2 rounded-xl bg-muted/60 py-1 pr-1 pl-3">
+      <div className="flex items-center gap-2 rounded-lg bg-overlay py-1 pr-1 pl-3">
         <span className="min-w-0 flex-1 truncate font-mono text-sm">{address}</span>
         <Button variant="ghost" size="icon-lg" aria-label="Copy the TV address" onClick={() => void copy(address)}>
           <CopyIcon />

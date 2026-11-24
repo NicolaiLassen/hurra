@@ -4,7 +4,7 @@
 import type { Presentation } from '@/games/core/Game'
 import { listNames } from '@/lib/recap'
 import { liveGames, type TvScene } from '@/lib/stage'
-import type { Player, SessionGame, Snapshot } from '@/lib/types'
+import type { Player, Session, SessionGame, Snapshot } from '@/lib/types'
 
 type Named = Pick<Player, 'id' | 'name'>
 
@@ -55,6 +55,26 @@ export function stageWords(scene: TvScene, players: readonly Named[], now: numbe
         detail: scene.lastGame ? `Last game: ${resultLine(scene.lastGame, players)}.` : "Everyone's points for the night.",
       }
   }
+}
+
+/** The header's line under the party's name: "12 guests, joining is open". */
+export function partyLine(guests: number, session: Pick<Session, 'status' | 'archived_at'>): string {
+  const count = guests === 1 ? '1 guest' : `${guests} guests`
+  if (session.archived_at !== null) return `${count}, the party is over`
+  return `${count}, joining is ${session.status === 'open' ? 'open' : 'closed'}`
+}
+
+/**
+ * The game whose Start is the control room's one gold step (docs/identity.md):
+ * the first game of the program that hasn't run, once nothing else leads. A
+ * TV is open (else Pair a TV leads), the TV shows the standings (a live game
+ * on the TV has its own next step, a final screen has Back to standings, the
+ * recap Back to the party), and the party isn't archived. Games live in the
+ * background don't stop it: Last one standing runs all night.
+ */
+export function nextStartId(s: Snapshot, scene: TvScene, tvOpen: boolean): string | null {
+  if (!s.session || s.session.archived_at !== null || !tvOpen || scene.kind !== 'standings') return null
+  return arrangeGames(s).program.find((g) => g.status === 'pending')?.id ?? null
 }
 
 /** "No TV paired yet", "1 TV paired", "2 TVs paired". */
