@@ -1,7 +1,7 @@
 import { CrownIcon, DetectiveIcon } from '@phosphor-icons/react'
 import { motion, useReducedMotion } from 'motion/react'
 import Avatar from '@/components/Avatar'
-import ConfettiBurst from '@/games/fusion/ConfettiBurst'
+import Confetti from '@/components/Confetti'
 import { listNames, plural, type FusionGame } from '@/games/fusion/logic'
 import { bestDisguise, nameOf, publicOf } from '@/games/fusion/view'
 import type { TvViewProps } from '@/games/types'
@@ -26,7 +26,7 @@ export default function FinalTvView({ game, players, publicState }: TvViewProps<
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-10 short:gap-6">
-      <ConfettiBurst pieces={60} />
+      <Confetti pieces={60} />
       <header className="text-center">
         <p className="flex items-center justify-center gap-3 text-2xl font-semibold tracking-widest text-confetti-violet uppercase short:text-xl">
           <DetectiveIcon weight="duotone" className="size-8" />

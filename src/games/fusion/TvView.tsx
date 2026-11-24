@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion, type Transition } from 'moti
 import { useEffect, useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
-import ConfettiBurst from '@/games/fusion/ConfettiBurst'
+import Confetti from '@/components/Confetti'
 import { plural, type FusionGame, type FusionPhase, type FusionPublicPicture, type FusionPublicState } from '@/games/fusion/logic'
 import { PictureArt } from '@/games/fusion/parts'
 import { countsLine, fitTiles, nameOf, publicOf, totalVotes } from '@/games/fusion/view'
@@ -314,7 +314,7 @@ function RevealMoment({
               </motion.p>
             </div>
           </div>
-          <ConfettiBurst />
+          <Confetti />
         </motion.div>
       )}
     </AnimatePresence>

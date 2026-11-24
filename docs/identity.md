@@ -12,6 +12,7 @@ block in [src/index.css](../src/index.css), and the approved
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
+[The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
 [Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
@@ -243,13 +244,15 @@ edges never cuts anything off. Games play inside it and get it for free.
   with the night's top five, join the band's `lines` list. While a game holds
   the stage and joining is open, "Join with HURRA30" stands at the band's
   right.
-- **The way in** (`joinPlace` in scene.ts, [Join.tsx](../src/components/tv/Join.tsx)):
-  before anyone joins, the lobby is one big QR code; for 1 to 3 guests the
-  board's own big join card; for a bigger party the join block (the QR code on
-  its white quiet zone, the code and the address) beside the podium; while a
-  game holds the stage (also one without a screen of its own, whose card
-  stands beside the podium) only the band's code. Codes are paper, never gold, and the address is
-  always the running page's own origin.
+- **The way in** (`joinPlace` in scene.ts): before anyone joins, the lobby
+  ([Lobby.tsx](../src/components/tv/Lobby.tsx)) is one big QR code; while
+  the standings show, the board's own join block (see
+  [The standings](#the-standings)), at every party size; while a game holds
+  the stage only the band's code ([Join.tsx](../src/components/tv/Join.tsx)),
+  and the same for a party of 4 or more while a game without a screen of its
+  own holds the stage, whose card stands beside the podium. One way in at a
+  time, never two. Codes are paper, never gold, and the address is always the
+  running page's own origin.
 - **News** ([news.ts](../src/components/tv/news.ts) routes it): big news is
   a strap across the whole top row for 8 seconds, over the programme strap
   and the bug, so it never covers the stage (a quiz's answered count
@@ -320,6 +323,66 @@ quiz is ("Question 3 of 10"), so the stage never repeats it.
   size (444 px at 720p). The night's top five is not on the TV during a
   question; if it is wanted, it joins the band as one slim line (The TV's
   frame).
+
+## The standings
+
+The board between games ([src/components/tv/Board.tsx](../src/components/tv/Board.tsx))
+has two columns, both measured in [fit.ts](../src/components/tv/fit.ts), so it
+fills whatever stage the frame gives it:
+
+- **The leader's column:** the leader as a hero (their token at 264 px,
+  their points at `text-tv-lead` in gold, what they last won at its finish
+  time and their lead, "2 ahead of Ana"), the next five places large (names
+  at `text-tv-name`, points at `text-tv-score`), and one line on how the last
+  game moved the places ("Beer pong moved Luna up 4 places and Clara up 3.",
+  from that game's points, `placesMoved` in
+  [stage.ts](../src/lib/stage.ts)). A guest's name is printed beside the hero
+  only with a photo or the word Out: otherwise the slate says it.
+- **The field:** everyone else in plain rows on the ground, no cards and no
+  bars, in fit.ts's row layouts (the floor of 28 px in the smallest), filled
+  top to bottom. The join block stands under it while joining is open: the
+  QR code on paper, the code at `text-tv-code` and the page's own address.
+- **Movers** are a triangle and a count in `paper-2`, never green or red.
+- **Gold** is the leader's: their points, the crown, the rank and points of
+  anyone tied for first (everyone tied for first wears the crown). Nothing
+  else on the board is gold, not even the join code.
+- **Out:** the word in pink beside the name and the stripe on the token, for
+  everyone a live game's `knockedOut` hook names.
+- **When it doesn't fit:** places that don't fit under the hero join the
+  field, the leader's column narrows (half, then 44, then 38 percent), the
+  join block gives way to its one line, and as a last resort the field ends
+  in "and 17 more". No text goes under the floor to make room.
+
+## The winner's screen
+
+A game's winners ([src/components/tv/WinnerMoment.tsx](../src/components/tv/WinnerMoment.tsx)),
+for Last one standing and for any game whose final screen is the generic one
+([FinalScreen.tsx](../src/components/tv/FinalScreen.tsx)). A still layout:
+everything fades in, and only the confetti moves.
+
+- **The field:** the first winner's guest colour covers the top 65 percent of
+  the TV, behind the frame (a fixed layer under the stage, so no ancestor of
+  the stage may set a `transform` or `filter`). It carries
+  `data-tv-field="<colour>"`, so the frame can set its words in ink while it
+  shows, with `has-[[data-tv-field]]:`. Paper stays paper on it; ink reads
+  6.9 to 1 or more on every guest colour.
+- **On it, in ink:** the winner's photo, or their name slate inverted (their
+  colour on ink, so it stands out of a field of the same colour), tilted 4
+  degrees with a hard ink shadow; the cheer, "Hurra for Bo!", the product's
+  one exclamation mark, in `wide` at up to 176 px and fitted to the room; the
+  deck ("The last one in, with 7 knockouts.") and the last thing that
+  happened at its clock time.
+- **Beneath, on the ground:** "The night so far", what the game did to the
+  night ("Last one standing gave Bo 10 points and a 4 point lead over Ana.")
+  and, always, "The third hurra is saved for the night's winner."; and the
+  night's top three on paper steps of clearly different heights (a tie
+  shares a height), the game's points on them as a chip, gold for its winner.
+  On a short screen the tokens move onto the steps, the steps go to one row,
+  and the words drop the title, then the line, never the third hurra.
+- **Confetti** ([src/components/Confetti.tsx](../src/components/Confetti.tsx))
+  is only the logo's pieces in the logo's colours: the pink dot, the teal
+  curl, the violet wave and the gold star. It bursts once and is gone in
+  about three seconds; with reduced motion there is none.
 
 ## Old names
 

@@ -82,13 +82,11 @@ describe('joinPlace', () => {
   const board = { kind: 'board', over: false, nowPlaying: null } as const
   const stage = { kind: 'stage', game: game('q'), finished: false } as const
 
-  it('puts the big join card on the board while the standings show 1 to 3 guests', () => {
-    expect([1, 2, 3].map((guests) => joinPlace(board, true, guests))).toEqual(['board', 'board', 'board'])
+  it('puts the join block on the board while the standings show, whatever the party\'s size', () => {
+    expect([1, 2, 3, 4, 24, 45].map((guests) => joinPlace(board, true, guests))).toEqual(['board', 'board', 'board', 'board', 'board', 'board'])
   })
 
-  it("gives a bigger party's standings the join block beside the podium, and a game on the stage only the code", () => {
-    expect(joinPlace(board, true, 4)).toBe('qr')
-    expect(joinPlace(board, true, 45)).toBe('qr')
+  it('gives a game on the stage only the band\'s code', () => {
     expect(joinPlace(stage, true, 2)).toBe('code')
     expect(joinPlace(stage, true, 45)).toBe('code')
   })

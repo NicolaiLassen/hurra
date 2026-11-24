@@ -5,7 +5,6 @@ import Banner from '@/components/tv/Banner'
 import Board from '@/components/tv/Board'
 import Corner from '@/components/tv/Corner'
 import Header from '@/components/tv/Header'
-import { JoinBlock } from '@/components/tv/Join'
 import Lobby from '@/components/tv/Lobby'
 import type { NewsStage } from '@/components/tv/news'
 import RecapScene from '@/components/tv/RecapScene'
@@ -107,23 +106,19 @@ function Screen({
   const titleCard = useTitleCard(shown, session, now)
   const titleOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.title
 
-  // The band has the games in the background. Beside the podium: a bigger
-  // party's join block, the game on the stage without a screen of its own, and
-  // the games that finished lately.
+  // The band has the games in the background. Beside the podium, in the room
+  // the board leaves: the game on the stage without a screen of its own, and
+  // the games that finished lately. The board draws its own join block.
   const nowPlaying = area.kind === 'board' ? area.nowPlaying : null
   const chips = !over && (nowPlaying !== null || finished.length > 0)
-  const strip =
-    join === 'qr' || chips
-      ? (room: number, chipsHeight?: number) => (
-          <div className="flex min-w-0 flex-col items-end gap-6 short:gap-4" style={{ maxWidth: room }}>
-            {join === 'qr' && <JoinBlock code={session.join_code} />}
-            {chips && <Strip room={room} chipsHeight={chipsHeight} nowPlaying={nowPlaying} running={[]} finished={finished} players={players} />}
-          </div>
-        )
-      : undefined
+  const strip = chips
+    ? (room: number, chipsHeight?: number) => (
+        <Strip room={room} chipsHeight={chipsHeight} nowPlaying={nowPlaying} running={[]} finished={finished} players={players} />
+      )
+    : undefined
 
   return (
-    <main className="relative isolate flex h-dvh flex-col overflow-hidden px-[5vw] py-[5vh]">
+    <main className="group/frame relative isolate flex h-dvh flex-col overflow-hidden px-[5vw] py-[5vh]">
       <Backdrop />
       {area.kind === 'recap' && recap ? (
         <RecapScene doc={recap} partyName={session.name} startAt={recapSlide} />

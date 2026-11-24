@@ -39,26 +39,24 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
 /**
  * Where the way in shows while joining is open (docs/identity.md, The TV's
  * frame):
- * - `board`: a small party's big join card on the board (1 to 3 guests,
- *   boardTier `few`), so the first guests' friends can scan it from across
- *   the room;
- * - `qr`: the join block beside the podium, the QR code on its white quiet
- *   zone with the code, on a bigger party's standings;
+ * - `board`: the board's own join block while the standings show, at every
+ *   party size (the QR code on paper and the code, or its one line when a big
+ *   party's rows need the room), so a guest who comes late can scan it from
+ *   across the room;
  * - `code`: "Join with HURRA30" at the band's right, while a game holds the
- *   stage, so the game keeps the room; also on the standings while a game
- *   without a screen of its own holds the stage, whose card then stands
- *   beside the podium.
+ *   stage, so the game keeps the room; also on a bigger party's standings
+ *   while a game without a screen of its own holds the stage, whose card then
+ *   stands beside the podium.
  * Nowhere before anyone has joined (the lobby is one big QR code already), on
  * the recap, or while joining is closed.
  */
-export type JoinPlace = 'board' | 'qr' | 'code'
+export type JoinPlace = 'board' | 'code'
 
 export function joinPlace(area: MainArea, open: boolean, guests: number): JoinPlace | null {
   if (!open || area.kind === 'recap') return null
   if (area.kind === 'stage') return 'code'
   if (guests === 0) return null
-  if (boardTier(guests) === 'few') return 'board'
-  return area.nowPlaying ? 'code' : 'qr'
+  return area.nowPlaying && boardTier(guests) !== 'few' ? 'code' : 'board'
 }
 
 /** The names of a game's winners who are still in the party, in the order the game gave them. */

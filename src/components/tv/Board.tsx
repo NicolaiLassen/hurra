@@ -1,45 +1,62 @@
 import { CrownIcon } from '@phosphor-icons/react'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import type { ReactNode, Ref } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { useMemo, type ReactNode, type Ref } from 'react'
 import Avatar from '@/components/Avatar'
-import { placeTone } from '@/components/placeTones'
-import ProfileBadges from '@/components/ProfileBadges'
-import Qr from '@/components/Qr'
-import { BADGES_MIN_WIDTH, boardTier, COLUMN_GAP, rowLayout, rowLayoutsFor, type BoardTier, type RowLayout } from '@/components/tv/fit'
-import { CARD, spring } from '@/components/tv/look'
-import { GainBubble, Points } from '@/components/tv/parts'
+import AvatarBadge from '@/components/AvatarBadge'
+import { aheadLine, commentary, wonLine, type Said } from '@/components/tv/boardLines'
+import {
+  boardSplit,
+  boardTier,
+  COLUMN_GAP,
+  leaderColumn,
+  NEXT_PLACES,
+  rowLayoutsFor,
+  SPLIT_GAP,
+  type FieldFit,
+  type RowLayout,
+} from '@/components/tv/fit'
+import { spring } from '@/components/tv/look'
+import { GainBubble, Mover, Points } from '@/components/tv/parts'
 import type { Gains } from '@/components/tv/useGains'
-import type { ScoreRow } from '@/lib/types'
+import { knockedOutIds } from '@/games/registry'
+import { usePlayerPhoto } from '@/lib/photoIndex'
+import { gamePointsOf, latestResult, placesMoved } from '@/lib/stage'
+import type { ScoreRow, SessionGame } from '@/lib/types'
 import { joinUrl } from '@/lib/urls'
 import { useElementSize } from '@/lib/useElementSize'
+import { useLive } from '@/lib/useLive'
 import { cn } from '@/lib/utils'
 
 export type Ranked = ScoreRow & { rank: number }
 
-/** The space between the podium and the status cards beside it (the strip's pl-8), in px. */
-const BAND_GAP = 32
-/** The space between a small party's podium and what stands beside it (gap-24), in px. */
-const HERO_GAP = 96
-/** A single column of rows is this wide at least (max-w-3xl), or as wide as the podium over it. */
-const ONE_COLUMN_MIN = 768
+/** The space between the hero, the next places and the commentary (mt-6), in px. */
+const PART_GAP = 24
+/** The space between the next places' rows (gap-1.5), in px. */
+const PLACE_GAP = 6
+/** The space between the field and the join block under it (gap-8), in px. */
+const FIELD_GAP = 32
+
+const NOTHING: Readonly<Record<string, number>> = Object.freeze({})
+const NO_GAMES: readonly SessionGame[] = Object.freeze([])
+
+/** A guest leads, and wears the crown, at the top with points; everyone tied for first wears it. */
+const crowned = (row: Ranked) => row.rank === 1 && row.points > 0
 
 /**
- * The podium and the day's standings: between games, at the end of the night,
- * and while a game without a TV view of its own is on the stage. The party's
- * size picks the composition (`boardTier` in fit.ts), always centred in the
- * room under the header:
- * - 1 to 3 guests: a big podium, and beside it a column with the big join
- *   card (`invite`, while joining is open) over the games as chips; without
- *   the join card, the status cards themselves. On a narrow screen the podium
- *   narrows, never the join card, so its QR code stays whole.
- * - 4 and up: the podium over the rows, both centred; the status cards stand
- *   on the podium's floor at the right edge, where the rows and the header's
- *   join card end. The podium narrows while they show, and moves left when
- *   they need more room; a single column of rows stays under it.
- * `strip` draws the status cards in the room it is given (px), so the rows
- * keep their height on a 1440 by 900 screen with 45 guests, or, under the
- * join card, only the chips that fit the height the card leaves
- * (`chipsHeight`), so the chips never push that column out of the room.
+ * The standings (docs/identity.md, The standings): between games, at the end
+ * of the night, and while a game without a TV view of its own is on the
+ * stage. Two columns, measured (fit.ts), so 1 guest and 45 fit any TV:
+ * - the leader's column: the leader as a hero (their token, their points in
+ *   gold, what they won and their lead), the next five places under it, and
+ *   a line on how the last game moved the places;
+ * - the field: everyone else in rows, in as many columns as they need, with
+ *   the join block under them while joining is open (`invite`): the QR code
+ *   on paper and the code, or its one line when the rows need the room.
+ * The places that don't fit under the hero join the field, and the leader's
+ * column narrows for a big party. Guests a live game has knocked out carry
+ * the word Out (GameModule.knockedOut). `strip` draws the status cards'
+ * chips in the room left under the field, if any.
  */
 export default function Board({
   rows,
@@ -50,81 +67,103 @@ export default function Board({
   rows: Ranked[]
   gains: Gains
   strip?: (room: number, chipsHeight?: number) => ReactNode
-  /** The join code for a small party's big join card; the header then leaves its own out (`joinCardPlace` in scene.ts). */
+  /** The join code for the join block; null leaves it out (joining closed, or the frame shows it). */
   invite?: string | null
 }) {
-  const tier = boardTier(rows.length)
-  const few = tier === 'few'
-  const inviting = few && invite !== null
-  const [areaRef, area] = useElementSize<HTMLDivElement>()
-  const [bandRef, band] = useElementSize<HTMLDivElement>()
-  const [gapRef, gap] = useElementSize<HTMLDivElement>()
-  const [podiumRef, podium] = useElementSize<HTMLDivElement>()
-  const [leftRef, left] = useElementSize<HTMLDivElement>()
-  const [inviteRef, inviteBox] = useElementSize<HTMLDivElement>()
-  const hasPodium = rows.length > 0
-  const rest = rows.slice(3)
+  const { snapshot } = useLive()
+  const games = snapshot?.games ?? NO_GAMES
+  const out = useMemo(() => knockedOutIds(games), [games])
+  // How the last game moved the places, while its result is still the news.
+  const last = snapshot ? latestResult(snapshot) : null
+  const lastPoints = snapshot && last ? gamePointsOf(snapshot, last.id) : NOTHING
+  const moved = useMemo(() => (last ? placesMoved(rows, lastPoints) : NOTHING), [last, rows, lastPoints])
+  const said = last ? commentary(last, moved, lastPoints, rows) : null
 
-  // Under the join card the chips get its width; anywhere else the cards get what the podium leaves.
-  const room = inviting ? inviteBox.width : Math.max(0, band.width - (hasPodium ? podium.width + (few ? HERO_GAP : BAND_GAP) : 0))
-  // All measured first, so the cards never flash in at the wrong count.
-  const measured = band.width > 0 && (!hasPodium || podium.width > 0) && (!inviting || (inviteBox.width > 0 && area.height > 0))
-  // Where the podium's middle is, so a single column of rows stands under it even when the cards push it left.
-  const podiumMiddle = podium.width > 0 ? left.width + podium.width / 2 : area.width / 2
+  const tier = boardTier(rows.length)
+  const [areaRef, area] = useElementSize<HTMLDivElement>()
+  const [heroRef, hero] = useElementSize<HTMLDivElement>()
+  const [placeRef, place] = useElementSize<HTMLLIElement>()
+  const [saidRef, saidBox] = useElementSize<HTMLParagraphElement>()
+  const [blockRef, block] = useElementSize<HTMLDivElement>()
+  const [lineRef, line] = useElementSize<HTMLDivElement>()
+
+  const leader = rows[0]
+  const next = rows.slice(1, 1 + NEXT_PLACES)
+  const column = leaderColumn({
+    height: area.height,
+    hero: hero.height,
+    row: place.height,
+    rowGap: PLACE_GAP,
+    gap: PART_GAP,
+    comment: said ? saidBox.height || 1 : 0,
+    next: next.length,
+  })
+  const places = next.slice(0, column.places)
+  const field = rows.slice(1 + places.length)
+  const measured = area.width > 0 && area.height > 0 && (!invite || (block.height > 0 && line.height > 0))
+  const split = boardSplit({
+    field: field.length,
+    width: area.width,
+    height: area.height,
+    join: invite ? { block: block.height, blockWidth: block.width, line: line.height } : null,
+    gap: FIELD_GAP,
+    layouts: rowLayoutsFor(tier),
+  })
+  // Until it is measured, the big join block shows (as it does in a prerender).
+  const joinForm = measured ? split.join : invite ? 'block' : null
+  const hasField = field.length > 0
+  const twoColumns = hasField || invite !== null || strip !== undefined
+  const leftWidth = Math.round(area.width * split.split)
+  const rightWidth = Math.max(0, area.width - leftWidth - SPLIT_GAP)
+  const fieldHeight = split.fit ? split.fit.perColumn * split.fit.layout.height + (split.fit.perColumn - 1) * split.fit.layout.gap : 0
+  const joinHeight = joinForm === 'block' ? block.height : joinForm === 'line' ? line.height : 0
+  const stripRoom = Math.max(0, area.height - (hasField ? fieldHeight + FIELD_GAP : 0) - (joinForm ? joinHeight + FIELD_GAP : 0))
+
+  if (!leader) return null
 
   return (
     <LayoutGroup>
-      <div ref={areaRef} className="flex min-h-0 flex-1 flex-col">
-        {/* Centred in the room under the header; from the top only if it ever needs all of it. */}
-        <div className="my-auto flex flex-col">
-          {/* One element for every size of party, so the podium stays put (and keeps its state) as the party grows. */}
-          <div
-            ref={bandRef}
-            className={few ? 'flex items-end justify-center gap-24' : 'grid grid-cols-[1fr_auto_1fr] items-end'}
-          >
-            {/* Equal sides keep the podium on the screen's middle, over the rows; wide status cards push it left. */}
-            {!few && <div ref={leftRef} aria-hidden className="col-start-1 row-start-1" />}
-            {hasPodium && (
-              <Podium
-                ref={podiumRef}
-                rows={rows.slice(0, 3)}
-                gains={gains}
-                size={PODIUM_SIZE[tier]}
-                narrow={!few && !!strip}
-                className={few ? 'min-w-0' : 'col-start-2 row-start-1'}
-              />
+      <div ref={areaRef} className="flex min-h-0 flex-1">
+        <div
+          className={cn('grid min-h-0 w-full', !twoColumns && 'mx-auto max-w-5xl')}
+          style={twoColumns ? { gridTemplateColumns: area.width > 0 ? `${leftWidth}px minmax(0, 1fr)` : '1fr 1fr', columnGap: SPLIT_GAP } : undefined}
+        >
+          {/* The leader's column. */}
+          <section className={cn('relative flex min-h-0 min-w-0 flex-col *:shrink-0', hasField ? 'justify-start' : 'justify-center')}>
+            <Hero ref={heroRef} row={leader} games={games} out={out.has(leader.player_id)} ahead={aheadLine(rows)} gain={gains[leader.player_id]} />
+            {places.length > 0 && (
+              <ol className="mt-6 grid grid-cols-1 gap-1.5">
+                <AnimatePresence initial={false}>
+                  {places.map((row, i) => (
+                    <Place
+                      key={row.player_id}
+                      ref={i === 0 ? placeRef : undefined}
+                      row={row}
+                      out={out.has(row.player_id)}
+                      moved={moved[row.player_id]}
+                      gain={gains[row.player_id]}
+                    />
+                  ))}
+                </AnimatePresence>
+              </ol>
             )}
-            {few
-              ? (inviting || strip) && (
-                  <div className="flex shrink-0 flex-col">
-                    {inviting && (
-                      // The card and the space under it, measured, so the chips know the height left on either screen.
-                      <div ref={inviteRef}>
-                        <JoinInvite joinCode={invite} />
-                        {strip && <div aria-hidden className="h-6 short:h-4" />}
-                      </div>
-                    )}
-                    {strip && measured && strip(room, inviting ? Math.max(0, area.height - inviteBox.height) : undefined)}
-                  </div>
-                )
-              : strip && measured && <div className="col-start-3 row-start-1 flex justify-end pl-8">{strip(room)}</div>}
-          </div>
-          {rest.length > 0 && (
-            <>
-              {/* The space over the rows, measured, so the rows know their room on either screen. */}
-              <div ref={gapRef} aria-hidden className="h-8 shrink-0 short:h-6" />
-              {area.height > 0 && band.height > 0 && gap.height > 0 && (
-                <Standings
-                  rows={rest}
-                  leaderPoints={rows[0].points}
-                  gains={gains}
-                  width={area.width}
-                  height={Math.max(0, area.height - band.height - gap.height)}
-                  layouts={rowLayoutsFor(tier)}
-                  oneColumn={{ width: Math.max(ONE_COLUMN_MIN, podium.width), middle: podiumMiddle }}
-                />
+            {said && <Commentary ref={saidRef} said={said} hidden={!column.comment} />}
+          </section>
+
+          {/* The field, and the join block under it. */}
+          {twoColumns && (
+            <section className={cn('relative flex min-h-0 min-w-0 flex-col gap-8', hasField ? 'justify-between' : 'justify-center')}>
+              {hasField && measured && split.fit && (
+                <Field rows={field} fit={split.fit} width={rightWidth} out={out} gains={gains} />
               )}
-            </>
+              {strip && measured && stripRoom > 0 && <div className="min-h-0">{strip(rightWidth, stripRoom)}</div>}
+              {invite && (
+                <>
+                  <JoinBlock ref={blockRef} joinCode={invite} hidden={joinForm !== 'block'} />
+                  <JoinLine ref={lineRef} joinCode={invite} hidden={joinForm !== 'line'} />
+                </>
+              )}
+            </section>
           )}
         </div>
       </div>
@@ -132,299 +171,269 @@ export default function Board({
   )
 }
 
-type PodiumSize = 'hero' | 'roomy' | 'regular' | 'compact'
-
-/** Big for a small party, smaller for a big one, but never so small it stops reading from across the room. */
-const PODIUM_SIZE: Record<BoardTier, PodiumSize> = { few: 'hero', small: 'roomy', medium: 'regular', large: 'compact' }
-
-// Left to right: 2nd, 1st, 3rd.
-const PODIUM_SLOTS = [1, 0, 2]
-
-/** A podium size: first place first in `avatars` and `pedestals`, with `short:` for 1440 by 900. */
-type PodiumLook = {
-  gap: string
-  step: string
-  crown: string
-  avatars: readonly [string, string, string]
-  name: string
-  points: string
-  badges: string
-  floor: string
-  pedestals: readonly [string, string, string]
-  rank: string
-}
-
-const REGULAR: PodiumLook = {
-  gap: 'gap-6 lg:gap-12',
-  step: 'w-56 lg:w-72',
-  crown: 'size-12 short:size-8',
-  avatars: [
-    'size-24 ring-4 lg:size-28 short:size-16',
-    'size-20 ring-4 lg:size-24 short:size-14',
-    'size-20 ring-4 lg:size-24 short:size-14',
-  ],
-  name: 'mt-3 text-2xl lg:text-3xl short:mt-1 short:text-xl',
-  points: 'text-4xl short:text-3xl',
-  badges: 'mt-2 short:hidden',
-  floor: 'mt-3 short:mt-2',
-  pedestals: ['h-24 lg:h-28 short:h-12', 'h-16 lg:h-20 short:h-8', 'h-10 lg:h-14 short:h-6'],
-  rank: 'text-4xl lg:text-5xl short:text-2xl',
-}
-
-/** Beside the status cards: slimmer steps leave them room. */
-const NARROW = { gap: 'gap-6', step: 'w-48 lg:w-56' }
-
-const PODIUM: Record<PodiumSize, PodiumLook> = {
-  hero: {
-    gap: 'gap-16 short:gap-8',
-    step: 'w-80 short:w-60',
-    crown: 'size-16 short:size-12',
-    avatars: [
-      'size-36 text-5xl ring-[6px] short:size-28 short:text-4xl',
-      'size-28 text-4xl ring-4 short:size-20 short:text-3xl',
-      'size-28 text-4xl ring-4 short:size-20 short:text-3xl',
-    ],
-    name: 'mt-4 text-4xl short:mt-2 short:text-3xl',
-    points: 'text-6xl short:text-5xl',
-    badges: 'mt-3 short:hidden',
-    floor: 'mt-4 short:mt-3',
-    pedestals: ['h-36 short:h-24', 'h-24 short:h-16', 'h-16 short:h-10'],
-    rank: 'text-6xl short:text-5xl',
-  },
-  // A small party: its few rows leave room, so it stands a little taller than the
-  // regular one, and on 1440 by 900 it keeps a size that outweighs the rows under it.
-  roomy: {
-    ...REGULAR,
-    crown: 'size-12 short:size-10',
-    avatars: [
-      'size-24 ring-4 lg:size-28 short:size-24',
-      'size-20 ring-4 lg:size-24 short:size-20',
-      'size-20 ring-4 lg:size-24 short:size-20',
-    ],
-    name: 'mt-3 text-2xl lg:text-4xl short:mt-2 short:text-3xl',
-    points: 'text-4xl lg:text-5xl',
-    floor: 'mt-3',
-    pedestals: ['h-24 lg:h-28 short:h-16', 'h-16 lg:h-20 short:h-12', 'h-10 lg:h-14 short:h-8'],
-    rank: 'text-4xl lg:text-5xl short:text-4xl',
-  },
-  regular: REGULAR,
-  // A big party: smaller than the regular one but still read from across the room,
-  // so the rows below keep a readable size; on 1440 by 900 the same as the others.
-  compact: {
-    gap: 'gap-6',
-    step: 'w-56',
-    crown: 'size-10 short:size-8',
-    avatars: [
-      'size-24 ring-4 short:size-16',
-      'size-20 ring-4 short:size-14',
-      'size-20 ring-4 short:size-14',
-    ],
-    name: 'mt-2 text-2xl short:mt-1 short:text-xl',
-    points: 'text-4xl short:text-3xl',
-    badges: 'hidden',
-    floor: 'mt-3 short:mt-2',
-    pedestals: ['h-16 short:h-12', 'h-12 short:h-8', 'h-8 short:h-6'],
-    rank: 'text-4xl short:text-2xl',
-  },
-}
-
-/** The top three on their steps, at the size the party's composition gives them. */
-function Podium({
+/**
+ * The leader: their token at hero size and their points in gold, with what
+ * they won last and their lead. The token carries the name (the slate), so
+ * the line prints it only beside a photo, or beside the word Out.
+ */
+function Hero({
   ref,
-  rows,
-  gains,
-  size,
-  narrow,
-  className,
+  row,
+  games,
+  out,
+  ahead,
+  gain,
 }: {
   ref: Ref<HTMLDivElement>
-  rows: Ranked[]
-  gains: Gains
-  size: PodiumSize
-  narrow: boolean
-  className?: string
+  row: Ranked
+  games: readonly SessionGame[]
+  out: boolean
+  ahead: string | null
+  gain?: { amount: number; seq: number }
 }) {
-  const look = PODIUM[size]
-  const { gap, step } = narrow ? NARROW : look
+  const photo = usePlayerPhoto(row.player_id, row.name) !== null
+  const lead = crowned(row)
+  const named = photo || out
+  const won = wonLine(row.player_id, games, named)
   return (
-    <section ref={ref} className={cn('flex w-fit items-end justify-center', gap, className)}>
-      {PODIUM_SLOTS.filter((slot) => slot < rows.length).map((slot) => {
-        const row = rows[slot]
-        // Ties share a place: a guest level with the leader is gold and crowned on any step.
-        const tone = placeTone(row.rank)
-        return (
-          <div key={slot} data-fit="podium" className={cn('flex min-w-0 flex-col items-center', step)}>
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.div
-                key={row.player_id}
-                initial={{ opacity: 0, y: 40, scale: 0.8 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -30, scale: 0.8 }}
-                transition={spring}
-                className="flex w-full flex-col items-center"
-              >
-                {row.rank === 1 && (
-                  <CrownIcon data-crown="" weight="fill" className={cn('mb-1 text-primary drop-shadow-[0_0_20px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]', look.crown)} />
-                )}
-                <div className="relative">
-                  <Avatar name={row.name} className={cn(look.avatars[slot], tone.ring)} />
-                  <GainBubble gain={gains[row.player_id]} className="-top-2 -right-8" />
-                </div>
-                <p className={cn('w-full truncate text-center font-bold', look.name)}>{row.name}</p>
-                <Points value={row.points} className={cn('font-black', look.points, tone.text)} />
-                <ProfileBadges profile={row.profile} size="lg" className={cn('justify-center', look.badges)} />
-              </motion.div>
-            </AnimatePresence>
-            <div
-              className={cn(
-                'grid w-full place-items-center rounded-t-3xl bg-linear-to-b to-transparent',
-                look.floor,
-                look.pedestals[slot],
-                tone.step,
-              )}
+    <div ref={ref} data-fit="hero" className="flex min-w-0 items-center gap-10 short:gap-7">
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={row.player_id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative shrink-0"
+        >
+          <Avatar name={row.name} playerId={row.player_id} out={out} className="size-66 short:size-44" />
+          {lead && (
+            <span
+              data-crown=""
+              className="absolute -right-4 -bottom-4 grid size-16 place-items-center rounded-chip bg-gold text-ink ring-[6px] ring-ground short:-right-3 short:-bottom-3 short:size-12 short:ring-4"
             >
-              <span className={cn('font-black opacity-70', look.rank, tone.text)}>{row.rank}</span>
-            </div>
-          </div>
-        )
-      })}
-    </section>
-  )
-}
-
-/** A small party's join card, big enough to scan from across the room. */
-function JoinInvite({ joinCode }: { joinCode: string }) {
-  return (
-    <section
-      data-fit="invite"
-      className={cn(CARD, 'flex flex-col items-center gap-5 p-7 text-center short:gap-4 short:p-5 short:[&_svg]:size-54')}
-    >
-      <Qr value={joinUrl(joinCode)} size={256} />
-      <div>
-        <p className="text-2xl text-muted-foreground short:text-xl">Join the game</p>
-        <p className="mt-1 font-mono text-5xl font-black tracking-widest text-primary short:text-4xl">{joinCode}</p>
+              <CrownIcon weight="fill" className="size-10 short:size-8" />
+            </span>
+          )}
+        </motion.div>
+      </AnimatePresence>
+      <div className="relative min-w-0">
+        {(named || won) && (
+          <p className="flex min-w-0 items-baseline gap-3 text-tv-field font-bold short:text-tv-body">
+            {named && <span className="min-w-0 shrink truncate tv-num text-tv-name short:text-tv-band">{row.name}</span>}
+            {out && <OutWord />}
+            {won && <span className="min-w-0 truncate">{won}</span>}
+          </p>
+        )}
+        <p className="mt-1 flex items-baseline gap-4">
+          <motion.span
+            key={row.points}
+            initial={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className={cn('tv-num text-tv-lead short:text-tv-cheer', lead ? 'text-gold' : 'text-paper')}
+          >
+            {row.points}
+          </motion.span>
+          <span className="text-tv-field font-semibold text-paper-2 short:text-tv-body">{row.points === 1 ? 'point' : 'points'}</span>
+        </p>
+        {ahead && <p className="mt-1 line-clamp-2 text-tv-field text-paper-2 short:text-tv-body">{ahead}</p>}
+        <GainBubble gain={gain} className="top-1/3 -right-2" />
       </div>
-    </section>
+    </div>
   )
 }
 
-const ROW_STYLE: Record<RowLayout['kind'], { row: string; rank: string; avatar: string; name: string; points: string; bar: string; details: boolean }> = {
-  large: {
-    row: 'h-20 gap-5 rounded-3xl px-6',
-    rank: 'w-12 text-3xl',
-    avatar: 'size-14',
-    name: 'text-3xl leading-tight',
-    points: 'text-4xl',
-    bar: 'mt-2 h-2',
-    details: true,
-  },
-  regular: {
-    row: 'h-14 gap-4 rounded-2xl px-5',
-    rank: 'w-9 text-2xl',
-    avatar: 'size-10',
-    name: 'text-2xl leading-tight',
-    points: 'text-3xl',
-    bar: 'mt-1 h-1.5',
-    details: true,
-  },
-  compact: { row: 'h-10 gap-3 rounded-2xl px-4', rank: 'w-7 text-lg', avatar: 'size-7', name: 'text-lg', points: 'text-xl', bar: '', details: false },
-  tiny: { row: 'h-8 gap-2 rounded-xl px-3', rank: 'w-6 text-base', avatar: 'size-6', name: 'text-base', points: 'text-lg', bar: '', details: false },
+/** One of the next places under the hero: large, with how the last game moved it. */
+function Place({
+  ref,
+  row,
+  out,
+  moved,
+  gain,
+}: {
+  ref?: Ref<HTMLLIElement>
+  row: Ranked
+  out: boolean
+  moved: number | undefined
+  gain?: { amount: number; seq: number }
+}) {
+  const lead = crowned(row)
+  return (
+    <motion.li
+      ref={ref}
+      layout="position"
+      data-fit="place"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={spring}
+      className="relative flex h-18 min-w-0 items-center gap-5 short:h-14 short:gap-4"
+    >
+      <span className={cn('w-14 shrink-0 text-right tv-num text-tv-name short:w-11 short:text-tv-band', lead ? 'text-gold' : 'text-paper-3')}>
+        {row.rank}
+      </span>
+      <span className="relative shrink-0">
+        <Avatar name={row.name} playerId={row.player_id} out={out} className="size-16 short:size-12" />
+        {lead && (
+          <span data-crown="">
+            <AvatarBadge icon={CrownIcon} tone="gold" size="lg" />
+          </span>
+        )}
+      </span>
+      <span className="flex min-w-0 flex-1 items-baseline gap-3">
+        <span className="min-w-0 truncate tv-num text-tv-name short:text-tv-band">{row.name}</span>
+        {out && <OutWord />}
+      </span>
+      <Mover by={moved} className="w-20 shrink-0 text-tv-field short:w-16 short:text-tv-tab" />
+      <Points
+        value={row.points}
+        className={cn('w-28 shrink-0 text-right tv-num text-tv-score short:w-20 short:text-tv-name', lead ? 'text-gold' : 'text-paper')}
+      />
+      <GainBubble gain={gain} className="-top-2 right-0" />
+    </motion.li>
+  )
+}
+
+/** The line about the last game; kept mounted out of sight while it doesn't fit, so its height stays known. */
+function Commentary({ ref, said, hidden }: { ref: Ref<HTMLParagraphElement>; said: Said; hidden: boolean }) {
+  return (
+    <p
+      ref={ref}
+      data-fit={hidden ? undefined : 'comment'}
+      aria-hidden={hidden || undefined}
+      className={cn(
+        'mt-6 line-clamp-2 text-tv-body text-paper-2 short:text-tv-tab short:leading-[1.3] [&_strong]:font-bold [&_strong]:text-paper',
+        hidden && 'invisible absolute inset-x-0 top-0',
+      )}
+    >
+      {said.map((part, i) => (typeof part === 'string' ? part : <strong key={i}>{part.name}</strong>))}
+    </p>
+  )
+}
+
+/** The word beside a knocked-out guest's name: pink, at the TV's floor. */
+function OutWord() {
+  return <span className="shrink-0 text-tv-floor leading-none font-bold text-pink">Out</span>
+}
+
+/** The field's rows by layout (fit.ts): fixed heights, so the fit maths holds, and never under the TV's floor of 28 px. */
+const FIELD_STYLE: Record<RowLayout['kind'], { row: string; rank: string; avatar: string; name: string; points: string }> = {
+  large: { row: 'gap-5', rank: 'w-12 text-tv-band', avatar: 'size-14', name: 'text-tv-band', points: 'w-16 text-tv-band' },
+  regular: { row: 'gap-4', rank: 'w-12 text-tv-band', avatar: 'size-11', name: 'text-tv-band', points: 'w-16 text-tv-band' },
+  compact: { row: 'gap-3', rank: 'w-11 text-tv-field', avatar: 'size-9', name: 'text-tv-field', points: 'w-12 text-tv-field' },
+  tiny: { row: 'gap-2.5', rank: 'w-9 text-tv-floor', avatar: 'size-7', name: 'text-tv-floor', points: 'w-10 text-tv-floor' },
 }
 
 /**
- * Everyone below the podium, in as many rows and columns as the `width` by
- * `height` left under it needs (fit.ts), at their own height, so the board can
- * centre them with the podium. Several columns fill the width; a single one
- * is as wide as the podium and stands under its `middle` (px from the left).
+ * Everyone past the leader's column, in the rows and columns `fit` gives the
+ * room beside it, filled top to bottom so the ranking reads down, then
+ * across. Plain rows on the ground: no cards, no bars. When even the smallest
+ * rows can't hold everyone, the last line says how many more there are.
  */
-function Standings({
+function Field({
   rows,
-  leaderPoints,
-  gains,
+  fit,
   width,
-  height,
-  layouts,
-  oneColumn,
+  out,
+  gains,
 }: {
   rows: Ranked[]
-  leaderPoints: number
-  gains: Gains
+  fit: FieldFit
   width: number
-  height: number
-  layouts: readonly RowLayout[]
-  oneColumn: { width: number; middle: number }
+  out: ReadonlySet<string>
+  gains: Gains
 }) {
-  const { layout, columns } = rowLayout(rows.length, width, height, layouts)
-  const style = ROW_STYLE[layout.kind]
-  const columnWidth = columns === 1 ? Math.min(width, oneColumn.width) : (width - (columns - 1) * COLUMN_GAP) / columns
-  const badges = style.details && columnWidth >= BADGES_MIN_WIDTH
-  // Fill columns top to bottom so the ranking reads down, then across.
-  const perColumn = Math.ceil(rows.length / columns)
-  const marginLeft = Math.min(Math.max(0, oneColumn.middle - columnWidth / 2), width - columnWidth)
-
+  const style = FIELD_STYLE[fit.layout.kind]
+  const shown = rows.slice(0, fit.shown)
+  const more = rows.length - shown.length
   return (
     <ol
-      className="grid grid-flow-col gap-x-6"
+      className="grid shrink-0 grid-flow-col"
       style={{
-        ...(columns === 1 ? { width: columnWidth, marginLeft } : undefined),
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${perColumn}, auto)`,
-        rowGap: layout.gap,
+        width,
+        gridTemplateColumns: `repeat(${fit.columns}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${fit.perColumn}, ${fit.layout.height}px)`,
+        rowGap: fit.layout.gap,
+        columnGap: COLUMN_GAP,
       }}
     >
       <AnimatePresence initial={false}>
-        {rows.map((row) => (
+        {shown.map((row) => (
           <motion.li
             key={row.player_id}
-            layout
+            layout="position"
             data-fit="row"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={spring}
-            className={cn('relative flex items-center bg-card/80 ring-1 ring-foreground/10 backdrop-blur', style.row)}
+            className={cn('relative flex min-w-0 items-center', style.row)}
           >
-            <span className={cn('text-right font-bold text-muted-foreground tabular-nums', style.rank)}>{row.rank}</span>
-            <Avatar name={row.name} className={style.avatar} />
-            <div className="min-w-0 flex-1">
-              <p className="flex min-w-0 items-center gap-2">
-                <span className={cn('truncate font-semibold', style.name)}>{row.name}</span>
-                {badges && <ProfileBadges profile={row.profile} className="shrink-0 flex-nowrap" />}
-              </p>
-              {style.details && (
-                <div className={cn('overflow-hidden rounded-full bg-white/10', style.bar)}>
-                  <motion.div
-                    className="h-full rounded-full bg-primary/70"
-                    initial={false}
-                    animate={{ width: `${leaderPoints > 0 ? (Math.max(0, row.points) / leaderPoints) * 100 : 0}%` }}
-                    transition={spring}
-                  />
-                </div>
-              )}
-            </div>
-            <Points value={row.points} className={cn('font-black', style.points)} />
-            <GainBubble gain={gains[row.player_id]} className="-top-3 right-3" />
+            <span className={cn('shrink-0 text-right tv-num text-paper-3', style.rank)}>{row.rank}</span>
+            <Avatar name={row.name} playerId={row.player_id} out={out.has(row.player_id)} className={style.avatar} />
+            <span className="flex min-w-0 flex-1 items-baseline gap-2">
+              <span className={cn('min-w-0 truncate tv-num', style.name)}>{row.name}</span>
+              {out.has(row.player_id) && <OutWord />}
+            </span>
+            <Points value={row.points} className={cn('shrink-0 text-right tv-num', style.points)} />
+            <GainBubble gain={gains[row.player_id]} className="-top-3 right-0" />
           </motion.li>
         ))}
       </AnimatePresence>
+      {more > 0 && (
+        <li data-fit="row" className={cn('flex items-center tv-num text-paper-2', style.name)}>
+          and {more} more
+        </li>
+      )}
     </ol>
   )
 }
 
-/** Nobody has joined yet: a big QR code to scan, or why nobody can. */
-export function EmptyBoard({ joinCode, open, over }: { joinCode: string; open: boolean; over: boolean }) {
-  if (over) return <p className="m-auto text-3xl text-muted-foreground">This party is over.</p>
-  if (!open) return <p className="m-auto text-3xl text-muted-foreground">Joining is closed.</p>
+/** The page's own address, for the join lines: a join address never comes from a hard-coded URL. */
+const host = () => (typeof window === 'undefined' ? '' : window.location.host)
+
+/**
+ * The join block: the QR code on paper, scanned from across the room, and
+ * the code for typing. Kept mounted out of sight while the join line stands
+ * in for it, so its height stays known.
+ */
+function JoinBlock({ ref, joinCode, hidden }: { ref: Ref<HTMLDivElement>; joinCode: string; hidden: boolean }) {
   return (
-    <div className="m-auto flex flex-col items-center gap-8 text-center">
-      <Qr value={joinUrl(joinCode)} size={300} />
-      <div>
-        <p className="text-5xl font-black">Scan to join</p>
-        <p className="mt-3 text-2xl text-muted-foreground">
-          or go to <span className="text-foreground">{window.location.host}</span> and enter{' '}
-          <span className="font-mono font-bold tracking-widest text-primary">{joinCode}</span>
-        </p>
+    <div
+      ref={ref}
+      data-fit={hidden ? undefined : 'invite'}
+      aria-hidden={hidden || undefined}
+      className={cn('flex w-max shrink-0 items-center gap-10 short:gap-7', hidden && 'invisible absolute bottom-0 left-0')}
+    >
+      <div className="shrink-0 rounded-tile bg-paper p-5 text-ink short:p-4">
+        <QRCodeSVG value={joinUrl(joinCode)} size={232} level="M" bgColor="transparent" fgColor="currentColor" className="short:size-44" />
       </div>
+      <div className="min-w-0">
+        <p className="text-tv-field font-bold short:text-tv-body">Scan to join</p>
+        <p className="mt-2 text-tv-body text-paper-2 short:mt-1 short:text-tv-tab">or enter the code</p>
+        <p className="font-mono text-tv-code font-black tracking-[0.02em] short:text-tv-question">{joinCode}</p>
+        <p className="truncate text-tv-body text-paper-2 short:text-tv-tab">at {host()}</p>
+      </div>
+    </div>
+  )
+}
+
+/** The join block in one line, when the field needs its room: "Join with HURRA30 at hurra.party". */
+function JoinLine({ ref, joinCode, hidden }: { ref: Ref<HTMLDivElement>; joinCode: string; hidden: boolean }) {
+  return (
+    <div
+      ref={ref}
+      data-fit={hidden ? undefined : 'join-line'}
+      aria-hidden={hidden || undefined}
+      className={cn(
+        'flex min-w-0 shrink-0 items-baseline gap-4 text-tv-body whitespace-nowrap text-paper-2 short:gap-3 short:text-tv-tab',
+        hidden && 'invisible absolute inset-x-0 bottom-0',
+      )}
+    >
+      Join with
+      <span className="font-mono text-tv-band font-black tracking-[0.02em] text-paper short:text-tv-field">{joinCode}</span>
+      <span className="min-w-0 truncate">at {host()}</span>
     </div>
   )
 }

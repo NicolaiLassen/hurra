@@ -4,7 +4,7 @@
 // arrives a moment after the page opens. The game data here is sample JSON
 // for screens only, like the fixtures it builds on; nothing outside dev reads it.
 //
-// ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, empty,
+// ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, pong-over, empty, hunt, hunt-ended,
 //                    quiz-lobby (before the first question), quiz-final (the quiz's podium)
 // &players=8|24|45   the party's size (trimmed, or padded with more guests)
 // &fresh=1           the stage game took the stage just now: its title card shows
@@ -19,7 +19,7 @@ import { FIXTURE_NOW, fixtureRecapDoc, fixtureSnapshot, isFixtureScene, type Fix
 import type { RecapDoc } from '@/lib/recap'
 import type { FeedItem, Player, ScoreRow, SessionGame, Snapshot } from '@/lib/types'
 
-export const TV_SCENES = ['recap', 'standings', 'between', 'pong', 'pong-final', 'empty', 'quiz-lobby', 'quiz-final'] as const
+export const TV_SCENES = ['recap', 'standings', 'between', 'pong', 'pong-final', 'pong-over', 'empty', 'hunt', 'hunt-ended', 'quiz-lobby', 'quiz-final'] as const
 export type TvOnlyScene = (typeof TV_SCENES)[number]
 export const NEWS = ['banner', 'ticker', 'interrupt', 'stage', 'points'] as const
 type News = (typeof NEWS)[number]
@@ -88,10 +88,12 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
       return { ...s, session: { ...s.session!, spotlight_game_id: null, spotlight_at: null } }
     }
     case 'pong':
-    case 'pong-final': {
-      // An in-person round (no TV view of its own) on the stage, beside the background games.
+    case 'pong-final':
+    case 'pong-over': {
+      // An in-person round (no TV view of its own) on the stage, beside the background games;
+      // pong-over: the host ended it with no winner.
       const s = fixtureSnapshot('background', 'tv')
-      const finished = scene === 'pong-final'
+      const finished = scene !== 'pong'
       const points = { [s.players[4].id]: 7, [s.players[9].id]: 4, [s.players[6].id]: 3 }
       const pong: SessionGame = {
         id: PONG,
@@ -103,12 +105,12 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
         started_at: FIXTURE_NOW - 25 * MIN,
         finished_at: finished ? FIXTURE_NOW - 20_000 : null,
         finished_by: finished ? 'host' : null,
-        winners: finished ? [s.players[4].id] : [],
+        winners: scene === 'pong-final' ? [s.players[4].id] : [],
         wake_at: null,
         archived_at: null,
         created_at: FIXTURE_NOW - 120 * MIN,
       }
-      const feed = finished
+      const feed = scene === 'pong-final'
         ? [say(950, `${s.players[4].name} won Beer pong`, { game_id: PONG, detail: '7 points', icon: 'trophy', sound: 'fanfare' }), ...s.feed]
         : s.feed
       return {
@@ -118,6 +120,17 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
         game_points: { ...s.game_points, [PONG]: points },
         feed,
       }
+    }
+    case 'hunt':
+    case 'hunt-ended': {
+      // Last one standing on the stage: live, or ended by the host with several still standing.
+      const s = fixtureSnapshot('background', 'tv')
+      const hunt = s.games.find((g) => g.game_type === 'elimination')!
+      const ended = scene === 'hunt-ended'
+      const games = s.games.map((g) =>
+        g.id === hunt.id && ended ? { ...g, status: 'finished' as const, finished_at: FIXTURE_NOW - 20_000, finished_by: 'host' as const } : g,
+      )
+      return { ...s, session: { ...s.session!, spotlight_game_id: hunt.id, spotlight_at: FIXTURE_NOW - 30 * MIN }, games }
     }
     case 'empty': {
       const s = fixtureSnapshot('lobby', 'tv')

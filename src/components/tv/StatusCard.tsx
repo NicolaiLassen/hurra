@@ -3,13 +3,13 @@ import { Suspense, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import Contained from '@/components/Contained'
 import { CARD } from '@/components/tv/look'
-import { runningFor, topOfGame } from '@/components/tv/scene'
+import { clockTime } from '@/components/tv/clock'
+import { topOfGame } from '@/components/tv/scene'
 import { drawsOwn, useStatusProps } from '@/components/tv/status'
 import { getGameModule } from '@/games/registry'
 import type { TvStatusProps, TvStatusVariant } from '@/games/types'
 import { listNames } from '@/lib/recap'
 import type { SessionGame } from '@/lib/types'
-import { useServerNow } from '@/lib/useLive'
 import { cn } from '@/lib/utils'
 
 /**
@@ -40,34 +40,36 @@ export function GameStatus({ game, variant, fallback }: { game: SessionGame; var
   )
 }
 
-/** The default card: the title, how long it has run, and this game's leader. */
+/**
+ * The default card: the title, the time it started (a time the database
+ * holds, never "12 min"), and this game's leader. Its words at the TV's floor.
+ */
 function GenericStatus({ game, players, gamePoints }: TvStatusProps) {
-  const now = useServerNow(30_000)
   const Icon = getGameModule(game.game_type)?.icon ?? GameControllerIcon
   const top = topOfGame(gamePoints, players)
   const leaders = top.filter((row) => row.points === top[0]?.points)
 
   return (
     <section className={cn(CARD, 'grid min-w-0 grid-cols-1 gap-3 p-5 short:gap-2 short:p-4')}>
-      <header className="flex min-w-0 items-center gap-2.5">
-        <Icon weight="duotone" className="size-7 shrink-0 text-paper-2 short:size-6" />
-        <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>
-        {game.started_at !== null && (
-          <span className="shrink-0 text-lg text-muted-foreground tabular-nums short:text-base">
-            {runningFor(now - game.started_at)}
-          </span>
-        )}
+      <header className="flex min-w-0 items-center gap-3">
+        <Icon weight="duotone" className="size-8 shrink-0 text-paper-2 short:size-7" />
+        <h3 className="min-w-0 flex-1 truncate text-tv-tab font-bold short:text-tv-floor">{game.title}</h3>
       </header>
+      {game.started_at !== null && (
+        <p className="flex items-baseline gap-2.5 text-tv-floor text-paper-2">
+          Running since <span className="tv-num text-paper">{clockTime(game.started_at)}</span>
+        </p>
+      )}
       {leaders.length > 0 ? (
-        <p className="flex min-w-0 items-center gap-2.5">
-          <Avatar name={leaders[0].player.name} className="size-8" />
-          <span className="min-w-0 flex-1 truncate text-lg font-semibold">
+        <p className="flex min-w-0 items-center gap-3">
+          <Avatar name={leaders[0].player.name} playerId={leaders[0].player.id} className="size-10" />
+          <span className="min-w-0 flex-1 truncate text-tv-floor font-semibold">
             {listNames(leaders.map((row) => row.player.name))} {leaders.length > 1 ? 'lead' : 'leads'}
           </span>
-          <span className="shrink-0 text-xl font-black text-primary tabular-nums">{leaders[0].points}</span>
+          <span className="shrink-0 tv-num text-tv-field text-paper">{leaders[0].points}</span>
         </p>
       ) : (
-        <p className="text-lg text-muted-foreground">No points yet</p>
+        <p className="text-tv-floor text-paper-2">No points yet</p>
       )}
     </section>
   )

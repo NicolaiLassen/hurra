@@ -79,7 +79,7 @@ describe('the TV scene for each fixture', () => {
   it.each([
     ['fixture=empty', 'Scan to join'],
     ['fixture=recap', 'the night in numbers'],
-    ['fixture=final&players=45', 'is the last one standing'],
+    ['fixture=final&players=45', 'Hurra for </span><span class="block whitespace-nowrap">Bo!'],
   ])('%s', async (search, expected) => {
     await expect(html(search)).resolves.toContain(expected)
   })
@@ -107,20 +107,22 @@ describe('the TV scene for each fixture', () => {
   })
 
   it('keeps the way in to an open party', async () => {
+    await expect(html('fixture=lobby')).resolves.toContain('Scan to join')
     await expect(html('fixture=quiz-question')).resolves.toContain('Join with')
+    await expect(html('fixture=archived')).resolves.not.toContain('Scan to join')
     await expect(html('fixture=archived')).resolves.not.toContain('data-fit="join"')
     await expect(html('fixture=archived')).resolves.not.toContain('data-fit="invite"')
   })
 
-  it("shows the way in once: the board's big card for 1 to 3 guests, beside the podium after that, the band's code on the stage", async () => {
+  it("shows the way in once: the board's join block while the standings show, the band's code while a game holds the stage", async () => {
     const count = (page: string, text: string) => page.split(text).length - 1
-    const few = await html('fixture=standings&players=2')
-    expect(count(few, 'data-fit="invite"')).toBe(1)
-    expect(few).not.toContain('Join with')
-    // Beside the podium the join block sits in the board's measured strip, which a static render leaves out; the band has no code.
-    const more = await html('fixture=standings&players=4')
-    expect(more).not.toContain('data-fit="invite"')
-    expect(more).not.toContain('Join with')
+    for (const players of [2, 4, 45]) {
+      const board = await html(`fixture=standings&players=${players}`)
+      expect(count(board, 'Scan to join')).toBe(1)
+      expect(board).toContain('data-fit="invite"')
+      // The band has no code of its own (the board's one-line form stays mounted out of sight).
+      expect(board).not.toContain('data-fit="join"')
+    }
     // A game on the stage keeps only the band's code, whatever the party's size.
     const stage = await html('fixture=quiz-question&players=2')
     expect(count(stage, 'Join with')).toBe(1)
@@ -132,6 +134,15 @@ describe('the TV scene for each fixture', () => {
     // With 45 guests, Felix and Luna share first place on 12 points.
     expect(crowns(await html('fixture=standings&players=45'))).toBe(2)
     expect(crowns(await html('fixture=standings&players=24'))).toBe(1)
+  })
+
+  it("cheers a game's winner with the screen's one exclamation mark and saves the third hurra for the night's winner", async () => {
+    for (const search of ['fixture=final', 'fixture=pong-final']) {
+      const page = await html(search)
+      expect(page.replace(/<[^>]*>/g, '')).toMatch(/Hurra for \w+!/)
+      expect(page).toContain('The third hurra is saved for the night')
+      expect(page).toContain('data-tv-field')
+    }
   })
 
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
