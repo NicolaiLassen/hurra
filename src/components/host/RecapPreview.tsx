@@ -18,11 +18,9 @@ import {
   clockTime,
   durationText,
   formatCount,
-  gameTones,
   nightAwards,
   podiumPlaces,
   timeSpan,
-  TONE_TEXT,
   tvPeek,
   type TvPeekSlide,
 } from '@/components/host/recapView'
@@ -33,9 +31,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Highlight, Tone } from '@/games/core/Game'
+import type { Highlight } from '@/games/core/Game'
 import { getGameModule } from '@/games/registry'
-import { CALLOUT_TONE } from '@/lib/callout'
 import { listNames, type RecapDoc } from '@/lib/recap'
 import { cn } from '@/lib/utils'
 
@@ -61,7 +58,6 @@ export default function RecapPreview({
   faded?: boolean
 }) {
   const awards = useMemo(() => nightAwards(doc), [doc])
-  const tones = useMemo(() => gameTones(doc), [doc])
   return (
     <div className="grid grid-cols-1 gap-10">
       <RecapHero doc={doc} partyName={partyName}>
@@ -87,7 +83,7 @@ export default function RecapPreview({
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {doc.chapters.map((chapter) => (
-                <Chapter key={`${chapter.gameId}-${chapter.round}`} chapter={chapter} tone={tones.get(chapter.gameId) ?? 'gold'} />
+                <Chapter key={`${chapter.gameId}-${chapter.round}`} chapter={chapter} />
               ))}
             </div>
           )}
@@ -98,12 +94,19 @@ export default function RecapPreview({
           <div className="lg:row-span-2">
             <YourNightPreview doc={doc} />
           </div>
-          <Timeline doc={doc} tones={tones} />
+          <Timeline doc={doc} />
         </div>
       </div>
     </div>
   )
 }
+
+/**
+ * A game's or a moment's icon on the page: a solid circle in paper-2. The
+ * games no longer wear gold, pink, teal and violet here, since those colours
+ * have jobs (docs/identity.md); a win alone is gold.
+ */
+const ICON_CIRCLE = 'bg-overlay text-paper-2'
 
 /** "3 rounds", "1 round". */
 const count = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`
@@ -119,7 +122,7 @@ function HighlightRow({ highlight }: { highlight: Highlight }) {
   const minor = highlight.weight === 'line'
   return (
     <li className="flex gap-2.5">
-      <span className={cn('mt-0.5 grid size-6 shrink-0 place-items-center rounded-full [&_svg]:size-3.5', CALLOUT_TONE[highlight.tone ?? 'gold'].icon)}>
+      <span className={cn('mt-0.5 grid size-6 shrink-0 place-items-center rounded-full [&_svg]:size-3.5', ICON_CIRCLE)}>
         <AnnouncementIconView name={highlight.icon ?? 'star'} />
       </span>
       <div className="min-w-0">
@@ -130,19 +133,18 @@ function HighlightRow({ highlight }: { highlight: Highlight }) {
   )
 }
 
-function Chapter({ chapter, tone }: { chapter: RecapDoc['chapters'][number]; tone: Tone }) {
+function Chapter({ chapter }: { chapter: RecapDoc['chapters'][number] }) {
   const GameIcon = getGameModule(chapter.gameType)?.icon ?? GameControllerIcon
   const running = chapter.finishedAt === null
   const { winners, highlights } = chapterStory(chapter)
   return (
-    <article className="relative isolate flex flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
-      <GameIcon aria-hidden weight="duotone" className={cn('absolute -right-6 -bottom-8 -z-10 size-40 opacity-[0.07]', TONE_TEXT[tone])} />
+    <article className="relative isolate flex flex-col overflow-hidden rounded-xl bg-raised">
       <header className="flex items-start gap-3 p-4">
-        <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl [&_svg]:size-6', CALLOUT_TONE[tone].icon)}>
+        <span className={cn('grid size-11 shrink-0 place-items-center rounded-control [&_svg]:size-6', ICON_CIRCLE)}>
           <GameIcon weight="duotone" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold">
+          <h3 className="truncate text-base font-extrabold">
             {chapter.title}
             {chapter.round > 1 && <span className="font-normal text-muted-foreground"> · round {chapter.round}</span>}
           </h3>
@@ -152,21 +154,22 @@ function Chapter({ chapter, tone }: { chapter: RecapDoc['chapters'][number]; ton
           </p>
         </div>
         {running && (
-          <Badge variant="secondary" className="shrink-0 text-confetti-teal">
+          <Badge variant="secondary" className="shrink-0">
             Running
           </Badge>
         )}
       </header>
       {winners && (
-        <div className="mx-4 flex items-center gap-3 rounded-xl bg-primary/10 px-3 py-2.5 ring-1 ring-primary/20">
+        <div className="mx-4 flex items-center gap-3 rounded-lg bg-overlay px-3 py-2.5">
           <div aria-hidden className="flex shrink-0 -space-x-2">
             {chapter.winners.slice(0, 3).map((w) => (
-              <Avatar key={w.id} name={w.name} className="size-8 ring-2 ring-card" />
+              // The overlay's colour round each token keeps overlapping tokens apart.
+              <Avatar key={w.id} name={w.name} playerId={w.id} className="size-8 ring-2 ring-overlay" />
             ))}
           </div>
           <div className="min-w-0 text-sm">
             <p className="leading-snug font-semibold">
-              <CrownIcon weight="fill" className="mr-1 inline size-4 -translate-y-px text-primary" />
+              <CrownIcon weight="fill" className="mr-1 inline size-4 -translate-y-px text-gold" />
               {winners.title}
             </p>
             {winners.detail && <p className="text-muted-foreground">{winners.detail}</p>}
@@ -174,7 +177,7 @@ function Chapter({ chapter, tone }: { chapter: RecapDoc['chapters'][number]; ton
         </div>
       )}
       {highlights.length > 0 && (
-        <ul className={cn('grid gap-2.5 p-4', running && 'opacity-80')}>
+        <ul className={cn('grid gap-2.5 p-4', running && 'text-paper-2')}>
           {highlights.map((highlight, i) => (
             <HighlightRow key={i} highlight={highlight} />
           ))}
@@ -325,10 +328,10 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
   return (
     <div
       aria-hidden
-      className="@container relative aspect-video overflow-hidden rounded-lg bg-[radial-gradient(80%_70%_at_50%_0%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent),var(--background)] ring-1 ring-foreground/15"
+      className="@container relative aspect-video overflow-hidden rounded-lg border-[3px] border-overlay bg-ground"
     >
       {body}
-      <span className="absolute top-[3cqw] right-[3cqw] rounded-[1.5cqw] bg-background/80 px-[1.5cqw] text-[3.5cqw] text-muted-foreground tabular-nums">
+      <span className="absolute top-[3cqw] right-[3cqw] rounded-[1.5cqw] bg-overlay px-[1.5cqw] text-[3.5cqw] text-paper-2 tabular-nums">
         {slide.seconds} s
       </span>
     </div>
@@ -386,8 +389,8 @@ function PhoneFrame({ label, children }: { label: string; children: ReactNode })
 
 const SHOWN_AT_FIRST = 8
 
-/** Starts, finishes, lead changes and the moments with a time, down a line in the party's colours. */
-function Timeline({ doc, tones }: { doc: RecapDoc; tones: Map<string, Tone> }) {
+/** Starts, finishes, lead changes and the moments with a time, down a plain line. */
+function Timeline({ doc }: { doc: RecapDoc }) {
   const [all, setAll] = useState(false)
   const titles = new Map(doc.chapters.map((c) => [c.gameId, c.title]))
   const entries = all ? doc.timeline : doc.timeline.slice(0, SHOWN_AT_FIRST)
@@ -404,29 +407,25 @@ function Timeline({ doc, tones }: { doc: RecapDoc; tones: Map<string, Tone> }) {
       ) : (
         <>
           <ol className="relative grid">
-            {/* The thread through the night, in the party's colours. */}
-            <span
-              aria-hidden
-              className="absolute top-3 bottom-3 left-[4.05rem] w-0.5 -translate-x-1/2 rounded-full bg-linear-to-b from-primary/60 via-confetti-pink/50 to-confetti-violet/50"
-            />
+            {/* The thread through the night. */}
+            <span aria-hidden className="absolute top-3 bottom-3 left-[4.05rem] w-0.5 -translate-x-1/2 rounded-full bg-rule" />
             {entries.map((entry, i) => {
-              const tone: Tone = entry.gameId ? (tones.get(entry.gameId) ?? 'gold') : 'gold'
               const win = entry.icon === 'crown'
               const game = entry.gameId ? titles.get(entry.gameId) : undefined
               return (
                 <li key={i} className="relative flex gap-3 py-2">
                   <time
                     dateTime={new Date(entry.at).toISOString()}
-                    className="w-10 shrink-0 pt-1 text-right text-xs font-semibold text-muted-foreground"
+                    className="tv-num w-10 shrink-0 pt-0.5 text-right text-sm text-paper-3"
                   >
                     {clockTime(entry.at)}
                   </time>
                   {/* On the card's colour first, so the thread stops at each moment. */}
-                  <span className="relative size-7 shrink-0 rounded-full bg-card ring-4 ring-card">
+                  <span className="relative size-7 shrink-0 rounded-full bg-raised ring-4 ring-raised">
                     <span
                       className={cn(
                         'grid size-full place-items-center rounded-full [&_svg]:size-3.5',
-                        win ? 'bg-primary text-primary-foreground' : CALLOUT_TONE[tone].icon,
+                        win ? 'bg-gold text-ink' : ICON_CIRCLE,
                       )}
                     >
                       <AnnouncementIconView name={entry.icon ?? 'megaphone'} />
@@ -435,7 +434,7 @@ function Timeline({ doc, tones }: { doc: RecapDoc; tones: Map<string, Tone> }) {
                   <div className="min-w-0 pt-1">
                     <p className={cn('text-sm leading-snug', win ? 'font-semibold' : 'font-medium')}>
                       {entry.text}
-                      {game && !entry.text.includes(game) && <span className={cn('font-normal', TONE_TEXT[tone])}> · {game}</span>}
+                      {game && !entry.text.includes(game) && <span className="font-normal text-paper-2"> · {game}</span>}
                     </p>
                     {entry.detail && <p className="text-sm text-muted-foreground">{entry.detail}</p>}
                   </div>

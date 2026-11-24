@@ -187,13 +187,14 @@ function RecapPage({ snapshot, sample, night }: { snapshot: Snapshot; sample: bo
           <span
             className={cn(
               'grid size-9 shrink-0 place-items-center rounded-full [&_svg]:size-4.5',
-              onTv ? 'bg-primary text-primary-foreground' : publishedAt !== null ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+              // Gold only while it is on air; otherwise a solid circle with the words beside it.
+              onTv ? 'bg-gold text-ink' : publishedAt !== null ? 'bg-overlay text-paper' : 'bg-overlay text-paper-2',
             )}
           >
             {onTv ? <TelevisionSimpleIcon weight="fill" /> : publishedAt !== null ? <PaperPlaneTiltIcon weight="fill" /> : <EyeSlashIcon />}
           </span>
           <div className="min-w-0 text-sm">
-            <p className="font-semibold">
+            <p className="font-bold">
               {publishedAt === null ? 'Not published yet' : `Published ${clockTime(publishedAt)}${onTv ? ', on the TV' : ''}`}
             </p>
             <p className="text-muted-foreground">
