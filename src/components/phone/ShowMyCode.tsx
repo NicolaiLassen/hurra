@@ -1,4 +1,3 @@
-import { QrCodeIcon } from '@phosphor-icons/react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -6,9 +5,11 @@ import type { Player } from '@/lib/types'
 import { playerUrl } from '@/lib/urls'
 
 /**
- * The "Show my code" bar, in reach at the bottom of the phone home (in-person
- * games need your code at a moment's notice), and the full-screen QR code it
- * opens: white, so it scans in a dark room. Tap anywhere to close.
+ * The "Show my code" bar, in the thumb zone at the bottom of the phone home
+ * (in-person games need your code at a moment's notice): the home's one gold
+ * step, on a solid strip of the ground, with your code at its right. It opens
+ * the full-screen QR code: white, so it scans in a dark room. Tap anywhere to
+ * close.
  *
  * `hidden` steps the bar aside (while a timed question is open, so it covers
  * no answer); a QR code already open stays open.
@@ -28,12 +29,11 @@ export default function ShowMyCode({ player, hidden = false }: { player: Pick<Pl
   return (
     <>
       {!hidden && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/85 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
           <div className="mx-auto max-w-md px-4">
-            <Button size="xl" variant="secondary" className="w-full" onClick={() => setOpen(true)}>
-              <QrCodeIcon />
-              Show my code
-              <span className="font-mono text-sm tracking-widest text-muted-foreground">{player.code}</span>
+            <Button size="xl" className="w-full justify-between px-[18px]" onClick={() => setOpen(true)}>
+              <span className="text-phone-action font-extrabold">Show my code</span>
+              <span className="text-[25px] leading-none tracking-[0.08em] tv-num">{player.code}</span>
             </Button>
           </div>
         </div>

@@ -186,6 +186,20 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   stageBanners?: 'banner' | 'sound-only'
   /** Turns this game's section of a profile into badges. */
   profileBadges?: (data: Record<string, unknown>) => ProfileBadge[]
+  /**
+   * The players this game has knocked out, read from its public state (Last
+   * one standing's). Asked only while the game is live. The core marks them
+   * where it lists the party: the pink stripe on their token and the word Out
+   * by their name (the phone's standings; the TV board and the host list
+   * next). Left out: this game knocks nobody out.
+   */
+  knockedOut?: (publicState: Parts<G>['publicState']) => readonly PlayerId[]
+  /**
+   * The words on the paper strap beside this game's tab on a phone, while it
+   * is live and holds the phone's main card: "Question 3 of 10". Null or left
+   * out: where the game is ("On the TV", or since when it runs).
+   */
+  phoneStrap?: (publicState: Parts<G>['publicState']) => string | null
 }
 
 /** Type-checks a module against its own game, then widens it for the registry. */

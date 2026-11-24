@@ -1,7 +1,7 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react'
 import { useMemo } from 'react'
 import Contained from '@/components/Contained'
-import { gameIconOf, usePhoneCalls } from '@/components/phone/calls'
+import { usePhoneCalls } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
 import { Button } from '@/components/ui/button'
 import { getGameModule } from '@/games/registry'
@@ -64,7 +64,7 @@ export function GameView(props: GameProps & { scannedCode?: string; onScanHandle
 export function GameCompactCard(props: GameProps & { open: () => void }) {
   const viewProps = usePlayerViewProps(props)
   const module = getGameModule(props.game.game_type)
-  const generic = <GenericPlayerCard game={props.game} icon={gameIconOf(props.game.game_type)} open={props.open} />
+  const generic = <GenericPlayerCard game={props.game} open={props.open} />
   if (!module?.PlayerCard) return generic
   return (
     <Contained key={roundOf(props.game)} fallback={generic}>
@@ -102,7 +102,7 @@ const roundOf = (game: SessionGame) => `${game.id}:${game.started_at ?? ''}`
 function ScreenFailed({ game }: { game: SessionGame }) {
   return (
     <div className="grid gap-3">
-      <p className="text-muted-foreground">{game.title} didn't load on this phone. Reload to try again.</p>
+      <p className="text-paper-2">{game.title} didn't load on this phone. Reload to try again.</p>
       <Button variant="secondary" size="lg" className="justify-self-start" onClick={() => window.location.reload()}>
         <ArrowClockwiseIcon />
         Reload
@@ -115,9 +115,7 @@ function ScreenFailed({ game }: { game: SessionGame }) {
 function UnknownGame({ game }: { game: SessionGame }) {
   return (
     <div className="grid gap-3">
-      <p className="text-muted-foreground">
-        {game.title} needs a newer version of this page. Reload to join in.
-      </p>
+      <p className="text-paper-2">{game.title} needs a newer version of this page. Reload to join in.</p>
       <Button variant="secondary" size="lg" className="justify-self-start" onClick={() => window.location.reload()}>
         <ArrowClockwiseIcon />
         Reload

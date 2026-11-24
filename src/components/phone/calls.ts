@@ -7,7 +7,7 @@ import { GameControllerIcon, type Icon } from '@phosphor-icons/react'
 import { createContext, useCallback, useContext } from 'react'
 import { getGameModule } from '@/games/registry'
 import { callGame, submitAnswer } from '@/lib/queries'
-import type { AnswerPayload, SubmitResult } from '@/lib/types'
+import type { AnswerPayload, SessionGame, SubmitResult } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
 
 /**
@@ -48,3 +48,18 @@ export function usePhoneCalls(gameId: string): {
 
 /** A game type's icon: the module's own, or the controller for a type this phone doesn't know. */
 export const gameIconOf = (gameType: string): Icon => getGameModule(gameType)?.icon ?? GameControllerIcon
+
+/** A game that runs in the background, beside whatever holds the TV (its logic's presentation). */
+export const isBackgroundGame = (gameType: string) => getGameModule(gameType)?.logic.presentation === 'background'
+
+/**
+ * A live game's own words for its strap (GameModule.phoneStrap): "Question 3
+ * of 10". Null when it has none, or can't read its public state.
+ */
+export function phoneStrapOf(game: SessionGame): string | null {
+  try {
+    return getGameModule(game.game_type)?.phoneStrap?.(game.public_state) ?? null
+  } catch {
+    return null
+  }
+}

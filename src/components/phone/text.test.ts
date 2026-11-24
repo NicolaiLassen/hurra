@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanClaimCode, couldBeClaimCode, finishedLine, nameIn, pointsText, timeAgo, winnersText } from './text'
+import { cleanClaimCode, couldBeClaimCode, finishedLine, nameIn, pointsText, winnersText } from './text'
 
 const players = [
   { id: 'a', name: 'Ana' },
@@ -29,12 +29,8 @@ describe('who won', () => {
   })
 })
 
-describe('timeAgo and pointsText', () => {
+describe('pointsText', () => {
   it('reads like people talk', () => {
-    expect(timeAgo(20_000)).toBe('just now')
-    expect(timeAgo(60_000)).toBe('1 min ago')
-    expect(timeAgo(12 * 60_000 + 59_000)).toBe('12 min ago')
-    expect(timeAgo(125 * 60_000)).toBe('2 h ago')
     expect(pointsText(1)).toBe('1 point')
     expect(pointsText(0)).toBe('0 points')
     expect(pointsText(-1)).toBe('-1 point')

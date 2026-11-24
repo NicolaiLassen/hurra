@@ -1,13 +1,18 @@
-import { EyeSlashIcon } from '@phosphor-icons/react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
+/** How long a secret shows before the card turns back over by itself. */
+const SHOW_MS = 8000
+
 /**
- * A face-down card that flips to show a secret when tapped, and hides it again
- * after a few seconds so nobody reads it over the player's shoulder.
+ * A face-down card that turns over to show a secret when tapped, and turns
+ * back by itself after a few seconds, so nobody reads it over the player's
+ * shoulder. Both faces stand on the overlay step with the popper's gold and
+ * pink stripes along the left edge (the mark of the hunt), so the card never
+ * out-shouts the screen's one gold step.
  *
- * `compact` is a slim strip for small cards (a game running beside another):
- * the same flip, about half the height.
+ * `compact` is a slim card for a section of the phone home; the full one is
+ * for the game's own view.
  */
 export default function SecretCard({
   label,
@@ -22,62 +27,39 @@ export default function SecretCard({
 
   useEffect(() => {
     if (!revealed) return
-    const timer = setTimeout(() => setRevealed(false), 8000)
+    const timer = setTimeout(() => setRevealed(false), SHOW_MS)
     return () => clearTimeout(timer)
   }, [revealed])
+
+  const face = cn(
+    'relative flex flex-col justify-center overflow-hidden rounded-phone bg-overlay py-3 pr-4 pl-[2.125rem] text-left backface-hidden',
+    // The popper's stripes along the left edge.
+    "before:absolute before:inset-y-0 before:left-0 before:w-[1.125rem] before:stripes before:content-['']",
+  )
 
   return (
     <button
       type="button"
       onClick={() => setRevealed((r) => !r)}
       aria-pressed={revealed}
-      className="block w-full text-left perspective-[1200px]"
+      className="block w-full rounded-phone text-left perspective-[1200px] focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none"
     >
       <div
         className={cn(
-          'relative grid transition-transform duration-500 ease-out transform-3d *:[grid-area:1/1]',
-          compact ? 'min-h-24' : 'min-h-56',
+          'relative grid transition-transform duration-500 ease-out transform-3d *:[grid-area:1/1] motion-reduce:transition-none',
+          compact ? 'min-h-21' : 'min-h-40',
           revealed && 'rotate-y-180',
         )}
       >
-        {compact ? (
-          <>
-            <div className="flex items-center gap-4 rounded-2xl bg-primary px-4 py-3 text-primary-foreground backface-hidden">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-foreground/10 text-2xl font-black">
-                ?
-              </span>
-              <span className="min-w-0">
-                <span className="block font-bold">Tap to see your secret {label}</span>
-                <span className="flex items-center gap-1.5 text-sm opacity-70">
-                  <EyeSlashIcon />
-                  Keep it hidden
-                </span>
-              </span>
-            </div>
-            <div className="flex rotate-y-180 flex-col justify-center gap-1 rounded-2xl bg-card px-4 py-3 ring-2 ring-primary backface-hidden">
-              <p className="text-xs font-semibold tracking-widest text-primary uppercase">Your {label}</p>
-              <div className="text-lg leading-snug font-bold">{children}</div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-col items-center justify-center gap-3 rounded-3xl bg-primary p-6 text-center text-primary-foreground backface-hidden">
-              <span className="grid size-16 place-items-center rounded-2xl bg-primary-foreground/10 text-4xl font-black">
-                ?
-              </span>
-              <p className="text-lg font-bold">Tap to see your secret {label}</p>
-              <p className="flex items-center gap-1.5 text-sm opacity-70">
-                <EyeSlashIcon />
-                Keep it hidden
-              </p>
-            </div>
-            <div className="flex rotate-y-180 flex-col justify-between gap-4 rounded-3xl bg-card p-6 ring-2 ring-primary backface-hidden">
-              <p className="text-xs font-semibold tracking-widest text-primary uppercase">Your {label}</p>
-              <div className="text-2xl leading-snug font-bold">{children}</div>
-              <p className="text-xs text-muted-foreground">Tap to hide</p>
-            </div>
-          </>
-        )}
+        <div className={face}>
+          <span className={cn('block font-extrabold', compact ? 'text-[1.0625rem]' : 'text-xl')}>Your secret {label}</span>
+          <span className="mt-1 block text-sm font-medium text-paper-2">Tap to read it. It turns back over by itself.</span>
+        </div>
+        <div className={cn(face, 'rotate-y-180 gap-1')}>
+          <span className="block text-sm font-semibold text-paper-2">Your {label}</span>
+          <span className={cn('block leading-snug font-bold', compact ? 'text-lg' : 'text-2xl')}>{children}</span>
+          {!compact && <span className="mt-2 block text-xs text-paper-2">Tap to hide</span>}
+        </div>
       </div>
     </button>
   )
