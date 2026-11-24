@@ -1,6 +1,7 @@
 import {
   CheckIcon,
   CrownIcon,
+  DotsThreeIcon,
   EyeIcon,
   EyeSlashIcon,
   LockKeyIcon,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { PlayerId } from '@/games/core/Game'
 import {
@@ -39,17 +41,19 @@ import { withRanks } from '@/lib/format'
 import type { Player } from '@/lib/types'
 
 /**
- * The control room: Lock voting, Reveal next and Crown, the votes per picture,
- * and who is in each picture behind Show who (the host's phone is out in the
- * room, so the key stays hidden until asked for).
+ * The control room: Lock voting, Reveal next and Crown as the one gold step
+ * (docs/identity.md), crowning early in the menu beside Reveal next, the votes
+ * per picture, and who is in each picture behind Show who (the host's phone
+ * is out in the room, so the key stays hidden until asked for).
  */
 export default function HostView({ session, game, players, state, publicState, tallies, act, mediaUrl }: HostViewProps<FusionGame>) {
   const [showWho, setShowWho] = useState(false)
+  const [crowningEarly, setCrowningEarly] = useState(false)
   // One host action at a time: its button shows it is busy, the others wait.
   const [pending, setPending] = useState<string | null>(null)
   const pub = publicOf(publicState)
-  if (state === undefined) return <p className="text-muted-foreground">Loading the pictures…</p>
-  if (!state || !pub) return <p className="text-muted-foreground">Hanging the pictures…</p>
+  if (state === undefined) return <p className="text-paper-2">Loading the pictures…</p>
+  if (!state || !pub) return <p className="text-paper-2">Hanging the pictures…</p>
 
   async function send(id: string, action: FusionHostAction, close?: string[]) {
     setPending(id)
@@ -71,7 +75,7 @@ export default function HostView({ session, game, players, state, publicState, t
   return (
     <div className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-lg font-semibold">
+        <p className="text-lg font-extrabold">
           {pub.phase === 'voting'
             ? `${plural(totalVotes(tallies), 'vote')} on ${plural(total, 'picture')}`
             : pub.phase === 'locked'
@@ -84,7 +88,7 @@ export default function HostView({ session, game, players, state, publicState, t
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {pub.phase === 'voting' && (
           <ConfirmButton
             title="Lock voting?"
@@ -111,18 +115,20 @@ export default function HostView({ session, game, players, state, publicState, t
         )}
         {pub.phase === 'locked' &&
           (next ? (
-            <ConfirmButton
-              variant="secondary"
-              title="Crown the face detective now?"
-              description={`${plural(total - revealed, 'picture')} ${total - revealed === 1 ? "isn't" : "aren't"} revealed yet. They stay secret, and their votes don't count.`}
-              confirm="Crown now"
-              disabled={busy}
-              pending={pending === 'finish'}
-              onConfirm={() => void send('finish', { type: 'finish' })}
-            >
-              <CrownIcon />
-              Crown the face detective
-            </ConfirmButton>
+            // Crowning early sits in the menu, so nothing stands beside Reveal next. It still asks first.
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="icon-lg" disabled={busy} aria-label="More steps for this game">
+                  <DotsThreeIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-auto min-w-56">
+                <DropdownMenuItem onSelect={() => setCrowningEarly(true)}>
+                  <CrownIcon />
+                  Crown the face detective now…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Button size="lg" disabled={busy} isPending={pending === 'finish'} onClick={() => void send('finish', { type: 'finish' })}>
               <CrownIcon />
@@ -131,22 +137,31 @@ export default function HostView({ session, game, players, state, publicState, t
           ))}
       </div>
 
+      <ConfirmDialog
+        open={crowningEarly}
+        onOpenChange={setCrowningEarly}
+        title="Crown the face detective now?"
+        description={`${plural(total - revealed, 'picture')} ${total - revealed === 1 ? "isn't" : "aren't"} revealed yet. They stay secret, and their votes don't count.`}
+        confirm="Crown now"
+        onConfirm={() => void send('finish', { type: 'finish' })}
+      />
+
       {pub.phase === 'locked' && next && session.spotlight_game_id !== game.id && (
-        <p className="flex items-start gap-2 text-sm text-confetti-violet">
+        <p className="flex items-start gap-2 text-sm font-bold text-paper">
           <TelevisionSimpleIcon weight="fill" className="mt-0.5 shrink-0" />
           The reveal plays on the TV: show this game on the TV before you reveal.
         </p>
       )}
 
       {unset > 0 && pub.phase !== 'done' && (
-        <p className="flex items-start gap-2 text-sm text-primary">
+        <p className="flex items-start gap-2 text-sm font-bold text-paper">
           <WarningIcon weight="fill" className="mt-0.5 shrink-0" />
           {unset === 1 ? "1 picture doesn't" : `${unset} pictures don't`} have their two people set yet. Use Show who to
           set them before their reveal.
         </p>
       )}
 
-      <ul className="divide-y">
+      <ul className="divide-y divide-rule">
         {pub.pictures.map((picture) => (
           <PictureRow
             key={picture.n}
@@ -166,16 +181,16 @@ export default function HostView({ session, game, players, state, publicState, t
 
       {pub.top.length > 0 && (
         <section>
-          <h3 className="mb-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+          <h3 className="mb-2 text-sm font-extrabold">
             {pub.phase === 'done' ? 'Sharpest eyes' : 'Sharpest eyes so far'}
           </h3>
           <ol className="grid gap-1.5">
             {withRanks(pub.top).map((row) => (
               <li key={row.playerId} className="flex items-center gap-2.5">
-                <span className="w-5 text-right text-sm font-bold text-muted-foreground tabular-nums">{row.rank}</span>
-                <Avatar name={nameOf(players, row.playerId)} className="size-7" />
-                <span className="min-w-0 flex-1 truncate font-medium">{nameOf(players, row.playerId)}</span>
-                <span className="font-bold text-primary tabular-nums">{row.points}</span>
+                <span className="tv-num w-5 text-right text-base text-paper-3">{row.rank}</span>
+                <Avatar name={nameOf(players, row.playerId)} playerId={row.playerId} className="size-7" />
+                <span className="min-w-0 flex-1 truncate font-bold">{nameOf(players, row.playerId)}</span>
+                <span className="tv-num text-lg text-paper">{row.points}</span>
               </li>
             ))}
           </ol>
@@ -215,8 +230,8 @@ function PictureRow({
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
       <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="size-12 shrink-0 rounded-lg" numberClassName="text-xl" />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold">{picture.label}</p>
-        <p className="text-sm text-muted-foreground">
+        <p className="truncate font-bold">{picture.label}</p>
+        <p className="text-sm text-paper-2">
           {result
             ? result.voters === 0
               ? 'Nobody voted on it'
@@ -246,7 +261,7 @@ function PictureRow({
           People set
         </Badge>
       ) : (
-        <Badge variant="outline" className="text-primary">
+        <Badge variant="outline" className="text-paper">
           <WarningIcon />
           Who is it?
         </Badge>
@@ -321,6 +336,38 @@ function KeyEditor({
       )}
       {same && <p className="w-full text-xs text-destructive">Pick two different people</p>}
     </div>
+  )
+}
+
+/** Asks first, for a step chosen from a menu. */
+function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirm,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description: string
+  confirm: string
+  onConfirm: () => void
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{confirm}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
