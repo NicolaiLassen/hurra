@@ -51,7 +51,7 @@ export default function GameSettings({
   const current = loaded?.attempt === attempt ? loaded : null
   if (current?.error) {
     return (
-      <div className="flex flex-wrap items-center gap-3 rounded-xl bg-muted/40 p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-overlay p-4 text-sm">
         <p className="flex-1 text-destructive">{current.error}</p>
         <Button variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
           <ArrowClockwiseIcon />
@@ -60,7 +60,7 @@ export default function GameSettings({
       </div>
     )
   }
-  if (!current?.config) return <p className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">Loading the settings…</p>
+  if (!current?.config) return <p className="rounded-lg bg-overlay p-4 text-sm text-paper-2">Loading the settings…</p>
   return (
     <SettingsForm session={session} game={game} gameModule={gameModule} players={players} initial={current.config} onClose={onClose} />
   )
@@ -118,7 +118,8 @@ function SettingsForm({
   }
 
   return (
-    <div className="grid w-full min-w-0 gap-4 rounded-xl bg-muted/40 p-4">
+    // A solid well in the games panel; the editors' cards inside it stand on raised, their fields on overlay (docs/identity.md).
+    <div className="grid w-full min-w-0 gap-4 rounded-lg bg-overlay p-4">
       <Editor config={config} onChange={setConfig} session={session} game={game} players={players} media={media} />
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" size="lg" disabled={saving} onClick={() => (dirty ? setDiscarding(true) : onClose())}>

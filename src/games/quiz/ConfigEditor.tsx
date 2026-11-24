@@ -154,7 +154,7 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
         )}
 
         {questions.length === 0 && !pasting && (
-          <div className="grid justify-items-center gap-3 rounded-2xl border border-dashed border-input p-6 text-center">
+          <div className="grid justify-items-center gap-3 rounded-lg border border-dashed border-rule p-6 text-center">
             <p className="font-semibold">No questions yet</p>
             <p className="text-sm text-muted-foreground">
               Write your own, paste a list, or start from 8 party questions and pick their right answers.
@@ -176,9 +176,9 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
           {questions.map((question, i) => {
             const issues = checkQuestion(question, i + 1).problems
             return (
-              <li key={i} className="grid gap-3 rounded-2xl bg-background/40 p-3 ring-1 ring-input sm:p-4">
+              <li key={i} className="grid gap-3 rounded-lg bg-raised p-3 sm:p-4">
                 <div className="flex items-center gap-1">
-                  <span className="grid size-7 place-items-center rounded-lg bg-secondary text-sm font-bold tabular-nums">{i + 1}</span>
+                  <span className="tv-num grid size-7 place-items-center rounded-chip bg-overlay text-base">{i + 1}</span>
                   <span className="flex-1" />
                   <Button type="button" variant="ghost" size="icon" aria-label={`Move question ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}>
                     <ArrowUpIcon />
@@ -223,10 +223,10 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
                           name={`quiz-${game.id}-q${i}-right`}
                           checked={question.correct === j}
                           onChange={() => update(i, (q) => ({ ...q, correct: j }))}
-                          className="size-4 accent-primary"
+                          className="size-4 accent-paper"
                           aria-label={`${letterOf(j)} is the right answer`}
                         />
-                        <LetterBadge index={j} className="size-7 rounded-lg text-sm" />
+                        <LetterBadge index={j} className="size-7 rounded-chip text-sm" />
                       </label>
                       <Input
                         value={option}
@@ -234,7 +234,8 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
                         aria-label={`Question ${i + 1}, option ${letterOf(j)}`}
                         autoFocus={focus === `${i}-${j}`}
                         onFocus={() => focus !== null && setFocus(null)}
-                        className={cn(question.correct === j && 'border-primary/60')}
+                        // The right answer's field: a paper edge beside its checked radio, never gold (docs/identity.md).
+                        className={cn(question.correct === j && 'border-paper')}
                         onChange={(e) =>
                           update(i, (q) => ({ ...q, options: q.options.map((o, k) => (k === j ? e.target.value : o)) }))
                         }
@@ -324,7 +325,7 @@ export default function ConfigEditor({ config, onChange, game }: ConfigEditorPro
       </section>
 
       {questions.length > 0 && problems.length > 0 && (
-        <div className="flex gap-3 rounded-2xl bg-destructive/10 p-4 text-sm ring-1 ring-destructive/30">
+        <div className="flex gap-3 rounded-lg bg-raised p-4 text-sm">
           <WarningIcon weight="fill" className="mt-0.5 size-5 shrink-0 text-destructive" />
           <div className="grid gap-1">
             <p className="font-semibold">Fix {problems.length === 1 ? 'this' : `these ${problems.length}`} before you start the quiz</p>
@@ -348,7 +349,7 @@ function PasteBox({ room, onAdd, onClose }: { room: number; onAdd: (questions: Q
   const adding = questions.slice(0, room)
 
   return (
-    <div className="grid gap-3 rounded-2xl bg-muted/40 p-4">
+    <div className="grid gap-3 rounded-lg bg-raised p-4">
       <Label htmlFor="quiz-paste">Paste questions</Label>
       <Textarea
         id="quiz-paste"
