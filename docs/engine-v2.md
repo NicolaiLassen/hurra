@@ -3035,6 +3035,14 @@ even with devtools: it reads exactly what a guest reads.
 - **Corner**: full screen, sound, and a live dot: teal when `connected` and
   `pings` is `'ok'`, grey otherwise (polling).
 
+**Changed in the redesign (24 Nov):** the TV stands in one on-air frame
+([identity.md, The TV's frame](identity.md#the-tvs-frame)). The rail is gone
+and the stage takes the full width; the programme strap and the bug sit at
+the top, and the band along the bottom has one line per game in the
+background (its `TvStatus` `band` variant, or a plain line). The banner is
+the news strap across the top row, the ticker is the band's event line, and
+the corner has no coloured dot. `news.ts` routes as before.
+
 **Timers.** `useWakeSync({ delayMs: 250 })` (5.10, 4.5): the TV's sync for
 each live game at `wake_at + 250 ms`, with the shared rate limit and backoff.
 

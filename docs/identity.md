@@ -11,7 +11,7 @@ block in [src/index.css](../src/index.css), and the approved
 **Contents:** [Colour jobs](#colour-jobs) · [Surfaces](#surfaces) ·
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
-[Old names](#old-names) · [Guards](#guards) ·
+[The TV's frame](#the-tvs-frame) · [Old names](#old-names) · [Guards](#guards) ·
 [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
@@ -202,6 +202,70 @@ holds real browser widths the fit must never undercut.
 winner's crown in gold, or the camera on your own token before you add a
 photo in paper, since gold is a screen's one next step (Show my code on the
 phone home). Out is never a badge.
+
+## The TV's frame
+
+Every TV screen but the recap and the pairing screen stands in one on-air
+frame ([src/components/tv/TvScreen.tsx](../src/components/tv/TvScreen.tsx)),
+inside the 5 percent safe area (`px-[5vw] py-[5vh]`), so a TV that crops its
+edges never cuts anything off. Games play inside it and get it for free.
+
+- **The programme strap** (top left,
+  [Header.tsx](../src/components/tv/Header.tsx)): a tilted gold tab with one
+  short word for what is on (the stage game's title, Next, Standings, The
+  end), then a paper strap with where it is. While a game holds the stage the
+  strap carries the game's own words, its `TvStatus` `strap` variant
+  ("Question 3 of 10"); a game without them gets "Running since 21:40", or
+  "Final result". Between games it says what comes next in the host's order
+  ("Quiz then Who is fused?"), or how the last game went. `sceneLine` in
+  [scene.ts](../src/components/tv/scene.ts) decides, and its tests pin it.
+  No stock icon.
+- **The bug** (top right): the party's name in `paper-2` (a long one ends in
+  an ellipsis), the time of night in `tv-num`, and the logo.
+- **The stage**: the full width between the strap and the band, clipped at
+  its edges so a scene that runs out of room never paints over the band. What
+  a stage screen gets at 1080p: about 760 px of height with one band line and
+  696 with two; at 1440 by 900, 654 and 590; at 720p, 492 and 428.
+- **The band** (bottom, [Band.tsx](../src/components/tv/Band.tsx)): one line
+  per game running in the background, each 64 px (56 on short screens) and
+  never wrapping. A game draws its own line with its `TvStatus` `band`
+  variant and the parts in [onAir.tsx](../src/components/tv/onAir.tsx)
+  (`Tab`, `Stripes`, `BandLine`, `BandCount`, `BandText`, `BandSince`,
+  `BandEvent`); any other gets the plain line, its title and "Running since"
+  the time it started. The oldest start stands at the bottom, so Last one
+  standing keeps its place all night; at most two lines, and past that the
+  newer games share one "Also running" line. More lines, such as a slim line
+  with the night's top five, join the band's `lines` list. While a game holds
+  the stage and joining is open, "Join with HURRA30" stands at the band's
+  right.
+- **The way in** (`joinPlace` in scene.ts, [Join.tsx](../src/components/tv/Join.tsx)):
+  before anyone joins, the lobby is one big QR code; for 1 to 3 guests the
+  board's own big join card; for a bigger party the join block (the QR code on
+  its white quiet zone, the code and the address) beside the podium; on the
+  stage only the band's code. Codes are paper, never gold, and the address is
+  always the running page's own origin.
+- **News** ([news.ts](../src/components/tv/news.ts) routes it): big news is
+  a strap across the whole top row for 8 seconds, over the programme strap
+  and the bug, so it never covers the stage (a quiz's answered count
+  included) or the band. Its tab is the game's title, pink with the stripes
+  for the hunt's news and gold for anything else on air. News from a game in
+  the background is the band's event line (the ticker), with its time.
+  Nothing crawls, there is no "Breaking" label and no red, and an event line
+  changes only when something happens. The TV says a game's news without its
+  exclamation marks (`onAirText`).
+- **Times** are only the ones the database holds (a game's start or finish,
+  an announcement's), as clock times (`clockTime` in
+  [clock.ts](../src/components/tv/clock.ts)): never "4 min ago" and never a
+  planned time.
+- **The title card** ("Hurra presents", 3 seconds, with the gong) is the gold
+  tab and the game's name in `wide` Archivo on the plain ground: no
+  spotlight, no wash.
+- **The corner** (bottom left, in the gutter under the band) is the laptop's,
+  not the programme's: full screen, sound ("Click for sound" until the
+  browser lets the TV play any) and the connection as a word ("Live",
+  "Reconnecting"), never a coloured dot. It is quiet in `paper-3` at a small
+  size and sits outside the safe area: the one place on the TV under the
+  28 px floor, because nobody watches it from the sofa.
 
 ## Old names
 

@@ -168,7 +168,7 @@ each optional but the first:
 | `ResultView` | The phone's result card once the game finishes. |
 | `HostView` | The game's controls in the host control room, with the full `state`, the `config` and host `act`. |
 | `TvView`, `FinalTvView` | The TV stage while live, and its final screen: `lazyScreen(() => import('./TvView'))`, which the TV loads as it opens. Without them the TV shows the standings or a generic winners screen. |
-| `TvStatus` | A whole card for the TV's rail while the game runs in the background. |
+| `TvStatus` | The game's status on the TV while it runs: a whole card for the strip beside the podium, and with `variants` its line in the TV's bottom band (`band`) and its words in the programme strap while it holds the stage (`strap`). See [The TV's frame](identity.md#the-tvs-frame). |
 | `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. |
 
 Shared building blocks: `QrScanner`, `ScanSheet`, `SecretCard` and `PlayerQr`
