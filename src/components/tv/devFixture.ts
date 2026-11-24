@@ -4,20 +4,22 @@
 // arrives a moment after the page opens. The game data here is sample JSON
 // for screens only, like the fixtures it builds on; nothing outside dev reads it.
 //
-// ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, empty
+// ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, empty,
+//                    quiz-lobby (before the first question), quiz-final (the quiz's podium)
 // &players=8|24|45   the party's size (trimmed, or padded with more guests)
 // &fresh=1           the stage game took the stage just now: its title card shows
 // &later=<seconds>   the clock moved on (a final screen's 3 minutes run out)
 // &news=banner|ticker|interrupt|stage|points   arrives 1.5 s after the page opens
 // &host=1            a host's own browser: "Host preview"
 // &name=<text>       the party's name (a long one checks the bug's ellipsis)
+// &question=<text>   the quiz's question, and &options=A|B|C|D its options (long ones check the fit)
 // &slide=<n>         the recap opens on slide n (from 0)
 // On the pairing screen (fixture=removed), the code TV2026 pairs; any other is refused.
 import { FIXTURE_NOW, fixtureRecapDoc, fixtureSnapshot, isFixtureScene, type FixtureScene } from '@/lib/fixtures'
 import type { RecapDoc } from '@/lib/recap'
 import type { FeedItem, Player, ScoreRow, SessionGame, Snapshot } from '@/lib/types'
 
-export const TV_SCENES = ['recap', 'standings', 'between', 'pong', 'pong-final', 'empty'] as const
+export const TV_SCENES = ['recap', 'standings', 'between', 'pong', 'pong-final', 'empty', 'quiz-lobby', 'quiz-final'] as const
 export type TvOnlyScene = (typeof TV_SCENES)[number]
 export const NEWS = ['banner', 'ticker', 'interrupt', 'stage', 'points'] as const
 type News = (typeof NEWS)[number]
@@ -58,6 +60,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
   }
   const name = search.get('name')
   if (name && snapshot.session) snapshot = { ...snapshot, session: { ...snapshot.session, name } }
+  snapshot = withQuestion(snapshot, search.get('question'), search.get('options'))
   const later = Number(search.get('later'))
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
   return {
@@ -120,6 +123,20 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
       const s = fixtureSnapshot('lobby', 'tv')
       return { ...s, players: [], standings: [] }
     }
+    case 'quiz-lobby':
+    case 'quiz-final': {
+      // The quiz on the stage before its first question, or just finished (its podium, inside its 3 minutes).
+      const s = fixtureSnapshot('quiz-leaderboard', 'tv')
+      const done = scene === 'quiz-final'
+      const games = s.games.map((g): SessionGame => {
+        if (g.game_type !== 'quiz') return g
+        const pub = g.public_state as { total: number; leaderboard: { playerId: string; rank: number }[] }
+        if (!done) return { ...g, public_state: { phase: 'lobby', index: -1, total: pub.total, question: null, reveal: null, leaderboard: [] } }
+        const winners = pub.leaderboard.filter((row) => row.rank === 1).map((row) => row.playerId)
+        return { ...g, status: 'finished', public_state: { ...pub, phase: 'done' }, finished_at: FIXTURE_NOW - 20_000, finished_by: 'game', winners }
+      })
+      return { ...s, games, prompts: done ? s.prompts : [], tallies: {} }
+    }
     default:
       return fixtureSnapshot(scene, 'tv')
   }
@@ -150,7 +167,22 @@ function resize(s: Snapshot, size: number): Snapshot {
     }
     return { ...g, public_state: { ...pub, alive: [...keep(pub.alive as string[]), ...ids], out: keep(pub.out as string[]) } }
   })
-  return { ...s, players: [...players, ...extra], standings: allStandings, games }
+  const tallies = Object.fromEntries(
+    Object.entries(s.tallies).map(([gameId, counts]) => [gameId, Object.fromEntries(Object.entries(counts).map(([key, n]) => [key, Math.min(n, size)]))]),
+  )
+  return { ...s, players: [...players, ...extra], standings: allStandings, games, tallies }
+}
+
+/** The sample quiz with its open question's words replaced (dev fit checks). */
+function withQuestion(s: Snapshot, text: string | null, options: string | null): Snapshot {
+  if (!text && !options) return s
+  const games = s.games.map((g) => {
+    const pub = g.public_state as { question?: { text: string; options: string[] } | null } | null
+    if (g.game_type !== 'quiz' || !pub?.question) return g
+    const question = { ...pub.question, ...(text ? { text } : {}), ...(options ? { options: options.split('|').slice(0, 4) } : {}) }
+    return { ...g, public_state: { ...pub, question } }
+  })
+  return { ...s, games }
 }
 
 let nextId = 900
