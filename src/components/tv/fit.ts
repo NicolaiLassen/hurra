@@ -84,3 +84,136 @@ export function cardsThatStack(heights: readonly number[], height: number, gap: 
   }
   return 0
 }
+
+// The leader's board (docs/identity.md, The standings): the leader as a hero
+// with the next places under it in the leader's column, and everyone else, the
+// field, in rows beside it, with the join block under the field while joining
+// is open. Both columns are measured, so 1 guest and 45 read from across the
+// room on a 1080p TV and still fit a 1440 by 900 or 720p screen.
+
+/** The space between the leader's column and the field (gap-16), in px. */
+export const SPLIT_GAP = 64
+
+/**
+ * The leader's column's share of the board's width, widest first: the first
+ * that leaves the field room for all its rows is used, so a big party gets
+ * a narrower leader's column and more columns of rows.
+ */
+export const LEADER_SPLITS = [0.5, 0.44, 0.38] as const
+
+/** The places the leader's column lists under the hero at most: the next five. */
+export const NEXT_PLACES = 5
+
+/**
+ * How many of the `next` places stand in rows under the hero, in a column
+ * `height` high, and whether the commentary still fits under them. The
+ * commentary keeps its line while at least four of the places (or all of
+ * them, when fewer) fit with it; otherwise the places take its room. Heights
+ * not measured yet (0) show every place, and the next measurement corrects them.
+ */
+export function leaderColumn({
+  height,
+  hero,
+  row,
+  rowGap,
+  gap,
+  comment,
+  next,
+}: {
+  /** The column's height, px. */
+  height: number
+  /** The hero's height, px. */
+  hero: number
+  /** One place's row and the space between rows, px. */
+  row: number
+  rowGap: number
+  /** The space between the hero, the rows and the commentary, px. */
+  gap: number
+  /** The commentary's height, px; 0 without one. */
+  comment: number
+  /** The places there are to list (at most NEXT_PLACES). */
+  next: number
+}): { places: number; comment: boolean } {
+  if (height <= 0 || hero <= 0 || row <= 0) return { places: next, comment: comment > 0 }
+  const rowsIn = (room: number) => (room < row ? 0 : Math.floor((room + rowGap) / (row + rowGap)))
+  const below = height - hero - gap
+  if (comment > 0) {
+    const withComment = Math.min(next, rowsIn(below - comment - gap))
+    if (withComment >= Math.min(4, next)) return { places: withComment, comment: true }
+  }
+  return { places: Math.max(0, Math.min(next, rowsIn(below))), comment: false }
+}
+
+/** How the field's rows fill a box: as rowLayout, plus how many show when even the smallest rows do not all fit. */
+export type FieldFit = { layout: RowLayout; columns: number; perColumn: number; shown: number; fits: boolean }
+
+/**
+ * The field's `count` rows in a box `width` by `height`: the roomiest layout
+ * that fits them all (rowLayout). When none does, the smallest rows in as
+ * many columns as the width allows, and as many rows as those hold, less one
+ * for a line saying how many more there are: never a name cut by the edge.
+ */
+export function fieldFit(count: number, width: number, height: number, layouts: readonly RowLayout[] = ROW_LAYOUTS): FieldFit {
+  const { layout, columns, fits } = rowLayout(count, width, height, layouts)
+  const perColumnOf = (l: RowLayout) => Math.max(1, Math.floor((height + l.gap) / (l.height + l.gap)))
+  if (fits) return { layout, columns, perColumn: Math.ceil(count / Math.max(1, columns)), shown: count, fits }
+  const smallest = layouts[layouts.length - 1]
+  const perColumn = perColumnOf(smallest)
+  const widthColumns = Math.max(1, Math.floor((width + COLUMN_GAP) / (smallest.minColumnWidth + COLUMN_GAP)))
+  const cols = Math.min(smallest.maxColumns, widthColumns)
+  const room = perColumn * cols
+  return { layout: smallest, columns: cols, perColumn, shown: count <= room ? count : Math.max(0, room - 1), fits: count <= room }
+}
+
+/**
+ * The join block's two forms, measured: the QR code on paper with the code
+ * (`block` high and `blockWidth` wide, which the field's column must give
+ * it), or one line with the code (`line` high, its address shortening to fit).
+ */
+export type JoinSizes = { block: number; blockWidth: number; line: number }
+
+/**
+ * Where the board splits between the leader's column and the field, and which
+ * join block stands under the field (`join`, null while joining is closed):
+ * the widest leader's column whose field fits over the big join block (and is
+ * as wide as it), else over the join line, else the narrowest with the join
+ * line and as many rows as fit (fieldFit). Without a field, the widest column
+ * as wide as the big block allows.
+ */
+export function boardSplit({
+  field,
+  width,
+  height,
+  join,
+  gap,
+  layouts = ROW_LAYOUTS,
+}: {
+  /** Rows in the field. */
+  field: number
+  /** The board's width and height, px. */
+  width: number
+  height: number
+  join: JoinSizes | null
+  /** The space between the field and the join block, px. */
+  gap: number
+  layouts?: readonly RowLayout[]
+}): { split: number; join: 'block' | 'line' | null; fit: FieldFit | null } {
+  const forms = join ? (['block', 'line'] as const) : ([null] as const)
+  const fieldWidth = (split: number) => Math.max(0, width - width * split - SPLIT_GAP)
+  const fieldHeight = (form: 'block' | 'line' | null) => Math.max(0, height - (form && join ? join[form] + gap : 0))
+  const roomFor = (form: 'block' | 'line' | null, split: number) => form !== 'block' || !join || fieldWidth(split) >= join.blockWidth
+  if (field === 0) {
+    const split = LEADER_SPLITS.find((s) => roomFor(forms[0], s))
+    return split !== undefined ? { split, join: forms[0], fit: null } : { split: LEADER_SPLITS[LEADER_SPLITS.length - 1], join: forms[forms.length - 1], fit: null }
+  }
+  for (const form of forms) {
+    for (const split of LEADER_SPLITS) {
+      if (!roomFor(form, split)) continue
+      const fit = fieldFit(field, fieldWidth(split), fieldHeight(form), layouts)
+      if (fit.fits) return { split, join: form, fit }
+    }
+  }
+  const split = LEADER_SPLITS[LEADER_SPLITS.length - 1]
+  const form = forms[forms.length - 1]
+  return { split, join: form, fit: fieldFit(field, fieldWidth(split), fieldHeight(form), layouts) }
+}

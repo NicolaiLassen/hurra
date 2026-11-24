@@ -4,9 +4,11 @@ import {
   FINAL_SCREEN_MS,
   finalScreenEndsAt,
   gamePointsOf,
+  latestResult,
   liveGames,
   myAnswersOf,
   phoneLayout,
+  placesMoved,
   promptsOf,
   recentlyFinished,
   scanTarget,
@@ -253,5 +255,34 @@ describe('selectors', () => {
     expect(myAnswersOf(s, 'quiz')).toEqual({ q1: { choice: ['0'] } })
     expect(talliesOf({}, 'x')).toBe(talliesOf({}, 'y'))
     expect(gamePointsOf(s, 'x')).toBe(myAnswersOf(s, 'x'))
+  })
+})
+
+describe('latestResult', () => {
+  it('is the newest finished game until another game starts', () => {
+    const pong = finished('pong', 40, 5)
+    expect(latestResult(snap([finished('quiz', 90, 60), pong]))?.id).toBe('pong')
+    expect(latestResult(snap([pong, live('fusion', 2)]))).toBeNull()
+    expect(latestResult(snap([live('fusion', 2)]))).toBeNull()
+  })
+})
+
+describe('placesMoved', () => {
+  const standings = [
+    { player_id: 'bo', points: 14 },
+    { player_id: 'ana', points: 12 },
+    { player_id: 'clara', points: 11 },
+    { player_id: 'felix', points: 9 },
+    { player_id: 'luna', points: 9 },
+  ]
+
+  it('compares each place with the place the guest had without the game\'s points', () => {
+    // Without Beer pong: Ana 12, Felix 9, Bo 8, Clara 6, Luna 5.
+    expect(placesMoved(standings, { bo: 6, clara: 5, luna: 4 })).toEqual({ bo: 2, ana: -1, clara: 1, felix: -2, luna: 1 })
+  })
+
+  it('leaves out everyone who kept their place, ties sharing a place', () => {
+    expect(placesMoved(standings, {})).toEqual({})
+    expect(placesMoved(standings, { bo: 1 })).toEqual({})
   })
 })

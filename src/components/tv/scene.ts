@@ -1,7 +1,6 @@
 // What the TV shows where (docs/engine-v2.md, 7.2), as pure functions of the
 // scene from stage.ts, so the screen's rules are unit-tested. The core decides
 // when a game's screens show, never what is in them.
-import { boardTier } from '@/components/tv/fit'
 import { listNames } from '@/lib/recap'
 import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
@@ -37,14 +36,16 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
 }
 
 /**
- * Where the join card shows while joining is open: on the board, big, while
- * the standings show 1 to 3 guests (boardTier `few`), so the first guests'
- * friends can scan it from across the room; in the header otherwise. Nowhere
- * before anyone has joined: the empty board is one big QR code already.
+ * Where the join card shows while joining is open: on the board while the
+ * standings show, as its join block (the QR code on paper and the code, or
+ * its one line when a big party's rows need the room), so a guest who comes
+ * late can scan it from across the room; in the frame while a game holds the
+ * stage. Nowhere before anyone has joined: the empty board is one big QR code
+ * already.
  */
 export function joinCardPlace(area: MainArea, open: boolean, guests: number): 'board' | 'header' | null {
   if (!open || guests === 0) return null
-  return area.kind === 'board' && boardTier(guests) === 'few' ? 'board' : 'header'
+  return area.kind === 'board' ? 'board' : 'header'
 }
 
 /** The names of a game's winners who are still in the party, in the order the game gave them. */

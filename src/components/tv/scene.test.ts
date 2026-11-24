@@ -81,14 +81,13 @@ describe('joinCardPlace', () => {
   const board = { kind: 'board', over: false, nowPlaying: null } as const
   const stage = { kind: 'stage', game: game('q'), finished: false } as const
 
-  it('puts the big join card on the board while the standings show 1 to 3 guests', () => {
-    expect([1, 2, 3].map((guests) => joinCardPlace(board, true, guests))).toEqual(['board', 'board', 'board'])
+  it('puts the join block on the board while the standings show, whatever the party\'s size', () => {
+    expect([1, 2, 3, 4, 24, 45].map((guests) => joinCardPlace(board, true, guests))).toEqual(['board', 'board', 'board', 'board', 'board', 'board'])
   })
 
-  it('keeps it in the header for a bigger party, and while a game holds the stage', () => {
-    expect(joinCardPlace(board, true, 4)).toBe('header')
-    expect(joinCardPlace(board, true, 45)).toBe('header')
+  it('keeps it in the frame while a game holds the stage', () => {
     expect(joinCardPlace(stage, true, 2)).toBe('header')
+    expect(joinCardPlace(stage, true, 45)).toBe('header')
   })
 
   it('shows none while joining is closed, or before anyone joined (the empty board is a QR code already)', () => {

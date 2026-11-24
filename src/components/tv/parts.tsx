@@ -20,7 +20,11 @@ export function Points({ value, className }: { value: number; className?: string
   )
 }
 
-/** "+3" floating up from a row whose points just changed. */
+/**
+ * "+3" floating up from a row whose points just changed: a paper chip in ink
+ * at the TV's floor, a taken point on the rule (no teal, no red: the guest
+ * colours are identity only, and danger is for the host's own buttons).
+ */
 export function GainBubble({ gain, className }: { gain?: { amount: number; seq: number }; className?: string }) {
   return (
     <AnimatePresence>
@@ -32,8 +36,8 @@ export function GainBubble({ gain, className }: { gain?: { amount: number; seq: 
           exit={{ opacity: 0, y: -24 }}
           transition={{ type: 'spring', stiffness: 320, damping: 18 }}
           className={cn(
-            'pointer-events-none absolute z-10 rounded-full px-3 py-1 text-xl font-black text-background shadow-lg',
-            gain.amount > 0 ? 'bg-confetti-teal' : 'bg-destructive',
+            'pointer-events-none absolute z-10 rounded-chip px-2.5 py-0.5 tv-num text-tv-floor leading-tight',
+            gain.amount > 0 ? 'bg-paper text-ink' : 'bg-rule text-paper',
             className,
           )}
         >
@@ -41,6 +45,24 @@ export function GainBubble({ gain, className }: { gain?: { amount: number; seq: 
         </motion.span>
       )}
     </AnimatePresence>
+  )
+}
+
+/**
+ * How many places a guest moved with the last game: a triangle and the count,
+ * in paper-2 either way, so a move reads by its shape and never by a colour.
+ * Nothing when they kept their place.
+ */
+export function Mover({ by, className }: { by: number | undefined; className?: string }) {
+  if (!by) return <span aria-hidden className={className} />
+  const up = by > 0
+  return (
+    <span className={cn('flex items-center justify-end gap-2 tv-num text-paper-2', className)} aria-label={`${up ? 'up' : 'down'} ${Math.abs(by)}`}>
+      <svg aria-hidden viewBox="0 0 10 10" className="size-[0.55em] shrink-0 fill-current">
+        <path d={up ? 'M5 1 L9.5 9 L0.5 9 Z' : 'M0.5 1 L9.5 1 L5 9 Z'} />
+      </svg>
+      {Math.abs(by)}
+    </span>
   )
 }
 

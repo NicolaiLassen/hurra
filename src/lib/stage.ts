@@ -155,6 +155,39 @@ export function talliesOf(tallies: Tallies, gameId: string): Record<string, numb
   return tallies[gameId] ?? NOTHING
 }
 
+/**
+ * The finished game whose result is still the news (no other game has
+ * started since it finished), or null: the TV board's movers and commentary
+ * come from its points.
+ */
+export function latestResult(s: Snapshot): SessionGame | null {
+  return lastResult(s)
+}
+
+/**
+ * How many places each guest in the standings moved with `points` (a game's
+ * points, gamePointsOf): their place now against their place without those
+ * points, competition ranked (1, 2, 2, 4). Positive is up; a guest who did
+ * not move is left out.
+ */
+export function placesMoved(
+  standings: readonly { player_id: string; points: number }[],
+  points: Readonly<Record<string, number>>,
+): Record<string, number> {
+  const place = (score: (row: { player_id: string; points: number }) => number) => {
+    const scores = standings.map(score)
+    return new Map(standings.map((row, i) => [row.player_id, 1 + scores.filter((other) => other > scores[i]).length]))
+  }
+  const now = place((row) => row.points)
+  const before = place((row) => row.points - (points[row.player_id] ?? 0))
+  const moved: Record<string, number> = {}
+  for (const row of standings) {
+    const by = (before.get(row.player_id) ?? 0) - (now.get(row.player_id) ?? 0)
+    if (by !== 0) moved[row.player_id] = by
+  }
+  return moved
+}
+
 /** This round's points per player: its scores plus its awards and bonuses. */
 export function gamePointsOf(s: Snapshot, gameId: string): Record<string, number> {
   return s.game_points[gameId] ?? NOTHING

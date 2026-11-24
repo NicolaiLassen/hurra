@@ -71,24 +71,26 @@ describe('the TV scene for each fixture', () => {
   it('hides the preview label in the tab Show the TV here opens, since that tab is the TV', async () => {
     const page = await html('fixture=lobby&host=1&mirror=1')
     expect(page).not.toContain('Host preview')
-    expect(page).toContain('Join the game')
+    expect(page).toContain('Scan to join')
   })
 
-  it('keeps the join card to an open party with guests', async () => {
-    await expect(html('fixture=lobby')).resolves.toContain('Join the game')
-    await expect(html('fixture=archived')).resolves.not.toContain('Join the game')
+  it('keeps the join block to an open party with guests', async () => {
+    await expect(html('fixture=lobby')).resolves.toContain('Scan to join')
+    await expect(html('fixture=archived')).resolves.not.toContain('Scan to join')
   })
 
-  it('shows one join card: big on the board for 1 to 3 guests, in the header after that', async () => {
+  it("shows one join card: the board's join block while the standings show, the header's card while a game holds the stage", async () => {
     const count = (page: string, text: string) => page.split(text).length - 1
-    const few = await html('fixture=standings&players=2')
-    expect(count(few, 'Join the game')).toBe(1)
-    expect(few).toContain('data-fit="invite"')
-    const more = await html('fixture=standings&players=4')
-    expect(count(more, 'Join the game')).toBe(1)
-    expect(more).not.toContain('data-fit="invite"')
+    for (const players of [2, 4, 45]) {
+      const board = await html(`fixture=standings&players=${players}`)
+      expect(count(board, 'Scan to join')).toBe(1)
+      expect(board).toContain('data-fit="invite"')
+      expect(board).not.toContain('Join the game')
+    }
     // A game on the stage keeps the header's card, whatever the party's size.
-    expect(count(await html('fixture=quiz-question&players=2'), 'Join the game')).toBe(1)
+    const stage = await html('fixture=quiz-question&players=2')
+    expect(count(stage, 'Join the game')).toBe(1)
+    expect(stage).not.toContain('data-fit="invite"')
   })
 
   it('crowns every guest tied for first on the podium, not only the middle step', async () => {
