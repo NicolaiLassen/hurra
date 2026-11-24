@@ -1,11 +1,11 @@
-import { CheckCircleIcon, CheckIcon, LightningIcon } from '@phosphor-icons/react'
+import { CheckIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { SOUNDS } from '@/games/core/sounds'
 import { useMomentSound, useMomentSoundAt, useServerTime } from '@/games/quiz/clock'
 import { formatNumber, formatSeconds, type QuizGame, type QuizPublicState } from '@/games/quiz/logic'
-import { FRESH_MS, LETTERS, momentId, OPTION_STEPS, QUESTION_STEPS, tvOptionSize, tvQuestionSize, URGENT_MS } from '@/games/quiz/look'
+import { FRESH_MS, LETTERS, momentId, OPTION_STEPS, QUESTION_STEPS, URGENT_MS } from '@/games/quiz/look'
 import { AnsweredDots, LetterBadge } from '@/games/quiz/parts'
 import QuizPodium from '@/games/quiz/Podium'
 import { readPublic } from '@/games/quiz/read'
@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils'
 
 /** The house easing (docs/identity.md, Motion). */
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
-const spring = { type: 'spring', stiffness: 260, damping: 26 } as const
 
 /**
  * The quiz on the TV stage (docs/identity.md, The quiz on the TV): the lobby,
@@ -278,91 +277,69 @@ function Picked({ count, right }: { count: number; right: boolean }) {
   )
 }
 
-/** The answer: each option fills like a bar to its count, the right one gold, then the fastest right answers. */
+/**
+ * The answer: the question stays, the right answer comes forward in its tile
+ * and the others step back, then how many got it right and the fastest right
+ * answers along the bottom, where the pips were.
+ */
 function Revealed({ pub, players }: { pub: QuizPublicState; players: Player[] }) {
   const question = pub.question!
   const reveal = pub.reveal!
   const reduce = useReducedMotion()
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
-  const most = Math.max(1, reveal.answered)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
-      <div className="flex shrink-0 items-baseline justify-between gap-6">
-        <Eyebrow>
-          Question {pub.index + 1} of {pub.total}: the answer
-        </Eyebrow>
-        <p className="text-3xl font-semibold text-muted-foreground short:text-2xl">
-          <span className="font-black text-primary">{reveal.rightCount}</span> of {reveal.answered} got it right
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-start">
+        <Question key={question.key} text={question.text} />
       </div>
-
-      <QuestionCard text={question.text} revealing />
-
-      <ol className="grid shrink-0 gap-4 short:gap-3">
-        {question.options.map((option, i) => {
-          const right = i === reveal.correct
-          const count = reveal.counts[i] ?? 0
-          return (
-            <li key={`${question.key}-${i}`}>
-              <OptionRow
-                index={i}
-                text={option}
-                size={tvOptionSize(question.options)}
-                right={right}
-                dimmed={!right}
-                fill={
-                  <motion.div
-                    className={cn('absolute inset-y-0 left-0', right ? 'bg-linear-to-r from-primary/55 to-primary/30' : 'bg-white/8')}
-                    initial={{ width: reduce ? `${(count / most) * 100}%` : 0 }}
-                    animate={{ width: `${(count / most) * 100}%` }}
-                    transition={{ duration: 0.9, delay: reduce ? 0 : 0.2 + i * 0.1, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                }
-                end={
-                  <span className={cn('flex shrink-0 items-center gap-3 font-black tabular-nums', right ? 'text-primary' : 'text-muted-foreground')}>
-                    {right && <CheckCircleIcon weight="fill" className="size-10 short:size-8" />}
-                    {count}
-                  </span>
-                }
-              />
-            </li>
-          )
-        })}
-      </ol>
-
-      <div className="mt-auto flex min-h-14 shrink-0 items-center gap-6 short:min-h-12">
-        {reveal.fastest.length > 0 ? (
-          <>
-            <p className="flex shrink-0 items-center gap-2 text-2xl font-semibold text-muted-foreground short:text-xl">
-              <LightningIcon weight="fill" className="text-confetti-teal" />
-              Fastest
-            </p>
-            <ol className="flex min-w-0 flex-1 gap-4">
+      <Options key={question.key} options={question.options} reveal={reveal} />
+      <div className="mt-10 flex min-w-0 shrink-0 items-center justify-between gap-10 short:mt-6 short:gap-8 low:mt-4 low:gap-6">
+        {reveal.rightCount > 0 ? (
+          <p className="flex shrink-0 items-baseline gap-4 whitespace-nowrap short:gap-3">
+            <span className="tv-num text-tv-band text-paper short:text-tv-field low:text-tv-tab">
+              {reveal.rightCount} of {reveal.answered}
+            </span>
+            <span className="text-tv-body font-medium text-paper-2 short:text-tv-tab low:text-tv-floor">got it right</span>
+          </p>
+        ) : (
+          <p className="text-tv-body font-medium text-paper-2 short:text-tv-tab low:text-tv-floor">
+            {reveal.answered === 0 ? 'Nobody answered this one.' : 'Nobody got this one.'}
+          </p>
+        )}
+        {reveal.fastest.length > 0 && (
+          <div className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5">
+            <p className="shrink-0 text-tv-body font-medium text-paper-2 short:text-tv-tab low:text-tv-floor">Fastest</p>
+            <ol className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5">
               {reveal.fastest.map((fast, i) => (
                 <motion.li
                   key={fast.playerId}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...spring, delay: reduce ? 0 : 0.6 + i * 0.12 }}
-                  className="flex min-w-0 items-center gap-3 rounded-full bg-card/80 py-1.5 pr-5 pl-1.5 ring-1 ring-foreground/10"
+                  transition={{ duration: 0.3, ease: EASE_OUT, delay: reduce ? 0 : 0.6 + i * 0.12 }}
+                  className="flex min-w-0 items-center gap-3"
                 >
-                  <Avatar name={nameOf(fast.playerId)} className="size-11 short:size-9" />
-                  <span className="truncate text-2xl font-bold short:text-xl">{nameOf(fast.playerId)}</span>
-                  <span className="shrink-0 text-2xl font-black text-confetti-teal short:text-xl">{formatSeconds(fast.ms)}</span>
+                  <Avatar name={nameOf(fast.playerId)} playerId={fast.playerId} className="size-12 short:size-10 low:size-8" />
+                  <span className="max-w-[14rem] min-w-0 truncate text-tv-body font-bold text-paper short:max-w-[11rem] short:text-tv-tab low:text-tv-floor">
+                    {nameOf(fast.playerId)}
+                  </span>
+                  <span className="shrink-0 tv-num text-tv-body text-paper-2 short:text-tv-tab low:text-tv-floor">{formatSeconds(fast.ms)}</span>
                 </motion.li>
               ))}
             </ol>
-          </>
-        ) : (
-          <p className="text-2xl text-muted-foreground short:text-xl">Nobody got this one. On to the next!</p>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-/** The top five by quiz points. Rows start in the order before this question, then move to their new places. */
+/**
+ * The top five by quiz points after a question. Rows start in the order before
+ * this question, then move to their new places. The leader's rank and points
+ * are gold (the leader is one of gold's jobs); everyone else is paper, with
+ * what they gained on a quiet chip.
+ */
 function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[] }) {
   const reduce = useReducedMotion()
   const [moved, setMoved] = useState(false)
@@ -381,55 +358,53 @@ function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[]
   const shown = (moved ? rows : before).slice(0, 5)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
-      <div className="flex shrink-0 items-baseline justify-between gap-6">
-        <Eyebrow>Leaderboard</Eyebrow>
-        <p className="text-3xl font-semibold text-muted-foreground short:text-2xl">
-          After question {pub.index + 1} of {pub.total}
-        </p>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <h2 className="shrink-0 wide text-tv-band text-paper short:text-tv-field low:text-tv-tab">The quiz so far</h2>
       {rows.length === 0 ? (
-        <p className="m-auto text-4xl text-muted-foreground">No points yet. Plenty of questions to go!</p>
+        <p className="m-auto text-tv-name text-paper-2 short:text-tv-band low:text-tv-field">No points yet. Plenty of questions to go.</p>
       ) : (
-        <ol className="grid shrink-0 gap-4 short:gap-3">
+        <ol className="mt-8 grid shrink-0 gap-3 short:mt-6 short:gap-2.5 low:mt-4 low:gap-2">
           <AnimatePresence initial={false}>
             {shown.map((row) => {
               // Ties share a rank, before and after.
               const rank = moved ? row.rank : before.findIndex((other) => other.points === row.points) + 1
+              const leads = rank === 1
               return (
                 <motion.li
                   key={row.playerId}
                   layout
-                  initial={{ opacity: 0, scale: 0.92 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.92 }}
-                  transition={spring}
-                  className={cn(
-                    'relative flex h-24 items-center gap-6 rounded-3xl bg-card/85 px-7 ring-1 ring-foreground/10 backdrop-blur short:h-18 short:gap-4',
-                    moved && row.rank === 1 && 'bg-primary/15 ring-2 ring-primary',
-                  )}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: EASE_OUT }}
+                  className="flex h-24 min-w-0 items-center gap-8 rounded-tile bg-raised pr-10 pl-8 short:h-20 short:gap-6 short:pr-8 short:pl-6 low:h-15 low:gap-5 low:pl-5"
                 >
-                  <span className="w-12 text-right text-4xl font-black text-muted-foreground tabular-nums short:text-3xl">
+                  <span className={cn('w-[2ch] shrink-0 text-right tv-num text-tv-score short:text-tv-name low:text-tv-field', leads ? 'text-gold' : 'text-paper-3')}>
                     {rank}
                   </span>
-                  <Avatar name={nameOf(row.playerId)} className="size-16 short:size-12" />
-                  <span className="min-w-0 flex-1 truncate text-4xl font-bold short:text-3xl">{nameOf(row.playerId)}</span>
+                  <Avatar name={nameOf(row.playerId)} playerId={row.playerId} className="size-16 short:size-14 low:size-11" />
+                  <span className="min-w-0 flex-1 truncate text-tv-name font-bold text-paper short:text-tv-band low:text-tv-field">
+                    {nameOf(row.playerId)}
+                  </span>
                   {moved && row.gained > 0 && (
                     <motion.span
-                      initial={{ opacity: 0, y: 12, scale: 0.6 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ type: 'spring', stiffness: 320, damping: 18 }}
-                      className="shrink-0 rounded-full bg-confetti-teal px-4 py-1 text-2xl font-black text-background short:text-xl"
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, ease: EASE_OUT }}
+                      className="shrink-0 rounded-chip bg-overlay px-3.5 py-1 tv-num text-tv-field text-paper-2 short:text-tv-tab low:px-2.5 low:py-0.5 low:text-tv-floor"
                     >
                       +{formatNumber(row.gained)}
                     </motion.span>
                   )}
                   <motion.span
                     key={moved ? 'after' : 'before'}
-                    initial={{ scale: moved ? 1.3 : 1 }}
+                    initial={reduce ? false : { scale: moved ? 1.12 : 1 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 14 }}
-                    className="w-44 shrink-0 text-right text-5xl font-black text-primary short:w-36 short:text-4xl"
+                    transition={{ duration: 0.4, ease: EASE_OUT }}
+                    className={cn(
+                      'w-[5ch] shrink-0 text-right tv-num text-tv-score short:text-tv-name low:text-tv-field',
+                      leads ? 'text-gold' : 'text-paper',
+                    )}
                   >
                     {formatNumber(row.points)}
                   </motion.span>
@@ -439,61 +414,6 @@ function Leaderboard({ pub, players }: { pub: QuizPublicState; players: Player[]
           </AnimatePresence>
         </ol>
       )}
-    </div>
-  )
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="text-2xl font-semibold tracking-widest text-muted-foreground uppercase short:text-xl">{children}</p>
-}
-
-/** The question on a large dark card. Children sit on it, like the countdown bar along its bottom edge. */
-function QuestionCard({ text, revealing = false, children }: { text: string; revealing?: boolean; children?: React.ReactNode }) {
-  const reduce = useReducedMotion()
-  return (
-    <motion.section
-      // At the reveal the card is already on screen: it only settles into its smaller size.
-      initial={revealing ? false : reduce ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={spring}
-      className="relative shrink-0 overflow-hidden rounded-[2.5rem] bg-card px-12 pt-9 pb-11 shadow-2xl shadow-black/40 ring-1 ring-foreground/10 short:rounded-[2rem] short:px-9 short:pt-7 short:pb-9"
-    >
-      <p className={cn('leading-[1.12] font-black text-balance', tvQuestionSize(text, revealing))}>{text}</p>
-      {children}
-    </motion.section>
-  )
-}
-
-/** One option: its letter badge and text on a dark row; at the reveal it fills to its count. */
-function OptionRow({
-  index,
-  text,
-  size,
-  right = false,
-  dimmed = false,
-  fill,
-  end,
-}: {
-  index: number
-  text: string
-  size: string
-  right?: boolean
-  dimmed?: boolean
-  fill?: React.ReactNode
-  end?: React.ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'relative flex min-h-24 items-center gap-6 overflow-hidden rounded-3xl bg-card/90 py-3 pr-8 pl-4 ring-1 ring-foreground/10 transition-opacity duration-500 short:min-h-18 short:gap-4',
-        right && 'ring-2 ring-primary',
-        dimmed && !right && 'opacity-45',
-      )}
-    >
-      {fill}
-      <LetterBadge index={index} className="relative size-16 rounded-2xl text-4xl short:size-12 short:text-2xl" />
-      <span className={cn('relative min-w-0 flex-1 leading-tight font-semibold break-words', size)}>{text}</span>
-      {end && <span className={cn('relative', size)}>{end}</span>}
     </div>
   )
 }
