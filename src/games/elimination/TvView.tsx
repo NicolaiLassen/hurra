@@ -1,11 +1,13 @@
-import { CrownIcon, DetectiveIcon, SwordIcon, TrophyIcon } from '@phosphor-icons/react'
+import { CrownIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
+import { clockTime } from '@/components/tv/clock'
+import { lastOneDeck } from '@/components/tv/winnerLines'
+import WinnerMoment from '@/components/tv/WinnerMoment'
 import type { EliminationGame, EliminationPublicState, PublicKnockout } from '@/games/elimination/logic'
-import { knockoutLine, nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
-import SurvivorMeter from '@/games/elimination/SurvivorMeter'
+import { nameFrom, roundRoster, topHunters } from '@/games/elimination/roster'
 import { tileLayout, type TileSize } from '@/games/elimination/tiles'
 import type { TvViewProps } from '@/games/types'
 import type { Player } from '@/lib/types'
@@ -19,63 +21,61 @@ const OUT_WORD = 'shrink-0 text-tv-floor leading-none font-bold text-pink'
 
 /**
  * The TV while Last one standing holds the stage: who is left, who got whom,
- * the top hunters. With `finished`, the same board is the final screen: the
- * winner under "Final result", or how it stood when the host ended it.
+ * the top hunters. Once it is over, the winner's screen (WinnerMoment): the
+ * winner's colour over the top of the TV, "Hurra for Bo!", their knockouts
+ * and the final one at its time, over the night so far. When the host ended
+ * it with nobody left alone, the same board under "Final result", as it stood.
  */
-export default function TvView({ players, publicState, finished }: TvViewProps<EliminationGame>) {
+export default function TvView({ game, players, publicState, finished, scores, gamePoints }: TvViewProps<EliminationGame>) {
   const { winner, feed } = publicState
-  // Players still in the party, so the meter and the tiles count the same people.
+  // Players still in the party, so the count and the tiles count the same people.
   const { standing, total } = roundRoster(players, publicState)
   const inRound = new Set([...publicState.alive, ...publicState.out])
   const dealtIn = players.filter((p) => inRound.has(p.id))
   const nameOf = nameFrom(players)
   const hunters = topHunters(publicState, players)
+  const champion = winner ? players.find((p) => p.id === winner) : undefined
+
+  if (finished && champion) {
+    const final = feed[0]
+    return (
+      <WinnerMoment
+        title={game.title}
+        winners={[champion]}
+        deck={lastOneDeck(publicState.knockoutCounts[champion.id] ?? 0)}
+        last={final ? { at: final.at, text: <Knockout k={final} nameOf={nameOf} task /> } : null}
+        scores={scores}
+        gamePoints={gamePoints}
+      />
+    )
+  }
 
   return (
-    <div className="grid min-h-0 flex-1 gap-8 lg:grid-cols-[1fr_24rem]">
-      {/* min-w-0: a long winner name truncates instead of pushing the aside off screen. */}
-      <section className="flex min-h-0 min-w-0 flex-col gap-6 short:gap-4">
-        {winner ? (
-          <div className="flex shrink-0 items-center gap-5">
-            <CrownIcon
-              weight="duotone"
-              className="size-24 shrink-0 text-primary drop-shadow-[0_0_24px_color-mix(in_oklab,var(--color-gold)_50%,transparent)] short:size-16"
-            />
-            <div className="min-w-0">
-              {finished && <FinalResult />}
-              <p className="truncate text-6xl font-black short:text-5xl">{nameOf(winner)}</p>
-              <p className="text-3xl text-muted-foreground short:text-2xl">is the last one standing!</p>
-            </div>
-          </div>
-        ) : finished ? (
-          // The host ended it early: how it stood.
-          <div className="grid shrink-0 gap-2">
-            <FinalResult />
-            <SurvivorMeter alive={standing.length} total={total} size="lg" />
-          </div>
-        ) : (
-          <SurvivorMeter alive={standing.length} total={total} size="lg" className="shrink-0" />
-        )}
-
-        <PlayerTiles players={dealtIn} publicState={publicState} nameOf={nameOf} />
+    <div className="grid min-h-0 flex-1 gap-10 lg:grid-cols-[1fr_28rem] short:gap-8 short:lg:grid-cols-[1fr_24rem]">
+      <section className="flex min-h-0 min-w-0 flex-col gap-8 short:gap-5">
+        <div className="grid shrink-0 gap-3">
+          {finished && <p className="on-air text-tv-tab text-paper-2 short:text-tv-floor">Final result</p>}
+          <StillStanding alive={standing.length} total={total} />
+        </div>
+        <PlayerTiles players={dealtIn} publicState={publicState} />
       </section>
 
       <aside className="flex min-h-0 flex-col gap-6 short:gap-4">
         <Panel title="Top hunters" className="shrink-0">
-          {hunters.length === 0 && <p className="text-lg text-muted-foreground">Nobody's out yet.</p>}
-          <ol className="grid grid-cols-1 gap-2">
+          {hunters.length === 0 && <p className="text-tv-floor text-paper-2">Nobody is out yet.</p>}
+          <ol className="grid grid-cols-1 gap-2.5">
             {hunters.map(([id, count], i) => {
               // A hunter can be knocked out too: the stripe and the word, as on the tiles.
               const out = Boolean(publicState.outBy[id])
               return (
-                <motion.li key={id} layout transition={spring} className="flex items-center gap-3">
-                  <span className="w-6 text-right text-xl font-bold text-muted-foreground tabular-nums">{i + 1}</span>
-                  <Avatar name={nameOf(id)} out={out} className="size-10" />
+                <motion.li key={id} layout="position" transition={spring} className="flex min-w-0 items-center gap-3">
+                  <span className="w-6 shrink-0 text-right tv-num text-tv-floor text-paper-3">{i + 1}</span>
+                  <Avatar name={nameOf(id)} playerId={id} out={out} className="size-10" />
                   <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                    <span className="truncate text-xl font-semibold">{nameOf(id)}</span>
+                    <span className="min-w-0 truncate tv-num text-tv-field">{nameOf(id)}</span>
                     {out && <span className={OUT_WORD}>Out</span>}
                   </span>
-                  <span className="text-2xl font-black text-primary tabular-nums">{count}</span>
+                  <span className="shrink-0 tv-num text-tv-field text-pink">{count}</span>
                 </motion.li>
               )
             })}
@@ -86,23 +86,27 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
             whole (three at most when the screen is short): one that doesn't fit wraps out of
             sight in the list's second column instead of being cut through. */}
         <Panel title="Latest" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {feed.length === 0 && <p className="text-lg text-muted-foreground">Waiting for the first knockout…</p>}
-          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-3 overflow-hidden">
+          {feed.length === 0 && <p className="text-tv-floor text-paper-2">Waiting for the first knockout</p>}
+          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-4 overflow-hidden">
             <AnimatePresence initial={false}>
               {feed.slice(0, 5).map((k) => (
                 <motion.li
                   key={`${k.by}-${k.target}`}
-                  layout
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
+                  layout="position"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={spring}
                   className="flex w-full gap-3 short:nth-[n+4]:hidden"
                 >
-                  <MethodIcon method={k.method} className="mt-1 size-6 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-lg font-semibold">{knockoutLine(k, nameOf)}</p>
-                    {k.task && <p className="line-clamp-2 text-muted-foreground">“{k.task}”</p>}
+                  <time dateTime={new Date(k.at).toISOString()} className="shrink-0 tv-num text-tv-floor text-paper-3">
+                    {clockTime(k.at)}
+                  </time>
+                  <div className="min-w-0 flex-1 text-tv-floor">
+                    <p className="font-semibold">
+                      <Knockout k={k} nameOf={nameOf} />
+                    </p>
+                    {k.task && <p className="line-clamp-2 text-paper-2 short:line-clamp-1">“{k.task}”</p>}
                   </div>
                 </motion.li>
               ))}
@@ -114,29 +118,55 @@ export default function TvView({ players, publicState, finished }: TvViewProps<E
   )
 }
 
-// Heights match TILE_SIZES (src/games/elimination/tiles.ts), so the fit maths
-// holds. A tile with `byName` gives a knocked-out guest a second line, which
-// the word Out leads: the name keeps the whole first line. A mini tile has one
-// line, so the word sits beside the name, in the room the method icon had.
-const TILE_STYLE: Record<
-  TileSize,
-  { tile: string; avatar: string; badge: 'sm' | 'md' | 'lg'; name: string; stacked: boolean; byName: boolean }
-> = {
-  large: { tile: 'h-38 flex-col justify-center gap-2 p-3', avatar: 'size-16', badge: 'lg', name: 'text-lg', stacked: true, byName: true },
-  medium: { tile: 'h-32 flex-col justify-center gap-1.5 p-2.5', avatar: 'size-12', badge: 'md', name: 'text-base', stacked: true, byName: true },
-  chip: { tile: 'h-13 gap-3 px-3', avatar: 'size-9', badge: 'sm', name: 'text-base', stacked: false, byName: true },
-  mini: { tile: 'h-10 gap-2 px-2.5', avatar: 'size-7', badge: 'sm', name: 'text-sm', stacked: false, byName: false },
+/** "Bo got Ana", or "Bo caught Ana", with the task once it is no one's secret (`task`). */
+function Knockout({ k, nameOf, task = false }: { k: PublicKnockout; nameOf: (id: string) => string; task?: boolean }) {
+  return (
+    <>
+      <strong>{nameOf(k.by)}</strong> {k.method === 'catch' ? 'caught' : 'got'} <strong>{nameOf(k.target)}</strong>
+      {task && k.task && <> with “{k.task}”</>}
+    </>
+  )
 }
 
-function PlayerTiles({
-  players,
-  publicState,
-  nameOf,
-}: {
-  players: Player[]
-  publicState: EliminationPublicState
-  nameOf: (id: string) => string
-}) {
+/**
+ * "20 of 24 still standing": the count in the hunt's pink, over one pip per
+ * player dealt in, pink while they stand and the rule once they are out.
+ */
+function StillStanding({ alive, total }: { alive: number; total: number }) {
+  return (
+    <div className="grid gap-4 short:gap-3" role="img" aria-label={`${alive} of ${total} still standing`}>
+      <p className="flex items-baseline gap-4 short:gap-3">
+        {/* Re-keyed on every change so the number pops. */}
+        <span key={alive} className="inline-block animate-count-pop tv-num text-tv-question text-pink short:text-tv-answer">
+          {alive}
+        </span>
+        <span className="text-tv-name font-bold short:text-tv-band">of {total} still standing</span>
+      </p>
+      <div className="flex h-3 gap-1.5 short:h-2.5">
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} className={cn('flex-1 transition-colors duration-700', i < alive ? 'bg-pink' : 'bg-rule')} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Heights match TILE_SIZES (src/games/elimination/tiles.ts), so the fit maths
+// holds, with every word at the TV's floor of 28 px. A tile with `byName`
+// gives a knocked-out guest's word Out a second line, so the name keeps the
+// whole first line (who got them is in Latest). A one-line tile has the word
+// beside the name.
+const TILE_STYLE: Record<
+  TileSize,
+  { tile: string; avatar: string; badge: 'sm' | 'md' | 'lg'; stacked: boolean; byName: boolean }
+> = {
+  large: { tile: 'h-38 flex-col justify-center gap-1.5 p-3', avatar: 'size-14', badge: 'lg', stacked: true, byName: true },
+  medium: { tile: 'h-32 flex-col justify-center gap-1 p-2.5', avatar: 'size-11', badge: 'md', stacked: true, byName: true },
+  chip: { tile: 'h-13 gap-3 px-3', avatar: 'size-9', badge: 'sm', stacked: false, byName: false },
+  mini: { tile: 'h-10 gap-2 px-2.5', avatar: 'size-7', badge: 'sm', stacked: false, byName: false },
+}
+
+function PlayerTiles({ players, publicState }: { players: Player[]; publicState: EliminationPublicState }) {
   const [ref, { width, height }] = useElementSize<HTMLDivElement>()
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
   const { outBy, winner, feed } = publicState
@@ -160,39 +190,27 @@ function PlayerTiles({
         <ul className="grid content-start" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap }}>
           {ordered.slice(0, shown).map((p) => {
             const knockedOut = outBy[p.id]
-            const isWinner = p.id === winner
             return (
               <motion.li
                 key={p.id}
                 layout
                 transition={spring}
-                className={cn(
-                  'relative flex min-w-0 items-center rounded-2xl ring-1 transition-colors duration-700',
-                  style.tile,
-                  knockedOut ? 'bg-card/40 ring-foreground/5' : 'bg-card/80 ring-foreground/10',
-                  isWinner && 'bg-primary/15 ring-2 ring-primary',
-                )}
+                // Solid tiles for those still standing; the ones who are out lose their tile, not their name.
+                className={cn('relative flex min-w-0 items-center rounded-tile transition-colors duration-700', style.tile, knockedOut ? 'bg-ground' : 'bg-raised')}
               >
                 <div className={cn('relative shrink-0', squeezed && 'hidden')}>
-                  <Avatar name={p.name} out={Boolean(knockedOut)} className={style.avatar} />
-                  {isWinner && <AvatarBadge icon={CrownIcon} tone="gold" size={style.badge} />}
+                  <Avatar name={p.name} playerId={p.id} out={Boolean(knockedOut)} className={style.avatar} />
+                  {p.id === winner && <AvatarBadge icon={CrownIcon} tone="gold" size={style.badge} />}
                 </div>
                 <div className={cn('min-w-0', style.stacked ? 'w-full text-center' : 'flex-1')}>
                   {/* The name at full strength, with the word Out by it: the stripe never says Out alone. */}
-                  <p className={cn('flex min-w-0 items-baseline gap-2 font-semibold', style.name, style.stacked && 'justify-center')}>
+                  <p className={cn('flex min-w-0 items-baseline gap-2 tv-num text-tv-floor leading-none', style.stacked && 'justify-center')}>
                     <span className="truncate">{p.name}</span>
                     {knockedOut && !style.byName && <span className={OUT_WORD}>Out</span>}
                   </p>
                   {knockedOut && style.byName && (
-                    <p
-                      className={cn(
-                        'flex max-w-full items-center gap-1.5 text-xs text-muted-foreground',
-                        style.stacked && 'justify-center',
-                      )}
-                    >
+                    <p className={cn('mt-1 flex max-w-full', style.stacked && 'justify-center')}>
                       <span className={OUT_WORD}>Out</span>
-                      <MethodIcon method={knockedOut.method} className="size-3.5 shrink-0" />
-                      <span className="truncate">{nameOf(knockedOut.by)}</span>
                     </p>
                   )}
                 </div>
@@ -205,27 +223,11 @@ function PlayerTiles({
   )
 }
 
-function MethodIcon({ method, className }: { method: PublicKnockout['method']; className?: string }) {
-  return method === 'catch' ? (
-    <DetectiveIcon weight="duotone" className={cn('text-confetti-teal', className)} />
-  ) : (
-    <SwordIcon weight="duotone" className={cn('text-confetti-pink', className)} />
-  )
-}
-
-function FinalResult() {
-  return (
-    <p className="flex items-center gap-2 text-xl font-semibold tracking-widest text-primary uppercase short:text-lg">
-      <TrophyIcon weight="fill" />
-      Final result
-    </p>
-  )
-}
-
+/** A solid raised panel with its label at the TV's floor. */
 function Panel({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
   return (
-    <section className={cn('rounded-3xl bg-card/80 p-6 ring-1 ring-foreground/10 backdrop-blur short:p-5', className)}>
-      <h2 className="mb-4 text-sm font-semibold tracking-widest text-muted-foreground uppercase short:mb-3">{title}</h2>
+    <section className={cn('rounded-tile bg-raised p-6 short:p-5', className)}>
+      <h2 className="mb-4 text-tv-floor font-semibold text-paper-2 short:mb-3">{title}</h2>
       {children}
     </section>
   )

@@ -59,7 +59,7 @@ describe('the TV scene for each fixture', () => {
     ['fixture=empty', 'Scan to join'],
     ['fixture=recap', 'the night in numbers'],
     ['fixture=background&players=45', 'Also running'],
-    ['fixture=final&players=45', 'is the last one standing'],
+    ['fixture=final&players=45', 'Hurra for </span><span class="block whitespace-nowrap">Bo!'],
   ])('%s', async (search, expected) => {
     await expect(html(search)).resolves.toContain(expected)
   })
@@ -98,6 +98,15 @@ describe('the TV scene for each fixture', () => {
     // With 45 guests, Felix and Luna share first place on 12 points.
     expect(crowns(await html('fixture=standings&players=45'))).toBe(2)
     expect(crowns(await html('fixture=standings&players=24'))).toBe(1)
+  })
+
+  it("cheers a game's winner with the screen's one exclamation mark and saves the third hurra for the night's winner", async () => {
+    for (const search of ['fixture=final', 'fixture=pong-final']) {
+      const page = await html(search)
+      expect(page.replace(/<[^>]*>/g, '')).toMatch(/Hurra for \w+!/)
+      expect(page).toContain('The third hurra is saved for the night')
+      expect(page).toContain('data-tv-field')
+    }
   })
 
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
