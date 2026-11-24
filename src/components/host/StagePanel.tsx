@@ -140,7 +140,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
               joinCode={session.join_code}
               screens={snapshot.screens}
               label={screens > 0 ? 'Pair another TV' : 'Pair a TV'}
-              variant={screens > 0 ? 'ghost' : 'default'}
+              // Gold while no TV is open at all: then pairing is the room's next step (nextStartId waits for it).
+              variant={screens > 0 || tvTab ? 'ghost' : 'default'}
               size="default"
             />
           </div>
