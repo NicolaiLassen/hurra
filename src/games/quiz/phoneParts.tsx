@@ -16,7 +16,8 @@ export type TileState = 'open' | 'sending' | 'locked' | 'faded'
  * big overlay tile with the letter's tilted chip in the quiz key, sized to
  * the tile through container units. With the answers shown: a row with the
  * chip and the answer. The picked one turns paper at once and says where it
- * is; the others fade. Rows never tilt; the chip does.
+ * is; the others step back to the raised surface, their chips to rule. Rows
+ * never tilt; the chip does.
  */
 export function AnswerTile({
   index,
@@ -45,13 +46,13 @@ export function AnswerTile({
       className={cn(
         // No transition onto the pick: it shows on the very next frame.
         'relative rounded-phone bg-overlay text-paper outline-none select-none focus-visible:ring-3 focus-visible:ring-gold/50',
-        'transition-opacity duration-150 motion-reduce:transition-none',
         letters
           ? 'grid h-[clamp(7.25rem,calc((100svh-24.5rem)/2),14.75rem)] place-items-center [container-type:size]'
           : 'flex min-h-[4.25rem] w-full items-center gap-3.5 py-2.5 pr-4 pl-2.5 text-left',
         state === 'open' && 'active:bg-rule',
         picked && 'bg-paper text-ink',
-        state === 'faded' && 'opacity-35',
+        // Faded steps back to the raised surface, as the TV's reveal does: never a key colour at part strength, which turns to mud.
+        state === 'faded' && 'bg-raised text-paper-3 transition-colors duration-150 motion-reduce:transition-none',
       )}
     >
       <LetterBadge
@@ -59,6 +60,7 @@ export function AnswerTile({
         className={cn(
           'rounded-chip leading-none',
           letters ? 'size-(--chip) text-[length:calc(var(--chip)*0.68)] [--chip:min(76cqw,56cqh)]' : 'size-12 text-[1.75rem]',
+          state === 'faded' && 'bg-rule text-paper-3 transition-colors duration-150 motion-reduce:transition-none',
         )}
       />
       {!letters && <span className="min-w-0 flex-1 text-lg leading-snug font-bold break-words">{option}</span>}

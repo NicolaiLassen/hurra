@@ -93,7 +93,14 @@ describe('the words for answering', () => {
     expect(sending).toContain('bg-paper')
     expect(sending).toContain('>Sending<')
     expect(await html(null, 'locked')).toContain('Locked in')
-    // A faded tile can't be tapped.
-    expect(await html(null, 'faded')).toMatch(/disabled=""/)
+    // A faded tile can't be tapped, and steps back to solid surfaces: no key colour at part strength.
+    const faded = await html(null, 'faded')
+    expect(faded).toMatch(/disabled=""/)
+    expect(faded).toContain('bg-raised')
+    expect(faded).toContain('bg-rule')
+    expect(faded).not.toContain('bg-key-c')
+    expect(faded).not.toMatch(/opacity-\d/)
+    // The pick shows on the very next frame: no transition onto it.
+    expect(sending).not.toContain('transition')
   })
 })
