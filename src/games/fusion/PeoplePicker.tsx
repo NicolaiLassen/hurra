@@ -79,7 +79,7 @@ export default function PeoplePicker({
           <XIcon />
         </Button>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold tracking-widest text-confetti-violet uppercase">Who is fused?</p>
+          <p className="text-xs font-semibold tracking-widest text-paper-2 uppercase">Who is fused?</p>
           <h2 className="truncate text-2xl font-bold">{picture.label}</h2>
         </div>
         <PictureArt
@@ -121,14 +121,15 @@ export default function PeoplePicker({
                     disabled={saving}
                     onClick={() => setPick((current) => togglePick(current, p.id))}
                     className={cn(
-                      'flex w-full flex-col items-center gap-1.5 rounded-2xl px-1.5 py-2.5 ring-1 transition-colors disabled:opacity-60',
-                      picked ? 'bg-confetti-violet/15 ring-2 ring-confetti-violet' : 'bg-card ring-foreground/10',
+                      // A pick turns paper, as a quiz answer does: no wash, no ring.
+                      'flex w-full flex-col items-center gap-1.5 rounded-phone px-1.5 py-2.5 transition-colors disabled:opacity-60',
+                      picked ? 'bg-paper text-ink' : 'bg-raised',
                     )}
                   >
                     <span className="relative">
                       <Avatar name={p.name} className="size-12" />
                       {picked && (
-                        <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-confetti-violet text-[0.65rem] font-black text-background ring-2 ring-background">
+                        <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-chip bg-ink text-[0.65rem] font-black text-paper">
                           {order + 1}
                         </span>
                       )}
@@ -180,12 +181,12 @@ export default function PeoplePicker({
             picture={picture}
             mediaUrl={mediaUrl}
             size="thumb"
-            className="aspect-square w-full rounded-3xl"
+            className="aspect-square w-full rounded-tile"
             numberClassName="text-8xl"
           />
           {picture.revealed && (
-            <section className="space-y-2 rounded-2xl bg-confetti-violet/10 p-4 ring-1 ring-confetti-violet/30">
-              <p className="text-xs font-semibold tracking-widest text-confetti-violet uppercase">It was</p>
+            <section className="space-y-2 rounded-phone bg-raised p-4">
+              <p className="text-xs font-semibold tracking-widest text-paper-2 uppercase">It was</p>
               <Pair
                 people={picture.revealed.people}
                 kept={picture.revealed.names}
@@ -206,12 +207,12 @@ export default function PeoplePicker({
                 {vote.map((id) => {
                   const right = picture.revealed?.people.includes(id)
                   return (
-                    <li key={id} className="flex items-center gap-3 rounded-xl bg-card px-3 py-2 ring-1 ring-foreground/10">
+                    <li key={id} className="flex items-center gap-3 rounded-phone bg-raised px-3 py-2">
                       <Avatar name={nameOf(players, id)} className="size-8" />
                       <span className="min-w-0 flex-1 truncate font-medium">{nameOf(players, id)}</span>
                       {picture.revealed &&
                         (right ? (
-                          <CheckIcon weight="bold" className="size-5 text-confetti-teal" aria-label="Right" />
+                          <CheckIcon weight="bold" className="size-5 text-paper" aria-label="Right" />
                         ) : (
                           <XIcon weight="bold" className="size-5 text-destructive" aria-label="Wrong" />
                         ))}

@@ -69,9 +69,9 @@ export default function PlayerView({
   return (
     <div className="space-y-5">
       {pub.phase === 'voting' ? (
-        <section className="space-y-3 rounded-2xl bg-confetti-violet/10 p-4 ring-1 ring-confetti-violet/30">
+        <section className="space-y-3 rounded-phone bg-raised p-4">
           <div className="flex items-start gap-3">
-            <DetectiveIcon weight="duotone" className="size-8 shrink-0 text-confetti-violet" />
+            <DetectiveIcon weight="duotone" className="size-8 shrink-0 text-paper-2" />
             <div className="min-w-0">
               <p className="font-bold">{voted === total ? 'All voted.' : 'Who is fused in each picture?'}</p>
               <p className="text-sm text-muted-foreground">
@@ -85,20 +85,20 @@ export default function PlayerView({
             <p className="text-sm font-semibold tabular-nums">
               {voted} of {total} voted
             </p>
-            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-2 overflow-hidden rounded-chip bg-rule">
               <div
-                className="h-full rounded-full bg-confetti-violet transition-[width] duration-500"
+                className="h-full rounded-chip bg-paper transition-[width] duration-500"
                 style={{ width: `${total ? (voted / total) * 100 : 0}%` }}
               />
             </div>
           </div>
         </section>
       ) : (
-        <section className="flex items-start gap-3 rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
+        <section className="flex items-start gap-3 rounded-phone bg-raised p-4">
           {pub.phase === 'locked' ? (
-            <LockKeyIcon weight="duotone" className="size-8 shrink-0 text-confetti-violet" />
+            <LockKeyIcon weight="duotone" className="size-8 shrink-0 text-paper-2" />
           ) : (
-            <TrophyIcon weight="duotone" className="size-8 shrink-0 text-primary" />
+            <TrophyIcon weight="duotone" className="size-8 shrink-0 text-paper-2" />
           )}
           <div className="min-w-0">
             <p className="font-bold">{pub.phase === 'locked' ? 'Voting is closed. Watch the TV.' : 'That was the reveal.'}</p>
@@ -188,19 +188,20 @@ function PictureCard({
       type="button"
       onClick={onOpen}
       className={cn(
-        'w-full overflow-hidden rounded-2xl bg-card text-left ring-1 ring-foreground/10 transition-shadow',
-        latest && 'ring-2 ring-confetti-violet shadow-[0_0_24px_color-mix(in_oklab,var(--confetti-violet)_35%,transparent)]',
+        // The newest reveal steps up to the overlay surface: no ring, no glow.
+        'w-full overflow-hidden rounded-phone text-left transition-colors',
+        latest ? 'bg-overlay' : 'bg-raised',
       )}
     >
       <div className="relative">
         <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="aspect-square w-full" />
         {picture.revealed ? (
-          <span className="absolute top-2 left-2 rounded-full bg-confetti-violet px-2 py-0.5 text-xs font-bold text-background">
+          <span className="absolute top-2 left-2 rounded-chip bg-ground px-2 py-0.5 text-xs font-bold text-paper">
             Revealed
           </span>
         ) : vote ? (
           <span
-            className="absolute top-2 right-2 grid size-7 place-items-center rounded-full bg-paper text-ink"
+            className="absolute top-2 right-2 grid size-7 place-items-center rounded-chip bg-paper text-ink"
             aria-label="Voted"
           >
             {open ? <CheckIcon weight="bold" /> : <LockKeyIcon weight="bold" />}
@@ -228,7 +229,7 @@ function PictureCard({
             <p className="text-xs text-muted-foreground">{open ? 'Tap to change' : 'Locked in'}</p>
           </>
         ) : open ? (
-          <p className="text-sm font-semibold text-confetti-violet">Tap to vote</p>
+          <p className="text-sm font-semibold text-paper">Tap to vote</p>
         ) : (
           <p className="text-sm text-muted-foreground">No vote</p>
         )}

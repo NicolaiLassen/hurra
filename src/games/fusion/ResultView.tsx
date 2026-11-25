@@ -47,7 +47,7 @@ export default function ResultView({ game, player, players, publicState, view, g
         </div>
       ) : (
         <p className="flex items-center gap-2 text-lg font-bold">
-          <DetectiveIcon weight="duotone" className="size-6 text-confetti-violet" />
+          <DetectiveIcon weight="duotone" className="size-6 text-paper-2" />
           Nobody scored this time
         </p>
       )}
