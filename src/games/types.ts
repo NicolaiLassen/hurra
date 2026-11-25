@@ -138,7 +138,12 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   media: { upload: (file: File) => Promise<string>; url: (path: string, size?: 'full' | 'thumb') => string }
 }
 
-/** A badge on a player's profile, shown on phones, the host page and the TV. */
+/**
+ * A badge on a player's profile, shown on phones, the host page and the TV.
+ * Its tone is its icon's job: 'gold' for a win, 'pink' for the hunt's; the
+ * guest colours (teal, violet) are identity only, so the app draws them in
+ * paper.
+ */
 export type ProfileBadge = { icon: Icon; label: string; tone?: 'gold' | 'pink' | 'teal' | 'violet' }
 
 /** A screen made with lazyScreen: `preload()` loads its file now. */

@@ -37,8 +37,8 @@ export const elimination = defineGameModule({
     const { tags = 0, catches = 0, wins = 0 } = data as EliminationProfile
     const badges: ProfileBadge[] = []
     if (tags) badges.push({ icon: SwordIcon, label: `${tags} tagged`, tone: 'pink' })
-    if (catches) badges.push({ icon: DetectiveIcon, label: `${catches} caught`, tone: 'teal' })
-    if (wins) badges.push({ icon: CrownIcon, label: wins === 1 ? 'Last one standing' : `${wins}× last one standing` })
+    if (catches) badges.push({ icon: DetectiveIcon, label: `${catches} caught`, tone: 'pink' })
+    if (wins) badges.push({ icon: CrownIcon, label: wins === 1 ? 'Last one standing' : `${wins}× last one standing`, tone: 'gold' })
     return badges
   },
 })
