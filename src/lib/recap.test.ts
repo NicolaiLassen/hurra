@@ -310,6 +310,51 @@ describe('the race and the lead changes', () => {
     ])
     expect(doc.leadChanges.map((c) => c.name)).toEqual(['Bo'])
   })
+
+  it('takes the points of a freed name out of the race, so whoever takes it next starts at 0', () => {
+    logId = 0
+    const effects = (minute: number, scores: Record<string, number>) => ({
+      id: ++logId,
+      at: T0 + minute * MIN,
+      kind: 'game.effects',
+      game_id: 'g',
+      game_type: 'x',
+      round: 1,
+      actor: 'game' as const,
+      player_id: null,
+      about: Object.keys(scores),
+      data: { scores },
+    })
+    const log = [
+      effects(1, { p1: 5 }),
+      award(2, 'p2', 2),
+      { ...award(30, 'p1', 0), kind: 'player.freed', data: { name: 'Ana', player_id: 'p1' } },
+      // The next person to take the name scores in the same game.
+      effects(40, { p1: 1 }),
+    ]
+    const doc = buildRecapDoc(
+      {
+        session: { id: 's', name: 'Party', created_at: T0, archived_at: null },
+        players,
+        games: [{ id: 'g', title: 'G', game_type: 'x', position: 0, status: 'finished' }],
+        rounds: [],
+        log,
+        standings: [
+          { player_id: 'p2', name: 'Bo', points: 2 },
+          { player_id: 'p1', name: 'Ana', points: 1 },
+        ],
+      },
+      new Map(),
+    )
+    expect(doc.race.map((s) => s.totals)).toEqual([
+      { p2: 0, p1: 0 },
+      { p2: 0, p1: 5 },
+      { p2: 2, p1: 5 },
+      { p2: 2, p1: 0 },
+      { p2: 2, p1: 1 },
+    ])
+    expect(doc.players.p1.byGame).toEqual([{ gameId: 'g', title: 'G', points: 1 }])
+  })
 })
 
 describe('listNames', () => {

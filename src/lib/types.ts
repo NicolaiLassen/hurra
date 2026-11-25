@@ -32,11 +32,21 @@ export type Player = {
   profile: GameData
   created_at: number
   /**
+   * When they joined: the snapshot's players are the guests who joined, in this
+   * order (docs/guest-list.md). Optional, so fixtures and test players need none.
+   */
+  joined_at?: number
+  /**
    * The player's photo in the player-photos bucket, <session id>/<player id>/<uuid>.jpg,
    * or null (docs/guest-photos.md). Optional, so fixtures and test players need none.
    */
   photo?: string | null
 }
+/**
+ * A name on the host's guest list (the snapshot's guests, the host page only):
+ * a guest who joined (joined_at set) or one still expected (joined_at null).
+ */
+export type ListedGuest = { id: string; name: string; joined_at: number | null; created_at: number }
 /** A players row read directly (PlayerCard, joining): ISO times, with its session and user. */
 export type PlayerRow = {
   id: string
@@ -140,4 +150,8 @@ export type Snapshot = {
   recap: { published_at: number } | null
   /** A phone that is no longer a member because its player moved to another phone (claim_player). */
   moved?: boolean
+  /** A phone that is no longer a member because the host gave its name back to the guest list (host_free_guest). */
+  freed?: boolean
+  /** The whole guest list, joined or still expected, by name: the host page only, else null (docs/guest-list.md). */
+  guests?: ListedGuest[] | null
 }

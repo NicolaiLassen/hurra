@@ -31,6 +31,8 @@ export type LiveState = {
   pings: 'ok' | 'unhealthy'
   /** This phone's player moved to another phone. */
   moved: boolean
+  /** The host gave this phone's name back to the guest list: it picks a name again. */
+  freed: boolean
 }
 
 /** Browser-only events, passed in by useLive.tsx; the rehearsal's bots pass none. */
@@ -376,6 +378,8 @@ export function pingedFingerprint(screen: Screen, s: Snapshot): string {
     s.tallies,
     s.states,
     s.screens,
+    // The host page's guest list: every change to it pings the stage.
+    s.guests?.map((g) => [g.id, g.name, g.joined_at]) ?? null,
   ])
 }
 
@@ -388,7 +392,7 @@ export function createLiveSession(
 ): { refresh(): void; serverNow(): number; close(): void } {
   const { sessionId, screen, environment = {} } = options
   const phone = screen === 'phone'
-  let state: LiveState = { tallies: {}, connected: false, pings: 'ok', moved: false }
+  let state: LiveState = { tallies: {}, connected: false, pings: 'ok', moved: false, freed: false }
   let closed = false
 
   const emit = (patch: Partial<LiveState>) => {
@@ -503,9 +507,16 @@ export function createLiveSession(
     // Ping health: a safety poll found a change, and no ping arrived since the read before it.
     if (poll && previous && fingerprint !== previous.fingerprint && lastPingAt < previous.sentAt) suspectPings()
     previous = { fingerprint, sentAt }
-    // A phone that slept through its "moved" ping learns it from the read.
+    // A phone that slept through its "moved" ping learns it from the read; a freed name has no ping of its own.
     const moved = !state.moved && phone && !snapshot.member && snapshot.moved === true
-    emit({ snapshot, error: undefined, tallies: settleTallies(snapshot, tallySeqAtSend), ...(moved ? { moved: true } : {}) })
+    const freed = !state.freed && phone && !snapshot.member && snapshot.freed === true
+    emit({
+      snapshot,
+      error: undefined,
+      tallies: settleTallies(snapshot, tallySeqAtSend),
+      ...(moved ? { moved: true } : {}),
+      ...(freed ? { freed: true } : {}),
+    })
     syncTopics(snapshot)
     planDeadlines(snapshot)
   }

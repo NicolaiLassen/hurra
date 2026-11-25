@@ -18,6 +18,8 @@ export type LiveValue = {
   connected: boolean
   pings: 'ok' | 'unhealthy'
   moved: boolean
+  /** The host gave this phone's name back to the guest list. */
+  freed: boolean
   /** Now by the database clock: for every countdown and the 3-minute final screen. */
   serverNow: () => number
   /** Reads the snapshot again now, e.g. after this screen's own successful call (it gets no ping for it). */
@@ -26,7 +28,7 @@ export type LiveValue = {
 
 const LiveContext = createContext<LiveValue | null>(null)
 
-const IDLE: LiveState = { tallies: {}, connected: false, pings: 'ok', moved: false }
+const IDLE: LiveState = { tallies: {}, connected: false, pings: 'ok', moved: false, freed: false }
 
 const browserEnvironment: LiveEnvironment = {
   onVisible(listener) {
@@ -86,7 +88,17 @@ export function LiveSessionProvider({
   const refresh = useCallback(() => session.current?.refresh(), [])
 
   const fixtureState = useMemo<LiveState | null>(
-    () => (fixture ? { snapshot: fixture, tallies: fixture.tallies, connected: true, pings: 'ok', moved: fixture.moved === true } : null),
+    () =>
+      fixture
+        ? {
+            snapshot: fixture,
+            tallies: fixture.tallies,
+            connected: true,
+            pings: 'ok',
+            moved: fixture.moved === true,
+            freed: fixture.freed === true,
+          }
+        : null,
     [fixture],
   )
   const state = fixtureState ?? (live?.key === key ? live.state : IDLE)
@@ -104,6 +116,7 @@ export function LiveSessionProvider({
       connected: state.connected,
       pings: state.pings,
       moved: state.moved,
+      freed: state.freed,
       serverNow,
       refresh,
     }

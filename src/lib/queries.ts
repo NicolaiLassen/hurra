@@ -22,7 +22,7 @@ const MOVE_CODE_MS = 5 * 60_000
 /** How long a TV pairing code works (screen_codes' default). */
 const SCREEN_CODE_MS = 15 * 60_000
 
-type DbError = { message: string; details?: string | null; code?: string | null }
+type DbError = { message: string; details?: string | null; code?: string | null; hint?: string | null }
 
 /**
  * A PostgREST error as a GameCallError: custom PT4xx refusals carry their code in
@@ -107,12 +107,65 @@ export async function loadMembership(joinCode: string): Promise<Membership | nul
 }
 
 /**
+ * A typed name that is free on the party's guest list (docs/guest-list.md):
+ * the phone offers "Yes, I'm Ana", which takes it with claimGuest.
+ */
+export class OnListError extends GameCallError {
+  /** The name as the host listed it. */
+  listedName: string
+
+  constructor(message: string, status: number, listedName: string) {
+    super(message, status, 'on_list')
+    this.name = 'OnListError'
+    this.listedName = listedName
+  }
+}
+
+/**
  * join_session. No retry of its own: PostgREST has no rate limit; the 429 comes
  * from the sign-in (5.9). Refusals carry their code: 'closed', 'archived',
- * 'name_taken', 'bad_name', 'not_found'.
+ * 'name_taken', 'bad_name', 'not_found', and 'on_list' as an OnListError.
  */
-export function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
-  return asThisAccount(() => supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() }))
+export async function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
+  let listed: string | null | undefined
+  try {
+    return await asThisAccount(async () => {
+      const result = await supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() })
+      listed = result.error?.hint
+      return result
+    })
+  } catch (error) {
+    if (error instanceof GameCallError && error.code === 'on_list') {
+      throw new OnListError(error.message, error.status, listed || name.trim())
+    }
+    throw error
+  }
+}
+
+/**
+ * The free names on a party's guest list (guest_list), for "Who are you?".
+ * An empty list for a party without one, and on any failure (an older
+ * database, a lost connection): the join page then shows the name form.
+ */
+export async function freeGuestNames(joinCode: string): Promise<string[]> {
+  const code = normalCode(joinCode)
+  if (!isJoinCode(code)) return []
+  try {
+    const { data, error } = await supabase.rpc('guest_list', { p_join_code: code })
+    if (error || !Array.isArray(data)) return []
+    return data.filter((name): name is string => typeof name === 'string')
+  } catch {
+    return []
+  }
+}
+
+/**
+ * claim_guest: this phone takes a free name on the guest list, which joins the
+ * party. Refusals: 'guest_taken', 'not_on_list', 'already_player', 'closed',
+ * 'archived', 'bad_name', 'not_found'.
+ */
+export function claimGuest(joinCode: string, name: string): Promise<PlayerRow> {
+  return asThisAccount(() => supabase.rpc('claim_guest', { p_join_code: normalCode(joinCode), p_name: name }))
 }
 
 /** Moves a player to this phone with the code the host showed ('bad_code', 'already_player'). */
@@ -135,6 +188,8 @@ export async function getPlayerByCode(code: string): Promise<(PlayerRow & { sess
       .from('players')
       .select(`${PLAYER_COLUMNS}, session:sessions(id, name, join_code, status, archived_at)`)
       .eq('code', normalized)
+      // A host reads the guests still expected too: never open one of those.
+      .not('joined_at', 'is', null)
       .maybeSingle(),
   )
   if (!row?.session) return null

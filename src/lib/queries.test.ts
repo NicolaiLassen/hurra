@@ -3,11 +3,14 @@ import { GameCallError } from './gameApi'
 import {
   archiveSession,
   awardPoints,
+  claimGuest,
   createSession,
+  freeGuestNames,
   getPlayerByCode,
   issuePlayerTransfer,
   joinSession,
   loadMembership,
+  OnListError,
   publishRecap,
   removePlayer,
   renamePlayer,
@@ -18,7 +21,11 @@ import {
 } from './queries'
 import type { RecapDoc } from './recap'
 
-type Result = { data: unknown; error: { message: string; details?: string | null; code?: string | null } | null; status: number }
+type Result = {
+  data: unknown
+  error: { message: string; details?: string | null; code?: string | null; hint?: string | null } | null
+  status: number
+}
 type Call = { table: string; ops: [string, unknown[]][] }
 type Respond = (call: Call) => Result
 type RespondRpc = (name: string, args: Record<string, unknown>) => Result
@@ -196,6 +203,54 @@ describe('joining', () => {
     const player = await getPlayerByCode('abcde')
     expect(player?.session.archived_at).toBe(Date.parse('2026-11-28T23:00:00Z'))
     expect(op(db.state.calls[0], 'eq')).toEqual(['code', 'ABCDE'])
+    // A host reads guests still expected too: the award page never opens one of those.
+    expect(op(db.state.calls[0], 'not')).toEqual(['joined_at', 'is', null])
+  })
+})
+
+describe('the guest list', () => {
+  it('joinSession turns a typed name that is free on the list into an OnListError with the listed name', async () => {
+    db.state.respondRpc = () => ({
+      data: null,
+      error: { message: '"Ana" is on the guest list. If that\'s you, pick it from the list.', details: 'on_list', code: 'PT409', hint: 'Ana' },
+      status: 409,
+    })
+    const error = (await joinSession('party', ' ana ').catch((e: unknown) => e)) as OnListError
+    expect(error).toBeInstanceOf(OnListError)
+    expect(error).toBeInstanceOf(GameCallError)
+    expect([error.status, error.code, error.listedName]).toEqual([409, 'on_list', 'Ana'])
+    expect(db.state.rpcs).toHaveLength(1)
+  })
+
+  it('freeGuestNames gives the free names, and an empty list for no party, an error or an older database', async () => {
+    db.state.respondRpc = () => ok(['Ana', 'Bo', 3])
+    expect(await freeGuestNames(' party ')).toEqual(['Ana', 'Bo'])
+    expect(db.state.rpcs).toEqual([{ name: 'guest_list', args: { p_join_code: 'PARTY' } }])
+    db.state.respondRpc = () => ok(null)
+    expect(await freeGuestNames('PARTY')).toEqual([])
+    db.state.respondRpc = () => ({ data: null, error: { message: 'Could not find the function', code: 'PGRST202' }, status: 404 })
+    expect(await freeGuestNames('PARTY')).toEqual([])
+    db.state.respondRpc = () => {
+      throw new Error('offline')
+    }
+    expect(await freeGuestNames('PARTY')).toEqual([])
+    db.state.rpcs = []
+    expect(await freeGuestNames('no!')).toEqual([])
+    expect(db.state.rpcs).toEqual([])
+  })
+
+  it('claimGuest takes a name with claim_guest and passes its refusals on with their codes', async () => {
+    const player = { id: PLAYER, session_id: SESSION, user_id: 'user-1', name: 'Ana', code: 'ABCDE', profile: {}, created_at: '2026-11-28T20:00:00Z' }
+    db.state.respondRpc = () => ok(player)
+    await expect(claimGuest('party', 'Ana')).resolves.toEqual(player)
+    expect(db.state.rpcs).toEqual([{ name: 'claim_guest', args: { p_join_code: 'PARTY', p_name: 'Ana' } }])
+    db.state.respondRpc = () => ({
+      data: null,
+      error: { message: "Someone just took Ana. If that's you, ask the host to free your name.", details: 'guest_taken', code: 'PT409' },
+      status: 409,
+    })
+    const error = (await claimGuest('party', 'Ana').catch((e: unknown) => e)) as GameCallError
+    expect([error.code, error.message]).toEqual(['guest_taken', "Someone just took Ana. If that's you, ask the host to free your name."])
   })
 })
 
