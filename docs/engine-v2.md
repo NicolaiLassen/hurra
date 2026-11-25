@@ -3049,6 +3049,11 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
 the host reopens. New: a "Got a code from the host?" link opens a 6-character
 code field; `claimPlayer(code)` then goes to `/play/:code`. The taken-name
 error links to it: "Is that you on another phone? Ask the host for a code."
+**Changed after the switch-over (26 Nov):** the hint names both ways it can be
+you, "Is that you? Ask the host. If someone else took your name, they can free
+it. If you joined on another phone, they can give you a code to move here.",
+in paper-2, and "Got a code from the host?" stays under the form
+(docs/guest-list.md, 6.4).
 **Changed after the switch-over (16 Nov):** after Let's go, the join page
 shows "Add a photo" (Take a selfie, Choose a photo, Skip for now), held above
 its membership reload so coming back from the camera never skips it. On the

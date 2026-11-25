@@ -45,7 +45,10 @@ describe('Who are you?', () => {
     const html = await list(['Åse', 'Zelda', 'bo', 'Ana', 'Ørn'])
     const text = plain(html)
     expect(text).toContain("You're joining Birthday party")
-    expect(text).toContain('Who are you? Tap your name.')
+    // Why a name can be missing: someone took it.
+    expect(text).toContain("Who are you? Tap your name. Names already taken aren't shown.")
+    // No logo here: the names start high enough for a small phone.
+    expect(html).not.toContain('favicon.svg')
     expect(rows(html)).toEqual(['Ana', 'bo', 'Zelda', 'Ørn', 'Åse'])
     expect(text).toContain("I'm not on the list")
     expect(text).toContain('Got a code from the host?')
@@ -62,7 +65,7 @@ describe('Who are you?', () => {
     expect(html).toContain('type="search"')
     expect(rows(html)).toEqual(['Søren'])
     const none = plain(await list(names, ' Zel '))
-    expect(none).toContain('Nobody called “Zel” on the list.')
+    expect(none).toContain('No free name matches “Zel”. If someone took yours, ask the host to free it.')
   })
 
   it('shows its notes at the top, above the heading', async () => {

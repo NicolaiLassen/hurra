@@ -403,13 +403,19 @@ When Joining is closed sees the party open, it goes through the same choice.
 
 ### 6.2 Who are you?
 
-- The logo, "You're joining" and the party's name, as before.
+- No logo: **"You're joining Birthday party"** on one small line in paper-2,
+  so an iPhone SE with Safari's bars showing fits 4 names above the bottom
+  bar.
 - For a phone just freed (6.6), a solid note with `ArrowUUpLeftIcon`: **"The
   host gave the name Ana back to the list. Pick your own name."**
-- **"Who are you?"**, under it **"Tap your name."**
+- **"Who are you?"** (the page's heading), under it **"Tap your name. Names
+  already taken aren't shown."**, so a guest whose name someone else took
+  knows why it is missing.
 - From 9 names, a search sticky at the top of the list: **"Find your name"**,
-  folded ("soren" finds Søren). No match: **"Nobody called “Zel” on the
-  list."**
+  folded ("soren" finds Søren). No match: **"No free name matches “mads”. If
+  someone took yours, ask the host to free it."**, and 0.4 s later the list is
+  read again, so a name the host just added shows at once instead of on the
+  next 15 s read.
 - The names, sorted the Danish way, each a full-width row at least 56 px tall
   with the guest's 40 px token and the name, truncated on one line. A tap
   opens 6.3.
@@ -440,18 +446,26 @@ after a typed join.
 ### 6.4 The name form
 
 The name form as before ("What should we call you?", the live token preview,
-"Let's go", "Got a code from the host?", and for `name_taken` "Is that you on
-another phone? Ask the host for a code."), plus **"Back to the list"** above
-it when the guest came from 6.2, and the freed note when it applies.
+"Let's go", "Got a code from the host?"), plus **"Back to the list"** above
+it when the guest came from 6.2, and the freed note when it applies. For
+`name_taken` the database's "Someone already joined as "Mads Holm". Try
+another name." gets a hint in paper-2 for both ways it can be you: **"Is that
+you? Ask the host. If someone else took your name, they can free it. If you
+joined on another phone, they can give you a code to move here."** "Got a code
+from the host?" stays under the form as the way to enter the code, so Let's go
+stays the one gold step. (Before, the hint sent every such guest to a move
+code, which hands the real guest the photo and points of whoever took the
+name.)
 
 ### 6.5 A typed name that is on the list
 
 `joinSession` refuses with `OnListError`. In place of the error line, in
 paper-2 since nothing is wrong: **"Ana is on the guest list."**; the gold
 button becomes **"Yes, I'm Ana"**, which takes the name with the refusals of
-6.3; under it **"Not you? Change the name, for example with the first letter
+6.3, and the token beside the field becomes Ana's (the one about to be taken,
+not the typed "ana"); under it **"Not you? Change the name, for example with the first letter
 of your last name."** Editing the name brings back "Let's go". A typed name
-that matches a name already taken gives `name_taken` as before.
+that matches a name already taken gives `name_taken` with the hint of 6.4.
 
 ### 6.6 A phone whose name was freed
 

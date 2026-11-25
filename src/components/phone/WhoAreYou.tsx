@@ -6,9 +6,8 @@ import {
   UserPlusIcon,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
-import Logo from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { matchNames, sortNames } from '@/lib/guestList'
@@ -25,11 +24,15 @@ export function JoinNote({ icon: Icon, children }: { icon: PhosphorIcon; childre
   )
 }
 
+/** A search that finds no free name reads the list again after this pause: a name the host just added shows at once. */
+const NO_MATCH_READ_MS = 400
+
 /**
  * Who are you? (docs/guest-list.md, 6.2): the party's free names, sorted the
  * Danish way, as big rows; a search from 9 names; "I'm not on the list" in the
  * thumb zone for a guest the host didn't list. The rows are the action: no
- * gold button here.
+ * gold button here. No logo and the party on one small line, so a small phone
+ * shows several names above "I'm not on the list".
  */
 export function WhoAreYou({
   party,
@@ -40,6 +43,7 @@ export function WhoAreYou({
   onChoose,
   onNotOnList,
   onClaimCode,
+  onNoMatch,
 }: {
   party: Pick<PublicSession, 'name'>
   names: readonly string[]
@@ -51,20 +55,27 @@ export function WhoAreYou({
   onChoose: (name: string) => void
   onNotOnList: () => void
   onClaimCode: () => void
+  /** The search found no free name: read the list again, in case the host just added it. */
+  onNoMatch?: () => void
 }) {
   const sorted = useMemo(() => sortNames(names), [names])
   const searching = names.length >= SEARCH_FROM
   const shown = searching ? matchNames(sorted, query) : sorted
+  const noMatch = searching && shown.length === 0 && query.trim() !== ''
+
+  useEffect(() => {
+    if (!noMatch || !onNoMatch) return
+    const timer = setTimeout(onNoMatch, NO_MATCH_READ_MS)
+    return () => clearTimeout(timer)
+  }, [noMatch, onNoMatch, query])
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pt-8">
-      <Logo className="size-16" />
-      <p className="mt-6 text-paper-2">You're joining</p>
-      <h1 className="text-3xl font-bold text-balance">{party.name}</h1>
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pt-6">
+      <p className="truncate text-paper-2">You're joining {party.name}</p>
       {notes}
 
-      <h2 className="mt-8 text-phone-head font-bold">Who are you?</h2>
-      <p className="text-paper-2">Tap your name.</p>
+      <h1 className="mt-4 text-3xl font-bold">Who are you?</h1>
+      <p className="text-paper-2">Tap your name. Names already taken aren't shown.</p>
 
       {searching && (
         <div className="sticky top-0 z-10 -mx-4 mt-2 bg-ground px-4 py-2">
@@ -98,7 +109,11 @@ export function WhoAreYou({
           </li>
         ))}
       </ul>
-      {shown.length === 0 && <p className="py-4 text-paper-2">Nobody called “{query.trim()}” on the list.</p>}
+      {shown.length === 0 && (
+        <p className="py-4 text-paper-2">
+          No free name matches “{query.trim()}”. If someone took yours, ask the host to free it.
+        </p>
+      )}
 
       <Button variant="ghost" size="lg" className="mt-4 self-center text-paper-2" onClick={onClaimCode}>
         <KeyIcon />

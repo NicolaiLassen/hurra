@@ -185,6 +185,7 @@ export function JoinOpen({
   const [refusal, setRefusal] = useState<string | null>(null)
   // Bumped after a refused take, so the list is read again at once (keeping what is on screen meanwhile).
   const [revision, setRevision] = useState(0)
+  const readAgain = useCallback(() => setRevision((n) => n + 1), [])
   const [polling, setPolling] = useState(false)
   const load = useCallback(() => calls.loadNames(party.join_code), [calls, party.join_code])
   const names = useLiveQuery(load, { pollMs: polling ? NAMES_POLL_MS : undefined, revision })
@@ -206,7 +207,7 @@ export function JoinOpen({
           setRefusal(error.message)
           setChosen(null)
           setTyping(false)
-          setRevision((n) => n + 1)
+          readAgain()
           return null
         }
         // Joined already (another tab): the phone home.
@@ -221,7 +222,7 @@ export function JoinOpen({
         return error.message
       }
     },
-    [calls, navigate, onJoined, onPartyChanged, party],
+    [calls, navigate, onJoined, onPartyChanged, party, readAgain],
   )
 
   const freedLine = freed && <JoinNote icon={ArrowUUpLeftIcon}>{freedNote(freed)}</JoinNote>
@@ -251,6 +252,7 @@ export function JoinOpen({
           setTyping(true)
         }}
         onClaimCode={onClaimCode}
+        onNoMatch={readAgain}
       />
     )
   }
@@ -340,7 +342,8 @@ function JoinForm({
       >
         <Label htmlFor="name">What should we call you?</Label>
         <div className="flex items-center gap-3">
-          <NamePreview name={name} />
+          {/* The token the guest is about to take: the listed name's when the gold button offers it. */}
+          <NamePreview name={offer ?? name} />
           <Input
             id="name"
             className="h-12 text-lg md:text-lg"
@@ -369,13 +372,12 @@ function JoinForm({
           </p>
         )}
         {taken && (
-          <button
-            type="button"
-            onClick={onClaim}
-            className="text-left text-sm text-muted-foreground underline-offset-4 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
-          >
-            Is that you on another phone? <span className="font-semibold text-primary underline">Ask the host for a code.</span>
-          </button>
+          // Two ways it can be you: someone else took your name (the host frees it), or you joined on another
+          // phone (the host's code moves you here). Paper, not gold: Let's go stays the one gold step.
+          <p className="text-sm text-paper-2">
+            Is that you? Ask the host. If someone else took your name, they can free it. If you joined on another
+            phone, they can give you a code to move here.
+          </p>
         )}
         <Button
           type="submit"
@@ -392,12 +394,10 @@ function JoinForm({
         )}
       </form>
 
-      {!taken && (
-        <Button variant="ghost" size="lg" className="mt-4 self-center text-muted-foreground" onClick={onClaim}>
-          <KeyIcon />
-          Got a code from the host?
-        </Button>
-      )}
+      <Button variant="ghost" size="lg" className="mt-4 self-center text-muted-foreground" onClick={onClaim}>
+        <KeyIcon />
+        Got a code from the host?
+      </Button>
     </Screen>
   )
 }

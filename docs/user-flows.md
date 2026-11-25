@@ -96,7 +96,7 @@ flowchart TD
   WHO -.- C26["C26 closed: the host adds the guests before the party;<br/>settings can name them before they join"]:::closed
   FORM -- "name taken, or closed meanwhile" --> FERR["Inline error under the name"]:::screen
   FERR --> FORM
-  FERR -- "Is that you on another phone?" --> CODE["Got a code from the host?<br/>6-character code field"]:::screen
+  FERR -- "Is that you? Ask the host:<br/>they free the name, or give a code" --> CODE["Got a code from the host?<br/>6-character code field"]:::screen
   FORM -- "Got a code from the host?" --> CODE
   CODE -- "wrong or expired code" --> CERR["The code is wrong or has expired.<br/>Ask the host for a new one."]:::screen
   CERR --> CODE
