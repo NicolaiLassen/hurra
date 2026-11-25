@@ -366,7 +366,17 @@ function Revealed({
             <LabelChip label={picture.label} className="shrink-0 text-[1.0625rem]" />
             <span className="font-semibold text-paper-2">It was</span>
           </p>
-          <Pair stacked people={people} kept={picture.revealed.names} players={players} meId={player.id} className="text-[1.0625rem]" avatarClassName="size-10" />
+          {/* Each person's own photo from the settings, small (the TV shows them large); else their profile photo or token. */}
+          <Pair
+            stacked
+            people={people}
+            kept={picture.revealed.names}
+            photos={picture.revealed.originals.map((path) => (path ? mediaUrl(path, 'thumb') : null))}
+            players={players}
+            meId={player.id}
+            className="text-[1.0625rem]"
+            avatarClassName="size-10"
+          />
         </div>
       </div>
 

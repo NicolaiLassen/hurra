@@ -2674,10 +2674,17 @@ has a scene per step (`FUSION_STAGE_SCENES`), each with 12 pictures and some
 with 2 or 40 as well: `fusion-lobby`, `fusion-showing`, `fusion-wall`,
 `fusion-asking` (each with `-2` and `-40`), `fusion-asking-locked` (Sofie has
 locked in), `fusion-asking-you` (Sofie is in the picture asked),
-`fusion-reveal` (and `-2`, `-40`), `fusion-crown` (every picture revealed)
+`fusion-reveal` (and `-2`, `-40`), `fusion-reveal-plain` (the reveal of a
+picture without its people's own photos), `fusion-crown` (every picture revealed)
 and `fusion-final`, with Last one standing live in the background. Their
 pictures are paths under `fixture/`, which dev builds draw as sample
-portraits (`src/lib/sampleMedia.ts`). `fusion-legacy` is a live round of the
+portraits (`src/lib/sampleMedia.ts`); every picture has its two people's own
+photos (`fixture/original-<n>-<1|2>.jpg`, each drawn in that person's half
+of the fused sample) except #6, which has only its first person's, so
+`fusion-reveal-you` shows a profile photo (with `&photos`) or a token
+beside an own photo. The dev TV's `&band=0` leaves out every game under the
+stage and closes joining, so the band is empty: with `&band=2`, the reveal's
+three stage heights at each size. `fusion-legacy` is a live round of the
 background version on the TV, in its old shapes with two pictures revealed,
 and `archived` holds a finished one: the two old saves a screen can still
 meet. Game data in the fixtures (`public_state`, views, `states`)
@@ -3639,7 +3646,12 @@ was. A point per right person, and a bonus for both.
 - **Config** (`game_settings`, hosts only):
 
   ```ts
-  export type FusionPicture = { label: string; image?: string; people?: [PlayerId, PlayerId] }
+  export type FusionPicture = {
+    label: string
+    image?: string
+    people?: [PlayerId, PlayerId]
+    originals?: [string | null, string | null]   // each person's own photo, in the order of people
+  }
   export type FusionConfig = {
     pictures: FusionPicture[]
     pointsPerPerson: number   // 1, whole 0 to 10
@@ -3659,6 +3671,20 @@ was. A point per right person, and a bonus for both.
   is read with the defaults wherever it is read. People can be set in the
   settings before the start (those guests must have joined) or on the night
   with `setKey`.
+- **The two people's own photos** (`originals`, added 25 November): per
+  picture, an optional game-media path for each of the two people, uploaded
+  through the same pipeline as the picture (`media.upload`: canvas, metadata
+  dropped, a full image and a thumbnail). Each belongs to its place in the
+  pair: `originals[0]` is the photo of `people[0]`, so the host picks each
+  person beside their photo, in the settings or with Show who on the night.
+  `parseConfig`: an array of at most two, each a plain `.jpg` game-media path
+  or null (empty strings read as null, both null as none at all); otherwise
+  "{label}: those photos of the two people aren't valid. Add them again." or
+  "{label}: the photo of the first person isn't valid. Add it again.". They
+  are as secret as the key: in the host-only settings and state, and in
+  `publicState` only inside that picture's `revealed`, from its reveal on.
+  Never in a view, a prompt, an announcement, the log or the recap. A person
+  without one shows at the reveal as their profile photo, else their token.
 - **State**:
 
   ```ts
@@ -3705,7 +3731,10 @@ was. A point per right person, and a bonus for both.
     Needs the picture's locks in `info.answers` ("The votes for #n are still
     open"). Then the reveal (below).
   - `{ type: 'setKey', n, people }`: refused once that picture is revealed;
-    two different players in the party; the same pair again is unchanged.
+    two different players in the party; the same pair again is unchanged, in
+    either order, unless the picture has its people's own photos: then the
+    order says whose photo is whose, and the pair the other way round is a
+    change.
     Allowed in every phase but done, the picture being asked included.
   - `{ type: 'finish' }`: while a picture is asked, "Reveal #n first".
     Otherwise phase `done`; announces "{name} has the sharpest eye" (crown,
@@ -3757,6 +3786,7 @@ was. A point per right person, and a bonus for both.
   export type FusionReveal = {
     people: [PlayerId, PlayerId]; names: [string, string]
     both: number; one: number; none: number; voters: number
+    originals: [string | null, string | null]   // the settings' own photos, in the order of people; [null, null] for none
     step: number            // its place in the guessing: "Picture 4 of 12"
     at: number | null       // when it was revealed; null in the background version's saves
   }
@@ -3799,12 +3829,19 @@ was. A point per right person, and a bonus for both.
   every picture at once (`wall.ts` lays the tiles out); asking, the picture
   in the frame with "Who is in it?", the quiz's countdown and the lock-in pips
   (`max(locked, guests - 2)`, so the pips never tell the room that someone in
-  the picture has left); the reveal, its two people as hero tokens, the counts
+  the picture has left); the reveal, the picture moving to the middle and
+  the two people sliding in beside it as their own photos (else their
+  profile photo, else their token), named on paper chips, then the counts
   and the sharpest eyes; the winner's screen. The strap says where the round
   is: "12 pictures, starting soon", "Showing 3 of 12", "4 of 12 revealed",
   "Picture 4 of 12", "Final result" (`strapWords`). Images: the full image in
   the frame, thumbnails on small wall tiles, every picture warmed in the
-  lobby. See docs/identity.md.
+  lobby. The own photos can't be warmed: their paths reach the TV with the
+  reveal's state and no sooner, so `useOriginals` loads both (thumbnail and
+  full image, high priority, decoded) from that render on, while the picture
+  moves; each person comes in at their beat once theirs is in, or at 2 s at
+  the latest (`arriveIn` in `reveal.ts`, tested), and the picture is there
+  first. See docs/identity.md.
 - **Phone** (`PlayerView`, `PlayerCard`, `ResultView`): the lobby and the
   showing say to watch the TV; the wall shows your points and your guesses;
   while a picture is asked, a thumbnail, the guests to pick from (search over
@@ -3812,7 +3849,8 @@ was. A point per right person, and a bonus for both.
   then "Locked in". The two in it get the same picker under "This one is you.
   Keep a straight face and pick any two: it won't count.", and their lock
   stays on the phone, so the next seat can't tell; the reveal says what you
-  got. The phone strap (`phoneStrap`) uses
+  got, with who it was as two small tokens wearing their own photos
+  (thumbnails) where the settings have them. The phone strap (`phoneStrap`) uses
   the strap's words without the clock. Phones load thumbnails only.
 - **Host** (`HostView`, with its steps in `host.ts`, tested): the phase as a
   chip (Ready, Showing, The wall, Guessing, Revealed, Over), the title line
@@ -3826,11 +3864,16 @@ was. A point per right person, and a bonus for both.
   itself in 6 s."); the count of who may vote is exact here (everyone but the
   two in the picture). Every picture has a state chip (On now, Revealed, Not
   asked), its counts once revealed and its own Ask. Who is in each picture
-  sits behind Show who, off by default. Notes: fusion isn't on the TV;
+  sits behind Show who, off by default: two pickers on a row of their own
+  under the picture's label, each beside its person's own photo when the
+  settings have one, so the host picks the person in that photo (the order
+  is saved). Notes: fusion isn't on the TV;
   pictures without their people; a round from before the update.
 - **Settings** (`ConfigEditor`): how many pictures, a label and an optional
   image per picture (re-encoded and uploaded with `media.upload`; a picture
-  without one shows its label on the TV), optional people, the timing
+  without one shows its label on the TV), optional people, each in a slot
+  with their own optional photo ("Add photo", "Replace", remove; the same
+  upload), with a note that the photos stay secret until the reveal, the timing
   ("Seconds to guess each picture", "Seconds each picture shows first") and
   the points.
 - **Bot** (`bot.ts`): `settings` makes 4 pictures whose people are pairs of

@@ -79,13 +79,15 @@ export function LabelChip({ label, className }: { label: string; className?: str
 
 /**
  * Two people: their tokens side by side and "Mads and Anna", or one per row
- * when `stacked`. A token carries the guest's photo by their id; someone who
- * has left keeps the name the round kept for them.
+ * when `stacked`. A token carries the guest's photo by their id, or `photos`
+ * (a revealed picture's own photos of them) where given; someone who has left
+ * keeps the name the round kept for them.
  */
 export function Pair({
   people,
   players,
   kept,
+  photos,
   meId,
   stacked = false,
   className,
@@ -95,6 +97,8 @@ export function Pair({
   players: readonly Player[]
   /** Names a reveal kept, for anyone who has left since. */
   kept?: readonly string[]
+  /** A photo URL for each person in its place, over their profile photo; null keeps theirs. */
+  photos?: readonly (string | null)[]
   /** Shown as "You". */
   meId?: PlayerId
   stacked?: boolean
@@ -102,13 +106,15 @@ export function Pair({
   avatarClassName?: string
 }) {
   const names = people.map((id, i) => nameOf(players, id, kept?.[i]))
+  // undefined lets Avatar find the guest's own photo; a URL shows that photo instead.
+  const srcOf = (i: number) => photos?.[i] ?? undefined
   const shown = people.map((id, i) => (id === meId ? 'You' : names[i]))
   if (stacked) {
     return (
       <ul className={cn('grid gap-1.5', className)}>
         {people.map((id, i) => (
           <li key={id} className="flex min-w-0 items-center gap-2">
-            <Avatar name={names[i]} playerId={id} className={cn('shrink-0', avatarClassName)} />
+            <Avatar name={names[i]} playerId={id} src={srcOf(i)} className={cn('shrink-0', avatarClassName)} />
             <span className="min-w-0 truncate font-semibold">{shown[i]}</span>
           </li>
         ))}
@@ -119,7 +125,7 @@ export function Pair({
     <span className={cn('flex min-w-0 items-center gap-2', className)}>
       <span className="flex shrink-0 gap-1">
         {people.map((id, i) => (
-          <Avatar key={id} name={names[i]} playerId={id} className={avatarClassName} />
+          <Avatar key={id} name={names[i]} playerId={id} src={srcOf(i)} className={avatarClassName} />
         ))}
       </span>
       <span className="min-w-0 truncate font-semibold">{shown.join(' and ')}</span>

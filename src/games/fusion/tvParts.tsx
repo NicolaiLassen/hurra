@@ -1,9 +1,10 @@
 // Participant fusion's parts on the TV (docs/identity.md, Participant fusion
 // on the TV): a picture drawn sharp without a blink, the countdown and the
 // lock-in pips in the quiz's visual language (drawn here with the same tokens
-// and sizes, so fusion never imports the quiz), and the sharpest eyes row.
+// and sizes, so fusion never imports the quiz), a guest's name on a paper
+// chip, and the sharpest eyes row.
 import { motion } from 'motion/react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import Avatar from '@/components/Avatar'
 import type { FusionPublicPicture, FusionTopRow } from '@/games/fusion/shapes'
 import { EASE_OUT, firstName, nameOf, URGENT_MS } from '@/games/fusion/tvLook'
@@ -26,6 +27,7 @@ export function PictureImage({
   fit,
   className,
   labelClassName,
+  alt,
 }: {
   picture: Pick<FusionPublicPicture, 'label' | 'image'>
   mediaUrl: MediaUrl
@@ -35,6 +37,8 @@ export function PictureImage({
   className?: string
   /** The label's text size when there is no image to show. */
   labelClassName?: string
+  /** What the image is, for a screen reader: "Picture #4" unless said. */
+  alt?: string
 }) {
   const thumb = picture.image ? mediaUrl(picture.image, 'thumb') : null
   const full = picture.image && size === 'full' ? mediaUrl(picture.image, 'full') : null
@@ -46,7 +50,7 @@ export function PictureImage({
   const fitClass = fit === 'cover' ? 'object-cover object-[50%_35%]' : 'object-contain'
 
   return (
-    <div role="img" aria-label={`Picture ${picture.label}`} className={cn('@container relative overflow-hidden bg-raised', className)}>
+    <div role="img" aria-label={alt ?? `Picture ${picture.label}`} className={cn('@container relative overflow-hidden bg-raised', className)}>
       {!showThumb && !showFull ? (
         <span className="absolute inset-0 grid place-items-center">
           <span className={cn('wide max-w-full truncate px-[6cqw] leading-none text-paper', labelClassName ?? 'text-[28cqw]')}>{picture.label}</span>
@@ -96,6 +100,27 @@ function FullImage({ src, fitClass, onError }: { src: string; fitClass: string; 
         state === 'loaded' && 'transition-opacity duration-200 ease-out',
       )}
     />
+  )
+}
+
+/**
+ * A guest's name on a paper chip in the condensed numerals, tilted like a
+ * letter chip: the first of two one way, the second the other. The wall's
+ * revealed tiles and the reveal both name the two this way. Its size comes
+ * from `className` or `style`.
+ */
+export function NameChip({ name, first, className, style }: { name: string; first: boolean; className?: string; style?: CSSProperties }) {
+  return (
+    <span
+      className={cn(
+        'inline-block max-w-full truncate rounded-chip bg-paper px-[0.28em] py-[0.1em] tv-num leading-[1.1] text-ink',
+        first ? '-rotate-2' : 'rotate-1',
+        className,
+      )}
+      style={style}
+    >
+      {name}
+    </span>
   )
 }
 

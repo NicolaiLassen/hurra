@@ -335,22 +335,24 @@ quiz is ("Question 3 of 10"), so the stage never repeats it.
 ## Participant fusion on the TV
 
 Fusion's stage screens ([src/games/fusion/TvView.tsx](../src/games/fusion/TvView.tsx),
-with its parts in [tvParts.tsx](../src/games/fusion/tvParts.tsx) and the wall's
-layout in [wall.ts](../src/games/fusion/wall.ts)) speak the quiz's language
+with its parts in [tvParts.tsx](../src/games/fusion/tvParts.tsx), the wall's
+layout in [wall.ts](../src/games/fusion/wall.ts) and the reveal's timing in
+[reveal.ts](../src/games/fusion/reveal.ts)) speak the quiz's language
 without importing it. The strap says where the round is ("Showing 3 of 12",
 "4 of 12 revealed", "Picture 4 of 12"), so the stage never repeats it.
 
 - **The lobby:** words only, as the quiz's: "Two guests, one face" in `wide`,
   "Who is in each picture?", how it scores, and "Getting the pictures ready:
   8 of 12" at the foot until every picture is in.
-- **The frame and the column** (the showing, a picture asked, its reveal): the
+- **The frame and the column** (the showing and a picture asked): the
   picture on the left at the stage's full height, `raised` with
   `rounded-tile`, the image whole inside it; its shape is the pictures' own,
   portrait or square, at most half the stage. The column beside it, top
   aligned, holds the label chip (paper with ink, `wide`, tilted 2 degrees, at
-  the question's size) and the words. One frame through all three phases, so
-  the picture never jumps; between a wall tile and the frame it moves (motion's
-  shared layout), a crossfade with reduced motion.
+  the question's size) and the words. One frame through the showing, the
+  asking and the reveal, so the picture never jumps; between a wall tile and
+  the frame, and from the frame to the middle at its reveal, it moves
+  (motion's shared layout), a crossfade with reduced motion.
 - **The showing:** each picture crossfades into the next over 600 ms, never
   blinking: the one before stays under it until it is covered. "Look closely."
   and one pip per picture at the column's foot, paper up to the one on show.
@@ -359,12 +361,29 @@ without importing it. The strap says where the round is ("Showing 3 of 12",
   up", then "The answer is coming."), and the lock-in pips with "7 of 22 have
   locked in": counts only, never names. The pips' total is the guests less
   two, so the room never learns that someone in the picture has left.
-- **The reveal:** "It was", the two as hero tokens landing one after the other
-  (tilted 4 and 3 degrees), then the counts ("3 of 8 got both, 3 got one",
-  "Nobody got both. 6 got one.") and "Sharpest eyes" at the foot, rank 1 in
-  gold, the first thing to go when the column runs out of room. A name stands
-  beside a token only over a photo, or where the slate says less than the name
-  (Anna Holm); two slates stand side by side, a size up.
+- **The reveal**, the round's big moment, centred on the whole stage and
+  reading as "Ana + Bo = this picture": the picture moves from the frame to
+  the middle (500 ms) at the row's full height, its label chip on its top
+  left as on the wall. After a beat the two people come in, the first sliding
+  in from the left at 0.7 s and the second from the right at 0.85 s (550 ms,
+  ease-out; with reduced motion they fade), each a square 72 percent of the
+  picture's height: their own photo from the settings on `raised` with
+  `rounded-tile`, else their profile photo, else their token. Each is named
+  on a paper name chip across its foot, the wall's chip (`NameChip`, the
+  condensed numerals, the first tilted one way and the second the other) at
+  `text-tv-answer` (`short:` score, `low:` name), landing like a tab; a bare
+  token gets none, since its slate says the name. Then one line of counts
+  ("8 of 21 got both, 6 got one", "Nobody got both. 6 got one.") and
+  "Sharpest eyes" with the top three, rank 1 in gold, both centred under it;
+  the sharpest eyes only on a stage 480 px tall or more (not 720p with two
+  band lines). Every part is laid out from the start, so nothing moves when
+  the words come in. The own photos are secret until this moment, so they
+  load from the reveal's own state (thumbnail and full image, at high
+  priority) while the picture moves; a person whose photo isn't in by their
+  beat comes in at 2 s at the latest, the photo fading in where it stands.
+  It fits 1920 by 1080, 1440 by 900 and 1280 by 720 with zero, one and two
+  band lines: the three are sized from the row's own room by a size
+  container (`--fh`, `--side` in `RevealStage`), never wider than the stage.
 - **The wall:** every picture at once, 1 to 40, as big as the stage allows,
   uniform tiles that never tilt. Each tile has its label chip at
   `max(28px, min(11cqw, 50px))`, every chip on one wall in the same face
@@ -555,7 +574,8 @@ showing ("Now showing #3.").
   so a glance from the next seat can't tell and nothing they pick can score.
 - **The reveal:** "You got both." with the points in paper, "You got one of
   the two.", "Not this time.", "No guess this time." or "That was you.", who it
-  was, your two picks with "Right" and a check or "Not in it" (never colour
+  was (two small tokens wearing their own photos, thumbnails, where the
+  settings have them; the TV shows them large), your two picks with "Right" and a check or "Not in it" (never colour
   alone, no red), and your place, named for the round: "You have 4 points,
   1st of the face detectives so far.", the rank gold only at 1st.
 

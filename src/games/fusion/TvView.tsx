@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { SOUNDS } from '@/games/core/sounds'
 import type { FusionGame } from '@/games/fusion/logic'
@@ -14,8 +14,10 @@ import {
   type FusionPublicState,
   type FusionReveal,
 } from '@/games/fusion/shapes'
+import { ARRIVE_MS, arriveIn, LEADERS_FROM_PX, revealOriginals, SIDE_SHARE, type OriginalStatus } from '@/games/fusion/reveal'
 import { EASE_OUT, firstName, FRESH_MS, momentId, nameOf } from '@/games/fusion/tvLook'
-import { Countdown, Leaders, PictureImage, Pips } from '@/games/fusion/tvParts'
+import { Countdown, Leaders, NameChip, PictureImage, Pips } from '@/games/fusion/tvParts'
+import { useOriginals } from '@/games/fusion/useOriginals'
 import { usePictures, type PictureCache } from '@/games/fusion/usePictures'
 import { TILE_CHIP_SIZE, TILE_NAME_SIZE, wallChipFace, wallImageSize, wallLayout, type ChipFace, type WallLayout } from '@/games/fusion/wall'
 import type { TvViewProps } from '@/games/types'
@@ -54,7 +56,8 @@ const COLUMN_LINE = 'text-tv-body text-paper-2 short:text-tv-tab low:text-tv-flo
  * the TV): the lobby; the showing, each picture large in the frame and
  * crossfading into the next; the wall, every picture at once; a picture asked,
  * in the frame with "Who is in it?", the countdown and the lock-in pips; its
- * reveal, the two people as hero tokens and how many got both. The strap above
+ * reveal, the picture in the middle with the two people's own photos sliding
+ * in beside it, each named on a paper chip, and how many got both. The strap above
  * says where the round is ("Showing 3 of 12", "Picture 4 of 12"), so the stage
  * never repeats it. It draws every moment itself, so its announcements only
  * sound here.
@@ -62,6 +65,8 @@ const COLUMN_LINE = 'text-tv-body text-paper-2 short:text-tv-tab low:text-tv-flo
 export default function TvView({ game, players, publicState, tallies, serverNow, mediaUrl }: TvViewProps<FusionGame>) {
   const pub = readPublic(publicState)
   const cache = usePictures(pub, mediaUrl, serverNow)
+  // The two people's own photos load from the render that first brings the reveal: no sooner is still secret.
+  const originals = useOriginals(revealOriginals(pub), mediaUrl)
   const [ref, box] = useElementSize<HTMLDivElement>()
   const reduce = useReducedMotion() ?? false
   const morph = SHARED_LAYOUT && !reduce
@@ -110,6 +115,7 @@ export default function TvView({ game, players, publicState, tallies, serverNow,
                   mediaUrl={mediaUrl}
                   morph={morph}
                   fromWall={views.before === 'wall'}
+                  originals={originals}
                 />
               )}
             </motion.div>
@@ -159,6 +165,7 @@ function FramePhase({
   mediaUrl,
   morph,
   fromWall,
+  originals,
 }: {
   game: SessionGame
   pub: FusionPublicState
@@ -172,14 +179,40 @@ function FramePhase({
   morph: boolean
   /** The wall was up before: the picture moves out of its tile. */
   fromWall: boolean
+  /** The two people's own photos of the picture revealed now, as they load. */
+  originals: [OriginalStatus, OriginalStatus]
 }) {
   const current = pub.current
   const showing = pub.phase === 'showing' || !current
   const picture = showing ? pub.pictures[index] : pub.pictures.find((p) => p.n === current.n)
+  // The picture this frame showed asked: its reveal moves it to the middle rather than fading it in.
+  const [asked, setAsked] = useState<number | null>(pub.phase === 'asking' ? (current?.n ?? null) : null)
+  if (pub.phase === 'asking' && current && asked !== current.n) setAsked(current.n)
   if (!picture) return null
 
-  // The frame keeps the pictures' own shape (portrait or square), at most half the stage's width.
+  // The pictures' own shape (portrait or square), in the frame and in the reveal.
   const aspect = cache.frameAspect
+  if (pub.phase === 'reveal' && current && picture.revealed) {
+    return (
+      <RevealStage
+        key={current.n}
+        game={game}
+        pub={pub}
+        current={current}
+        picture={picture}
+        reveal={picture.revealed}
+        players={players}
+        box={box}
+        aspect={aspect}
+        serverNow={serverNow}
+        mediaUrl={mediaUrl}
+        morph={morph}
+        moves={morph && asked === current.n}
+        originals={originals}
+      />
+    )
+  }
+  // The frame at the stage's full height, at most half its width.
   const width = Math.floor(Math.min(box.width / 2, box.height * aspect))
   const height = Math.floor(Math.min(box.height, width / aspect))
 
@@ -187,8 +220,6 @@ function FramePhase({
   if (showing) column = <ShowingColumn game={game} pub={pub} index={index} serverNow={serverNow} />
   else if (pub.phase === 'asking') {
     column = <AskingColumn key={current.n} game={game} current={current} picture={picture} locked={locked} guests={players.length} serverNow={serverNow} />
-  } else if (picture.revealed) {
-    column = <RevealColumn key={current.n} game={game} pub={pub} current={current} picture={picture} reveal={picture.revealed} players={players} serverNow={serverNow} />
   }
 
   return (
@@ -349,19 +380,30 @@ function AskingColumn({
 }
 
 /**
- * The reveal: the picture stays, and beside it who is in it, their tokens
- * landing one after the other, how many got both, and the sharpest eyes so
- * far along the foot (the first thing to go when the column runs out of
- * room). The gotcha sting once, as it lands.
+ * The reveal, the round's big moment: the picture moves to the middle of the
+ * stage and grows to its height; after a beat the two people come in, the
+ * first from the left and the second from the right, each as their own photo
+ * (from the settings), else their profile photo, else their token, named on a
+ * tilted paper chip: Ana + Bo = this picture. Then one line of how the room
+ * did, and the sharpest eyes so far along the foot where the stage has room.
+ * A person comes in once their photo has loaded (useOriginals), or late, and
+ * the picture is there first, so a slow photo never pops in over a finished
+ * scene. The gotcha sting once, as it lands.
  */
-function RevealColumn({
+function RevealStage({
   game,
   pub,
   current,
   picture,
   reveal,
   players,
+  box,
+  aspect,
   serverNow,
+  mediaUrl,
+  morph,
+  moves,
+  originals,
 }: {
   game: SessionGame
   pub: FusionPublicState
@@ -369,58 +411,155 @@ function RevealColumn({
   picture: FusionPublicPicture
   reveal: FusionReveal
   players: Player[]
+  box: Box
+  /** The picture's shape: width over height, portrait or square. */
+  aspect: number
   serverNow: () => number
+  mediaUrl: MediaUrl
+  morph: boolean
+  /** It was asked in this frame: it moves to the middle (else it fades in). */
+  moves: boolean
+  originals: [OriginalStatus, OriginalStatus]
 }) {
   const [fresh] = useState(() => current.revealedAt !== null && serverNow() - current.revealedAt < FRESH_MS)
   useMomentSound(fresh ? momentId(game, current.key, 'reveal') : null, 'gotcha')
   const scored = pub.top.filter((row) => row.points > 0)
-  const names = [nameOf(players, reveal.people[0], reveal.names[0]), nameOf(players, reveal.people[1], reveal.names[1])]
-  // The token's slate already says a first name: the name is printed beside it only over a photo, or when the slate
-  // says less than the name (Anna Holm), as the board's hero does (docs/identity.md, The standings).
-  const photos = [usePlayerPhoto(reveal.people[0], names[0]), usePlayerPhoto(reveal.people[1], names[1])]
-  const named = names.map((name, i) => photos[i] !== null || firstName(name) !== name.trim())
+  const leaders = scored.length > 0 && box.height >= LEADERS_FROM_PX
+  const names = reveal.people.map((id, i) => nameOf(players, id, reveal.names[i]))
+  const arrived = [useArrival(originals[0], ARRIVE_MS[0]), useArrival(originals[1], ARRIVE_MS[1])]
+  const both = arrived[0] && arrived[1]
+
+  // The three sized by the row's own room (a size container): the picture as tall as the row allows, or narrower
+  // where the three would be wider than the stage, and each person a square SIDE_SHARE of its height.
+  const sizes = {
+    '--a': aspect,
+    '--k': SIDE_SHARE,
+    '--g': 'clamp(32px, 3.6cqw, 64px)',
+    '--fh': 'min(100cqh, (100cqw - 2 * var(--g)) / (var(--a) + 2 * var(--k)))',
+    '--side': 'calc(var(--fh) * var(--k))',
+  } as CSSProperties
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <LabelChip label={picture.label} className={COLUMN_CHIP} />
-      <p className={cn(COLUMN_LINE, 'mt-6 short:mt-4 low:mt-2')}>It was</p>
-      {/* Two rows with a name beside a photo; two slates, which say their names themselves, side by side. */}
-      <ol className={cn('mt-4 shrink-0 short:mt-3 low:mt-2', named.some(Boolean) ? 'grid gap-6 short:gap-4 low:gap-3' : 'flex gap-10 short:gap-8 low:gap-6')}>
-        {reveal.people.map((id, i) => (
-          <RevealRow key={id} id={id} name={names[i]} named={named[i]} first={i === 0} pair={!named.some(Boolean)} />
-        ))}
-      </ol>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, ease: EASE_OUT, delay: 1.4 }} className="mt-8 shrink-0 short:mt-6 low:mt-3">
+    <div className="absolute inset-0 flex flex-col gap-6 short:gap-5 low:gap-4">
+      <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
+        <ol aria-label={`${picture.label} was ${names[0]} and ${names[1]}`} className="absolute inset-0 flex items-center justify-center gap-(--g)" style={sizes}>
+          <Person slot={0} id={reveal.people[0]} name={names[0]} path={reveal.originals[0]} status={originals[0]} arrived={arrived[0]} mediaUrl={mediaUrl} />
+          <li data-reveal-part="picture" className="@container relative shrink-0" style={{ width: 'calc(var(--fh) * var(--a))', height: 'var(--fh)' }}>
+            <Frame pub={pub} n={picture.n} mediaUrl={mediaUrl} morph={morph} entering={moves ? 'moves' : 'quick'} />
+            {picture.image !== null && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, ease: EASE_OUT, delay: moves ? MORPH_S : 0.2 }}
+                className="pointer-events-none absolute top-[5cqw] left-[5cqw] flex max-w-[90cqw]"
+                style={{ fontSize: TILE_CHIP_SIZE }}
+              >
+                <LabelChip label={picture.label} />
+              </motion.span>
+            )}
+          </li>
+          <Person slot={1} id={reveal.people[1]} name={names[1]} path={reveal.originals[1]} status={originals[1]} arrived={arrived[1]} mediaUrl={mediaUrl} />
+        </ol>
+      </div>
+      {/* Always laid out, so the pictures never move when the words come in. */}
+      <motion.div
+        data-reveal-part="counts"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: both ? 1 : 0 }}
+        transition={{ duration: 0.4, ease: EASE_OUT, delay: both ? 0.7 : 0 }}
+        className="flex shrink-0 justify-center"
+      >
         <Counts reveal={reveal} />
       </motion.div>
-      {scored.length > 0 && (
-        <IfRoom>
-          <Leaders top={scored} players={players} delay={2} />
-        </IfRoom>
+      {leaders && (
+        // Laid out (and hidden) from the start too; it comes in after the counts, once both people are in.
+        <div data-reveal-part="leaders" className={cn('flex shrink-0 justify-center', !both && 'invisible')}>
+          <Leaders key={both ? 'in' : 'waiting'} top={scored} players={players} delay={both ? 1.2 : 0} />
+        </div>
       )}
     </div>
   )
 }
 
-/** One of the two in the picture, landing as a hero token, with the name beside it when `named`; a size up as a `pair` of slates. */
-function RevealRow({ id, name, named, first, pair }: { id: string; name: string; named: boolean; first: boolean; pair: boolean }) {
+/**
+ * Whether a person has come in yet: at their beat once their photo is ready
+ * (or they have none), at ARRIVE_LATEST_MS at the latest while it loads.
+ */
+function useArrival(status: OriginalStatus, beat: number): boolean {
+  const [mountedAt] = useState(() => performance.now())
+  const [arrived, setArrived] = useState(false)
+  useEffect(() => {
+    if (arrived) return
+    const timer = setTimeout(() => setArrived(true), arriveIn(status, performance.now() - mountedAt, beat))
+    return () => clearTimeout(timer)
+  }, [arrived, status, beat, mountedAt])
+  return arrived
+}
+
+/**
+ * One of the two in the picture, a square beside it: their own photo, else
+ * their profile photo, else their token (whose slate says the name already,
+ * so it gets no chip), sliding in from its side once `arrived`, then named on
+ * a tilted paper chip across its foot. Its place is laid out from the start.
+ */
+function Person({
+  slot,
+  id,
+  name,
+  path,
+  status,
+  arrived,
+  mediaUrl,
+}: {
+  slot: 0 | 1
+  id: string
+  name: string
+  path: string | null
+  status: OriginalStatus
+  arrived: boolean
+  mediaUrl: MediaUrl
+}) {
+  const photo = usePlayerPhoto(id, name)
+  const own = path !== null && status !== 'failed'
+  const named = own || photo !== null
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: EASE_OUT, delay: first ? 0.25 : 0.7 }}
-      className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5"
-      aria-label={named ? undefined : name}
-    >
-      <Avatar
-        name={name}
-        playerId={id}
-        className={cn(pair ? 'size-48 short:size-40 low:size-32' : 'size-40 short:size-32 low:size-24', first ? '-rotate-4' : 'rotate-3')}
-      />
-      {named && <span className="min-w-0 truncate text-tv-answer leading-[1.1] font-extrabold text-paper short:text-tv-score low:text-tv-name">{name}</span>}
-    </motion.li>
+    <li data-reveal-part={`person-${slot + 1}`} className="relative shrink-0" style={{ width: 'var(--side)', height: 'var(--side)' }}>
+      {arrived && (
+        <motion.div
+          className="absolute inset-0"
+          initial={{ opacity: 0, x: slot === 0 ? -SLIDE_PX : SLIDE_PX }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.55, ease: EASE_OUT }}
+        >
+          {own ? (
+            <PictureImage
+              picture={{ label: name, image: path }}
+              mediaUrl={mediaUrl}
+              size="full"
+              fit="cover"
+              alt={`${firstName(name)}'s own photo`}
+              className="size-full rounded-tile"
+            />
+          ) : (
+            <Avatar name={name} playerId={id} className="size-full" />
+          )}
+          {named && (
+            <span className="absolute inset-x-0 bottom-0 flex translate-y-1/2 justify-center px-[6%]">
+              <NameChip
+                name={firstName(name)}
+                first={slot === 0}
+                className="animate-tab-land text-tv-answer [animation-delay:350ms] motion-reduce:animate-none short:text-tv-score low:text-tv-name"
+              />
+            </span>
+          )}
+        </motion.div>
+      )}
+    </li>
   )
 }
+
+/** How far a person slides in from their side. */
+const SLIDE_PX = 120
 
 /** How the room did: "9 of 21 got both, 6 got one", or the words for nobody. */
 function Counts({ reveal }: { reveal: FusionReveal }) {
@@ -429,27 +568,12 @@ function Counts({ reveal }: { reveal: FusionReveal }) {
   if (voters === 0) return <p className={words}>Nobody guessed this one.</p>
   if (both === 0) return <p className={words}>{one > 0 ? `Nobody got both. ${one} got one.` : 'Nobody got either of them.'}</p>
   return (
-    <p className="flex flex-wrap items-baseline gap-x-4 short:gap-x-3">
+    <p className="flex flex-wrap items-baseline justify-center gap-x-4 short:gap-x-3">
       <span className="tv-num text-tv-band text-paper short:text-tv-field low:text-tv-tab">
         {both} of {voters}
       </span>
       <span className={words}>{one > 0 ? `got both, ${one} got one` : 'got both'}</span>
     </p>
-  )
-}
-
-/** Its children at the foot of the room left, or nothing while they don't fit whole. */
-function IfRoom({ children }: { children: ReactNode }) {
-  const [slotRef, slot] = useElementSize<HTMLDivElement>()
-  const [innerRef, inner] = useElementSize<HTMLDivElement>()
-  // The row keeps a gap above it, as the column's other parts do.
-  const fits = inner.height > 0 && inner.height + 24 <= slot.height
-  return (
-    <div ref={slotRef} className="relative min-h-0 flex-1">
-      <div ref={innerRef} className={cn('absolute inset-x-0 bottom-0', !fits && 'invisible')}>
-        {children}
-      </div>
-    </div>
   )
 }
 
@@ -586,18 +710,7 @@ function NameBand({ reveal, players, mode, wipe }: { reveal: FusionReveal; playe
       )}
     >
       {mode === 'names' ? (
-        names.map((name, i) => (
-          <span
-            key={reveal.people[i]}
-            className={cn(
-              'inline-block max-w-full truncate rounded-chip bg-paper px-[0.28em] py-[0.1em] tv-num leading-[1.1] text-ink',
-              i === 0 ? '-rotate-2' : 'rotate-1',
-            )}
-            style={{ fontSize: TILE_NAME_SIZE }}
-          >
-            {firstName(name)}
-          </span>
-        ))
+        names.map((name, i) => <NameChip key={reveal.people[i]} name={firstName(name)} first={i === 0} style={{ fontSize: TILE_NAME_SIZE }} />)
       ) : (
         <div className="flex gap-[5cqw]">
           {reveal.people.map((id, i) => (

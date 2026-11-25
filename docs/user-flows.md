@@ -281,14 +281,17 @@ flowchart LR
   START -- "menu: Skip the showing" --> WALL
   SHOW -- "by itself, or Skip to the wall" --> WALL["The wall<br/>every picture at once"]:::screen
   WALL -- "Ask #5, or Ask on any picture" --> ASK["A picture asked<br/>30 s, phones lock in"]:::screen
-  ASK -- "by itself when time's up,<br/>or Reveal now" --> REV["The reveal<br/>who it was, 10 s"]:::screen
+  ASK -- "by itself when time's up,<br/>or Reveal now" --> REV["The reveal<br/>the two people's own photos<br/>beside it, 10 s"]:::screen
   REV -- "by itself, or Back to the wall" --> WALL
   REV -- "menu: Skip the wall: ask #6" --> ASK
   WALL -- "after the last: Crown the face detective;<br/>before it: the menu, after a confirm" --> DONE["The winner's screen"]:::screen
 ```
 
 A picture without its two people can't be asked: set them with Show who
-first. A round started before the update (when fusion ran in the background)
+first. In the settings each person can have their own photo; it stays
+secret until the reveal, where the TV shows it beside the picture, and the
+host picks each person beside their photo (with Show who too). Without one,
+the reveal shows the guest's profile photo, or their token. A round started before the update (when fusion ran in the background)
 can't go on: End it, then restart it, and its pictures and people are kept.
 
 ### 3.3 Scanning and points

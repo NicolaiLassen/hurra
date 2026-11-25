@@ -15,6 +15,7 @@
 //                    game on the stage moves on from one phase to the next (a transition to look at)
 // &host=1            a host's own browser: "Host preview"
 // &band=2            a round of darts runs underneath too, so the band has a second line (the stage's least room)
+// &band=0            nothing runs underneath the stage game and joining is closed: an empty band (the stage's most room)
 // &name=<text>       the party's name (a long one checks the bug's ellipsis)
 // &question=<text>   the quiz's question, and &options=A|B|C|D its options (long ones check the fit)
 // &slide=<n>         the recap opens on slide n (from 0)
@@ -81,7 +82,9 @@ export function devTv(search: URLSearchParams): DevTv | null {
   if (name && snapshot.session) snapshot = { ...snapshot, session: { ...snapshot.session, name } }
   snapshot = withQuestion(snapshot, search.get('question'), search.get('options'))
   const twoLines = search.get('band') === '2'
+  const noLines = search.get('band') === '0'
   if (twoLines) snapshot = withSecondLine(snapshot)
+  if (noLines) snapshot = withoutLines(snapshot)
   const later = Number(search.get('later'))
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
   const then = search.get('then')
@@ -91,6 +94,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
     let moved = build(then as FixtureScene | TvOnlyScene)
     if (size !== null && Number.isInteger(size) && size >= 0 && then !== 'empty') moved = resize(moved, size)
     if (twoLines) moved = withSecondLine(moved)
+    if (noLines) moved = withoutLines(moved)
     next = keepStarts(snapshot, moved)
   }
   return {
@@ -219,6 +223,13 @@ function withSecondLine(s: Snapshot): Snapshot {
     created_at: FIXTURE_NOW - 120 * MIN,
   }
   return { ...s, games: [...s.games, darts] }
+}
+
+/** Only the stage game runs and joining is closed: no game line and no join code, so the band is empty. */
+function withoutLines(s: Snapshot): Snapshot {
+  if (!s.session) return s
+  const stage = s.session.spotlight_game_id
+  return { ...s, session: { ...s.session, status: 'closed' }, games: s.games.filter((g) => g.id === stage || g.status !== 'active') }
 }
 
 /** `next` with the games' start times (and the stage's) of `first`, so a screen keyed on them stays mounted. */
