@@ -12,6 +12,7 @@ import {
   pickSignature,
   publicOf,
   revealPoints,
+  shortNames,
   takesVotes,
   togglePick,
   totalVotes,
@@ -91,6 +92,17 @@ describe('finding people', () => {
     expect(candidatesFor(players, 'me', 'bj').map((p) => p.name)).toEqual(['Christoffer Bjørnskov'])
     // Only contains: by name.
     expect(candidatesFor(players, 'me', 'r').map((p) => p.name)).toEqual(['Christoffer Bjørnskov', 'Clara', 'Lars'])
+  })
+
+  it('calls a guest by their first name on the picker, or their whole name where a first name is shared', () => {
+    const names = shortNames([
+      player('1', 'Christoffer Bjørnskov'),
+      player('2', 'Anna Holm'),
+      player('3', 'anna  Berg'),
+      player('4', 'Marie-Louise Christensen'),
+      player('5', 'Bo'),
+    ])
+    expect([...names.values()]).toEqual(['Christoffer', 'Anna Holm', 'anna  Berg', 'Marie-Louise', 'Bo'])
   })
 
   it('names players, falling back to the name a reveal kept', () => {
