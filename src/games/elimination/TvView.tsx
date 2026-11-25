@@ -24,7 +24,8 @@ const OUT_WORD = 'shrink-0 text-tv-floor leading-none font-bold text-pink'
  * the top hunters. Once it is over, the winner's screen (WinnerMoment): the
  * winner's colour over the top of the TV, "Hurra for Bo!", their knockouts
  * and the final one at its time, over the night so far. When the host ended
- * it with nobody left alone, the same board under "Final result", as it stood.
+ * it with nobody left alone, the same board as it stood, under the strap's
+ * "Final result".
  */
 export default function TvView({ game, players, publicState, finished, scores, gamePoints }: TvViewProps<EliminationGame>) {
   const { winner, feed } = publicState
@@ -53,8 +54,8 @@ export default function TvView({ game, players, publicState, finished, scores, g
   return (
     <div className="grid min-h-0 flex-1 gap-10 lg:grid-cols-[1fr_28rem] short:gap-8 short:lg:grid-cols-[1fr_24rem]">
       <section className="flex min-h-0 min-w-0 flex-col gap-8 short:gap-5">
+        {/* Once it is over the frame's strap says "Final result" above it, so the board doesn't repeat it. */}
         <div className="grid shrink-0 gap-3">
-          {finished && <p className="on-air text-tv-tab text-paper-2 short:text-tv-floor">Final result</p>}
           <StillStanding alive={standing.length} total={total} />
         </div>
         <PlayerTiles players={dealtIn} publicState={publicState} />
