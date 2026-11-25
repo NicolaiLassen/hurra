@@ -439,6 +439,13 @@ running underneath in its own section (oldest start first, so Last one
 standing stays near the top all evening), what finished lately, Your night,
 the standings card below the fold, and Show my code in the thumb zone.
 
+- **A sheet never hides a timed question.** A game's full view opens in a
+  sheet over the home, and Last one standing's stays open after a camera
+  scan. When a timed question (a quiz question) opens on the main card, an
+  open sheet gives way so its seconds aren't missed, unless it is still
+  handling a scanned code (`sheetGivesWay` in
+  [running.ts](../src/components/phone/running.ts)). The sheet's game keeps
+  its state, and its section opens it again.
 - **One gold step.** Show my code is the home's one gold bar (the default
   Button). A game's section carries no gold button and no gold Live chip:
   its actions are `outline` Buttons (Scan, Vote, Answer now), and a row on

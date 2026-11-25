@@ -101,3 +101,22 @@ export function tvRows(
   if (later) rows.push({ when: 'Later', what: later.title, detail: rest.length > 0 ? `Then ${rest.length} more` : null })
   return rows
 }
+
+/** What the main card holds that a guest must not miss: its game and its newest open question. */
+export type MainQuestion = { gameId: string | null; questionKey: string | null }
+
+/** Whether the main card has news since `before`: another game took it, or a new question opened on it. */
+export function mainCardNews(before: MainQuestion, now: MainQuestion): boolean {
+  return (now.gameId !== null && now.gameId !== before.gameId) || (now.questionKey !== null && now.questionKey !== before.questionKey)
+}
+
+/**
+ * Whether an open sheet (say Last one standing's, left open after a camera
+ * scan) gives way to a new question on the main card, so the guest sees it
+ * while its seconds run: only for a timed question, and never while the
+ * sheet still works on a scanned code. The sheet's game keeps its state, and
+ * its section opens it again.
+ */
+export function sheetGivesWay({ news, covered, timed, scanning }: { news: boolean; covered: boolean; timed: boolean; scanning: boolean }): boolean {
+  return news && covered && timed && !scanning
+}
