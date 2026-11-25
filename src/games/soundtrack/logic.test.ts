@@ -11,7 +11,7 @@ import { GameError, type AnswerPayload, type PlayerId, type Prompt, type RecapRo
 import { canonicalJson } from '../core/runtime'
 import { simulateParty, type FakeParty } from '../core/simulate'
 import { answersOf, seededRandom, testInfo } from '../core/testing'
-import { bot, misspell } from './bot'
+import { bot, botSettings, misspell } from './bot'
 import { checkConfig, eventSpec, playedKeys, SoundtrackGame, TEXT_SPEC, buildReview, readPicks } from './logic'
 import { judge } from './match'
 import {
@@ -200,6 +200,25 @@ describe('settings', () => {
     expect(config.songs).toHaveLength(3)
     expect(config.songs[0].inPhoto).toEqual(['b'])
     expect(checkConfig(bot.settings!(['a', 'b'])).problems).toEqual([])
+  })
+
+  it('knows eight songs for a rehearsal of the night, and counts its right answers and one-letter slips on each', () => {
+    const { config, problems } = checkConfig(botSettings(['a', 'b'], 8))
+    expect(problems).toEqual([])
+    expect(config.songs).toHaveLength(8)
+    expect(config.extraPhotos).toHaveLength(4)
+    expect(config.standingsEvery).toBe(4)
+    const random = seededRandom(5)
+    for (const song of config.songs) {
+      for (const [part, right, extras] of [
+        ['title', song.title, song.alsoTitles],
+        ['singer', song.singer, song.alsoSingers],
+      ] as const) {
+        const accepted = [right, ...extras]
+        expect(judge(right.toLowerCase(), part, accepted, []).verdict).toBe('exact')
+        for (let k = 0; k < 5; k++) expect(['exact', 'typo']).toContain(judge(misspell(right, 1, random, true), part, accepted, []).verdict)
+      }
+    }
   })
 })
 

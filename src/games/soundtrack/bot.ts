@@ -7,12 +7,60 @@ import type { BotMove, BotSight, GameBot, HostBotSight } from '../core/bot'
 import type { AnswerPayload } from '../core/Game'
 import { NO_PHOTO, promptKey, type SoundtrackConfig, type SoundtrackState, type TypedPart } from './types'
 
-/** Three invented songs, each with one extra accepted answer per part. */
+/**
+ * Eight invented songs, each with one extra accepted answer per part. The
+ * scripted round plays the first three; a rehearsal of the night's length
+ * plays all eight (botSettings), and the guests type answers to every one.
+ */
 export const BOT_SONGS = [
   { title: 'Paper Lanterns', singer: 'Mira Holm', alsoTitle: 'Lanterns', alsoSinger: 'Mira', caption: 'The harbour, 2009' },
   { title: 'Seven Ferries', singer: 'Coldwave', alsoTitle: 'The Ferry Song', alsoSinger: 'Cold Wave Band', caption: 'Island trip, 2014' },
   { title: 'Blå Mandag', singer: 'Søren Bækgaard', alsoTitle: 'Mandag', alsoSinger: 'Søren B', caption: 'First flat, 2019' },
+  { title: 'Route 41', singer: 'The Pale Harbour', alsoTitle: 'The Long Road', alsoSinger: 'Pale Harbour Band', caption: 'The road trip, 2012' },
+  { title: 'Sommer i Skagen', singer: 'Ærø Kvartet', alsoTitle: 'Skagen', alsoSinger: 'Kvartetten', caption: 'Skagen, 2016' },
+  { title: 'Glasshouse Summer (Live)', singer: 'Nora Lind feat. Otto Berg', alsoTitle: 'Glasshouse', alsoSinger: 'Nora', caption: 'The festival, 2018' },
+  { title: 'Midnight Ferry Lights', singer: 'Kasper Holt', alsoTitle: 'Ferry Lights', alsoSinger: 'Holt', caption: 'New Year, 2020' },
+  { title: 'Copper Sky', singer: 'Linnea Vass', alsoTitle: 'Kobberhimmel', alsoSinger: 'Linnea', caption: 'The wedding, 2023' },
 ] as const
+
+const SONG_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
+
+/**
+ * Settings for a scripted round of 1 to 8 of the bot's songs, with sample
+ * photo paths: 2 extra photos up to 3 songs, else 4; a short last call; the
+ * second player in song 1's photo; the top 5 every 2 songs up to 3, else 4.
+ */
+export function botSettings(playerIds: readonly string[], count = 3): Record<string, unknown> {
+  const songs = BOT_SONGS.slice(0, Math.max(1, Math.min(BOT_SONGS.length, count)))
+  const extras = songs.length <= 3 ? 2 : 4
+  return {
+    songs: songs.map((song, i) => ({
+      title: song.title,
+      singer: song.singer,
+      alsoTitles: [song.alsoTitle],
+      alsoSingers: [song.alsoSinger],
+      photo: `rehearsal/soundtrack/song-${i + 1}.jpg`,
+      caption: song.caption,
+      startAt: 30 + i * 15,
+      note: '',
+      inPhoto: i === 0 && playerIds[1] ? [playerIds[1]] : [],
+    })),
+    extraPhotos: [
+      { photo: 'rehearsal/soundtrack/extra-1.jpg', caption: 'A wedding, 2016' },
+      { photo: 'rehearsal/soundtrack/extra-2.jpg', caption: 'The festival, 2011' },
+      { photo: 'rehearsal/soundtrack/extra-3.jpg', caption: 'Moving day, 2021' },
+      { photo: 'rehearsal/soundtrack/extra-4.jpg', caption: 'Ski trip, 2017' },
+    ].slice(0, extras),
+    points: { event: 2, title: 1, singer: 1 },
+    lastCallSeconds: 20,
+    standingsEvery: songs.length <= 3 ? 2 : 4,
+    hints: false,
+    boardMax: 20,
+    intro: `${SONG_WORDS[songs.length]} songs from a rehearsal.`,
+    storyteller: 'The host',
+    sitOut: [],
+  }
+}
 
 /** Answers that fit none of the songs. */
 const WRONG = ['Night Harbour', 'Glass Rain', 'Copper Sun', 'Lake Dancers', 'The Tin Owls', 'Velvet Roads']
@@ -22,33 +70,9 @@ const STEP_MS = 3000
 const KEY = /^s(\d+)\.(title|singer|event)$/
 
 export const bot: GameBot = {
-  /** 3 invented songs with sample photo paths, 2 extra photos, a short last call, the second player in song 1's photo. */
+  /** The first 3 invented songs with sample photo paths, 2 extra photos, a short last call, the second player in song 1's photo. */
   settings(playerIds) {
-    return {
-      songs: BOT_SONGS.map((song, i) => ({
-        title: song.title,
-        singer: song.singer,
-        alsoTitles: [song.alsoTitle],
-        alsoSingers: [song.alsoSinger],
-        photo: `rehearsal/soundtrack/song-${i + 1}.jpg`,
-        caption: song.caption,
-        startAt: 30 + i * 15,
-        note: '',
-        inPhoto: i === 0 && playerIds[1] ? [playerIds[1]] : [],
-      })),
-      extraPhotos: [
-        { photo: 'rehearsal/soundtrack/extra-1.jpg', caption: 'A wedding, 2016' },
-        { photo: 'rehearsal/soundtrack/extra-2.jpg', caption: 'The festival, 2011' },
-      ],
-      points: { event: 2, title: 1, singer: 1 },
-      lastCallSeconds: 20,
-      standingsEvery: 2,
-      hints: false,
-      boardMax: 20,
-      intro: 'Three songs from a rehearsal.',
-      storyteller: 'The host',
-      sitOut: [],
-    }
+    return botSettings(playerIds)
   },
 
   /**
@@ -168,15 +192,28 @@ export function typed(n: number, part: TypedPart, random: () => number): string 
   const right = part === 'title' ? song.title : song.singer
   const roll = random()
   if (roll < 0.55) return random() < 0.5 ? right.toLowerCase() : right
-  if (roll < 0.75) return misspell(right, 1, random)
+  // A slip inside a word: with a leading "The" dropped, a word's first letter can be the answer's first, which must be right.
+  if (roll < 0.75) return misspell(right, 1, random, true)
   if (roll < 0.85) return misspell(right, 3, random)
   return pick(WRONG, random)
 }
 
-/** The text with `count` neighbouring letters swapped or changed, never the first letter. */
-export function misspell(text: string, count: number, random: () => number): string {
+/**
+ * The text with `count` neighbouring letters swapped or changed, never the
+ * first letter; with `inWords`, never the first letter of any word either.
+ */
+export function misspell(text: string, count: number, random: () => number, inWords = false): string {
   const letters = Array.from(text)
-  const inner = letters.map((_, i) => i).filter((i) => i > 0 && i < letters.length - 1 && /\p{L}/u.test(letters[i]) && /\p{L}/u.test(letters[i + 1]))
+  const inner = letters
+    .map((_, i) => i)
+    .filter(
+      (i) =>
+        i > 0 &&
+        i < letters.length - 1 &&
+        /\p{L}/u.test(letters[i]) &&
+        /\p{L}/u.test(letters[i + 1]) &&
+        (!inWords || /\p{L}/u.test(letters[i - 1])),
+    )
   if (inner.length === 0) return text
   if (count === 1) {
     const i = pick(inner, random)
