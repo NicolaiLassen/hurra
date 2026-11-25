@@ -63,14 +63,15 @@ export function Stripes({ size = 'band', className }: { size?: keyof typeof STRI
 /**
  * One line of the band: the tab (a Tab, with Stripes before it if it is the
  * hunt's), then what the line says, on one line that never wraps. 60 px high
- * on a 1080p TV, 52 on short screens; the tab takes at most 48 percent of it.
+ * on a 1080p TV, 52 on short screens; the tab takes at most 60 percent of it,
+ * so "LAST ONE STANDING" stays whole beside the join tag on a 720p TV.
  * The line is a size container, so a detail can show only where it has room
  * (`hidden @min-[96rem]:inline`).
  */
 export function BandLine({ tab, className, children }: { tab: ReactNode; className?: string; children?: ReactNode }) {
   return (
     <div data-fit="band-line" className={cn('@container flex h-15 min-w-0 items-center short:h-13', className)}>
-      <div className="flex max-w-[48%] min-w-0 shrink-0 items-center">{tab}</div>
+      <div className="flex max-w-[60%] min-w-0 shrink-0 items-center">{tab}</div>
       <div className="flex min-w-0 flex-1 items-center gap-6.5 pl-7 short:gap-5 short:pl-5">{children}</div>
     </div>
   )
