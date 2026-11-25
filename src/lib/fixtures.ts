@@ -14,14 +14,40 @@ import type { Screen } from './live'
 import type { RecapDoc } from './recap'
 import type { AnswerPayload, FeedItem, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
 
+/** Participant fusion on the stage (8.4), each with 12 pictures, and some with 2 or 40 as well (`-2`, `-40`). */
+export const FUSION_STAGE_SCENES = [
+  'fusion-lobby',
+  'fusion-lobby-2',
+  'fusion-lobby-40',
+  'fusion-showing',
+  'fusion-showing-2',
+  'fusion-showing-40',
+  'fusion-wall',
+  'fusion-wall-2',
+  'fusion-wall-40',
+  'fusion-asking',
+  'fusion-asking-2',
+  'fusion-asking-40',
+  'fusion-asking-locked',
+  'fusion-asking-you',
+  'fusion-reveal',
+  'fusion-reveal-2',
+  'fusion-reveal-40',
+  'fusion-crown',
+  'fusion-final',
+] as const
+
+export type FusionStageScene = (typeof FUSION_STAGE_SCENES)[number]
+
 export const FIXTURE_SCENES = [
   'lobby',
   'quiz-question',
   'quiz-reveal',
   'quiz-leaderboard',
-  'fusion-voting',
-  'fusion-locked',
-  'fusion-reveal',
+  ...FUSION_STAGE_SCENES,
+  'fusion-legacy',
+  'fusion-old-voting',
+  'fusion-old-reveal',
   'final',
   'background',
   'removed',
@@ -506,8 +532,327 @@ const pong = (finishedAt: number) =>
     winners: [FREJA],
   })
 
+// Participant fusion on the stage (8.4) ------------------------------------------------------
+// The round as the engine saves it, phase by phase: the full state and the
+// settings (host page only), the public state, every guest's view, the
+// prompts and their counts, and Sofie's own locks. Fusion holds the TV, and
+// Last one standing runs in the background.
+
+const STAGE_RULES = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
+const STAGE_GRACE_MS = 1000
+const STAGE_WAKE_MARGIN_MS = 250
+const STAGE_REVEAL_HOLD_MS = 10_000
+/** From one picture's reveal to the next one's: 10 s of reveal, a few on the wall, 30 s to guess. */
+const STAGE_STEP_MS = 45_000
+/** The 12 prints of the party: #4 is Bo and Maja, Sofie is in #6. */
+const STAGE_KEY: [number, number][] = [
+  [2, 6],
+  [4, 11],
+  [0, 9],
+  [1, 10],
+  [5, 8],
+  [7, 3],
+  [0, 5],
+  [2, 8],
+  [1, 9],
+  [4, 6],
+  [11, 7],
+  [10, 0],
+]
+const SOFIE_AT = ids.indexOf(SOFIE)
+
+/** Who is in picture n: the party's 12, then pairs of the 12 players cycling for more. */
+function stagePair(n: number): [string, string] {
+  if (n <= STAGE_KEY.length) {
+    const [a, b] = STAGE_KEY[n - 1]
+    return [ids[a], ids[b]]
+  }
+  const k = n - STAGE_KEY.length - 1
+  const a = (k * 5 + 1) % ids.length
+  return [ids[a], ids[(a + 1 + (k % 5)) % ids.length]]
+}
+
+/** Two other guests for a guess, in a fixed order from `start`, leaving out `skip`. */
+function othersFor(start: number, skip: readonly string[]): string[] {
+  return Array.from({ length: ids.length }, (_, i) => ids[(start + i) % ids.length]).filter((id) => !skip.includes(id))
+}
+
+/**
+ * Player v's locked guess on picture n, sorted as the database stores choices,
+ * or null for no lock. Sofie got both on #1, one on #2, none on #3, and both on
+ * the picture of the asking and reveal scenes; the others follow a pattern.
+ */
+function stageGuess(v: number, n: number, current: number | null): [string, string] | null {
+  const people = stagePair(n)
+  const me = ids[v]
+  if (people.includes(me)) return null
+  const kind =
+    v === SOFIE_AT
+      ? n === 1 || n === current
+        ? 0
+        : n === 2
+          ? 1
+          : n === 3
+            ? 2
+            : (v + 2 * n) % 3
+      : (v + n) % 5 === 0
+        ? null
+        : (v + 2 * n) % 3
+  if (kind === null) return null
+  const others = othersFor(v + n, [...people, me])
+  const pair: [string, string] = kind === 0 ? [people[0], people[1]] : kind === 1 ? [people[0], others[0]] : [others[0], others[1]]
+  return sortedPair(...pair)
+}
+
+type StageKind = 'lobby' | 'showing' | 'wall' | 'asking' | 'asking-locked' | 'asking-you' | 'reveal' | 'crown' | 'final'
+
+/** fusion-asking-40 as its kind and its number of pictures. */
+function stageOf(scene: FusionStageScene): { kind: StageKind; count: number } {
+  const match = /^fusion-(.+?)(?:-(2|40))?$/.exec(scene)!
+  return { kind: match[1] as StageKind, count: match[2] ? Number(match[2]) : 12 }
+}
+
+export const isFusionStageScene = (scene: string): scene is FusionStageScene => FUSION_STAGE_SCENES.includes(scene as FusionStageScene)
+
+function fusionStage(scene: FusionStageScene) {
+  const { kind, count } = stageOf(scene)
+  const numbers = Array.from({ length: count }, (_, i) => i + 1)
+  // In the lobby of the party's 12, the last two prints still wait for their people (Show who).
+  const keyed = (n: number) => !(kind === 'lobby' && count === 12 && n > 10)
+  const before = count === 2 ? 1 : count === 40 ? 15 : 3
+  const phase: 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done' =
+    kind === 'asking-locked' || kind === 'asking-you' ? 'asking' : kind === 'crown' ? 'wall' : kind === 'final' ? 'done' : kind
+  const current = phase === 'asking' || phase === 'reveal' ? (kind === 'asking-you' ? 6 : before + 1) : null
+  const revealed =
+    kind === 'final' || kind === 'crown'
+      ? numbers
+      : phase === 'wall' || phase === 'asking'
+        ? numbers.slice(0, before)
+        : phase === 'reveal'
+          ? [...numbers.slice(0, before), current!]
+          : []
+
+  // The clock: the current picture now, the ones before it a step apart.
+  const finishedAt = FIXTURE_NOW - MIN
+  const asked = current !== null ? FIXTURE_NOW - (phase === 'asking' ? 12_000 : 1500 + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS + STAGE_RULES.seconds * 1000) : null
+  const lastReveal =
+    phase === 'reveal'
+      ? FIXTURE_NOW - 1500
+      : asked !== null
+        ? asked - 13_000
+        : kind === 'final'
+          ? finishedAt - 12_000
+          : FIXTURE_NOW - 20_000
+  const revealedAt = (i: number) => lastReveal - (revealed.length - 1 - i) * STAGE_STEP_MS
+  const timesOf = (i: number) => {
+    const at = revealedAt(i)
+    const endsAt = at - STAGE_GRACE_MS - STAGE_WAKE_MARGIN_MS
+    return { openedAt: endsAt - STAGE_RULES.seconds * 1000, endsAt, at }
+  }
+  const showStartedAt =
+    kind === 'showing' ? FIXTURE_NOW - (count === 2 ? 1.5 : 2.5) * STAGE_RULES.showSeconds * 1000 : null
+  const firstAt = revealed.length > 0 ? timesOf(0).openedAt : (asked ?? FIXTURE_NOW)
+  const startedAt =
+    kind === 'lobby' ? FIXTURE_NOW - MIN : kind === 'showing' ? FIXTURE_NOW - 2 * MIN : Math.min(FIXTURE_NOW - 20 * MIN, firstAt - 2 * MIN)
+
+  // The guesses and the points, picture by picture.
+  type Result = { both: number; one: number; none: number; voters: number; hits: Record<string, number>; at: number }
+  const results: Record<string, Result> = {}
+  const totals: Record<string, number> = {}
+  revealed.forEach((n, i) => {
+    const people = stagePair(n)
+    const result: Result = { both: 0, one: 0, none: 0, voters: 0, hits: {}, at: timesOf(i).at }
+    ids.forEach((id, v) => {
+      const guess = stageGuess(v, n, current)
+      if (!guess) return
+      const hit = guess.filter((g) => people.includes(g)).length
+      result.hits[id] = hit
+      result.voters++
+      if (hit === 2) result.both++
+      else if (hit === 1) result.one++
+      else result.none++
+      const points = hit * STAGE_RULES.perPerson + (hit === 2 ? STAGE_RULES.bothBonus : 0)
+      if (points > 0) totals[id] = (totals[id] ?? 0) + points
+    })
+    results[n] = result
+  })
+  const scorers = ids.filter((id) => (totals[id] ?? 0) > 0).sort((a, b) => totals[b] - totals[a] || ids.indexOf(a) - ids.indexOf(b))
+  const rankOfScorer = (id: string) => 1 + scorers.filter((other) => totals[other] > totals[id]).length
+
+  const names: Record<string, string> = {}
+  const key: Record<string, [string, string]> = {}
+  for (const n of numbers) {
+    if (!keyed(n)) continue
+    key[n] = stagePair(n)
+    for (const id of key[n]) names[id] = nameOfPlayer(id)
+  }
+  const label = (n: number) => (n === 9 ? 'The viking' : `#${n}`)
+  const config = {
+    pictures: numbers.map((n) => ({ label: label(n), image: `fixture/fusion-${n}.jpg`, ...(keyed(n) ? { people: stagePair(n) } : {}) })),
+    pointsPerPerson: STAGE_RULES.perPerson,
+    bonusForBoth: STAGE_RULES.bothBonus,
+    seconds: STAGE_RULES.seconds,
+    showSeconds: STAGE_RULES.showSeconds,
+  }
+
+  const currentTimes =
+    current === null
+      ? null
+      : phase === 'reveal'
+        ? timesOf(revealed.length - 1)
+        : { openedAt: asked!, endsAt: asked! + STAGE_RULES.seconds * 1000, at: null }
+  const publicState = {
+    phase,
+    pictures: numbers.map((n) => {
+      const i = revealed.indexOf(n)
+      const r = results[n]
+      const people = stagePair(n)
+      return {
+        n,
+        key: `p${n}`,
+        label: label(n),
+        image: `fixture/fusion-${n}.jpg`,
+        revealed:
+          i >= 0
+            ? { people, names: [nameOfPlayer(people[0]), nameOfPlayer(people[1])], both: r.both, one: r.one, none: r.none, voters: r.voters, step: i + 1, at: r.at }
+            : null,
+      }
+    }),
+    rules: STAGE_RULES,
+    showing: showStartedAt !== null ? { startedAt: showStartedAt, endsAt: showStartedAt + count * STAGE_RULES.showSeconds * 1000 } : null,
+    current:
+      current !== null && currentTimes
+        ? {
+            n: current,
+            step: phase === 'asking' ? revealed.length + 1 : revealed.length,
+            key: `p${current}`,
+            openedAt: currentTimes.openedAt,
+            endsAt: currentTimes.endsAt,
+            revealedAt: phase === 'reveal' ? currentTimes.at : null,
+          }
+        : null,
+    top: scorers.slice(0, 5).map((id) => ({ playerId: id, points: totals[id], rank: rankOfScorer(id) })),
+  }
+
+  const inPicture = (id: string) => current !== null && stagePair(current).includes(id)
+  const views: Record<string, unknown> = {}
+  for (const id of ids) {
+    const hits: Record<string, number> = {}
+    for (const n of revealed) if (results[n].hits[id] !== undefined) hits[n] = results[n].hits[id]
+    views[id] = { points: totals[id] ?? 0, rank: (totals[id] ?? 0) > 0 ? rankOfScorer(id) : null, hits, inPicture: inPicture(id) }
+  }
+
+  const state = {
+    phase,
+    key,
+    names,
+    revealed,
+    results,
+    totals,
+    showStartedAt,
+    current,
+    openedAt: currentTimes?.openedAt ?? null,
+    endsAt: currentTimes?.endsAt ?? null,
+    revealedAt: phase === 'reveal' ? currentTimes!.at : null,
+  }
+
+  const spec = { kind: 'choice' as const, options: 'players' as const, min: 2, max: 2, exclude_self: true, final: true }
+  const promptsAsked = phase === 'asking' ? [...revealed, current!] : revealed
+  const prompts: PromptState[] = promptsAsked.map((n) => {
+    const i = revealed.indexOf(n)
+    const t = i >= 0 ? timesOf(i) : currentTimes!
+    return {
+      game_id: FUSION,
+      key: `p${n}`,
+      spec,
+      opened_at: t.openedAt,
+      closes_at: t.endsAt + STAGE_GRACE_MS,
+      closed_at: i >= 0 ? t.endsAt + STAGE_GRACE_MS : null,
+      revealed_at: i >= 0 ? t.at : null,
+    }
+  })
+  // Counts only for the picture being guessed: 7 have locked in, and Sofie too once she has.
+  const tallies: Record<string, number> = phase === 'asking' ? { [`p${current}`]: kind === 'asking-locked' ? 8 : 7 } : {}
+  const answers: Record<string, Record<string, AnswerPayload>> = {}
+  ids.forEach((id, v) => {
+    for (const n of revealed) {
+      const guess = stageGuess(v, n, current)
+      if (guess) answers[id] = { ...answers[id], [`p${n}`]: { choice: guess } }
+    }
+  })
+  if (kind === 'asking-locked') answers[SOFIE] = { ...answers[SOFIE], [`p${current}`]: { choice: sortedPair(BO, MAJA) } }
+
+  const wakeAt =
+    phase === 'showing'
+      ? publicState.showing!.endsAt
+      : phase === 'asking'
+        ? currentTimes!.endsAt + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS
+        : phase === 'reveal'
+          ? currentTimes!.at! + STAGE_REVEAL_HOLD_MS
+          : null
+  return { kind, state, config, publicState, views, points: totals, prompts, tallies, answers, wakeAt, startedAt, finishedAt, winners: scorers.filter((id) => rankOfScorer(id) === 1) }
+}
+
+/** A scene of Participant fusion on the stage, with Last one standing live in the background. */
+function fusionStageWorld(scene: FusionStageScene): World {
+  const fusion = fusionStage(scene)
+  const elimination = eliminationLive()
+  const members = [...ids]
+  const finished = fusion.kind === 'final'
+  const latest = elimination.knockouts[elimination.knockouts.length - 1]
+  const feed: FeedItem[] = [
+    say('Last one standing has started', ELIMINATION_STARTED, { game_id: ELIMINATION, detail: '12 players, one life each', icon: 'megaphone', sound: 'gong' }),
+    say(`${nameOfPlayer(latest.by)} got ${nameOfPlayer(latest.target)}`, latest.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
+  ]
+  if (finished) {
+    const names = fusion.winners.map(nameOfPlayer)
+    const points = fusion.points[fusion.winners[0]]
+    const shared = names.length > 1
+    feed.push(
+      say(`${names.join(' and ')} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}!`, fusion.finishedAt, {
+        game_id: FUSION,
+        detail: `${points} points`,
+        icon: 'crown',
+        tone: 'gold',
+        sound: 'fanfare',
+        interrupt: true,
+      }),
+    )
+    if (fusion.winners.includes(SOFIE)) {
+      feed.push(say('You have the sharpest eye!', fusion.finishedAt, { game_id: FUSION, audience: [SOFIE], icon: 'crown', tone: 'gold', sound: 'fanfare' }))
+    }
+  }
+  return {
+    session: { spotlight_game_id: FUSION, spotlight_at: fusion.startedAt },
+    games: [
+      game(ELIMINATION, 'elimination', 'Last one standing', 0, { status: 'active', public_state: elimination.publicState, started_at: ELIMINATION_STARTED }),
+      game(QUIZ, 'quiz', 'Quiz', 1),
+      game(FUSION, 'fusion', 'Who is fused?', 2, {
+        status: finished ? 'finished' : 'active',
+        public_state: fusion.publicState,
+        started_at: fusion.startedAt,
+        wake_at: fusion.wakeAt,
+        ...(finished ? { finished_at: fusion.finishedAt, finished_by: 'game' as const, winners: fusion.winners } : {}),
+      }),
+      pong(FIXTURE_NOW - 75 * MIN),
+    ],
+    prompts: fusion.prompts,
+    tallies: Object.keys(fusion.tallies).length > 0 ? { [FUSION]: fusion.tallies } : {},
+    points: { [ELIMINATION]: elimination.points, [FUSION]: fusion.points, [PONG]: PONG_POINTS },
+    awards: AWARDS,
+    views: { [ELIMINATION]: elimination.views, [FUSION]: fusion.views },
+    answers: { [FUSION]: fusion.answers },
+    states: {
+      [ELIMINATION]: { state: elimination.state, config: elimination.config, round: 1, members },
+      [FUSION]: { state: fusion.state, config: fusion.config, round: 1, members },
+    },
+    feed: feed.sort((a, b) => a.created_at - b.created_at),
+  }
+}
+
 function world(scene: Exclude<FixtureScene, 'removed'>): World {
   feedId = 100
+  if (isFusionStageScene(scene)) return fusionStageWorld(scene)
   const members = [...ids]
   switch (scene) {
     case 'lobby':
@@ -543,15 +888,18 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         ],
       }
     }
-    case 'fusion-voting':
-    case 'fusion-locked':
-    case 'fusion-reveal': {
-      const fusion = fusionRound(scene === 'fusion-voting' ? 'voting' : 'locked', scene === 'fusion-reveal' ? 2 : 0)
-      const onStage = scene !== 'fusion-voting'
+    // The background version's rounds, in their old shapes: fusion-legacy is a
+    // live round started before the update, on the TV; the other two are for the
+    // old screens until their replacements land.
+    case 'fusion-old-voting':
+    case 'fusion-legacy':
+    case 'fusion-old-reveal': {
+      const fusion = fusionRound(scene === 'fusion-old-voting' ? 'voting' : 'locked', scene === 'fusion-old-reveal' ? 2 : 0)
+      const onStage = scene !== 'fusion-old-voting'
       const feed = [
         say('Who is fused? 6 pictures on the wall. Vote on your phone.', FUSION_STARTED, { game_id: FUSION, icon: 'detective', sound: 'chime' }),
       ]
-      if (scene !== 'fusion-voting') feed.push(say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'ticktock' }))
+      if (scene !== 'fusion-old-voting') feed.push(say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'ticktock' }))
       for (const picture of fusion.publicState.pictures) {
         if (!picture.revealed) continue
         const [a, b] = picture.revealed.people.map(nameOfPlayer)

@@ -113,10 +113,10 @@ describe('the phone home', () => {
   })
 
   it('fusion voting off the TV is its own section with an outlined Vote; locked on the TV is "On the TV"', async () => {
-    const voting = await phone('fusion-voting')
+    const voting = await phone('fusion-old-voting')
     expect(voting).toContain('Who is fused? Vote on the pictures: 5 of 6 done')
     expect(voting).not.toContain('Live')
-    expect(await phone('fusion-locked')).toContain('Who is fused? On the TV')
+    expect(await phone('fusion-legacy')).toContain('Who is fused? On the TV')
   })
 
   it('a finished game: the result card, then waiting for the next game', async () => {
@@ -150,7 +150,7 @@ describe('the phone home', () => {
   })
 
   it("has one gold step at most: Show my code, never a game's button or a Live chip", async () => {
-    for (const scene of ['lobby', 'quiz-reveal', 'quiz-leaderboard', 'fusion-voting', 'final'] as const) {
+    for (const scene of ['lobby', 'quiz-reveal', 'quiz-leaderboard', 'fusion-old-voting', 'final'] as const) {
       const html = await phoneMarkup(scene)
       expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
       expect(html, scene).not.toMatch(/data-slot="badge" data-variant="default"/)
