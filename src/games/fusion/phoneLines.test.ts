@@ -1,8 +1,11 @@
 // Participant fusion's words on a guest's phone (spec 6.3), phase by phase and
 // case by case: a voter, a lock, the two in the picture, time's up, a late
-// joiner with no view yet, and each reveal outcome. Then the words of the
-// section card and the result card.
+// joiner with no view yet, and each reveal outcome. Then the section card and
+// the result card, rendered from the fixture scenes as Sofie's phone gets them.
+import { createElement, type ComponentType } from 'react'
+import { prerender } from 'react-dom/static'
 import { describe, expect, it } from 'vitest'
+import PlayerCard from '@/games/fusion/PlayerCard'
 import {
   askingCase,
   barNames,
@@ -24,8 +27,9 @@ import {
   type Outcome,
   type Part,
 } from '@/games/fusion/phoneLines'
+import ResultView from '@/games/fusion/ResultView'
 import { readPublic, readView, type FusionPlayerView, type FusionPublicState, type FusionRules } from '@/games/fusion/shapes'
-import { fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
+import { FIXTURE_NOW, FIXTURE_PLAYER_ID, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 
 const RULES: FusionRules = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
 const view = (over: Partial<FusionPlayerView> = {}): FusionPlayerView => ({ points: 0, rank: null, hits: {}, inPicture: false, ...over })
@@ -187,6 +191,16 @@ describe('the section card, while another game holds the main card', () => {
     expect(cardLine(reveal, null, null, { names: ['Bo', 'Maja'], outcome: 'both', points: 3 })).toBe('#4 was Bo and Maja. You got both (+3).')
     expect(cardLine(reveal, null, null, { names: ['you', 'Maja'], outcome: 'you', points: 0 })).toBe('#4 was you and Maja.')
   })
+
+  it('renders over a picture being asked: the row and an outlined Guess with the seconds left', async () => {
+    const html = await renderCard('fusion-asking')
+    expect(plain(html)).toContain('Guess #4 now')
+    expect(html).toMatch(/data-variant="outline"[^>]*>Guess/)
+    expect(html).not.toMatch(/data-variant="default"/)
+    expect(plain(await renderCard('fusion-asking-locked'))).toContain('Locked in on #4')
+    expect(plain(await renderCard('fusion-asking-you'))).toContain('#6 is on. You sit this one out.')
+    expect(plain(await renderCard('fusion-reveal'))).toContain('#4 was Bo and Maja. You got both (+3).')
+  })
 })
 
 describe('the result card', () => {
@@ -231,6 +245,24 @@ describe('the result card', () => {
       scored: null,
     })
   })
+
+  it('renders the finished round as Sofie’s phone gets it', async () => {
+    const s = fixtureSnapshot('fusion-final', 'phone')
+    const game = s.games.find((g) => g.game_type === 'fusion')!
+    const sofie = s.players.find((p) => p.id === FIXTURE_PLAYER_ID)!
+    const props = {
+      session: s.session!,
+      game,
+      player: sofie,
+      players: s.players,
+      publicState: game.public_state,
+      view: s.me?.views[game.id] ?? null,
+      gamePoints: s.game_points[game.id] ?? {},
+    }
+    const html = await render(ResultView as ComponentType<never>, props)
+    expect(plain(html)).toContain('Emil had the sharpest eye')
+    expect(plain(html)).toContain("You scored 13 points Both people right on 3 of 12 pictures. You're 2nd of the face detectives.")
+  })
 })
 
 describe('the words', () => {
@@ -251,3 +283,41 @@ describe('the words', () => {
     }
   })
 })
+
+// Rendering ----------------------------------------------------------------------
+
+const ENTITIES: Record<string, string> = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>' }
+const plain = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x27;|&quot;|&amp;|&lt;|&gt;/g, (entity) => ENTITIES[entity])
+    .replace(/\s+/g, ' ')
+
+async function render(view: ComponentType<never>, props: Record<string, unknown>): Promise<string> {
+  const errors: unknown[] = []
+  const { prelude } = await prerender(createElement(view, props as never), { onError: (error) => void errors.push(error) })
+  if (errors.length > 0) throw errors[0]
+  return new Response(prelude).text()
+}
+
+/** Fusion's section card over a scene, as Sofie's phone would draw it beside another game. */
+function renderCard(scene: FixtureScene): Promise<string> {
+  const s = fixtureSnapshot(scene, 'phone')
+  const game = s.games.find((g) => g.game_type === 'fusion')!
+  return render(PlayerCard as ComponentType<never>, {
+    session: s.session!,
+    game,
+    players: s.players,
+    player: s.players.find((p) => p.id === FIXTURE_PLAYER_ID)!,
+    publicState: game.public_state,
+    prompts: s.prompts.filter((p) => p.game_id === game.id),
+    serverNow: () => FIXTURE_NOW,
+    mediaUrl: (path: string) => `/media/${path}`,
+    view: s.me?.views[game.id] ?? null,
+    myAnswers: s.me?.answers[game.id] ?? {},
+    onStage: false,
+    act: async () => {},
+    submit: async () => ({ accepted: true, answer: { choice: [] }, at: FIXTURE_NOW, ms: 0 }),
+    open: () => {},
+  })
+}
