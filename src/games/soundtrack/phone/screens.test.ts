@@ -161,7 +161,7 @@ describe('Lydspor on the phone', () => {
       const html = await phoneMarkup(`soundtrack-${scene}`)
       expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
       const card = lydsporCard(html)
-      expect(card, scene).not.toMatch(/[!–—]/)
+      expect(card, scene).not.toMatch(/[!\u2013\u2014]/)
     }
   })
 })

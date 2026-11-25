@@ -85,13 +85,6 @@ export function planPhoto(events: Events, n: number, photo: number): PhotoMove {
   return mine === null ? { kind: 'take', other, writes, undo } : { kind: 'swap', other, writes, undo }
 }
 
-/** Applies writes to the photos this phone shows. */
-export function applyWrites(events: Events, writes: readonly PhotoWrite[]): (number | null)[] {
-  const next = [...events]
-  for (const { n, photo } of writes) next[n - 1] = photo
-  return next
-}
-
 /** The event answer a write sends. */
 export const photoChoice = (photo: number | null) => ({ choice: [photo === null ? NO_PHOTO : String(photo)] })
 

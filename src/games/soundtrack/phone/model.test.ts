@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   answeredParts,
-  applyWrites,
   bandOf,
   confirmAnswer,
   doubledPhotos,
@@ -17,7 +16,15 @@ import {
   planPhoto,
   shownAnswer,
   TOUCH_GUARD_MS,
+  type PhotoWrite,
 } from './model'
+
+/** The photos a phone shows once these writes went through, as useAnswers shows them while they are sent. */
+function applyWrites(events: readonly (number | null)[], writes: readonly PhotoWrite[]): (number | null)[] {
+  const next = [...events]
+  for (const { n, photo } of writes) next[n - 1] = photo
+  return next
+}
 
 describe('planPhoto', () => {
   // Songs 1 to 4: B, C, nothing, F (wall indices 1, 2, null, 5).
