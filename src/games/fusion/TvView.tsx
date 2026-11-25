@@ -85,8 +85,12 @@ export default function TvView({ game, players, publicState, tallies, serverNow,
     <div ref={ref} data-fusion-phase={pub.phase} className="relative min-h-0 flex-1">
       {box.width > 0 && box.height > 0 && (
         <LayoutGroup id={`fusion-${game.id}`}>
-          {/* The view that goes fades out over the one that comes, which brings its own parts in; the picture moves between them. */}
-          <AnimatePresence initial={false}>
+          {/*
+            The view that goes fades out over the one that comes, which brings its own parts in; the picture moves between them.
+            No initial={false} here: motion would hand it to every part mounted later inside the first view, so a TV opened
+            mid-showing would cut each picture and a reveal would land all at once. The wrapper has no entrance of its own.
+          */}
+          <AnimatePresence>
             <motion.div key={view} className="absolute inset-0" exit={{ opacity: 0 }} transition={{ duration: 0.25, ease: EASE_OUT }}>
               {view === 'lobby' ? (
                 <Lobby pub={pub} cache={cache} />
