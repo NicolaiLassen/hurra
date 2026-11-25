@@ -145,7 +145,7 @@ export default function PeoplePicker({
             )}
           </ul>
 
-          <footer className="border-t bg-background/90 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">
+          <footer className="bg-raised px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
             <div className="mx-auto flex max-w-md items-center gap-3">
               <span className="flex shrink-0 -space-x-2" aria-hidden>
                 {[0, 1].map((slot) =>
