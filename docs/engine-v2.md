@@ -2659,7 +2659,7 @@ failures; a new `wake_at` replacing the old timer.
 export type FixtureScene =
   | 'lobby' | 'quiz-question' | 'quiz-reveal' | 'quiz-leaderboard'
   | FusionStageScene                    // Participant fusion on the stage (8.4)
-  | 'fusion-legacy' | 'fusion-old-voting' | 'fusion-old-reveal'
+  | 'fusion-legacy'                     // a live round of the background version, on the TV
   | 'final' | 'background' | 'removed' | 'archived'
 /** A typed snapshot of that scene as the given screen reads it ('phone' as one guest, with `me`). */
 export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot
@@ -2667,8 +2667,8 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot
 
 Lands in phase 0, so PHONE, TV, HOST and the game views build against real
 shapes from day 1 and switch to live data later. `background` has two
-background games (Last one standing and fusion voting) beside a quiz on the
-stage; `final` is a finished game inside its 3 minutes; `removed` has
+games running underneath (Last one standing and a round of darts in person)
+beside a quiz on the stage, so the TV's band has two lines; `final` is a finished game inside its 3 minutes; `removed` has
 `member: false`. **Changed on 25 November:** Participant fusion on the stage
 has a scene per step (`FUSION_STAGE_SCENES`), each with 12 pictures and some
 with 2 or 40 as well: `fusion-lobby`, `fusion-showing`, `fusion-wall`,
@@ -2678,8 +2678,9 @@ locked in), `fusion-asking-you` (Sofie is in the picture asked),
 and `fusion-final`, with Last one standing live in the background. Their
 pictures are paths under `fixture/`, which dev builds draw as sample
 portraits (`src/lib/sampleMedia.ts`). `fusion-legacy` is a live round of the
-background version on the TV, in its old shapes; `fusion-old-voting` and
-`fusion-old-reveal` keep the old screens' scenes until those screens go. Game data in the fixtures (`public_state`, views, `states`)
+background version on the TV, in its old shapes with two pictures revealed,
+and `archived` holds a finished one: the two old saves a screen can still
+meet. Game data in the fixtures (`public_state`, views, `states`)
 is sample JSON in the shapes of section 8, for screens only: no core code
 reads it. In dev builds (`import.meta.env.DEV`), the phone, TV and host pages
 read `?fixture=<scene>` and pass `fixtureSnapshot(scene, screen)` to their

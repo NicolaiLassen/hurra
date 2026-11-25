@@ -205,11 +205,11 @@ describe('the phone home', () => {
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
     // Each game running underneath has its own section, headed by its tab: the
-    // quiz on the main card, then fusion (started first), then Last one standing.
-    expect(headings(html)).toEqual(['Quiz', 'Who is fused?', 'Last one standing'])
-    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Who is fused?'))
-    expect(text.indexOf('Who is fused?')).toBeLessThan(text.indexOf('Last one standing'))
-    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Standings'))
+    // quiz on the main card, then Last one standing (started first), then the darts.
+    expect(headings(html)).toEqual(['Quiz', 'Last one standing', 'Darts'])
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Last one standing'))
+    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Darts'))
+    expect(text.indexOf('Darts')).toBeLessThan(text.indexOf('Standings'))
     // The hunt's section: where Sofie stands, how many are left and the latest knockout at its time.
     const hunt = snapshot.games.find((g) => g.game_type === 'elimination')!
     const [latest] = (hunt.public_state as { feed: { at: number }[] }).feed
@@ -231,7 +231,7 @@ describe('the phone home', () => {
     expect(goldButtons(await phoneMarkup('fusion-asking-you'))).toEqual(['Lock in'])
     expect(goldButtons(await phoneMarkup('fusion-asking-locked'))).toEqual([])
     // While the quiz's timed question is open, the code bar steps aside: no gold button at all,
-    // and the hunt's Scan and fusion's Vote stay outlined.
+    // and the hunt's Scan stays outlined.
     const background = await phoneMarkup('background')
     expect(goldButtons(background)).toEqual([])
     expect(background).not.toMatch(/data-slot="badge" data-variant="default"/)

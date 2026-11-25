@@ -72,8 +72,6 @@ describe('the TV scene for each fixture', () => {
     ['fixture=fusion-final', 'Who is fused? | Final result'],
     // The background version's rounds read as a lobby that never starts.
     ['fixture=fusion-legacy', 'Who is fused? | 6 pictures, starting soon'],
-    ['fixture=fusion-old-reveal', 'Who is fused? | 6 pictures, starting soon'],
-    ['fixture=fusion-old-voting', 'Next | Last one standing then Quiz'],
     ['fixture=final', 'Last one standing | The final knockout'],
     ['fixture=background', 'Quiz | Question 3 of 10'],
     ['fixture=archived', 'The end | Final standings'],
@@ -99,7 +97,7 @@ describe('the TV scene for each fixture', () => {
     const page = await html('fixture=background')
     const band = page.slice(page.indexOf('data-frame="band"'), page.indexOf('</footer>'))
     expect(band).toContain('Last one standing')
-    expect(band).toContain('Who is fused?')
+    expect(band).toContain('Darts')
     expect(band.split('data-fit="band-line"').length - 1).toBe(2)
     // The recap has no frame: no strap and no band.
     const recap = await html('fixture=recap')
@@ -169,13 +167,9 @@ describe('the TV scene for each fixture', () => {
       ['fusion-reveal', 'reveal'],
       ['fusion-crown', 'wall'],
       ['fusion-legacy', 'lobby'],
-      ['fusion-old-reveal', 'lobby'],
     ]) {
       await expect(html(`fixture=${scene}`)).resolves.toContain(`data-fusion-phase="${phase}"`)
     }
-    // Off the stage, its line in the band says where it is.
-    const band = await html('fixture=fusion-old-voting')
-    expect(band.slice(band.indexOf('data-frame="band"'))).toContain('Starting soon')
   })
 
   it("crowns fusion's face detective on the winner's screen, with the best disguise at its reveal's time", async () => {

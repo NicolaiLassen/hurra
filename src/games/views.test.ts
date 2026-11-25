@@ -5,6 +5,7 @@
 // no effects run, so this checks what a view reads while it renders.
 import { createElement, type ComponentType } from 'react'
 import { prerender } from 'react-dom/static'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { gameModules } from '@/games/registry'
 import type { GameModule } from '@/games/types'
@@ -15,11 +16,11 @@ import type { SessionGame, Snapshot } from '@/lib/types'
 vi.stubGlobal('document', { documentElement: {} })
 vi.stubGlobal('getComputedStyle', () => ({ fontSize: '16px' }))
 
-/** Renders to HTML, waiting for lazy views; rejects with the first render error. */
+/** Renders to HTML inside a router, as the pages do, waiting for lazy views; rejects with the first render error. */
 async function render(view: ComponentType<never> | undefined, props: Record<string, unknown>): Promise<string> {
   if (!view) return ''
   const errors: unknown[] = []
-  const { prelude } = await prerender(createElement(view, props as never), { onError: (error) => void errors.push(error) })
+  const { prelude } = await prerender(createElement(MemoryRouter, null, createElement(view, props as never)), { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
   return new Response(prelude).text()
 }

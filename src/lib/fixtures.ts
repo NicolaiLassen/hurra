@@ -50,8 +50,6 @@ export const FIXTURE_SCENES = [
   'quiz-leaderboard',
   ...FUSION_STAGE_SCENES,
   'fusion-legacy',
-  'fusion-old-voting',
-  'fusion-old-reveal',
   'final',
   'background',
   'removed',
@@ -83,6 +81,7 @@ const QUIZ = uid(3, 1)
 const ELIMINATION = uid(3, 2)
 const FUSION = uid(3, 3)
 const PONG = uid(3, 4)
+const DARTS = uid(3, 5)
 
 const PROFILES: Record<string, Player['profile']> = {
   [BO]: { elimination: { tags: 3, wins: 1 } },
@@ -399,8 +398,16 @@ const FUSION_VOTES: Record<number, [number, number]>[] = [
 ]
 const sortedPair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
 const FUSION_STARTED = FIXTURE_NOW - 80 * MIN
+/** The background scene's round of darts, live beside the quiz since after Last one standing began. */
+const DARTS_STARTED = FIXTURE_NOW - 30 * MIN
 
-function fusionRound(phase: 'voting' | 'locked', revealedCount: number) {
+/**
+ * A round of the background version as it saved it, voting closed (`locked`),
+ * with the first `revealedCount` pictures revealed: a live one started before
+ * the update (fusion-legacy) and a finished one (archived) are real old saves.
+ */
+function fusionRound(revealedCount: number) {
+  const phase = 'locked'
   const revealed = Array.from({ length: revealedCount }, (_, i) => i + 1)
   const results: Record<string, { both: number; one: number; none: number; voters: number; hits: Record<string, number> }> = {}
   const totals: Record<string, number> = {}
@@ -450,7 +457,7 @@ function fusionRound(phase: 'voting' | 'locked', revealedCount: number) {
     for (const n of revealed) if (results[n].hits[id] !== undefined) hits[n] = results[n].hits[id]
     views[id] = { points: totals[id] ?? 0, hits }
   }
-  const closedAt = phase === 'locked' ? FIXTURE_NOW - 2 * MIN : null
+  const closedAt = FIXTURE_NOW - 2 * MIN
   const prompts: PromptState[] = PICTURE_KEY.map((_, i) => ({
     game_id: FUSION,
     key: `p${i + 1}`,
@@ -921,18 +928,15 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         ],
       }
     }
-    // The background version's rounds, in their old shapes: fusion-legacy is a
-    // live round started before the update, on the TV; the other two are for the
-    // old screens until their replacements land.
-    case 'fusion-old-voting':
-    case 'fusion-legacy':
-    case 'fusion-old-reveal': {
-      const fusion = fusionRound(scene === 'fusion-old-voting' ? 'voting' : 'locked', scene === 'fusion-old-reveal' ? 2 : 0)
-      const onStage = scene !== 'fusion-old-voting'
+    // A live round of the background version, started before the update, on the
+    // TV in its old shapes with two pictures revealed: every screen reads it as a
+    // lobby that never starts, and the host room says to end and restart it.
+    case 'fusion-legacy': {
+      const fusion = fusionRound(2)
       const feed = [
         say('Who is fused? 6 pictures on the wall. Vote on your phone.', FUSION_STARTED, { game_id: FUSION, icon: 'detective', sound: 'chime' }),
+        say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'ticktock' }),
       ]
-      if (scene !== 'fusion-old-voting') feed.push(say('Voting is closed', FIXTURE_NOW - 2 * MIN, { game_id: FUSION, icon: 'megaphone', sound: 'ticktock' }))
       for (const picture of fusion.publicState.pictures) {
         if (!picture.revealed) continue
         const [a, b] = picture.revealed.people.map(nameOfPlayer)
@@ -941,7 +945,7 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         feed.push(say(`${picture.label} was ${a} and ${b}!`, at, { game_id: FUSION, detail: `${both} of ${voters} got both`, icon: 'detective', sound: 'gotcha' }))
       }
       return {
-        session: onStage ? { spotlight_game_id: FUSION, spotlight_at: FIXTURE_NOW - 60_000 } : {},
+        session: { spotlight_game_id: FUSION, spotlight_at: FIXTURE_NOW - 60_000 },
         games: [
           game(ELIMINATION, 'elimination', 'Last one standing', 0),
           game(QUIZ, 'quiz', 'Quiz', 1),
@@ -994,9 +998,9 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
       }
     }
     case 'background': {
+      // The quiz on the TV, with Last one standing and a round of darts live beside it.
       // Sofie has answered the open question here: the phone shows "Locked in".
       const quiz = quizRound('question', 2, true)
-      const fusion = fusionRound('voting', 0)
       const elimination = eliminationLive()
       const [firstOut] = elimination.knockouts
       const latest = elimination.knockouts[elimination.knockouts.length - 1]
@@ -1009,21 +1013,20 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
             started_at: ELIMINATION_STARTED,
           }),
           game(QUIZ, 'quiz', 'Quiz', 1, { status: 'active', public_state: quiz.publicState, started_at: QUIZ_STARTED, wake_at: quiz.wakeAt }),
-          game(FUSION, 'fusion', 'Who is fused?', 2, { status: 'active', public_state: fusion.publicState, started_at: FUSION_STARTED }),
+          game(DARTS, 'in-person', 'Darts', 2, { status: 'active', public_state: {}, started_at: DARTS_STARTED }),
         ],
-        prompts: [...fusion.prompts, ...quiz.prompts],
-        tallies: { [QUIZ]: quiz.tallies, [FUSION]: fusion.tallies },
-        points: { [ELIMINATION]: elimination.points, [QUIZ]: quiz.points, [FUSION]: fusion.points },
+        prompts: quiz.prompts,
+        tallies: { [QUIZ]: quiz.tallies },
+        points: { [ELIMINATION]: elimination.points, [QUIZ]: quiz.points },
         awards: AWARDS,
-        views: { [ELIMINATION]: elimination.views, [QUIZ]: quiz.views, [FUSION]: fusion.views },
-        answers: { [QUIZ]: quiz.answers, [FUSION]: fusion.answers },
+        views: { [ELIMINATION]: elimination.views, [QUIZ]: quiz.views },
+        answers: { [QUIZ]: quiz.answers },
         states: {
           [ELIMINATION]: { state: elimination.state, config: elimination.config, round: 1, members },
           [QUIZ]: { state: quiz.state, config: quizConfig, round: 1, members },
-          [FUSION]: { state: fusion.state, config: fusion.config, round: 1, members },
+          [DARTS]: { state: {}, config: {}, round: 1, members },
         },
         feed: [
-          say('Who is fused? 6 pictures on the wall. Vote on your phone.', FUSION_STARTED, { game_id: FUSION, icon: 'detective', sound: 'chime' }),
           say('Last one standing has started', ELIMINATION_STARTED, { game_id: ELIMINATION, detail: '12 players, one life each', icon: 'megaphone', sound: 'gong' }),
           say(`${nameOfPlayer(firstOut.by)} got ${nameOfPlayer(firstOut.target)}`, firstOut.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
           say('Quiz time!', QUIZ_STARTED, { game_id: QUIZ, detail: '10 questions. Answer on your phone.', icon: 'megaphone', sound: 'whoosh' }),
@@ -1034,7 +1037,7 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
     case 'archived': {
       const elimination = eliminationDone(FIXTURE_NOW - 150 * MIN, FIXTURE_NOW - 40 * MIN)
       const quiz = quizRound('leaderboard', 2)
-      const fusion = fusionRound('locked', 6)
+      const fusion = fusionRound(6)
       const quizWinners = topOf(quiz.state.quizPoints)
       const fusionWinners = topOf(fusion.state.totals)
       return {

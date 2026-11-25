@@ -121,7 +121,7 @@ describe('defaultAwardGame', () => {
     expect(defaultAwardGame(background, 'not-a-game')).toBe(quiz)
 
     const offStage: Snapshot = { ...background, session: { ...background.session!, spotlight_game_id: null } }
-    // Fusion started before the quiz and Last one standing: the quiz is the newest start.
+    // Last one standing and the darts started before the quiz: the quiz is the newest start.
     expect(defaultAwardGame(offStage, null)).toBe(quiz)
   })
 
@@ -141,7 +141,7 @@ describe('arranging the games', () => {
   it('splits live games, the program and the archive', () => {
     const s = fixtureSnapshot('background', 'host')
     const { live, program, archived } = arrangeGames(s)
-    expect(live.map((g) => g.title)).toEqual(['Quiz', 'Last one standing', 'Who is fused?'])
+    expect(live.map((g) => g.title)).toEqual(['Quiz', 'Darts', 'Last one standing'])
     expect(program).toEqual([])
     expect(archived).toEqual([])
     const lobby = arrangeGames(fixtureSnapshot('lobby', 'host'))

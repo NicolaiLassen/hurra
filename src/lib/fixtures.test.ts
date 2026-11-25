@@ -43,7 +43,7 @@ describe('fixtureSnapshot', () => {
   it('keeps the open question’s answer and the fusion key off every screen but the host page until revealed', () => {
     // Every live scene: the host page gets states only of live games.
     const live = FUSION_STAGE_SCENES.filter((scene) => scene !== 'fusion-final')
-    for (const scene of ['quiz-question', 'background', 'fusion-old-voting', 'fusion-legacy', ...live] as const) {
+    for (const scene of ['quiz-question', 'background', 'fusion-legacy', ...live] as const) {
       for (const screen of ['phone', 'tv'] as const) {
         const s = fixtureSnapshot(scene, screen)
         // Prompt specs are public: never an answer in them.
@@ -73,15 +73,15 @@ describe('fixtureSnapshot', () => {
       expect(tvScene(s, FIXTURE_NOW)).toMatchObject({ kind: 'live', game: { game_type: 'quiz' } })
       expect(phoneLayout(fixtureSnapshot(scene, 'phone'), FIXTURE_NOW).main).toMatchObject({ kind: 'game', onStage: true })
     }
-    expect(phoneLayout(fixtureSnapshot('fusion-old-voting', 'phone'), FIXTURE_NOW).main).toMatchObject({ kind: 'game', onStage: false })
-    expect(tvScene(fixtureSnapshot('fusion-old-voting', 'tv'), FIXTURE_NOW).kind).toBe('standings')
-    expect(tvScene(fixtureSnapshot('fusion-old-reveal', 'tv'), FIXTURE_NOW)).toMatchObject({ kind: 'live', game: { game_type: 'fusion' } })
+    // A live round of the background version, on the TV since the update: live, as a lobby that never starts.
+    expect(tvScene(fixtureSnapshot('fusion-legacy', 'tv'), FIXTURE_NOW)).toMatchObject({ kind: 'live', game: { game_type: 'fusion' } })
+    expect(phoneLayout(fixtureSnapshot('fusion-legacy', 'phone'), FIXTURE_NOW).main).toMatchObject({ kind: 'game', onStage: true })
     const final = tvScene(fixtureSnapshot('final', 'tv'), FIXTURE_NOW)
     expect(final).toMatchObject({ kind: 'final', game: { game_type: 'elimination', winners: [expect.any(String)] } })
     expect(phoneLayout(fixtureSnapshot('final', 'phone'), FIXTURE_NOW).main.kind).toBe('result')
     const background = fixtureSnapshot('background', 'tv')
     expect(tvScene(background, FIXTURE_NOW)).toMatchObject({ kind: 'live', game: { game_type: 'quiz' } })
-    expect(backgroundGames(background).map((g) => g.game_type).sort()).toEqual(['elimination', 'fusion'])
+    expect(backgroundGames(background).map((g) => g.game_type).sort()).toEqual(['elimination', 'in-person'])
     expect(phoneLayout(fixtureSnapshot('background', 'phone'), FIXTURE_NOW).alsoRunning).toHaveLength(2)
     expect(tvScene(fixtureSnapshot('archived', 'tv'), FIXTURE_NOW).kind).toBe('over')
     expect(phoneLayout(fixtureSnapshot('archived', 'phone'), FIXTURE_NOW).main.kind).toBe('over')
