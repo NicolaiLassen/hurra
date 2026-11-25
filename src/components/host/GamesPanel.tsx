@@ -36,6 +36,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { gameModules, getGameModule } from '@/games/registry'
+import { guestsOf } from '@/lib/guestList'
 import { addGame, archiveGame, callGame, deleteGame, renameGame, setSpotlight } from '@/lib/queries'
 import { tvScene } from '@/lib/stage'
 import { toast } from '@/lib/toast'
@@ -299,6 +300,7 @@ function GameRow({
           game={game}
           gameModule={gameModule}
           players={snapshot.players}
+          guests={guestsOf(snapshot)}
           onClose={onCloseSettings}
         />
       )}
