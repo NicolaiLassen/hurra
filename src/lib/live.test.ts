@@ -565,7 +565,7 @@ describe('safety polls', () => {
     await announce(withPrompt)
     await pollsAfter(10_000, withPrompt)
 
-    // An open prompt with no deadline (fusion's votes, open all evening) keeps the 60 s poll.
+    // An open prompt with no deadline (a vote left open for the evening) keeps the 60 s poll.
     const votes = snapshot({ games: [liveGame()], prompts: [{ ...prompt, key: 'p1', closes_at: null }] })
     await announce(votes)
     await pollsAfter(60_000, votes)

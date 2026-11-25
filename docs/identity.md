@@ -492,9 +492,11 @@ confirmation stays where it was. Its own rules:
 
 - **One gold step per item.** A game's host view has at most one gold button,
   its next step (the quiz's Reveal now, Show the leaderboard, Next question or
-  Crown the winner). A step that skips ahead (skip the leaderboard, crown
-  early) goes in the menu beside it, behind the same confirmation, never next
-  to it. A program's Start is gold only on the game that is the room's next
+  Crown the winner; Participant fusion's Start the showing, Skip to the wall,
+  Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
+  that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
+  the menu beside it, behind the same confirmation, never next to it. Fusion's
+  Ask on each picture and the Save of who is in it are `secondary`. A program's Start is gold only on the game that is the room's next
   step, `nextStartId` in
   [src/components/host/scene.ts](../src/components/host/scene.ts): the first
   game not started, while a TV is open and shows the standings. Back to

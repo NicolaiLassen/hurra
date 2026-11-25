@@ -259,15 +259,37 @@ flowchart TD
 
 Each live game has its own card, so its controls sit with its title and its End
 (P2-4). The game's own controls are its `HostView`: the quiz's one big button
-for the next step and its answered count, fusion's Lock voting, Reveal next and
-who is in each picture, Last one standing's who is still in. Secrets (the quiz's
+for the next step and its answered count; fusion's one gold step (Start the
+showing, Ask the next picture, Reveal now, Back to the wall, Crown the face
+detective), its locked-in count, an Ask on every picture and who is in each
+picture; Last one standing's who is still in. Secrets (the quiz's
 answers, fusion's people, the tasks) stay behind a Show toggle, because the
 host's phone is out in the room. A game whose controls crash shows a note in
 its card; Show on the TV and End keep working.
 
-The split button starts a game the way it presents itself: the quiz and
-in-person rounds take the TV, Last one standing and fusion voting run in the
-background. The caret offers the other way.
+The split button starts a game the way it presents itself: the quiz,
+Participant fusion and in-person rounds take the TV, Last one standing runs in
+the background. The caret offers the other way.
+
+Participant fusion on the stage, from the host's side:
+
+```mermaid
+flowchart LR
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+
+  START["Start: the title card,<br/>then the lobby"]:::screen -- "Start the showing" --> SHOW["The showing<br/>each picture, 6 s"]:::screen
+  START -- "menu: Skip the showing" --> WALL
+  SHOW -- "by itself, or Skip to the wall" --> WALL["The wall<br/>every picture at once"]:::screen
+  WALL -- "Ask #5, or Ask on any picture" --> ASK["A picture asked<br/>30 s, phones lock in"]:::screen
+  ASK -- "by itself when time's up,<br/>or Reveal now" --> REV["The reveal<br/>who it was, 10 s"]:::screen
+  REV -- "by itself, or Back to the wall" --> WALL
+  REV -- "menu: Skip the wall: ask #6" --> ASK
+  WALL -- "after the last: Crown the face detective;<br/>before it: the menu, after a confirm" --> DONE["The winner's screen"]:::screen
+```
+
+A picture without its two people can't be asked: set them with Show who
+first. A round started before the update (when fusion ran in the background)
+can't go on: End it, then restart it, and its pictures and people are kept.
 
 ### 3.3 Scanning and points
 

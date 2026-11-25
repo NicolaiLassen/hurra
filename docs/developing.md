@@ -108,7 +108,10 @@ public `game-media` bucket (hosts upload; JPEG only).
 A game is a folder in `src/games/<name>/`. The core never changes for a new
 game: everything goes through the SDK in [src/games/core](../src/games/core).
 [elimination](../src/games/elimination) (*Last one standing*) is the full example
-of a move-based game, [quiz](../src/games/quiz) of one played with prompts, and
+of a move-based game, [quiz](../src/games/quiz) of one played with prompts,
+[fusion](../src/games/fusion) (*Participant fusion*) of a stage game with
+timers and a secret, whose screens and logic share one contract
+([shapes.ts](../src/games/fusion/shapes.ts)), and
 [in-person](../src/games/in-person) is the smallest.
 
 **`logic.ts`**: a class extending `Game` from
@@ -122,7 +125,7 @@ the engine's one save per request, as pure functions of the state:
 | `parseConfig(input)` | Optional: checks the settings once, at start. Throw `GameError` to refuse. |
 | `setup(ctx)` | Deals the initial state when the host starts (or restarts) the game. |
 | `parseAction(input)`, `handleAction(state, action, playerId, ctx)` | Checks a move from a phone and applies it. Throw `GameError` to refuse; the message is shown as is. |
-| `parseHostAction`, `handleHostAction` | Optional host controls (Next, Reveal, Lock voting). |
+| `parseHostAction`, `handleHostAction` | Optional host controls (Next, Reveal). |
 | `wakeAt(state, info)`, `onWake(state, ctx)` | Optional timers: when the state wants a sync, and what happens then. |
 | `onPlayerJoin`, `onPlayerLeave` | Optional: someone joined or left while the round runs. |
 | `isFinished`, `winners`, `onEnd(state, ctx, by)` | Optional: the game finishes itself in the same save; the default winners are the top of this round's points. |
@@ -190,8 +193,10 @@ real engine step with `simulateParty`, and check the game's own example with
 `checkGameContract` (it must include a join and a leave). In dev builds every
 screen also opens on a sample party: `/play/x?fixture=<scene>`,
 `/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
-(the scenes are listed in `fixtures.ts`), and `/dev/tokens` draws the token
-sheet ([identity.md](identity.md#the-acceptance-test)).
+(the scenes are listed in `fixtures.ts`; Participant fusion has one per step
+of its round, `fusion-lobby` to `fusion-final`, some with 2 or 40 pictures
+as `-2` and `-40`, and their pictures are drawn sample portraits), and
+`/dev/tokens` draws the token sheet ([identity.md](identity.md#the-acceptance-test)).
 
 ## Local development
 
@@ -213,7 +218,7 @@ npm run db:smoke              # a quick check that the schema, private Realtime 
 
 `npm run smoke` plays a short round through the real API of any deployment:
 a throwaway host, party, three guests and a TV; joining, pairing, pings,
-secrets, Last one standing, a quiz to its crown, fusion, an award, moving a
+secrets, Last one standing, a quiz to its crown, a fusion picture on the stage, an award, moving a
 player, the recap, an image upload and unpairing. It deletes everything it
 made, even when a step fails. It takes the deployment from the shell, never
 from a file:

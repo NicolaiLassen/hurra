@@ -287,7 +287,7 @@ const liveIds = (s: Snapshot) => new Set(s.games.filter((g) => g.status === 'act
 
 /**
  * Whether a live game has a timer or an open prompt with a deadline: phones
- * then poll every 10 s. A prompt with no deadline (fusion's votes, open all
+ * then poll every 10 s. A prompt with no deadline (a vote left open for the
  * evening) doesn't count: nothing about it is due, so it keeps the 60 s poll.
  */
 function hasLiveDeadline(s: Snapshot | undefined): boolean {

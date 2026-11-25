@@ -59,8 +59,9 @@
   ones take the TV.
 - **A live quiz.** Questions on the TV, answers on every phone. Faster right
   answers score more.
-- **Participant fusion.** Guess who is fused in each AI portrait on the wall.
-  The name search works like an autocomplete, so "soren" finds Søren.
+- **Participant fusion.** The TV shows each AI portrait of two fused guests,
+  then all of them, then one at a time: pick the two on your phone and lock
+  in. The name search works like an autocomplete, so "soren" finds Søren.
 - **The night's recap.** The host previews and publishes it, the TV plays it,
   and every guest finds their own night on their phone.
 - **The TV from your own browser.** No second device for the TV? *Show the TV
@@ -82,7 +83,7 @@
 | --- | --- | --- |
 | **Last one standing** | All night, in the background | Everyone gets a secret task and one life. Get someone to do your task and they're out, and their task becomes yours. Or catch someone trying theirs on you. Scan their code to knock them out. The TV keeps count of who is still standing, and the last one standing wins. |
 | **Quiz** | On the TV | The host runs the questions and everyone answers on their phone. Right answers score more the faster they come. Time's up reveals the answer, a leaderboard follows, and the host crowns the winner. |
-| **Participant fusion** | On the wall, with the vote on phones | AI images fuse two guests into one portrait, printed and hung on the wall. Guests vote on their phones for who is in each picture, picking two of the other guests. The host locks voting and reveals the pictures one by one on the TV. |
+| **Participant fusion** | On the TV | AI images fuse two guests into one portrait. The TV shows each picture large, one at a time, then all of them at once. Then the host asks them one by one: everyone picks the two guests in the picture on their phone and locks in before time runs out, and the reveal shows who it was. The two in the picture sit that one out. The host crowns the sharpest eye. |
 | **In-person round** | In the room | Points for anything that happens in the room, like a round of beer pong. The host gives them by hand, by scanning the guest's code. |
 
 Several games run at once: a long one in the background while short ones take
