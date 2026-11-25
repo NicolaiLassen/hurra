@@ -217,3 +217,35 @@ export function boardSplit({
   const form = forms[forms.length - 1]
   return { split, join: form, fit: fieldFit(field, fieldWidth(split), fieldHeight(form), layouts) }
 }
+
+/** How the night so far stands under a winner's colour (nightPodium). */
+export type NightPodium = {
+  /** The night's top three show on their steps; else only the words, the full width. */
+  podium: boolean
+  /** The tokens stand on the steps (92 px of the room); else a small one sits by the name on the step. */
+  tokens: boolean
+  /** The steps in one row (the name, this game's gain and the place, no token), when the room is short. */
+  compact: boolean
+  /** The steps' heights by place, first to third, px. */
+  steps: [number, number, number]
+}
+
+/**
+ * The night so far on a winner's screen (WinnerMoment), in `height` px under
+ * the field (0 until measured): the tokens on the steps while there is room,
+ * the steps in one row when the room is short, the steps' heights by place,
+ * clearly different. The third hurra's promise always stays, and beside the
+ * podium it takes two lines (`promiseLine` is one of them, px): in less room
+ * than that the podium gives way, so the promise has the whole width for one
+ * line and nothing is cut at the stage's edge.
+ */
+export function nightPodium(height: number, promiseLine: number): NightPodium {
+  const tokens = height === 0 || height >= 260
+  const room = height - (tokens ? 92 : 0)
+  const compact = height > 0 && room < 150
+  const least = compact ? 56 : 112
+  const tallest = height > 0 ? Math.max(least, Math.min(216, room)) : 216
+  const lowest = Math.max(least, Math.min(tallest - 32, Math.round(tallest * 0.55)))
+  const podium = height === 0 || (height >= least && (promiseLine === 0 || height >= 2 * promiseLine))
+  return { podium, tokens, compact, steps: [tallest, Math.round((tallest + lowest) / 2), lowest] }
+}

@@ -389,8 +389,11 @@ everything fades in, and only the confetti moves.
   and, always, "The third hurra is saved for the night's winner."; and the
   night's top three on paper steps of clearly different heights (a tie
   shares a height), the game's points on them as a chip, gold for its winner.
-  On a short screen the tokens move onto the steps, the steps go to one row,
-  and the words drop the title, then the line, never the third hurra.
+  On a short screen the tokens move onto the steps, the steps go to one row
+  (the name, this game's gain and the place: the standings carry the total),
+  and the words drop the title, then the line, never the third hurra. In the
+  least room (720p with two band lines) the podium gives way, so the promise
+  stands whole on one line (`nightPodium` in fit.ts).
 - **Confetti** ([src/components/Confetti.tsx](../src/components/Confetti.tsx))
   is only the logo's pieces in the logo's colours: the pink dot, the teal
   curl, the violet wave and the gold star. It bursts once and is gone in

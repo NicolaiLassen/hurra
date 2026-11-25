@@ -55,6 +55,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
   const news = search.get('news') as News | null
   let snapshot = build(scene as FixtureScene | TvOnlyScene)
   if (size !== null && Number.isInteger(size) && size >= 0 && scene !== 'empty') snapshot = resize(snapshot, size)
+  if (scene === 'final' || scene === 'pong-final') snapshot = withPodiumGains(snapshot)
   if (search.get('fresh') === '1' && snapshot.session) {
     snapshot = { ...snapshot, session: { ...snapshot.session, spotlight_at: snapshot.now - 500 } }
   }
@@ -184,6 +185,21 @@ function resize(s: Snapshot, size: number): Snapshot {
     Object.entries(s.tallies).map(([gameId, counts]) => [gameId, Object.fromEntries(Object.entries(counts).map(([key, n]) => [key, Math.min(n, size)]))]),
   )
   return { ...s, players: [...players, ...extra], standings: allStandings, games, tallies }
+}
+
+/**
+ * The finished game's points for the night's top three too, as live data has
+ * them (a winner is usually on the night's podium): the winner's screen then
+ * shows its "+3" chips on the steps, where the fit is tightest.
+ */
+function withPodiumGains(s: Snapshot): Snapshot {
+  const game = s.games.find((g) => g.id === s.session?.spotlight_game_id && g.status === 'finished')
+  if (!game) return s
+  const points = { ...(s.game_points[game.id] ?? {}) }
+  s.standings.slice(0, 3).forEach((row, i) => {
+    points[row.player_id] ??= [3, 2, 1][i]
+  })
+  return { ...s, game_points: { ...s.game_points, [game.id]: points } }
 }
 
 /** The sample quiz with its open question's words replaced (dev fit checks). */
