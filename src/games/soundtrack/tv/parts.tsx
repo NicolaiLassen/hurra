@@ -80,13 +80,14 @@ export function Wall({
           {wall.map((photo, i) => (
             <li key={i} className="@container relative overflow-hidden rounded-tile bg-overlay">
               <Photo path={photo.path} mediaUrl={mediaUrl} alt={`Photo ${letterOf(i)}`} className="absolute inset-0 size-full" />
-              {/* The chip and its letter never go under the TV's floor, however small the tile; so does a hint, on a band across the photo's foot. */}
+              {/* The chip and its letter never go under the TV's floor, however small the tile; nor does a hint, on a band across the
+                  photo's foot: two lines at most, one on a small tile (720p), so the photo stays in sight. */}
               <LetterChip
                 index={i}
                 className="absolute top-[5cqw] left-[5cqw] size-[max(2.75rem,19cqw)] text-[length:max(var(--text-tv-floor),12cqw)]"
               />
               {photo.hint && (
-                <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-paper px-[4cqw] py-[1.5cqw] text-[length:max(var(--text-tv-floor),9cqw)] leading-[1.12] font-bold break-words text-ink">
+                <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-paper px-[4cqw] py-[1.5cqw] text-[length:max(var(--text-tv-floor),9cqw)] leading-[1.12] font-bold break-words text-ink @max-[12rem]:line-clamp-1 @max-[12rem]:break-all">
                   {photo.hint}
                 </span>
               )}
