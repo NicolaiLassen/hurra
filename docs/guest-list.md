@@ -743,6 +743,14 @@ fusion/stage applies this list.
 - Recap: `nameOf` already falls back to `state.names`.
 - The two refusals move to `info.guests`: `setup`'s "has someone who isn't in
   the party" and `setKey`'s "Pick two people who are in the party".
+- Rule 6 (fusion has no `onPlayerLeave` on any branch): add one that drops
+  `totals[id]` and the id from every `results[n].hits` (that phone's votes and
+  points). `both`, `one`, `none` and `voters` stay as the room saw them. Keep
+  the id in `key` and `names`: they name the listed guest in the picture, who
+  may take the name back, not the phone that had it. A vote on the open
+  picture is a prompt answer, which the free deletes with the row. Test it
+  with `simulateParty`: vote and reveal, `freeGuest`, `claimGuest`, sync; the
+  scores lack the id and the picture still names the guest.
 
 ### 9.3 The photo and song game (lydspor/game)
 
@@ -757,6 +765,14 @@ fusion/stage applies this list.
 - The editor's people pickers list `guests`, joined and expected, the
   expected ones marked "not here yet" (as fusion's editor does, 10).
 - `finalRows(state, config, info.players)` already scores players only.
+- Rule 6 (the game has no `onPlayerLeave` on lydspor/game): add one that drops
+  the id from `picks`, from every `review` row's `players` (dropping a row
+  left with nobody), and from `shownTop` and `credits`. Before the lock the
+  answers are prompt answers, which the free deletes with the row; after it
+  they are `picks`, which would otherwise score the old phone's answers for
+  whoever takes the name. Keep the id in `sitOut` and `inPhoto`: they name the
+  listed guest, not the phone. Test it with `simulateParty`: answer, lock,
+  `freeGuest`, `claimGuest`, reveal and crown; the scores lack the id.
 
 ### 9.4 Last one standing, the quiz, in-person rounds
 
@@ -765,34 +781,94 @@ fusion/stage applies this list.
   Nothing to change for expected guests.
 - A listed guest who arrives late joins like any late joiner (Last one
   standing: a spectator until the next deal).
-- Rule 6, the quiz: it keeps per-player totals in its state and has no
-  `onPlayerLeave`; the rebuilt quiz should drop an id's totals on leave, so a
-  freed and retaken name starts at 0.
-- Rule 6, Last one standing: **must change before the party**. The live run
-  of 26 November confirmed it: the host freed a name during a round, and the
-  guest who took it was marked Out, though nobody knocked them out. No branch
-  changes `src/games/elimination/logic.ts`, so the integration applies this
-  to it. Today `onPlayerLeave` drops the leaver's task but keeps the id in
-  `playerIds`, and returns the state unchanged for someone already out. So:
-  - while the name is free, `publicState.out` still carries the id to every
-    phone and the TV (an id only, never a name);
-  - whoever takes the name is in `out`: the TV board, the host's Players and
-    the phones' standings show them Out, and the TV's band counts them ("4 of
-    5 still in");
-  - their own card says "This round started before you joined" until the
-    game's next save (a move, a timer, a sync), then "You're out. Someone got
-    you.", because `playerView` gives `status: 'out'` with no `by` and no task.
+- In-person rounds keep nothing per guest in their state (their points are
+  host awards, which go with the row on a free), so rule 6 needs nothing there.
+- **Rule 6: both the quiz and Last one standing must change before the
+  party.** No branch changes `src/games/quiz/logic.ts` or
+  `src/games/elimination/logic.ts` (fusion/stage only touches
+  `src/games/quiz/clock.ts`), so the integration applies the change below.
+  It is a verified patch, with the tests:
+  `.design/guest-list/patches/freed-name-leaves-the-round.patch` in the main
+  checkout (`git apply` it on the integrated tree; it applied cleanly on
+  `guests/list` and every unit test passed with it, 1110 of 1110). Without
+  it, Free the name during a running round goes wrong, as the live run of
+  26 November and two `simulateParty` runs confirmed:
+  - **The quiz** keeps per-player totals (`right`, `quizPoints`, each
+    `results[].answers`) and has no `onPlayerLeave`. `scores()` is rebuilt
+    from `right` for every id, so after free, take and the next save, the new
+    guest has the old person's quiz points: `game_commit` skips the id while
+    it is expected and writes the old points again once it is joined.
+  - **Last one standing** drops the leaver's task but keeps the id in
+    `playerIds`, and its `knockouts` still hold the old person's knockouts
+    `by` that id. So the new guest is marked Out on the TV board, in the
+    host's Players and the phone standings ("4 of 5 still in"), their card
+    says "You're out. Someone got you." after the next save, and `scores()`
+    and `knockoutCounts` give them the old person's knockout points. While
+    the name is free, `publicState.out` also carries the id to every screen.
 
-  The change: on leave, take the id out of `playerIds` too, whether or not
-  it holds a task. Then `playerView` treats a re-joined id as a spectator, and
-  `publicState.out` drops it. `winnerOf` and the crown in `onPlayerLeave` read
-  "more than one dealt in" from `playerIds.length`: keep that meaning (for
-  example a count of how many were dealt in, kept at setup), so a round of two
-  where one leaves still crowns the other. Test it with `simulateParty`: deal
-  three, `freeGuest` one, `claimGuest` it, sync; the new guest's view is
-  `spectator` and `out` lacks the id. It matters on the night because Free the
-  name is for mistakes at arrival, and Last one standing can be running by
-  then.
+  **The quiz's change:** an `onPlayerLeave` that drops the id's totals and
+  answers. The counts per option stay as the room saw them.
+
+  ```ts
+  onPlayerLeave(state: QuizState, playerId: PlayerId): QuizState {
+    const answered = state.results.some((r) => Object.hasOwn(r.answers, playerId))
+    if (!Object.hasOwn(state.right, playerId) && !Object.hasOwn(state.quizPoints, playerId) && !answered) return state
+    const without = <T>(record: Record<PlayerId, T>): Record<PlayerId, T> =>
+      Object.fromEntries(Object.entries(record).filter(([id]) => id !== playerId))
+    return {
+      ...state,
+      right: without(state.right),
+      quizPoints: without(state.quizPoints),
+      results: state.results.map((r) => (Object.hasOwn(r.answers, playerId) ? { ...r, answers: without(r.answers) } : r)),
+    }
+  }
+  ```
+
+  **Last one standing's change:** the state gains `left?: PlayerId[]`, the
+  ids dealt in that then left the party (removed, or the name freed).
+  `playerIds` stays as dealt, so `winnerOf` and the crown in `onPlayerLeave`
+  keep reading "more than one dealt in" from it, and a round of two where one
+  is freed still crowns the other. Two helpers:
+
+  ```ts
+  function hasLeft(state: EliminationState, id: PlayerId): boolean {
+    return Array.isArray(state.left) && state.left.includes(id)
+  }
+  /** Dealt in and still the same guest: not someone who left, whose freed name another guest may have taken since. */
+  function dealtIn(state: EliminationState, id: PlayerId): boolean {
+    return state.playerIds.includes(id) && !hasLeft(state, id)
+  }
+  /** The knockouts that still score: none by someone who left. */
+  function counted(state: EliminationState): Knockout[] {
+    return state.knockouts.filter((k) => !hasLeft(state, k.by))
+  }
+  ```
+
+  - `onPlayerLeave`: return the state unchanged for an id never dealt in;
+    otherwise add the id to `left` (once), whether or not it holds a task,
+    then drop the task and crown as today.
+  - `scores()`, `publicState`'s `knockoutCounts` and `recap()`'s hunter
+    counts read `counted(state)`, not `state.knockouts`.
+  - `publicState.out` leaves out `hasLeft` ids; `outBy` leaves out knockouts
+    whose `target` has left (the TV marks Out from `outBy`).
+  - `playerView`: `spectator` when `!dealtIn(state, id)`.
+  - `handleAction`'s two refusals ("You're out" against "You joined after
+    this game started", and "is already out" against "isn't in this game")
+    test `dealtIn`, not `playerIds.includes`.
+
+  Two of today's tests change with it, as intended: leaving when already
+  out now returns `{ ...state, left: ['bo'] }`, and a removed player is no
+  longer in `out` (no screen showed them there: the views draw only players
+  still in the party). The patch adds a `simulateParty` test for each game:
+  deal (or answer), `freeGuest`, `claimGuest`, sync; the new guest's scores
+  are `{}`, their Last one standing view is `spectator`, `out`, `outBy` and
+  `knockoutCounts` lack the id, a re-taken name that was out is not Out, and
+  the quiz's `right`, `quizPoints` and `results[].answers` lack the id.
+
+  The Free the name confirm says the points earned under the name go with
+  it. That is true at the moment of the free for every game (every score row
+  goes with the row), and stays true after the name is taken again only once
+  these two changes are in.
 
 ### 9.5 Branches that build `GameInfo` or `Loaded` literals
 
@@ -899,12 +975,12 @@ reads `freed: true`, and the TV is back to the guests it had.
    recap moment from before the free can name the listed guest. Freeing is meant
    for mistakes caught at arrival.
 5. **Freed and retaken during a live round** relies on the games' leave hooks
-   (9.1, rule 6). The quiz has none today, so a retaken id keeps the old
-   person's quiz totals if a quiz runs at that moment, and today's Last one
-   standing marks the new person Out (9.4) until its change lands. The new
-   person never sees the old person's private view: freeing deletes it with
-   the row. Until the game's next save they see what a late joiner sees; that
-   save runs the join hooks.
+   (9.1, rule 6). Until the integration applies 9.4's patch, a retaken id
+   keeps the old person's quiz points if a quiz runs at that moment, and Last
+   one standing marks the new person Out and gives them the old person's
+   knockout points. The new person never sees the old person's private view:
+   freeing deletes it with the row. Until the game's next save they see what a
+   late joiner sees; that save runs the join hooks.
 6. **Impersonation** is as before: anyone with the join code can take any free
    name, as they could type any name. Closing joining and Free the name are the
    host's tools.
