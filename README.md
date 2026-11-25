@@ -16,7 +16,7 @@
 <p align="center">
   <img src="docs/screenshots/store/phone-1.png" width="160" alt="Join: scan, pick a name, and you're in. The phone shows the standings and a button to show your own code.">
   <img src="docs/screenshots/store/phone-2.png" width="160" alt="Quiz: the question and four answers on the phone, with the seconds counting down.">
-  <img src="docs/screenshots/store/phone-3.png" width="160" alt="Participant fusion: tap each picture and pick the two guests fused in it.">
+  <img src="docs/screenshots/store/phone-3.png" width="160" alt="Participant fusion: pick the two guests fused into a picture on your phone.">
   <img src="docs/screenshots/store/phone-4.png" width="160" alt="Last one standing: your secret task, how many are still standing, and a button to scan someone's code.">
   <img src="docs/screenshots/store/phone-5.png" width="160" alt="Recap: your place for the night and your points game by game.">
 </p>
