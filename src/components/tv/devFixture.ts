@@ -13,6 +13,7 @@
 // &then=<scene>      the party 1.5 s after the page opens is in that fixture scene instead, its games' start times kept, so a
 //                    game on the stage moves on from one phase to the next (a transition to look at)
 // &host=1            a host's own browser: "Host preview"
+// &band=2            a round of darts runs underneath too, so the band has a second line (the stage's least room)
 // &name=<text>       the party's name (a long one checks the bug's ellipsis)
 // &question=<text>   the quiz's question, and &options=A|B|C|D its options (long ones check the fit)
 // &slide=<n>         the recap opens on slide n (from 0)
@@ -40,6 +41,7 @@ export type DevTv = {
 const MIN = 60_000
 const uid = (n: number) => `f1c7a000-0000-4000-8000-${String(9000 + n).padStart(12, '0')}`
 const PONG = uid(500)
+const DARTS = uid(501)
 
 const EXTRA_NAMES = [
   'Asta', 'Alma', 'Agnes', 'Anton', 'August', 'Bertram', 'Carl', 'Christoffer Bjørnskov', 'Dagmar', 'Ella', 'Esther',
@@ -63,6 +65,8 @@ export function devTv(search: URLSearchParams): DevTv | null {
   const name = search.get('name')
   if (name && snapshot.session) snapshot = { ...snapshot, session: { ...snapshot.session, name } }
   snapshot = withQuestion(snapshot, search.get('question'), search.get('options'))
+  const twoLines = search.get('band') === '2'
+  if (twoLines) snapshot = withSecondLine(snapshot)
   const later = Number(search.get('later'))
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
   const then = search.get('then')
@@ -71,6 +75,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
   else if (isFixtureScene(then) || TV_SCENES.includes(then as TvOnlyScene)) {
     let moved = build(then as FixtureScene | TvOnlyScene)
     if (size !== null && Number.isInteger(size) && size >= 0 && then !== 'empty') moved = resize(moved, size)
+    if (twoLines) moved = withSecondLine(moved)
     next = keepStarts(snapshot, moved)
   }
   return {
@@ -163,6 +168,27 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
     default:
       return fixtureSnapshot(scene, 'tv')
   }
+}
+
+/** A round of darts live underneath, beside what already runs: the band's second line. */
+function withSecondLine(s: Snapshot): Snapshot {
+  if (!s.session || s.games.some((g) => g.title === 'Darts')) return s
+  const darts: SessionGame = {
+    id: DARTS,
+    game_type: 'in-person',
+    title: 'Darts',
+    position: 4,
+    status: 'active',
+    public_state: {},
+    started_at: FIXTURE_NOW - 30 * MIN,
+    finished_at: null,
+    finished_by: null,
+    winners: [],
+    wake_at: null,
+    archived_at: null,
+    created_at: FIXTURE_NOW - 120 * MIN,
+  }
+  return { ...s, games: [...s.games, darts] }
 }
 
 /** `next` with the games' start times (and the stage's) of `first`, so a screen keyed on them stays mounted. */
