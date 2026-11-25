@@ -14,6 +14,7 @@ import {
 import AnnouncementIconView from '@/components/AnnouncementIconView'
 import type { AnnouncementIcon, Tone } from '@/games/core/Game'
 import { CALLOUT_TONE } from '@/lib/callout'
+import { onAirText } from '@/lib/onAirText'
 import type { FeedItem } from '@/lib/types'
 import { toast } from '@/lib/toast'
 
@@ -40,14 +41,19 @@ const iconByName: Record<AnnouncementIcon, Icon> = {
 export const announcementIcon = (name: string | null | undefined): Icon =>
   (name && iconByName[name as AnnouncementIcon]) || MegaphoneIcon
 
+/**
+ * A game's tone as the app shows it. A game's 'red' (the hunt's "You're out!",
+ * its first out) shows as the hunt's pink: danger is for destructive host
+ * actions only (docs/identity.md, Colour jobs). The game's own data keeps it.
+ */
 export const announcementTone = (tone: string | null | undefined): Tone =>
-  tone && tone in CALLOUT_TONE ? (tone as Tone) : 'gold'
+  tone === 'red' ? 'pink' : tone && tone in CALLOUT_TONE ? (tone as Tone) : 'gold'
 
-/** Shows an announcement as a toast: the shared callout in its tone, with its detail as the second line. */
+/** Shows an announcement as a toast: the shared callout in its tone, with its detail as the second line, without a game's exclamation marks. */
 export function toastAnnouncement(item: Announcement) {
-  toast(item.message, {
+  toast(onAirText(item.message), {
     icon: <AnnouncementIconView name={item.icon} />,
     tone: announcementTone(item.tone),
-    description: item.detail ?? undefined,
+    description: item.detail ? onAirText(item.detail) : undefined,
   })
 }

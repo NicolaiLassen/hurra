@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { onAirText } from '@/components/tv/news'
+import { onAirText } from '@/lib/onAirText'
 import { BandEvent, BandLine, BandSince, Tab } from '@/components/tv/onAir'
 import { JoinTag } from '@/components/tv/Join'
 import { bandRows } from '@/components/tv/scene'

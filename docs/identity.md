@@ -267,7 +267,7 @@ edges never cuts anything off. Games play inside it and get it for free.
   the background is the band's event line (the ticker), with its time.
   Nothing crawls, there is no "Breaking" label and no red, and an event line
   changes only when something happens. The TV says a game's news without its
-  exclamation marks (`onAirText`).
+  exclamation marks (`onAirText` in src/lib, which a phone's toasts use too).
 - **Times** are only the ones the database holds (a game's start or finish,
   an announcement's), as clock times (`clockTime` in
   [clock.ts](../src/components/tv/clock.ts)): never "4 min ago" and never a
@@ -421,7 +421,10 @@ the standings card below the fold, and Show my code in the thumb zone.
   "Since 20:30" or "Finished at 22:41". A long name and its words wrap, the
   strap under the tab, instead of cutting either.
 - **Copy:** no exclamation marks ("You're in.", "That's a wrap."), and only
-  times the database holds, as clock times.
+  times the database holds, as clock times. A game's news in a toast is said
+  without its exclamation marks (`onAirText`), and a game's `red` tone (the
+  hunt's "You're out") shows as the hunt's pink (`announcementTone`): the
+  danger chip is only for errors.
 
 ### The quiz on a phone
 

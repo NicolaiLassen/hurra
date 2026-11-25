@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { onAirText } from '@/components/tv/news'
+import { onAirText } from '@/lib/onAirText'
 import { Stripes, Tab } from '@/components/tv/onAir'
 import type { FeedItem } from '@/lib/types'
 import { cn } from '@/lib/utils'

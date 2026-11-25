@@ -1,4 +1,4 @@
-import { onAirText } from '@/components/tv/news'
+import { onAirText } from '@/lib/onAirText'
 import { BandEvent, BandLine, Stripes, Tab } from '@/components/tv/onAir'
 import type { FeedItem } from '@/lib/types'
 
