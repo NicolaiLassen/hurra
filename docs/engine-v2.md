@@ -3701,8 +3701,8 @@ was. A point per right person, and a bonus for both.
     two different players in the party; the same pair again is unchanged.
     Allowed in every phase but done, the picture being asked included.
   - `{ type: 'finish' }`: while a picture is asked, "Reveal #n first".
-    Otherwise phase `done`; announces "{name} has the sharpest eye!" (crown,
-    fanfare, `interrupt`) and "You have the sharpest eye!" to the winners;
+    Otherwise phase `done`; announces "{name} has the sharpest eye" (crown,
+    fanfare, `interrupt`) and "You have the sharpest eye" to the winners;
     `updateProfile(winner, { detective: n + 1 })`; records `crowned`. With no
     points on the board: "Participant fusion is over", "Nobody scored this
     time", no winner.

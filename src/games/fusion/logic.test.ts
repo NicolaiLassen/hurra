@@ -454,8 +454,8 @@ describe('finish', () => {
     const players = PLAYERS.map((id): GamePlayer => ({ id, name: id, profile: id === 'cy' ? { fusion: { detective: 2 } } : {} }))
     const { result, effects } = host(reveal, { type: 'finish' }, { players })
     expect(effects.announcements).toEqual([
-      expect.objectContaining({ message: 'cy has the sharpest eye!', detail: '2 points', icon: 'crown', sound: 'fanfare', interrupt: true }),
-      expect.objectContaining({ message: 'You have the sharpest eye!', to: ['cy'] }),
+      expect.objectContaining({ message: 'cy has the sharpest eye', detail: '2 points', icon: 'crown', sound: 'fanfare', interrupt: true }),
+      expect.objectContaining({ message: 'You have the sharpest eye', to: ['cy'] }),
     ])
     expect(effects.profiles).toEqual({ cy: { detective: 3 } })
     expect(effects.records).toEqual([{ type: 'crowned', data: { winners: ['cy'], points: 2 }, about: ['cy'] }])
@@ -465,8 +465,8 @@ describe('finish', () => {
   it('crowns everyone tied at the top', () => {
     const reveal = revealed(1, [['cy', ['ana', 'bo']], ['dee', ['ana', 'bo']]]).result
     const { effects } = host(reveal, { type: 'finish' })
-    expect(effects.announcements[0].message).toBe('cy and dee have the sharpest eyes!')
-    expect(effects.announcements[1]).toMatchObject({ message: 'You share the sharpest eye!', to: ['cy', 'dee'] })
+    expect(effects.announcements[0].message).toBe('cy and dee have the sharpest eyes')
+    expect(effects.announcements[1]).toMatchObject({ message: 'You share the sharpest eye', to: ['cy', 'dee'] })
   })
 
   it('crowns nobody when nobody scored', () => {
@@ -738,7 +738,7 @@ describe('a round in the party', () => {
     expect(hostAct(p, { type: 'finish' }).kind).toBe('commit')
     expect(p.game(GAME)).toMatchObject({ status: 'finished', finishedBy: 'game', winners: [e] })
     expect(p.players.find((pl) => pl.id === e)?.profile).toEqual({ fusion: { detective: 1 } })
-    expect(p.feed.filter((item) => item.interrupt).map((item) => item.message)).toEqual(['Guest 5 has the sharpest eye!'])
+    expect(p.feed.filter((item) => item.interrupt).map((item) => item.message)).toEqual(['Guest 5 has the sharpest eye'])
   })
 
   it('sets the key on the night and still keeps it secret', () => {

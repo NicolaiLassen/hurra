@@ -517,14 +517,14 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const points = s.totals[top[0]]
     const names = top.map((id) => nameIn(ctx.players, s.names, id))
     const shared = top.length > 1
-    ctx.announce(`${listNames(names)} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}!`, {
+    ctx.announce(`${listNames(names)} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}`, {
       detail: plural(points, 'point'),
       icon: 'crown',
       tone: 'gold',
       sound: 'fanfare',
       interrupt: true,
     })
-    ctx.announce(shared ? 'You share the sharpest eye!' : 'You have the sharpest eye!', {
+    ctx.announce(shared ? 'You share the sharpest eye' : 'You have the sharpest eye', {
       to: top,
       detail: `${plural(points, 'point')}. You're the face detective.`,
       icon: 'crown',

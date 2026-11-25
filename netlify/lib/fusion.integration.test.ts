@@ -93,6 +93,6 @@ describe('Participant fusion on the stage', () => {
     const done = await gameRow()
     expect(done).toMatchObject({ status: 'finished', winners: [ana.playerId], wake_at: null })
     const crowned = await admin.from('session_feed').select('message, interrupt').eq('game_id', gameId).order('id')
-    expect(crowned.data).toEqual([{ message: 'Ana has the sharpest eye!', interrupt: true }, { message: 'You have the sharpest eye!', interrupt: false }])
+    expect(crowned.data).toEqual([{ message: 'Ana has the sharpest eye', interrupt: true }, { message: 'You have the sharpest eye', interrupt: false }])
   }, 30_000)
 })

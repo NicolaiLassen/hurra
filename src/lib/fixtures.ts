@@ -849,7 +849,7 @@ function fusionStageWorld(scene: FusionStageScene): World {
     const points = fusion.points[fusion.winners[0]]
     const shared = names.length > 1
     feed.push(
-      say(`${names.join(' and ')} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}!`, fusion.finishedAt, {
+      say(`${names.join(' and ')} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}`, fusion.finishedAt, {
         game_id: FUSION,
         detail: `${points} points`,
         icon: 'crown',
@@ -859,7 +859,7 @@ function fusionStageWorld(scene: FusionStageScene): World {
       }),
     )
     if (fusion.winners.includes(SOFIE)) {
-      feed.push(say('You have the sharpest eye!', fusion.finishedAt, { game_id: FUSION, audience: [SOFIE], icon: 'crown', tone: 'gold', sound: 'fanfare' }))
+      feed.push(say('You have the sharpest eye', fusion.finishedAt, { game_id: FUSION, audience: [SOFIE], icon: 'crown', tone: 'gold', sound: 'fanfare' }))
     }
   }
   return {

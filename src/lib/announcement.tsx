@@ -12,6 +12,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react'
 import AnnouncementIconView from '@/components/AnnouncementIconView'
+import { onAirText } from '@/components/tv/news'
 import type { AnnouncementIcon, Tone } from '@/games/core/Game'
 import { CALLOUT_TONE } from '@/lib/callout'
 import type { FeedItem } from '@/lib/types'
@@ -43,11 +44,16 @@ export const announcementIcon = (name: string | null | undefined): Icon =>
 export const announcementTone = (tone: string | null | undefined): Tone =>
   tone && tone in CALLOUT_TONE ? (tone as Tone) : 'gold'
 
-/** Shows an announcement as a toast: the shared callout in its tone, with its detail as the second line. */
+/**
+ * Shows an announcement as a toast: the shared callout in its tone, with its
+ * detail as the second line. In the words the TV says it, without a game's
+ * exclamation marks: the product keeps its one for the winner's screen
+ * (docs/identity.md, The phone).
+ */
 export function toastAnnouncement(item: Announcement) {
-  toast(item.message, {
+  toast(onAirText(item.message), {
     icon: <AnnouncementIconView name={item.icon} />,
     tone: announcementTone(item.tone),
-    description: item.detail ?? undefined,
+    description: item.detail ? onAirText(item.detail) : undefined,
   })
 }
