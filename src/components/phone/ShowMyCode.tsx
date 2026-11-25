@@ -12,7 +12,8 @@ import { playerUrl } from '@/lib/urls'
  * close.
  *
  * `hidden` steps the bar aside (while a timed question is open, so it covers
- * no answer); a QR code already open stays open.
+ * no answer, and while the guest types, for the browsers that lift a fixed
+ * bar above the keyboard); a QR code already open stays open.
  */
 export default function ShowMyCode({ player, hidden = false }: { player: Pick<Player, 'name' | 'code'>; hidden?: boolean }) {
   const [open, setOpen] = useState(false)
