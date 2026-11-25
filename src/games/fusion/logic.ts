@@ -56,24 +56,6 @@ import {
   type FusionTopRow,
 } from './shapes'
 
-export {
-  defaultLabel,
-  GRACE_MS,
-  listNames,
-  MAX_LABEL_LENGTH,
-  MAX_PICTURES,
-  MAX_POINTS,
-  MAX_SECONDS,
-  MAX_SHOW_SECONDS,
-  MIN_SECONDS,
-  MIN_SHOW_SECONDS,
-  pictureKey,
-  plural,
-  pointsFor,
-  REVEAL_HOLD_MS,
-  VOTE_SPEC,
-  WAKE_MARGIN_MS,
-}
 export type { FusionHostAction }
 
 export type FusionPicture = {
@@ -130,30 +112,6 @@ export type FusionState = {
 
 /** What this game keeps on a player's profile. */
 export type FusionProfile = { detective?: number }
-
-// The background version's public shapes, for the screens being replaced
-// (docs/engine-v2.md, 8.4): they read saved JSON through view.ts's publicOf.
-// New code reads through shapes.ts; these go once the old screens have.
-/** @deprecated The background version's phases: read through shapes.ts. */
-export type FusionPhase = 'voting' | 'locked' | 'done'
-/** @deprecated The background version's picture: read through shapes.ts. */
-export type FusionPublicPicture = {
-  n: number
-  key: string
-  label: string
-  image: string | null
-  revealed: { people: [PlayerId, PlayerId]; names?: [string, string]; both: number; one: number; none: number; voters: number } | null
-}
-/** @deprecated The background version's public state: read through shapes.ts. */
-export type FusionPublicState = {
-  phase: FusionPhase
-  pictures: FusionPublicPicture[]
-  top: { playerId: PlayerId; points: number }[]
-  lastReveal: { n: number; at: number } | null
-  scoring?: { perPerson: number; bothBonus: number }
-}
-/** @deprecated The background version's view: read through shapes.ts. */
-export type FusionPlayerView = { points: number; hits: Record<string, number> }
 
 /** A game-media path as uploads make them: `<session>/<game>/<uuid>.jpg`, nothing that climbs or points elsewhere. */
 const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
