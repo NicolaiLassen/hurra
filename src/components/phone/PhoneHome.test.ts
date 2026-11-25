@@ -148,13 +148,13 @@ describe('the phone home', () => {
     expect(text).not.toMatch(/Bo and Maja|Maja and Bo/)
   })
 
-  it('fusion asked: locked in, and the two in the picture sit it out', async () => {
+  it('fusion asked: locked in, and the two in the picture get the same picker, told it won\'t count', async () => {
     const locked = await phone('fusion-asking-locked')
     expect(locked).toContain('Locked in: Bo and Maja. The answer comes up on the TV.')
     const you = await phone('fusion-asking-you')
     expect(you).toContain('#6 Who is in it?')
-    expect(you).toContain("This one is you. Keep a straight face. You sit this one out: nobody scores on a picture they're in.")
-    expect(you).not.toContain('Lock in')
+    expect(you).toContain("This one is you. Keep a straight face and pick any two: it won't count.")
+    expect(you).toContain('Pick two Lock in')
   })
 
   it('fusion revealed: what you got, who it was, your two picks and your place', async () => {
@@ -225,11 +225,11 @@ describe('the phone home', () => {
       expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
       expect(html, scene).not.toMatch(/data-slot="badge" data-variant="default"/)
     }
-    // While a fusion picture is asked, Lock in is the one gold step and Show my code steps aside;
-    // once locked in, or for the two in the picture, nothing on the phone is gold.
+    // While a fusion picture is asked, Lock in is the one gold step and Show my code steps aside,
+    // for the two in the picture too (their lock stays on the phone); once locked in, nothing is gold.
     expect(goldButtons(await phoneMarkup('fusion-asking'))).toEqual(['Lock in'])
+    expect(goldButtons(await phoneMarkup('fusion-asking-you'))).toEqual(['Lock in'])
     expect(goldButtons(await phoneMarkup('fusion-asking-locked'))).toEqual([])
-    expect(goldButtons(await phoneMarkup('fusion-asking-you'))).toEqual([])
     // While the quiz's timed question is open, the code bar steps aside: no gold button at all,
     // and the hunt's Scan and fusion's Vote stay outlined.
     const background = await phoneMarkup('background')

@@ -25,10 +25,10 @@ export default function PlayerCard({ game, players, player, publicState, view: r
   const current = pub?.current ? pub.pictures.find((p) => p.n === pub.current!.n) : undefined
   const asking = pub?.phase === 'asking' && pub.current ? pub.current : null
   const mine = pub?.current ? choiceOf(myAnswers[pub.current.key]) : null
-  const inPicture = view?.inPicture === true
-  const now = useServerTime(serverNow, 1000, asking !== null && mine === null && !inPicture)
+  // The two in the picture see the same row and Guess as everyone else: their sheet holds the same picker.
+  const now = useServerTime(serverNow, 1000, asking !== null && mine === null)
   const closed = asking ? (prompts.find((p) => p.key === asking.key)?.closed_at ?? null) !== null : true
-  const askCase = asking ? askingCase({ inPicture, lockedIn: mine !== null, sending: false, over: closed || now >= asking.endsAt }) : null
+  const askCase = asking ? askingCase({ lockedIn: mine !== null, sending: false, over: closed || now >= asking.endsAt }) : null
 
   let reveal = null
   if (pub?.phase === 'reveal' && current?.revealed) {

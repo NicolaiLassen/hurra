@@ -3615,7 +3615,7 @@ was. A point per right person, and a bonus for both.
 | `lobby` | What the game is, and how it scores | Watch the TV | Start the showing | Host |
 | `showing` | Each picture large, `showSeconds` each | "Look at the TV." | Skip to the wall | By itself after the last picture |
 | `wall` | Every picture at once; revealed ones carry their names | Your points and guesses | Ask the next picture, or Crown the face detective after the last | Host |
-| `asking` | The picture, "Who is it?", the countdown, the lock-in pips | Pick two and Lock in; the two in it: "This one is you." | Reveal now | By itself when time is up |
+| `asking` | The picture, "Who is it?", the countdown, the lock-in pips | Pick two and Lock in; the two in it get the same picker, told "This one is you." and that it won't count | Reveal now | By itself when time is up |
 | `reveal` | Who it was, how many got both, the top 3 | What you got | Back to the wall | By itself after 10 s |
 | `done` | The winner's screen | The result card | none | |
 
@@ -3706,8 +3706,8 @@ was. A point per right person, and a bonus for both.
     points on the board: "Participant fusion is over", "Nobody scored this
     time", no winner.
 - **The reveal** (Reveal now and the timer alike): every lock from someone
-  not in the picture counts (a lock from the two in it, which their phones
-  never offer, counts for nothing); `hits` is how many of the two each voter
+  not in the picture counts (a lock from the two in it counts for nothing;
+  their phones keep theirs on the phone and never send it); `hits` is how many of the two each voter
   got; `totals += hits * pointsPerPerson + (hits === 2 ? bonusForBoth : 0)`.
   No speed points. `revealPrompt('p' + n)`; records `revealed` with
   `{ n, label, people, both, one, none, voters }`; phase `reveal`,
@@ -3759,8 +3759,9 @@ was. A point per right person, and a bonus for both.
 - **playerView**: `{ points, rank, hits, inPicture }`: `rank` is null until
   the player scores; `hits` holds each revealed picture they locked in on and
   aren't in; `inPicture` is true only for the two in the picture asked or just
-  revealed, so their phones say "This one is you." and offer no picker. A
-  guest's own lock comes from `myAnswers`.
+  revealed, so their phones say "This one is you." over the same picker and
+  Lock in everyone gets, and keep that lock on the phone (a glance from the
+  next seat can't tell). A guest's own lock comes from `myAnswers`.
 - **Guests joining and leaving**: a guest who joins mid-round gets a view at
   the next sync and can lock in on the next picture asked. A guest removed
   before a reveal loses their lock with them (the database deletes their
@@ -3800,8 +3801,10 @@ was. A point per right person, and a bonus for both.
   showing say to watch the TV; the wall shows your points and your guesses;
   while a picture is asked, a thumbnail, the guests to pick from (search over
   16), two pick slots and the gold Lock in, the one gold step on the screen;
-  then "Locked in", or "This one is you. Keep a straight face." for the two
-  in it; the reveal says what you got. The phone strap (`phoneStrap`) uses
+  then "Locked in". The two in it get the same picker under "This one is you.
+  Keep a straight face and pick any two: it won't count.", and their lock
+  stays on the phone, so the next seat can't tell; the reveal says what you
+  got. The phone strap (`phoneStrap`) uses
   the strap's words without the clock. Phones load thumbnails only.
 - **Host** (`HostView`, with its steps in `host.ts`, tested): the phase as a
   chip (Ready, Showing, The wall, Guessing, Revealed, Over), the title line

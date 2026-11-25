@@ -80,7 +80,7 @@ describe('Lock in', () => {
 })
 
 describe('which screen a phone shows while a picture is asked', () => {
-  const base = { inPicture: false, lockedIn: false, sending: false, over: false }
+  const base = { lockedIn: false, sending: false, over: false }
 
   it('the picker for a voter, a late joiner included (no view reads as not in it)', () => {
     expect(askingCase(base)).toBe('picking')
@@ -96,8 +96,4 @@ describe('which screen a phone shows while a picture is asked', () => {
     expect(askingCase({ ...base, over: true, sending: true })).toBe('picking')
   })
 
-  it('the two in the picture sit it out, whatever else', () => {
-    expect(askingCase({ ...base, inPicture: true })).toBe('inPicture')
-    expect(askingCase({ inPicture: true, lockedIn: true, sending: false, over: true })).toBe('inPicture')
-  })
 })

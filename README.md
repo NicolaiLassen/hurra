@@ -83,7 +83,7 @@
 | --- | --- | --- |
 | **Last one standing** | All night, in the background | Everyone gets a secret task and one life. Get someone to do your task and they're out, and their task becomes yours. Or catch someone trying theirs on you. Scan their code to knock them out. The TV keeps count of who is still standing, and the last one standing wins. |
 | **Quiz** | On the TV | The host runs the questions and everyone answers on their phone. Right answers score more the faster they come. Time's up reveals the answer, a leaderboard follows, and the host crowns the winner. |
-| **Participant fusion** | On the TV | AI images fuse two guests into one portrait. The TV shows each picture large, one at a time, then all of them at once. Then the host asks them one by one: everyone picks the two guests in the picture on their phone and locks in before time runs out, and the reveal shows who it was. The two in the picture sit that one out. The host crowns the sharpest eye. |
+| **Participant fusion** | On the TV | AI images fuse two guests into one portrait. The TV shows each picture large, one at a time, then all of them at once. Then the host asks them one by one: everyone picks the two guests in the picture on their phone and locks in before time runs out, and the reveal shows who it was. The two in the picture can't score on it, and their phones look like everyone else's. The host crowns the sharpest eye. |
 | **In-person round** | In the room | Points for anything that happens in the room, like a round of beer pong. The host gives them by hand, by scanning the guest's code. |
 
 Several games run at once: a long one in the background while short ones take

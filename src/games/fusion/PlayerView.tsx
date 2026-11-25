@@ -8,7 +8,6 @@ import { Pair, LabelChip, PictureArt } from '@/games/fusion/parts'
 import {
   askingCase,
   doneWords,
-  IN_PICTURE,
   lobbyWords,
   lockedWords,
   outcomeFor,
@@ -44,9 +43,11 @@ import { cn } from '@/lib/utils'
 // Participant fusion on a phone). The TV is the show: the lobby and the
 // showing send eyes there; the wall says what comes next and how you are
 // doing; while a picture is asked, pick its two guests and lock in, the
-// screen's one gold step (Show my code steps aside for the timed prompt), or,
-// for the two in it, "This one is you."; the reveal says what you got. The
-// phone draws the strap above it ("Picture 4 of 12", phoneStrap in index.ts).
+// screen's one gold step (Show my code steps aside for the timed prompt). The
+// two in it get the same picker, told "This one is you." and that their lock
+// won't count, so a glance from the next seat can't tell; the reveal says what
+// you got. The phone draws the strap above it ("Picture 4 of 12", phoneStrap
+// in index.ts).
 
 /** The reveal's sound plays only this soon after the reveal: a phone opened later stays quiet. */
 const FRESH_MS = 15_000
@@ -201,7 +202,9 @@ function Wall({
 /**
  * A picture being guessed. A voter picks two guests and locks in: the lock
  * shows at once (Sending), then locked in; a refusal brings the picker back
- * with the picks and the server's words. The two in the picture sit it out.
+ * with the picks and the server's words. The two in the picture pick and lock
+ * in the same way, but their lock never leaves the phone: nothing they send
+ * could count, and the TV's count already leaves them out.
  */
 function Asking({
   picture,
@@ -233,24 +236,16 @@ function Asking({
   const names = useMemo(() => shortNames(players), [players])
   const lockedIn = isLockedIn(saved, lock)
   const sending = lock.kind === 'sending'
-  const now = useServerTime(serverNow, 250, !lockedIn && !inPicture)
+  const now = useServerTime(serverNow, 250, !lockedIn)
   // Time's up by the database clock, a closed prompt, or the database saying so.
   const over = now >= endsAt || (prompt?.closed_at ?? null) !== null || (lock.kind === 'refused' && lock.closed)
-  const view = askingCase({ inPicture, lockedIn, sending, over })
+  const view = askingCase({ lockedIn, sending, over })
   // A second tap before the first one's render can't send twice.
   const inFlight = useRef(false)
   const nameFor = (id: PlayerId) => names.get(id) ?? nameOf(players, id)
 
   const header = <AskHeader picture={picture} endsAt={endsAt} closed={over} serverNow={serverNow} mediaUrl={mediaUrl} />
 
-  if (view === 'inPicture') {
-    return (
-      <div className="grid grid-cols-1 gap-5">
-        {header}
-        <MomentCard head={IN_PICTURE.head} line={IN_PICTURE.line} />
-      </div>
-    )
-  }
   if (view === 'locked') {
     // Locked in means a lock to show: this tap's, or the one read back.
     const two = lockedPick(saved, lock)!
@@ -266,7 +261,7 @@ function Asking({
     )
   }
   if (view === 'timeUp') {
-    const words = timeUpWords(lock.kind === 'refused' && lock.closed ? lock.message : null)
+    const words = timeUpWords(lock.kind === 'refused' && lock.closed ? lock.message : null, inPicture)
     return (
       <div className="grid grid-cols-1 gap-5">
         {header}
@@ -284,6 +279,8 @@ function Asking({
 
   function lockIn() {
     if (!canLock || inFlight.current) return
+    // In the picture: locked in on this phone only, the same card as everyone's.
+    if (inPicture) return setLock({ kind: 'locked', pick: [picks[0], picks[1]] })
     inFlight.current = true
     void sendLock(picture.key, [picks[0], picks[1]], submit, setLock).finally(() => {
       inFlight.current = false
@@ -295,7 +292,7 @@ function Asking({
       {header}
       {/* Two lines kept for it, so the guests stay put as it changes. */}
       <p role="status" className="min-h-[2lh] text-[1.0625rem] leading-snug text-paper-2">
-        {pickLine(shownNames, lock)}
+        {pickLine(shownNames, lock, inPicture)}
       </p>
       <GuestPicker
         players={players}

@@ -246,9 +246,8 @@ export function LockBar({
 
 /**
  * Where you are with the picture being asked, once there is nothing to pick:
- * locked in, in the picture, or time's up. One size and weight for all, on
- * the raised surface with no colour, so a glance from the next seat can't
- * tell "This one is you." from "Locked in".
+ * locked in, or time's up. One size and weight for both, on the raised
+ * surface with no gold. The two in the picture reach the same cards.
  */
 export function MomentCard({ head, line, children }: { head: string; line: string | null; children?: ReactNode }) {
   return (

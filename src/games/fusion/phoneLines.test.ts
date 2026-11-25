@@ -11,7 +11,7 @@ import {
   barNames,
   cardLine,
   doneWords,
-  IN_PICTURE,
+  IN_PICTURE_LINE,
   lobbyWords,
   lockedWords,
   outcomeFor,
@@ -113,11 +113,14 @@ describe('a picture being guessed', () => {
     expect(lockedWords(['Bo', 'Maja'], false).line).toBe('The answer comes up soon.')
   })
 
-  it('in the picture: sit it out with a straight face', () => {
-    expect(IN_PICTURE).toEqual({
-      head: 'This one is you.',
-      line: "Keep a straight face. You sit this one out: nobody scores on a picture they're in.",
-    })
+  it('in the picture: the same picker, told to keep a straight face and that it won\'t count', () => {
+    expect(pickLine([], { kind: 'none' }, true)).toBe(IN_PICTURE_LINE)
+    expect(IN_PICTURE_LINE).toBe("This one is you. Keep a straight face and pick any two: it won't count.")
+    expect(pickLine(['Mads'], { kind: 'none' }, true)).toBe("Mads and one more. It won't count.")
+    expect(pickLine(['Mads', 'Ida'], { kind: 'none' }, true)).toBe("Mads and Ida. It won't count.")
+    // Locked in on the phone, it reads as everyone's lock.
+    expect(pickLine(['Mads', 'Ida'], { kind: 'locked', pick: ['m', 'i'] }, true)).toBe('Locking in Mads and Ida…')
+    expect(timeUpWords(null, true)).toEqual({ head: "Time's up.", line: 'You sat this one out.' })
   })
 
   it("time's up without a lock, with the database's words when a lock came too late", () => {
@@ -128,7 +131,7 @@ describe('a picture being guessed', () => {
   it('a late joiner (no view yet) gets the picker, as any voter', () => {
     const late = readView(null)
     expect(late).toBeNull()
-    expect(askingCase({ inPicture: late?.inPicture === true, lockedIn: false, sending: false, over: false })).toBe('picking')
+    expect(askingCase({ lockedIn: false, sending: false, over: false })).toBe('picking')
   })
 })
 
@@ -186,7 +189,7 @@ describe('the section card, while another game holds the main card', () => {
     expect(cardLine(asking, null, 'picking', null)).toBe('Guess #4 now')
     expect(cardLine(asking, null, 'locked', null)).toBe('Locked in on #4')
     expect(cardLine(asking, null, 'timeUp', null)).toBe("Time's up on #4")
-    expect(cardLine(pubOf('fusion-asking-you'), null, 'inPicture', null)).toBe('#6 is on. You sit this one out.')
+    expect(cardLine(pubOf('fusion-asking-you'), null, 'picking', null)).toBe('Guess #6 now')
     const reveal = pubOf('fusion-reveal')
     expect(cardLine(reveal, null, null, { names: ['Bo', 'Maja'], outcome: 'both', points: 3 })).toBe('#4 was Bo and Maja. You got both (+3).')
     expect(cardLine(reveal, null, null, { names: ['you', 'Maja'], outcome: 'you', points: 0 })).toBe('#4 was you and Maja.')
@@ -198,7 +201,10 @@ describe('the section card, while another game holds the main card', () => {
     expect(html).toMatch(/data-variant="outline"[^>]*>Guess/)
     expect(html).not.toMatch(/data-variant="default"/)
     expect(plain(await renderCard('fusion-asking-locked'))).toContain('Locked in on #4')
-    expect(plain(await renderCard('fusion-asking-you'))).toContain('#6 is on. You sit this one out.')
+    // The two in the picture get the same row and Guess: a glance can't tell.
+    const you = await renderCard('fusion-asking-you')
+    expect(plain(you)).toContain('Guess #6 now')
+    expect(you).toMatch(/data-variant="outline"[^>]*>Guess/)
     expect(plain(await renderCard('fusion-reveal'))).toContain('#4 was Bo and Maja. You got both (+3).')
   })
 })
@@ -274,8 +280,10 @@ describe('the words', () => {
       pickLine([], { kind: 'none' }),
       pickLine(['A', 'B'], { kind: 'none' }),
       ...Object.values(lockedWords(['A', 'B'], true)),
-      ...Object.values(IN_PICTURE),
+      IN_PICTURE_LINE,
+      pickLine(['A', 'B'], { kind: 'none' }, true),
       ...Object.values(timeUpWords()),
+      ...Object.values(timeUpWords(null, true)),
       ...(['both', 'one', 'none', 'noGuess', 'you'] as Outcome[]).map((o) => outcomeLine(o, 2)),
     ].filter((line): line is string => typeof line === 'string')
     for (const line of all) {
