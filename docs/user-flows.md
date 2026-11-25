@@ -35,7 +35,7 @@ flowchart LR
   classDef entry fill:#29241e,stroke:#f5c542,color:#f2ebde
   classDef route fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
 
-  JQR(["Join QR on the TV or the host's join card"]):::entry --> JOIN["/join/:code<br/>pick a name"]:::route
+  JQR(["Join QR on the TV or the host's join card"]):::entry --> JOIN["/join/:code<br/>Who are you?, or type a name"]:::route
   LINK(["Copied join link"]):::entry --> JOIN
   TYPED(["Typed code"]):::entry --> HOME["/ start page"]:::route
   HOME -- "Join" --> JOIN
@@ -79,8 +79,21 @@ flowchart TD
   J0 -- "already a player here" --> P0
   J0 -- "party archived" --> AR1["This party is over<br/>Join another party"]:::closed
   J0 -- "joining closed" --> CL1["Joining is closed<br/>lets you in as soon as the host reopens"]:::closed
-  CL1 -. "host opens joining" .-> FORM
-  J0 -- "joining open" --> FORM["What should we call you?"]:::screen
+  CL1 -. "host opens joining" .-> LIST
+  J0 -- "joining open" --> LIST{{"Free names on the guest list?"}}:::gate
+  LIST -- "none, an error, or a party without a list" --> FORM["What should we call you?"]:::screen
+  LIST -- "the host listed names" --> WHO["Who are you?<br/>the free names, a search from 9,<br/>I'm not on the list"]:::closed
+  WHO -- "tap a name" --> CONF["You're Ana?<br/>Yes, I'm Ana or No, go back"]:::screen
+  CONF -- "No, go back" --> WHO
+  CONF -- "someone just took it, or it left the list:<br/>back with a note" --> WHO
+  CONF -- "Yes, I'm Ana" --> P0
+  WHO -- "I'm not on the list" --> FORM
+  FORM -- "Back to the list" --> WHO
+  FORM -- "a typed name that is on the list" --> OFFER["Ana is on the guest list.<br/>Yes, I'm Ana"]:::closed
+  OFFER -- "Yes, I'm Ana" --> P0
+  OFFER -- "edit the name" --> FORM
+  WHO -- "Got a code from the host?" --> CODE
+  WHO -.- C26["C26 closed: the host adds the guests before the party;<br/>settings can name them before they join"]:::closed
   FORM -- "name taken, or closed meanwhile" --> FERR["Inline error under the name"]:::screen
   FERR --> FORM
   FERR -- "Is that you on another phone?" --> CODE["Got a code from the host?<br/>6-character code field"]:::screen
@@ -118,7 +131,9 @@ flowchart TD
   S -- "party deleted while open" --> NF
   S -- "host removed me" --> REM["You're no longer in X<br/>Join again"]:::closed
   S -- "host moved my player to another phone" --> MOVED["Your player moved to another phone"]:::closed
+  S -- "host freed my name" --> FREED["Who are you?, with: The host gave the name Ana<br/>back to the list. Pick your own name."]:::closed
   REM --> JOIN
+  FREED --> JOIN
   LOBBY -- "host starts a game" --> LIVE
   LIVE -- "the game finishes, by itself or by End" --> RES
   RES -- "the next game starts" --> LIVE
@@ -221,6 +236,7 @@ flowchart TD
   PAGE --> LIVEG["Live now: a card per live game (3.2)"]:::screen
   PAGE --> GP["Games: the program (3.2)"]:::screen
   PAGE --> PL["Players (3.2)"]:::screen
+  PAGE --> GLC["Guest list (3.2)"]:::screen
   PAGE --> JC["Join card: QR, code, Copy join link"]:::screen
 ```
 
@@ -255,7 +271,23 @@ flowchart TD
   PLR -- "menu: Rename" --> PLR
   PLR -- "menu: Move to a new phone" --> MOVE["A 6-character code with its time left,<br/>the join link as a QR"]:::closed
   PLR -- "menu: Remove, after a confirm" --> REMV["Player removed, their points with them<br/>live games carry on without them"]:::closed
+  PLR -- "menu: Free the name, after a confirm" --> FREE["Back on the guest list as still expected,<br/>the phone asks Who are you? again, its points go"]:::closed
+  GL["Guest list: 12 of 30 here. 18 still expected.<br/>Still expected, with a search from 9"]:::screen -- "Add guests" --> ADDG["One name per line, pasted or typed<br/>Added 12 guests, and what was left out"]:::closed
+  ADDG -- "a name over 40 characters stays in the field" --> ADDG
+  GL -- "menu: Rename" --> GL
+  GL -- "menu: Remove from the list, after a confirm" --> GLR["The name leaves the list<br/>settings that named it lose that pick"]:::closed
+  FREE --> GL
 ```
+
+The Guest list card sits under Players (on a phone, before the join card).
+Before the party the host adds every guest's name; a guest who joins taps
+theirs under Who are you?, and game settings, such as fusion's "Who is in
+it?", can name guests who haven't joined yet, marked "(not here yet)". The
+card lists only the guests still expected: joined guests are in Players. Free
+the name is for a guest who tapped the wrong name; for another spelling (Ulle
+for Ulrik), free Ulle, then remove Ulle from the list. A name on the list that
+never joins appears nowhere else. The words of each screen are in
+[guest-list.md](guest-list.md), section 7.
 
 Each live game has its own card, so its controls sit with its title and its End
 (P2-4). The game's own controls are its `HostView`: the quiz's one big button
@@ -406,6 +438,8 @@ rows need the room.
 | Joining closed | Joining is closed, opens by itself when the host reopens | Joining is closed card, faded QR | No join card |
 | Player removed | You're no longer in X, Join again | Row gone | Row gone |
 | Player moved to another phone | Your player moved to another phone | Row stays, with its points | Row stays |
+| Name freed by the host | Who are you?, with "The host gave the name Ana back to the list. Pick your own name." | Row gone from Players, back under Still expected | Row gone |
+| Name taken a moment before (Yes, I'm Ana) | Back to Who are you?, with "Someone just took Ana. If that's you, ask the host to free your name." | Not applicable | Not applicable |
 | Game deleted (End it first if it is live) | It leaves the lists, its result card too | Row gone | Back to the standings if it was on the stage |
 | A game's timer can't get through | Not applicable | A warning above the live games | Keeps trying, with backoff |
 | Unknown player code | Unknown code, Back to the game | Unknown player, Scan again, Back to your sessions | Not applicable |
@@ -449,6 +483,7 @@ rows need the room.
 | C23 | G6: a decided game stayed Live until the host pressed End | A game finishes itself (`isFinished`) in the same save as the deciding move; End is still there for ending early |
 | C24 | G9: with two in-person rounds live, a round's Scan a player opened the award page with the stage game or the newest live game picked | The round's Scan a player sends its own game id (`?game=<id>`), which the scanner carries to the award page |
 | C25 | An old phone that slept through its player's move woke to "You're no longer in X" | The snapshot says the player moved, so it shows "Your player moved to another phone" with Join with a new name |
+| C26 | Fusion's pictures could only name guests who had joined, so the host couldn't set the game up before the party | The guest list ([guest-list.md](guest-list.md)): the host adds every name before the party, a guest taps theirs under Who are you?, and settings can name guests still expected |
 
 ### Open, in priority order
 
