@@ -222,7 +222,8 @@ function Hero({
           <p className="flex min-w-0 items-baseline gap-3 text-tv-field font-bold short:text-tv-body">
             {named && <span className="min-w-0 shrink truncate tv-num text-tv-name short:text-tv-band">{row.name}</span>}
             {out && <OutWord />}
-            {won && <span className="min-w-0 truncate">{won}</span>}
+            {/* Two lines when the column is narrow ("Won Last one standing / at 21:29"), never cut. */}
+            {won && <span className="line-clamp-2 min-w-0 text-balance">{won}</span>}
           </p>
         )}
         <p className="mt-1 flex items-baseline gap-4">

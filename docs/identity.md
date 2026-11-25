@@ -338,7 +338,8 @@ fills whatever stage the frame gives it:
 
 - **The leader's column:** the leader as a hero (their token at 264 px,
   their points at `text-tv-lead` in gold, what they last won at its finish
-  time and their lead, "2 ahead of Ana"), the next five places large (names
+  time, on two lines rather than cut when the column is narrow, and their
+  lead, "2 ahead of Ana"), the next five places large (names
   at `text-tv-name`, points at `text-tv-score`), and one line on how the last
   game moved the places ("Beer pong moved Luna up 4 places and Clara up 3.",
   from that game's points, `placesMoved` in
