@@ -336,7 +336,7 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
             value={config.standingsEvery}
             min={0}
             max={MAX_STANDINGS_EVERY}
-            hint="0 never shows it. 4 shows it after reveals 4 and 8."
+            hint="0 never shows it. 4 shows it after every 4th reveal, and always after the last one."
             issues={placed.fields.standings}
             onChange={(standingsEvery) => change({ standingsEvery })}
           />

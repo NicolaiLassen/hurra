@@ -187,8 +187,7 @@ flowchart TD
 
 ### 2.5 Lydspor on the phone
 
-The designed flow (`.design/lydspor/spec.md`, section 4); the phone's screens
-land from their own package, and until then Lydspor's card is a placeholder.
+The flow as built from `.design/lydspor/spec.md`, section 4.
 
 ```mermaid
 flowchart TD
@@ -210,12 +209,15 @@ flowchart TD
   LOCKED -- "the host reveals song n" --> REV["The storyteller tells the story. Look at the TV.<br/>Song 1: 3 of 4 points; per part what I typed<br/>and whether it counted (Spelling forgiven.)"]:::screen
   REV -- "the host accepts my close answer" --> REV
   REV -- "the next reveal" --> REV
+  REV -- "after the last reveal" --> TOP["The top 5 is on the TV.<br/>My points with my own average:<br/>Your own photo counts as 3 of them."]:::screen
+  TOP -- "the host crowns Lydspor" --> RES
   REV -- "the host crowns Lydspor" --> RES["Result card: You won Lydspor, +20 on the night board,<br/>or my place and payout"]:::closed
   START -- "I sit this one out" --> SIT["You sit this one out. Enjoy the show."]:::closed
 ```
 
 Typed answers are saved when a field is left (Next, Done, another field, a
-photo, the page going hidden), never per letter. Spelling is forgiven on the
+photo, the page going hidden, or the last call changing the screen under it),
+never per letter. Spelling is forgiven on the
 server at the lock, never judged on the phone, and nobody's typed answer ever
 reaches another phone or the TV.
 
