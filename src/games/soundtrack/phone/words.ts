@@ -138,6 +138,9 @@ export function nextLine(n: number, mine: Picks | null): { lead: string; have: s
   return { lead, have: `${parts[0]}, ${parts[1]} and ${parts[2]}` }
 }
 
+/** After the last reveal, for a guest in a song's photo: their own average, counted in the points. */
+export const ownPhotoLine = (credit: number) => `Your own photo counts as ${credit} of them.`
+
 /** "3 Lydspor points so far, 6th." split as the figure and the words; the place only once scored. */
 export function soFarWords(points: number, place: string | null): string {
   const word = points === 1 ? 'Lydspor point' : 'Lydspor points'

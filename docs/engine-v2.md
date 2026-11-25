@@ -3831,12 +3831,15 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   how many are playing, the songs revealed, the latest reveal (its truth, the
   room's counts with the host's accepts, and how many could score on it), the
   photos that fit no song after the last reveal, the top 5 with each gain
-  since the last top 5, and the final rows after the crown. Never a title,
+  since the last top 5 (once every song played is revealed, its points
+  count each own average, as `credit`, so it ranks as the crown will), and
+  the final rows after the crown. Never a title,
   singer or caption before its reveal, never a typed answer, never who is in
   a photo. **playerView**: sitting out, the guest's own locked answers from the
   lock on, how each revealed song went (`exact`, `typo`, `accepted`, `close`,
   `wrong` or `none` per typed part; `right`, `wrong`, `doubled` or `none` for
-  the event), their points, place and final row.
+  the event), their points and place (with the own average once every song
+  played is revealed, as `credit`), and their final row.
 - **recap** (finished rounds, revealed songs only): "Lydspor champion:
   {names}", the best known song and the hardest, with how many placed the
   photo and typed the title and the singer. Never a typed answer.

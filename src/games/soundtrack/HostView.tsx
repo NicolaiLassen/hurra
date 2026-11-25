@@ -311,7 +311,7 @@ function stageLine(pub: SoundtrackPublicState): string {
 function TopFive({ pub, players, title }: { pub: SoundtrackPublicState; players: readonly Player[]; title: string }) {
   const nameOf = (id: PlayerId) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const rows = pub.final
-    ? pub.final.slice(0, 5).map((row) => ({ playerId: row.playerId, rank: row.place, points: row.points, gained: 0 }))
+    ? pub.final.slice(0, 5).map((row) => ({ playerId: row.playerId, rank: row.place, points: row.points, credit: 0, gained: 0 }))
     : pub.top
   return (
     <section>
@@ -326,7 +326,8 @@ function TopFive({ pub, players, title }: { pub: SoundtrackPublicState; players:
               <Avatar name={nameOf(row.playerId)} playerId={row.playerId} className="size-7" />
               <span className="min-w-0 flex-1 truncate font-bold">{nameOf(row.playerId)}</span>
               {/* The gain since the last top 5; at the first one it would only repeat the points. */}
-              {row.gained > 0 && row.gained !== row.points && <span className="tv-num text-base text-paper-2">+{row.gained}</span>}
+              {row.gained > 0 && row.gained !== row.points - row.credit && <span className="tv-num text-base text-paper-2">+{row.gained}</span>}
+              {row.credit > 0 && <span className="text-sm font-semibold whitespace-nowrap text-paper-2">+{row.credit} own photo</span>}
               <span className="tv-num min-w-8 text-right text-lg text-paper">{row.points}</span>
             </li>
           ))}

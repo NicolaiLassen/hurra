@@ -209,7 +209,12 @@ export type SoundtrackPublicState = {
   reveal: SoundtrackReveal | null
   /** The photos that fit no song, after the last reveal only. */
   extras: { path: string; caption: string }[] | null
-  top: { playerId: PlayerId; points: number; rank: number; gained: number }[]
+  /**
+   * The top 5. Once every song played is revealed, `points` include the own
+   * average (`credit`), as the crown will count them; before that `credit` is 0.
+   * `gained` is what was earned since the last top 5, without the own average.
+   */
+  top: { playerId: PlayerId; points: number; credit: number; rank: number; gained: number }[]
   final: { playerId: PlayerId; points: number; place: number; paid: number }[] | null
   intro: string
   storyteller: string
@@ -252,8 +257,10 @@ export type SoundtrackPlayerView = {
   mine: Picks | null
   /** Revealed songs, in order. */
   songs: SoundtrackSongView[]
-  /** Lydspor points so far (before the own average). */
+  /** Lydspor points so far: what this guest earned, plus the own average once every song played is revealed. */
   points: number
+  /** The own average in `points`: 0 until every song played is revealed. */
+  credit: number
   /** Place among scoring guests, once this guest has scored. */
   rank: number | null
   final: { points: number; credit: number; place: number; paid: number } | null

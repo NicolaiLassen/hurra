@@ -550,6 +550,19 @@ function creditOf(sheet: Sheet, id: PlayerId): number {
   return played >= 1 && inPhoto >= 1 ? Math.round(((sheet.earned.get(id) ?? 0) / played) * inPhoto) : 0
 }
 
+/**
+ * A guest's Lydspor points as the room sees them: what they earned, plus the
+ * own average once every song played is revealed (it can't grow after that,
+ * only follow an accept), so the last top 5 ranks the way the crown will.
+ * The crown's own averages are kept in the state.
+ */
+function standingOf(state: SoundtrackState, sheet: Sheet, id: PlayerId): { points: number; credit: number } {
+  const earned = sheet.earned.get(id) ?? 0
+  const allRevealed = sheet.songs.length > 0 && sheet.songs.length === state.playedAt.length
+  const credit = !allRevealed ? 0 : (state.credits?.[id] ?? creditOf(sheet, id))
+  return { points: earned + credit, credit }
+}
+
 /** Competition ranks (1, 2, 2, 4) of the rows, highest first; ties keep their order. */
 function ranked<T extends { points: number }>(rows: T[]): (T & { rank: number })[] {
   const sorted = rows.map((row, order) => ({ row, order })).sort((a, b) => b.row.points - a.row.points || a.order - b.order)
@@ -817,9 +830,10 @@ export class SoundtrackGame extends Game<
               return { path: photo.photo, caption: photo.caption }
             })
         : null,
-      top: ranked(sheet.participants.map((playerId) => ({ playerId, points: sheet.earned.get(playerId) ?? 0 })).filter((row) => row.points > 0))
+      top: ranked(sheet.participants.map((playerId) => ({ playerId, ...standingOf(state, sheet, playerId) })).filter((row) => row.points > 0))
         .slice(0, TOP_SIZE)
-        .map((row) => ({ ...row, gained: row.points - (state.shownTop[row.playerId] ?? 0) })),
+        // The gain counts what was earned since the last top 5; the own average shows on its own.
+        .map((row) => ({ ...row, gained: row.points - row.credit - (state.shownTop[row.playerId] ?? 0) })),
       final:
         state.phase === 'done'
           ? finalRows(state, config, info.players).map(({ playerId, points, place, paid }) => ({ playerId, points, place, paid }))
@@ -830,7 +844,7 @@ export class SoundtrackGame extends Game<
   }
 
   playerView(state: SoundtrackState, playerId: PlayerId, info: GameInfo<SoundtrackConfig>): SoundtrackPlayerView {
-    if (state.sitOut.includes(playerId)) return { sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null }
+    if (state.sitOut.includes(playerId)) return { sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null }
     const sheet = sheetOf(state, info.config, info.players)
     const mine = state.picks && Object.hasOwn(state.picks, playerId) ? state.picks[playerId] : null
     const outcomes =
@@ -843,10 +857,11 @@ export class SoundtrackGame extends Game<
       title: outcome.title,
       singer: outcome.singer,
     }))
-    const points = sheet.earned.get(playerId) ?? 0
+    // Ranked as the TV's top 5 ranks: with the own average once every song played is revealed.
+    const { points, credit } = sheet.outcomes.has(playerId) ? standingOf(state, sheet, playerId) : { points: 0, credit: 0 }
     const rank =
       points > 0
-        ? (ranked(sheet.participants.map((id) => ({ id, points: sheet.earned.get(id) ?? 0 })).filter((row) => row.points > 0)).find(
+        ? (ranked(sheet.participants.map((id) => ({ id, points: standingOf(state, sheet, id).points })).filter((row) => row.points > 0)).find(
             (row) => row.id === playerId,
           )?.rank ?? null)
         : null
@@ -856,6 +871,7 @@ export class SoundtrackGame extends Game<
       mine: mine ? { event: [...mine.event], title: [...mine.title], singer: [...mine.singer] } : null,
       songs,
       points,
+      credit,
       rank,
       final: final ? { points: final.points, credit: final.credit, place: final.place, paid: final.paid } : null,
     }

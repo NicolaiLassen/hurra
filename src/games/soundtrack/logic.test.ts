@@ -678,8 +678,15 @@ describe('scoring', () => {
     expect(pub(p).reveal).toMatchObject({ counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
     expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 0, inPhoto: true, event: 'right', title: 'exact', singer: 'exact' })
     reveal(p, 1)
+    expect(viewOf(p, ids[0])).toMatchObject({ points: 4, credit: 0 })
     reveal(p, 2)
-    expect(viewOf(p, ids[0]).points).toBe(4 + 1)
+    // Every song played is revealed: the own average counts now, on the phone and in the last top 5, as the crown will.
+    expect(viewOf(p, ids[0])).toMatchObject({ points: 4 + 1 + 3, credit: 3, rank: 1 })
+    hostAct(p, { type: 'standings', after: 3 })
+    expect(pub(p).top).toEqual([
+      { playerId: ids[0], points: 8, credit: 3, rank: 1, gained: 5 },
+      { playerId: ids[1], points: 1, credit: 0, rank: 2, gained: 1 },
+    ])
     hostAct(p, { type: 'crown' })
     // Earned 5 over the 2 songs played: round(5 / 2 * 1) = 3 for the song in the photo.
     expect(stateOf(p).credits).toEqual({ [ids[0]]: 3, [ids[1]]: 0 })
@@ -735,13 +742,13 @@ describe('scoring', () => {
     expect(hostAct(p, { type: 'standings', after: 0 }).kind).toBe('skip')
     expect(hostAct(p, { type: 'standings', after: 1 }).kind).toBe('commit')
     expect(hostAct(p, { type: 'standings', after: 1 }).kind).toBe('skip')
-    expect(pub(p).top).toEqual([{ playerId: ids[0], points: 1, rank: 1, gained: 1 }])
+    expect(pub(p).top).toEqual([{ playerId: ids[0], points: 1, credit: 0, rank: 1, gained: 1 }])
     reveal(p, 1)
     reveal(p, 2)
     hostAct(p, { type: 'standings', after: 3 })
     expect(pub(p).top).toEqual([
-      { playerId: ids[0], points: 3, rank: 1, gained: 2 },
-      { playerId: ids[1], points: 2, rank: 2, gained: 2 },
+      { playerId: ids[0], points: 3, credit: 0, rank: 1, gained: 2 },
+      { playerId: ids[1], points: 2, credit: 0, rank: 2, gained: 2 },
     ])
   })
 })
@@ -795,7 +802,7 @@ describe('sitting out', () => {
     lockNow(p)
     reveal(p, 0)
     expect(pub(p).reveal).toMatchObject({ counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
-    expect(viewOf(p, ids[5])).toEqual({ sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null })
+    expect(viewOf(p, ids[5])).toEqual({ sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null })
     expect(pub(p).top.map((row) => row.playerId)).toEqual([ids[0]])
     // Taken off the list, they count from then on: their locked answers score.
     hostAct(p, { type: 'sitOut', playerIds: [ids[4]] })

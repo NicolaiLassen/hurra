@@ -4,7 +4,7 @@ import { pointsPerSong } from '@/games/soundtrack/logic'
 import { letterOf, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
 import { cn } from '@/lib/utils'
 import { LetterChip, PhotoImage } from './Wall'
-import { eventLine, gotItLine, nextLine, partCounts, partLine, soFarWords, storyLine } from './words'
+import { eventLine, gotItLine, nextLine, ownPhotoLine, partCounts, partLine, soFarWords, storyLine } from './words'
 
 // The reveal on a guest's phone (spec 4.11), for the song just revealed: the
 // story first, heads up to the TV; then how the song went for this guest,
@@ -49,6 +49,8 @@ export function Reveal({
   const head = standings ? 'Lydspor’s top 5 is on the TV.' : storyLine(pub.storyteller)
   const points = view?.points ?? 0
   const place = view?.rank ? ordinal(view.rank) : null
+  // Once every song is revealed, the points count the own average, as the TV's top 5 does.
+  const credit = view && view.credit > 0 ? ownPhotoLine(view.credit) : null
   const next = reveal.n < played ? nextLine(reveal.n + 1, mine) : null
 
   return (
@@ -108,6 +110,7 @@ export function Reveal({
         <span className={cn('text-[30px] leading-none tv-num', view?.rank === 1 && 'text-gold')}>{points}</span>
         <span className="text-[17px] font-bold">{soFarWords(points, place)}</span>
       </p>
+      {credit && <p className="mt-1 text-base leading-snug font-semibold text-paper-2">{credit}</p>}
       <Tally played={played} revealed={pub.revealed} songs={view?.songs ?? []} />
       <p className="mt-3 text-base leading-snug text-pretty text-paper-2">
         {next ? (

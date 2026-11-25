@@ -181,7 +181,7 @@ describe('Lydspor for a guest sitting out, or with no answers', () => {
       serverNow: () => snapshot.now,
       mediaUrl: (path: string) => `/media/${path}`,
       player,
-      view: { sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null },
+      view: { sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null },
       myAnswers: {},
       onStage: true,
       act: async () => {},

@@ -74,7 +74,13 @@ export function readPublic(raw: unknown): SoundtrackPublicState | null {
     extras: Array.isArray(pub.extras) ? rows(pub.extras).map((photo) => ({ path: text(photo.path), caption: text(photo.caption) })) : null,
     top: rows(pub.top)
       .filter(isId)
-      .map((row) => ({ playerId: row.playerId as PlayerId, points: number(row.points), rank: number(row.rank, 1), gained: number(row.gained) })),
+      .map((row) => ({
+        playerId: row.playerId as PlayerId,
+        points: number(row.points),
+        credit: number(row.credit),
+        rank: number(row.rank, 1),
+        gained: number(row.gained),
+      })),
     final,
     intro: text(pub.intro),
     storyteller: text(pub.storyteller),
@@ -116,6 +122,7 @@ export function readView(raw: unknown): SoundtrackPlayerView | null {
     mine: readPicks(view.mine),
     songs: rows(view.songs).map(readSong),
     points: number(view.points),
+    credit: number(view.credit),
     rank: typeof view.rank === 'number' && view.rank > 0 ? view.rank : null,
     final: final
       ? { points: number(final.points), credit: number(final.credit), place: number(final.place, 1), paid: number(final.paid) }
