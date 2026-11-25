@@ -115,6 +115,6 @@ describe("Lydspor's TV words", () => {
 
   it('keeps the copy free of dashes and exclamation marks', () => {
     const copy = [...RULES, PLAYING_LINE, LAST_CALL_LINE, NOBODY_LINE, lockedLine('Ida'), revealsLine('Ida'), storyLine('Ida')]
-    for (const line of copy) expect(line).not.toMatch(/[–—!]| - /)
+    for (const line of copy) expect(line).not.toMatch(/[\u2013\u2014!]| - /)
   })
 })
