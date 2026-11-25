@@ -187,7 +187,7 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   // Two songs whose titles read the same: a typed answer would count for both.
   const titleKeys = songs.map((song) => normalise(song.title))
   const twice = titleKeys.findIndex((key, i) => key !== '' && titleKeys.indexOf(key) !== i)
-  if (twice >= 0) problems.push(`Two songs are called ${songs[twice].title}`)
+  if (twice >= 0) problems.push(`Two songs are called ${songs[titleKeys.indexOf(titleKeys[twice])].title}`)
   const photos = [...songs.map((song) => song.photo), ...extraPhotos.map((photo) => photo.photo)].filter(Boolean)
   if (new Set(photos).size !== photos.length) problems.push('The same photo is used twice')
   if (songs.length >= EXTRAS_NEEDED_FROM && extraPhotos.length < MIN_EXTRA_PHOTOS) {
