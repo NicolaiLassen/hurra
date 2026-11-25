@@ -3,7 +3,7 @@ import { decodeSet, frameAspect, median, runQueue, wallAspect } from './preload'
 import type { FusionPublicPicture, FusionPublicState, FusionReveal } from './shapes'
 
 const RULES = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
-const REVEAL: FusionReveal = { people: ['ana', 'bo'], names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1, step: 1, at: 1 }
+const REVEAL: FusionReveal = { people: ['ana', 'bo'], names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1, originals: [null, null], step: 1, at: 1 }
 
 const picture = (n: number, patch: Partial<FusionPublicPicture> = {}): FusionPublicPicture => ({
   n,

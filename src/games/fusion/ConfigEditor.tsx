@@ -1,4 +1,4 @@
-import { ImageIcon, PlusIcon, TrashIcon, UploadSimpleIcon, WarningIcon, XIcon } from '@phosphor-icons/react'
+import { ImageIcon, PlusIcon, TrashIcon, UploadSimpleIcon, UserIcon, WarningIcon, XIcon } from '@phosphor-icons/react'
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,15 +26,19 @@ import { cn } from '@/lib/utils'
 /** The Select's value for "nobody picked yet": Radix keeps empty values for clearing. */
 const NOBODY = 'nobody'
 
+/** What an upload fills: the fused picture's image, or the own photo of its first or second person. */
+type Slot = 'image' | 0 | 1
+
 /**
  * Fusion's settings (hosts only): the numbered pictures, each with an optional
- * label, image and the two people in it, the timing and the points. Who is in
- * a picture can also wait until the night (Show who in the live game).
+ * label, image and the two people in it, each person with their own photo
+ * (secret until the reveal), the timing and the points. Who is in a picture
+ * can also wait until the night (Show who in the live game).
  */
 export default function ConfigEditor({ config, onChange, players, media }: ConfigEditorProps<FusionGame>) {
   const pictures: FusionPicture[] = Array.isArray(config.pictures) ? config.pictures : []
-  // Uploads by picture index. Adding and removing pictures waits for them, so an index stays put.
-  const [uploading, setUploading] = useState<Record<number, boolean>>({})
+  // Uploads by picture index and slot ("3:image", "3:0"). Adding and removing pictures waits for them, so an index stays put.
+  const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [count, setCount] = useState('12')
   const busy = Object.values(uploading).some(Boolean)
 
@@ -49,17 +53,18 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
   const update = (index: number, patch: Partial<FusionPicture>) =>
     change({ pictures: pictures.map((p, i) => (i === index ? withPatch(p, patch) : p)) })
 
-  async function upload(index: number, file: File) {
-    setUploading((u) => ({ ...u, [index]: true }))
+  async function upload(index: number, slot: Slot, file: File) {
+    const id = `${index}:${slot}`
+    setUploading((u) => ({ ...u, [id]: true }))
     try {
       const path = await media.upload(file)
       const { config: now, onChange: save } = latest.current
       const list = Array.isArray(now.pictures) ? now.pictures : []
-      save({ ...now, pictures: list.map((p, i) => (i === index ? withPatch(p, { image: path }) : p)) })
+      save({ ...now, pictures: list.map((p, i) => (i === index ? withPatch(p, slot === 'image' ? { image: path } : withOriginal(p, slot, path)) : p)) })
     } catch (error) {
       toast.error((error as Error).message || "That image couldn't be uploaded")
     } finally {
-      setUploading((u) => ({ ...u, [index]: false }))
+      setUploading((u) => ({ ...u, [id]: false }))
     }
   }
 
@@ -88,8 +93,8 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
           </Button>
         </div>
         <p className="text-xs text-paper-2">
-          Number the prints 1 to {valid ? n : 'N'}, as they are numbered here. You can add an image and the two people for
-          each one next.
+          Number the prints 1 to {valid ? n : 'N'}, as they are numbered here. You can add an image, the two people and their
+          own photos for each one next.
         </p>
         <Rules config={config} change={change} />
       </div>
@@ -120,11 +125,11 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
               n={index + 1}
               picture={picture}
               players={players}
-              uploading={uploading[index] === true}
+              uploading={(slot) => uploading[`${index}:${slot}`] === true}
               busy={busy}
-              imageUrl={picture.image ? media.url(picture.image, 'thumb') : null}
+              thumbOf={(path) => media.url(path, 'thumb')}
               onChange={(patch) => update(index, patch)}
-              onUpload={(file) => void upload(index, file)}
+              onUpload={(slot, file) => void upload(index, slot, file)}
               onRemove={() => change({ pictures: pictures.filter((_, i) => i !== index) })}
             />
           ))}
@@ -132,6 +137,11 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
         <p className="text-xs text-paper-2">
           The numbers here are the numbers on the prints: removing a picture renumbers the ones after it. Who is in each
           picture is optional now; you can set it on the night with Show who.
+        </p>
+        <p className="text-xs text-paper-2">
+          Each person's own photo is optional and stays secret until the picture is revealed: then the TV shows the two photos
+          beside it. Pick each person beside their own photo. Without one, the TV shows the guest's profile photo, or their
+          token.
         </p>
       </div>
       <Rules config={config} change={change} />
@@ -145,7 +155,7 @@ function PictureRow({
   players,
   uploading,
   busy,
-  imageUrl,
+  thumbOf,
   onChange,
   onUpload,
   onRemove,
@@ -153,23 +163,19 @@ function PictureRow({
   n: number
   picture: FusionPicture
   players: Player[]
-  uploading: boolean
+  uploading: (slot: Slot) => boolean
   busy: boolean
-  imageUrl: string | null
+  thumbOf: (path: string) => string
   onChange: (patch: Partial<FusionPicture>) => void
-  onUpload: (file: File) => void
+  onUpload: (slot: Slot, file: File) => void
   onRemove: () => void
 }) {
   const people = picture.people ?? ['', '']
+  const originals = picture.originals ?? [null, null]
   const chosen = people.filter((id) => id !== '').length
   const problem =
     chosen === 1 ? 'Pick the second person, or clear both' : chosen === 2 && people[0] === people[1] ? 'Pick two different people' : null
-
-  function onFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = '' // the same file can be picked again after a failure
-    if (file) onUpload(file)
-  }
+  const imageUploading = uploading('image')
 
   function setPerson(slot: 0 | 1, id: string) {
     const next: [PlayerId, PlayerId] = slot === 0 ? [id, people[1]] : [people[0], id]
@@ -179,12 +185,12 @@ function PictureRow({
   return (
     <li className="grid grid-cols-[auto_1fr] gap-3 rounded-lg bg-raised p-3">
       <div className="relative h-20 w-16 overflow-hidden rounded-chip bg-overlay">
-        {imageUrl ? (
-          <img src={imageUrl} alt={`Picture ${n}`} width={320} height={400} className="size-full object-cover object-[50%_35%]" />
+        {picture.image ? (
+          <img src={thumbOf(picture.image)} alt={`Picture ${n}`} width={320} height={400} className="size-full object-cover object-[50%_35%]" />
         ) : (
           <span className="wide grid size-full place-items-center text-2xl text-paper-2">{n}</span>
         )}
-        {uploading && (
+        {imageUploading && (
           <span className="absolute inset-0 grid place-items-center bg-overlay text-xs font-bold text-paper">Uploading…</span>
         )}
       </div>
@@ -212,37 +218,111 @@ function PictureRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="secondary" size="sm" className={cn(uploading && 'pointer-events-none opacity-50')}>
-            <label>
-              {picture.image ? <ImageIcon /> : <UploadSimpleIcon />}
-              {picture.image ? 'Replace image' : 'Add image'}
-              <input type="file" accept="image/*" className="sr-only" disabled={uploading} onChange={onFile} />
-            </label>
-          </Button>
-          {picture.image && !uploading && (
+          <FileButton
+            label={picture.image ? 'Replace image' : 'Add image'}
+            icon={picture.image ? ImageIcon : UploadSimpleIcon}
+            uploading={imageUploading}
+            onFile={(file) => onUpload('image', file)}
+          />
+          {picture.image && !imageUploading && (
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ image: undefined })}>
               <XIcon />
               Remove image
             </Button>
           )}
-          {!picture.image && !uploading && <p className="text-xs text-paper-2">No image: the TV shows its label instead.</p>}
+          {!picture.image && !imageUploading && <p className="text-xs text-paper-2">No image: the TV shows its label instead.</p>}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-paper-2">Who is in it?</span>
-          {([0, 1] as const).map((slot) => (
-            <PersonSelect
-              key={slot}
-              value={people[slot]}
-              players={players}
-              label={slot === 0 ? `First person in picture ${n}` : `Second person in picture ${n}`}
-              onChange={(id) => setPerson(slot, id)}
-            />
-          ))}
-          {problem && <Problem>{problem}</Problem>}
+        <p className="text-sm text-paper-2">Who is in it, each with their own photo?</p>
+        {/* minmax(0, 1fr) tracks, so a narrow phone shrinks the slots instead of pushing them past the card. */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {([0, 1] as const).map((slot) => {
+            const ordinal = slot === 0 ? 'first' : 'second'
+            const original = originals[slot]
+            const busySlot = uploading(slot)
+            return (
+              <div key={slot} className="flex min-w-0 items-center gap-2" role="group" aria-label={`The ${ordinal} person in picture ${n}`}>
+                <div className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-chip bg-overlay text-paper-3">
+                  {original ? (
+                    <img
+                      src={thumbOf(original)}
+                      alt={`Photo of the ${ordinal} person in picture ${n}`}
+                      width={300}
+                      height={400}
+                      className="size-full object-cover object-[50%_30%]"
+                    />
+                  ) : (
+                    <UserIcon aria-hidden className="size-6" />
+                  )}
+                  {busySlot && <span className="absolute inset-0 bg-overlay" />}
+                </div>
+                <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5">
+                  <PersonSelect
+                    className="w-full max-w-56"
+                    value={people[slot]}
+                    players={players}
+                    label={slot === 0 ? `First person in picture ${n}` : `Second person in picture ${n}`}
+                    onChange={(id) => setPerson(slot, id)}
+                  />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <FileButton
+                      label={busySlot ? 'Uploading…' : original ? 'Replace' : 'Add photo'}
+                      icon={UploadSimpleIcon}
+                      uploading={busySlot}
+                      ariaLabel={`${original ? 'Replace the photo' : 'Add a photo'} of the ${ordinal} person in picture ${n}`}
+                      onFile={(file) => onUpload(slot, file)}
+                    />
+                    {original && !busySlot && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove the photo of the ${ordinal} person in picture ${n}`}
+                        title="Remove the photo"
+                        onClick={() => onChange(withOriginal(picture, slot, null))}
+                      >
+                        <XIcon />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
+        {problem && <Problem>{problem}</Problem>}
       </div>
     </li>
+  )
+}
+
+/** A file picker as a secondary button: an image, re-encoded and uploaded by the caller. */
+function FileButton({
+  label,
+  icon: Glyph,
+  uploading,
+  ariaLabel,
+  onFile,
+}: {
+  label: string
+  icon: typeof UploadSimpleIcon
+  uploading: boolean
+  ariaLabel?: string
+  onFile: (file: File) => void
+}) {
+  function change(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = '' // the same file can be picked again after a failure
+    if (file) onFile(file)
+  }
+  return (
+    <Button asChild variant="secondary" size="sm" className={cn(uploading && 'pointer-events-none opacity-50')}>
+      <label>
+        <Glyph />
+        {label}
+        <input type="file" accept="image/*" className="sr-only" disabled={uploading} aria-label={ariaLabel} onChange={change} />
+      </label>
+    </Button>
   )
 }
 
@@ -250,11 +330,13 @@ function PersonSelect({
   value,
   players,
   label,
+  className,
   onChange,
 }: {
   value: PlayerId
   players: Player[]
   label: string
+  className?: string
   onChange: (id: PlayerId) => void
 }) {
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name))
@@ -262,7 +344,7 @@ function PersonSelect({
   const missing = value !== '' && !players.some((p) => p.id === value)
   return (
     <Select value={value === '' ? NOBODY : value} onValueChange={(id) => onChange(id === NOBODY ? '' : id)}>
-      <SelectTrigger size="sm" className="w-40" aria-label={label}>
+      <SelectTrigger size="sm" className={cn('w-40', className)} aria-label={label}>
         <SelectValue placeholder="Nobody yet" />
       </SelectTrigger>
       <SelectContent>
@@ -400,6 +482,14 @@ function withPatch(picture: FusionPicture, patch: Partial<FusionPicture>): Fusio
   const next: FusionPicture = { ...picture, ...patch }
   if (next.image === undefined) delete next.image
   if (next.people === undefined) delete next.people
+  if (next.originals === undefined) delete next.originals
   return next
+}
+
+/** The patch that sets one person's own photo (or clears it with null): no originals at all once both are cleared. */
+function withOriginal(picture: FusionPicture, slot: 0 | 1, path: string | null): Partial<FusionPicture> {
+  const next: [string | null, string | null] = [...(picture.originals ?? [null, null])]
+  next[slot] = path
+  return { originals: next[0] === null && next[1] === null ? undefined : next }
 }
 

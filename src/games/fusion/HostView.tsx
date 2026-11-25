@@ -71,7 +71,7 @@ const ICONS: Record<StepIcon, Icon> = {
  * phone is out in the room. Each step names the step it was made for, so a
  * double tap or a race with a timer does nothing.
  */
-export default function HostView({ session, game, players, state, publicState, tallies, serverNow, act, mediaUrl }: HostViewProps<FusionGame>) {
+export default function HostView({ session, game, players, state, config, publicState, tallies, serverNow, act, mediaUrl }: HostViewProps<FusionGame>) {
   const [showWho, setShowWho] = useState(false)
   // One host action at a time: its button shows it is busy, the others wait.
   const [pending, setPending] = useState<string | null>(null)
@@ -199,6 +199,7 @@ export default function HostView({ session, game, players, state, publicState, t
             pub={pub}
             state={state}
             players={players}
+            originals={config?.pictures?.[picture.n - 1]?.originals ?? null}
             showWho={showWho}
             legacy={legacy}
             busy={busy}
@@ -286,6 +287,7 @@ function PictureRow({
   pub,
   state,
   players,
+  originals,
   showWho,
   legacy,
   busy,
@@ -298,6 +300,8 @@ function PictureRow({
   pub: FusionPublicState
   state: FusionState | null
   players: Player[]
+  /** The two people's own photos from the round's settings, in the order of its people. */
+  originals: readonly [string | null, string | null] | null
   showWho: boolean
   legacy: boolean
   busy: boolean
@@ -320,7 +324,8 @@ function PictureRow({
         className="h-15 w-12 shrink-0 rounded-chip bg-overlay"
         labelClassName="text-[13px]"
       />
-      <div className="min-w-0 flex-1">
+      {/* Room for its label and state chip: the pickers of Show who wrap under it before they squeeze it. */}
+      <div className="min-w-36 flex-1">
         <p className="flex items-center gap-2">
           <span className="truncate font-bold">{picture.label}</span>
           {onNow ? (
@@ -337,12 +342,16 @@ function PictureRow({
       {result ? (
         <Pair people={result.people} kept={result.names} players={players} className="text-sm" />
       ) : showWho && state && !legacy && pub.phase !== 'done' ? (
+        // A row of its own under the label, so the label and Ask keep theirs whatever the panel's width.
         <KeyEditor
-          // Starts again from the saved key whenever it changes.
-          key={pickSignature(key)}
+          className="order-last sm:pl-15"
+          // Starts again from the saved key whenever it changes, in its order: each place has its own photo.
+          key={key ? key.join('+') : ''}
           current={key}
           state={state}
           players={players}
+          originals={originals}
+          mediaUrl={mediaUrl}
           disabled={busy}
           pending={pending === `key:${picture.n}`}
           onSave={onSetKey}
@@ -377,25 +386,38 @@ function PictureRow({
   )
 }
 
-/** Two pickers for who is in a picture, and Save once both are chosen and differ from what is saved. */
+/**
+ * Two pickers for who is in a picture, and Save once both are chosen and
+ * differ from what is saved. With the two people's own photos in the
+ * settings, each picker stands beside its photo: the host picks the person
+ * in it, so the order counts (whose photo is whose at the reveal).
+ */
 function KeyEditor({
   current,
   state,
   players,
+  originals,
+  mediaUrl,
   disabled,
   pending,
+  className,
   onSave,
 }: {
   current: readonly [PlayerId, PlayerId] | null
   state: FusionState
   players: Player[]
+  originals: readonly [string | null, string | null] | null
+  mediaUrl: HostViewProps['mediaUrl']
   disabled: boolean
   pending: boolean
+  className?: string
   onSave: (people: [PlayerId, PlayerId]) => void
 }) {
   const [draft, setDraft] = useState<[PlayerId, PlayerId]>(() => (current ? [current[0], current[1]] : ['', '']))
   const same = draft[0] !== '' && draft[0] === draft[1]
-  const ready = draft[0] !== '' && draft[1] !== '' && !same && pickSignature(draft) !== pickSignature(current)
+  const photos = originals !== null && (originals[0] !== null || originals[1] !== null)
+  const changed = photos ? draft.join('+') !== (current ?? []).join('+') : pickSignature(draft) !== pickSignature(current)
+  const ready = draft[0] !== '' && draft[1] !== '' && !same && changed
   // Someone in the saved key who has left the party still shows, by the name the game kept.
   const gone = (current ?? []).filter((id) => !players.some((p) => p.id === id))
   const options = [
@@ -404,26 +426,40 @@ function KeyEditor({
   ]
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-      {[0, 1].map((slot) => (
-        <Select
-          key={slot}
-          value={draft[slot]}
-          disabled={disabled}
-          onValueChange={(id) => setDraft((d) => (slot === 0 ? [id, d[1]] : [d[0], id]))}
-        >
-          <SelectTrigger size="sm" className="w-36" aria-label={slot === 0 ? 'First person' : 'Second person'}>
-            <SelectValue placeholder="Pick someone" />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((option) => (
-              <SelectItem key={option.id} value={option.id} disabled={gone.includes(option.id)}>
-                {option.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ))}
+    <div className={cn('flex w-full flex-wrap items-center gap-2', className)}>
+      {[0, 1].map((slot) => {
+        const photo = originals?.[slot] ?? null
+        return (
+          <span key={slot} className="flex items-center gap-1.5">
+            {photo && (
+              <img
+                src={mediaUrl(photo, 'thumb')}
+                alt={slot === 0 ? 'Photo of the first person' : 'Photo of the second person'}
+                width={300}
+                height={400}
+                loading="lazy"
+                className="size-8 shrink-0 rounded-chip bg-overlay object-cover object-[50%_30%]"
+              />
+            )}
+            <Select value={draft[slot]} disabled={disabled} onValueChange={(id) => setDraft((d) => (slot === 0 ? [id, d[1]] : [d[0], id]))}>
+              <SelectTrigger
+                size="sm"
+                className="w-36"
+                aria-label={photo ? `Who is in the ${slot === 0 ? 'first' : 'second'} photo` : slot === 0 ? 'First person' : 'Second person'}
+              >
+                <SelectValue placeholder="Pick someone" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={option.id} value={option.id} disabled={gone.includes(option.id)}>
+                    {option.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </span>
+        )
+      })}
       {ready && (
         <Button size="sm" variant="secondary" disabled={disabled} isPending={pending} onClick={() => onSave(draft)}>
           Save

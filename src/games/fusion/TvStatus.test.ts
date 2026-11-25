@@ -11,7 +11,7 @@ import type { Player, SessionGame } from '@/lib/types'
 
 const NOW = 1_000_000
 const players: Player[] = ['Mads', 'Ida', 'Ana', 'Bo'].map((name, i) => ({ id: `p${i}`, name, code: `C${i}`, profile: {}, created_at: 0 }))
-const REVEAL: FusionReveal = { people: ['p0', 'p1'], names: ['Mads', 'Ida'], both: 9, one: 6, none: 6, voters: 21, step: 1, at: NOW - 5000 }
+const REVEAL: FusionReveal = { people: ['p0', 'p1'], names: ['Mads', 'Ida'], both: 9, one: 6, none: 6, voters: 21, originals: [null, null], step: 1, at: NOW - 5000 }
 
 const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicPicture => ({ n, key: `p${n}`, label: `#${n}`, image: null, revealed })
 const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({

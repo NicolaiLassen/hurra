@@ -37,6 +37,7 @@ export const FUSION_STAGE_SCENES = [
   'fusion-reveal-none',
   'fusion-reveal-missed',
   'fusion-reveal-you',
+  'fusion-reveal-plain',
   'fusion-crown',
   'fusion-final',
 ] as const
@@ -633,6 +634,7 @@ type StageKind =
   | 'reveal-none'
   | 'reveal-missed'
   | 'reveal-you'
+  | 'reveal-plain'
   | 'crown'
   | 'final'
 
@@ -727,8 +729,17 @@ function fusionStage(scene: FusionStageScene) {
     for (const id of key[n]) names[id] = nameOfPlayer(id)
   }
   const label = (n: number) => (n === 9 ? 'The viking' : `#${n}`)
+  // The two people's own photos, drawn in each one's half of the fused sample: both for every picture but #6 (only
+  // the first person's, so the second shows their profile photo or token), and none at all in fusion-reveal-plain.
+  const originals = (n: number): [string | null, string | null] | null =>
+    kind === 'reveal-plain' ? null : [`fixture/original-${n}-1.jpg`, n === 6 ? null : `fixture/original-${n}-2.jpg`]
   const config = {
-    pictures: numbers.map((n) => ({ label: label(n), image: `fixture/fusion-${n}.jpg`, ...(keyed(n) ? { people: stagePair(n) } : {}) })),
+    pictures: numbers.map((n) => ({
+      label: label(n),
+      image: `fixture/fusion-${n}.jpg`,
+      ...(keyed(n) ? { people: stagePair(n) } : {}),
+      ...(originals(n) ? { originals: originals(n) } : {}),
+    })),
     pointsPerPerson: STAGE_RULES.perPerson,
     bonusForBoth: STAGE_RULES.bothBonus,
     seconds: STAGE_RULES.seconds,
@@ -754,7 +765,18 @@ function fusionStage(scene: FusionStageScene) {
         image: `fixture/fusion-${n}.jpg`,
         revealed:
           i >= 0
-            ? { people, names: [nameOfPlayer(people[0]), nameOfPlayer(people[1])], both: r.both, one: r.one, none: r.none, voters: r.voters, step: i + 1, at: r.at }
+            ? {
+                people,
+                names: [nameOfPlayer(people[0]), nameOfPlayer(people[1])],
+                both: r.both,
+                one: r.one,
+                none: r.none,
+                voters: r.voters,
+                // Secret until the picture is revealed, as the logic's publicState keeps them.
+                originals: originals(n) ?? [null, null],
+                step: i + 1,
+                at: r.at,
+              }
             : null,
       }
     }),

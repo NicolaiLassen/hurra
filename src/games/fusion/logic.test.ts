@@ -133,6 +133,27 @@ describe('settings', () => {
     ])
   })
 
+  it("keeps each person's own photo in the order of the people, and treats cleared ones as none", () => {
+    const parsed = parse({
+      pictures: [
+        { people: ['a', 'b'], originals: ['s/g/one.jpg', 's/g/two.jpg'] },
+        { people: ['c', 'd'], originals: [null, 's/g/three.jpg'] },
+        { originals: ['s/g/four.jpg'] },
+        { originals: ['', null] },
+        { originals: [] },
+        { originals: null },
+      ],
+    }).pictures
+    expect(parsed).toEqual([
+      { label: '#1', people: ['a', 'b'], originals: ['s/g/one.jpg', 's/g/two.jpg'] },
+      { label: '#2', people: ['c', 'd'], originals: [null, 's/g/three.jpg'] },
+      { label: '#3', originals: ['s/g/four.jpg', null] },
+      { label: '#4' },
+      { label: '#5' },
+      { label: '#6' },
+    ])
+  })
+
   it.each([
     [{ pictures: [] }, 'Add the pictures in the settings first'],
     [{ pictures: 'x' }, 'Add the pictures in the settings first'],
@@ -148,6 +169,11 @@ describe('settings', () => {
     [{ pictures: [{ image: '../secret.jpg' }] }, "that image isn't valid"],
     [{ pictures: [{ image: 'https://example.com/x.jpg' }] }, "that image isn't valid"],
     [{ pictures: [{ image: 's/g/x.png' }] }, "that image isn't valid"],
+    [{ pictures: [{ originals: 's/g/x.jpg' }] }, "those photos of the two people aren't valid"],
+    [{ pictures: [{ originals: ['s/g/a.jpg', 's/g/b.jpg', 's/g/c.jpg'] }] }, "those photos of the two people aren't valid"],
+    [{ pictures: [{ originals: ['../secret.jpg'] }] }, "the photo of the first person isn't valid"],
+    [{ pictures: [{ originals: [null, 'https://example.com/x.jpg'] }] }, "the photo of the second person isn't valid"],
+    [{ pictures: [{ originals: [7, null] }] }, "the photo of the first person isn't valid"],
     [{ pictures: [{}], pointsPerPerson: 1.5 }, 'Points per right person must be a whole number from 0 to 10'],
     [{ pictures: [{}], pointsPerPerson: 11 }, 'Points per right person must be a whole number from 0 to 10'],
     [{ pictures: [{}], bonusForBoth: -1 }, 'The bonus for both must be a whole number from 0 to 10'],
@@ -413,6 +439,13 @@ describe('setKey', () => {
     expect(host(state, { type: 'setKey', n: 1, people: ['bo', 'ana'] }).result).toBe(state)
   })
 
+  it("takes the same two the other way round when the picture has their own photos: the order says whose photo is whose", () => {
+    const cfg = config({ pictures: [{ label: '#1', people: ['ana', 'bo'], originals: ['s/g/ana.jpg', null] }] })
+    const state = start(cfg).result
+    expect(host(state, { type: 'setKey', n: 1, people: ['ana', 'bo'] }, {}, cfg).result).toBe(state)
+    expect(host(state, { type: 'setKey', n: 1, people: ['bo', 'ana'] }, {}, cfg).result.key[1]).toEqual(['bo', 'ana'])
+  })
+
   it('works in every phase, the picture being asked included, until that picture is revealed', () => {
     const asking = asked(1)
     const changed = host(asking, { type: 'setKey', n: 1, people: ['cy', 'eve'] }).result
@@ -527,6 +560,39 @@ describe('what the room sees', () => {
     expect(['ana', 'bo', 'cy', 'dee'].filter((id) => view(back, id).inPicture)).toEqual([])
   })
 
+  it("keeps the two people's own photos secret until their picture is revealed, then shows them in the people's order", () => {
+    const cfg = config({
+      pictures: [
+        { label: '#1', people: ['ana', 'bo'], originals: ['s/g/orig-ana.jpg', 's/g/orig-bo.jpg'] },
+        { label: '#2', people: ['cy', 'dee'], originals: ['s/g/orig-cy.jpg', null] },
+        { label: 'The viking' },
+      ],
+    })
+    const lobby = start(cfg).result
+    const showing = host(lobby, { type: 'show' }, { now: 1_000 }, cfg).result
+    const wall = host(showing, { type: 'wall', from: 'showing' }, {}, cfg).result
+    const asking = asked(1, wall, 10_000, cfg)
+    const reveal = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, [['eve', ['ana', 'bo']]], 20_000), cfg).result
+    const back = host(reveal, { type: 'wall', from: 'reveal', n: 1 }, {}, cfg).result
+    const asking2 = asked(2, back, 50_000, cfg)
+    const done = host(back, { type: 'finish' }, {}, cfg).result
+    for (const [name, state] of Object.entries({ lobby, showing, wall, asking, reveal, back, asking2, done })) {
+      const room = canonicalJson(pub(state, PLAYERS, cfg))
+      // #2's photo never shows: it is never revealed. #1's only from its reveal.
+      expect(room, name).not.toContain('orig-cy')
+      if (state.revealed.includes(1)) expect(room, name).toContain('"originals":["s/g/orig-ana.jpg","s/g/orig-bo.jpg"]')
+      else expect(room, name).not.toMatch(/orig-(ana|bo)/)
+      // No guest's view ever carries one, the two in the picture included.
+      for (const id of PLAYERS) expect(canonicalJson(view(state, id, PLAYERS, cfg)), `${name} ${id}`).not.toContain('orig-')
+    }
+    // The prompt asks nothing about them either.
+    const { effects } = run((ctx) => game.handleHostAction(wall, game.parseHostAction({ type: 'ask', n: 1 }), ctx), { now: 10_000 }, cfg)
+    expect(canonicalJson(effects)).not.toContain('orig-')
+    // A picture without its own photos says so: two nulls.
+    const plain = revealed(1, [['eve', ['ana', 'bo']]]).result
+    expect(pub(plain).pictures[0].revealed?.originals).toEqual([null, null])
+  })
+
   it('shows the pictures, the rules and the top five with ranks', () => {
     const cfg = config({ pictures: [{ label: '#1', image: 's/g/a.jpg', people: ['ana', 'bo'] }, { label: '#2' }], bonusForBoth: 2, seconds: 20 })
     const state = { ...start(cfg).result, totals: { eve: 1, cy: 3, dee: 3, gone: 9 } }
@@ -561,6 +627,7 @@ describe('what the room sees', () => {
       one: 0,
       none: 1,
       voters: 2,
+      originals: [null, null],
       step: 1,
       at: 20_000,
     })
@@ -750,6 +817,53 @@ describe('a round in the party', () => {
     expect(canonicalJson(p.game(GAME).publicState)).not.toContain(ids[0])
     expect(canonicalJson(Object.values(p.game(GAME).views))).not.toContain(ids[1])
     expect(hostAct(p, { type: 'setKey', n: 1, people: [ids[1], ids[0]] }).kind).toBe('skip')
+  })
+
+  it("keeps the two people's own photos off every phone and the TV until their picture's reveal", () => {
+    const { p, ids } = party(6)
+    const [a, b, c, d, e, f] = ids
+    const photos = { a: 's/g/secret-a.jpg', b: 's/g/secret-b.jpg', c: 's/g/secret-c.jpg' }
+    // Everything a phone or the TV reads: the public state, the views, the prompts, the feed, the party's data and players, the tallies.
+    const screens = () =>
+      canonicalJson({
+        room: p.game(GAME).publicState,
+        views: p.game(GAME).views,
+        prompts: p.promptsOf(GAME),
+        feed: p.feed,
+        data: p.sessionData,
+        players: p.players,
+        tallies: p.talliesOf(GAME),
+        pings: p.pings,
+      })
+    const seen = () => Object.entries(photos).filter(([, path]) => screens().includes(path)).map(([who]) => who)
+    startParty(p, {
+      pictures: [
+        { people: [a, b], originals: [photos.a, photos.b] },
+        { people: [c, d], originals: [photos.c, null] },
+      ],
+      pointsPerPerson: 1,
+      bonusForBoth: 0,
+    })
+    expect(seen()).toEqual([])
+    hostAct(p, { type: 'show' })
+    expect(seen()).toEqual([])
+    wakeUp(p)
+    hostAct(p, { type: 'ask', n: 1 })
+    lock(p, 1, e, [a, b])
+    lock(p, 1, f, [a, c])
+    lock(p, 1, a, [c, d]) // in the picture: kept, never told
+    expect(seen()).toEqual([])
+    // The reveal hands the TV #1's two photos, in the people's order, and nobody else's.
+    hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
+    expect(seen()).toEqual(['a', 'b'])
+    expect(roomOf(p).pictures[0].revealed?.originals).toEqual([photos.a, photos.b])
+    expect(canonicalJson(p.game(GAME).views)).not.toContain('secret-')
+    wakeUp(p)
+    hostAct(p, { type: 'ask', n: 2 })
+    expect(seen()).toEqual(['a', 'b'])
+    hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
+    expect(seen()).toEqual(['a', 'b', 'c'])
+    expect(roomOf(p).pictures[1].revealed?.originals).toEqual([photos.c, null])
   })
 
   it('handles a guest who joins late and locks in, and one who leaves', () => {

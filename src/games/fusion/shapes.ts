@@ -30,6 +30,12 @@ export type FusionReveal = {
   one: number
   none: number
   voters: number
+  /**
+   * The two people's own photos, in the order of `people`: a game-media path
+   * (the full image; its thumbnail sits beside it), or null where the host
+   * added none. Secret like the key: here only once the picture is revealed.
+   */
+  originals: [string | null, string | null]
   /** Its place in the guessing: 1 for the first picture asked. */
   step: number
   /** When it was revealed (database clock); null in a save from the background version. */
@@ -212,10 +218,17 @@ function readReveal(raw: unknown): FusionReveal | null {
     one: count(raw.one),
     none: count(raw.none),
     voters: count(raw.voters),
+    originals: readOriginals(raw.originals),
     // 0 until readPublic fills it in.
     step: isWhole(raw.step, 1) ? raw.step : 0,
     at: isFiniteNumber(raw.at) ? raw.at : null,
   }
+}
+
+/** Two game-media paths or nulls, whatever was saved: [null, null] for none (every save before originals existed). */
+export function readOriginals(raw: unknown): [string | null, string | null] {
+  const path = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null)
+  return Array.isArray(raw) ? [path(raw[0]), path(raw[1])] : [null, null]
 }
 
 function readRules(raw: unknown, scoring: unknown): FusionRules {

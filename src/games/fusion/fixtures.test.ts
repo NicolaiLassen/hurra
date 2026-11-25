@@ -40,6 +40,25 @@ describe('Participant fusion on the stage', () => {
     }
   })
 
+  it("keeps the two people's own photos off the TV and the phones until their picture's reveal", () => {
+    for (const scene of FUSION_STAGE_SCENES.filter((s) => s !== 'fusion-final')) {
+      const settings = hostState(scene).config.pictures as { originals?: [string | null, string | null] }[]
+      for (const screen of ['phone', 'tv'] as const) {
+        const { s, pub } = fusionOf(scene, screen)
+        for (const picture of pub.pictures) {
+          if (picture.revealed) expect(picture.revealed.originals, scene).toEqual(settings[picture.n - 1].originals ?? [null, null])
+          else expect(JSON.stringify(picture), scene).not.toContain('original-')
+        }
+        // Nothing else a screen reads carries one: the views, the prompts, the feed.
+        expect(JSON.stringify({ me: s.me, prompts: s.prompts, feed: s.feed }), scene).not.toContain('original-')
+      }
+    }
+    // The reveal of #4 has both photos; #6 only the first person's; the plain scene none.
+    expect(fusionOf('fusion-reveal').pub.pictures[3].revealed?.originals).toEqual(['fixture/original-4-1.jpg', 'fixture/original-4-2.jpg'])
+    expect(fusionOf('fusion-reveal-you').pub.pictures[5].revealed?.originals).toEqual(['fixture/original-6-1.jpg', null])
+    expect(fusionOf('fusion-reveal-plain').pub.pictures[3].revealed?.originals).toEqual([null, null])
+  })
+
   it('holds the TV, with Last one standing in the background; the final scene is the winner’s screen', () => {
     for (const scene of FUSION_STAGE_SCENES.filter((s) => s !== 'fusion-final')) {
       expect(tvScene(fixtureSnapshot(scene, 'tv'), FIXTURE_NOW), scene).toMatchObject({ kind: 'live', game: { game_type: 'fusion' } })

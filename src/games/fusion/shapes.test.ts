@@ -27,6 +27,7 @@ const reveal = (patch: Partial<FusionReveal> = {}): FusionReveal => ({
   one: 6,
   none: 6,
   voters: 21,
+  originals: ['s/g/ana.jpg', null],
   step: 1,
   at: 5_000,
   ...patch,
@@ -85,7 +86,17 @@ describe('readPublic', () => {
     const pub = readPublic(old)!
     expect(pub.phase).toBe('lobby')
     expect(pub.rules).toEqual({ seconds: 30, showSeconds: 6, perPerson: 2, bothBonus: 1 })
-    expect(pub.pictures[0].revealed).toEqual({ people: ['ana', 'bo'], names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1, step: 1, at: null })
+    expect(pub.pictures[0].revealed).toEqual({
+      people: ['ana', 'bo'],
+      names: ['Ana', 'Bo'],
+      both: 1,
+      one: 0,
+      none: 0,
+      voters: 1,
+      originals: [null, null],
+      step: 1,
+      at: null,
+    })
     expect(pub.top).toEqual([{ playerId: 'cy', points: 2, rank: 1 }])
     expect(pub.showing).toBeNull()
     expect(pub.current).toBeNull()
@@ -143,7 +154,27 @@ describe('readPublic', () => {
       { n: 2, key: 'p2', label: '#2', image: null, revealed: null },
       { n: 7, key: 'p7', label: 'Viking', image: 's/g/v.jpg', revealed: null },
     ])
-    expect(pub.pictures[3].revealed).toEqual({ people: ['a', 'b'], names: ['A guest', 'A guest'], both: 0, one: 0, none: 0, voters: 2, step: 1, at: null })
+    expect(pub.pictures[3].revealed).toEqual({
+      people: ['a', 'b'],
+      names: ['A guest', 'A guest'],
+      both: 0,
+      one: 0,
+      none: 0,
+      voters: 2,
+      originals: [null, null],
+      step: 1,
+      at: null,
+    })
+  })
+
+  it("reads the two people's own photos as paths or nulls, [null, null] where none were saved", () => {
+    const read = (originals: unknown) => readPublic({ pictures: [{ revealed: { ...reveal(), originals } }] })!.pictures[0].revealed?.originals
+    expect(read(['s/g/a.jpg', 's/g/b.jpg'])).toEqual(['s/g/a.jpg', 's/g/b.jpg'])
+    expect(read([null, 's/g/b.jpg'])).toEqual([null, 's/g/b.jpg'])
+    expect(read(['s/g/a.jpg'])).toEqual(['s/g/a.jpg', null])
+    expect(read(['', 7])).toEqual([null, null])
+    expect(read(undefined)).toEqual([null, null])
+    expect(read('s/g/a.jpg')).toEqual([null, null])
   })
 
   it('reads a showing without its times, or a picture asked without one, as the wall', () => {

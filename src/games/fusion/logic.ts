@@ -10,9 +10,10 @@
 // countdown's end plus a grace second as its deadline. The reveal (the host's
 // Reveal now, or the timer) gets every lock at once in ctx.answers.
 //
-// Who is in each picture (the key) is the secret. It lives in the host-only
-// settings and the state, and reaches publicState only once that picture is
-// revealed. Relative imports only: the Netlify function bundles this file.
+// Who is in each picture (the key) is the secret, and so are the two people's
+// own photos (the originals). Both live in the host-only settings and the
+// state, and reach publicState only once that picture is revealed. Relative
+// imports only: the Netlify function bundles this file.
 import {
   Game,
   GameError,
@@ -65,6 +66,13 @@ export type FusionPicture = {
   image?: string
   /** Who is fused in it. Optional: the host can also set it on the night (setKey). */
   people?: [PlayerId, PlayerId]
+  /**
+   * The two people's own photos, in the order of `people` (the first is the
+   * first person's): a game-media path, or null for none. Optional, and
+   * secret like `people`: the TV shows them beside the picture at its reveal,
+   * and a person without one gets their profile photo, else their token.
+   */
+  originals?: [string | null, string | null]
 }
 
 export type FusionConfig = {
@@ -321,8 +329,8 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
         key: pictureKey(n),
         label: picture.label,
         image: picture.image ?? null,
-        // Who is in it only once it is revealed: never a key before that.
-        revealed: revealedOf(s, n, info.players),
+        // Who is in it, and their own photos, only once it is revealed: never a key before that.
+        revealed: revealedOf(s, n, info.players, picture),
       }
     })
     const asking = s.phase === 'asking' || s.phase === 'reveal'
@@ -500,7 +508,9 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
       throw new GameError('Pick two people who are in the party')
     }
     const current = s.key[n]
-    if (current && current.includes(a) && current.includes(b)) return state
+    // The same two again change nothing, in either order; with their own photos the order says whose photo is whose.
+    const ordered = originalsOf(picture).some((path) => path !== null)
+    if (current && (ordered ? current[0] === a && current[1] === b : current.includes(a) && current.includes(b))) return state
     const key = { ...s.key, [n]: [a, b] as [PlayerId, PlayerId] }
     return { ...s, key, names: namesOf(key, ctx.players, s.names) }
   }
@@ -588,7 +598,7 @@ const showingMs = (config: FusionConfig) => (Array.isArray(config.pictures) ? co
 const labelOf = (config: FusionConfig, n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
 
 /** A revealed picture as the room sees it, or null before its reveal. */
-function revealedOf(s: FusionState, n: number, players: readonly GamePlayer[]): PublicPicture['revealed'] {
+function revealedOf(s: FusionState, n: number, players: readonly GamePlayer[], picture: FusionPicture): PublicPicture['revealed'] {
   const index = s.revealed.indexOf(n)
   const result = index >= 0 ? s.results[n] : undefined
   const people = s.key[n]
@@ -600,6 +610,8 @@ function revealedOf(s: FusionState, n: number, players: readonly GamePlayer[]): 
     one: result.one,
     none: result.none,
     voters: result.voters,
+    // Each photo belongs to its place in the pair: the host sets the person beside their photo.
+    originals: originalsOf(picture),
     step: index + 1,
     at: typeof result.at === 'number' ? result.at : null,
   }
@@ -609,7 +621,7 @@ function parsePicture(item: unknown, n: number): FusionPicture {
   if (item === null || typeof item !== 'object' || Array.isArray(item)) {
     throw new GameError(`Picture ${defaultLabel(n)} isn't valid. Check it in the settings.`)
   }
-  const { label: rawLabel, image, people } = item as Record<string, unknown>
+  const { label: rawLabel, image, people, originals } = item as Record<string, unknown>
   if (rawLabel !== undefined && rawLabel !== null && typeof rawLabel !== 'string') {
     throw new GameError(`Picture ${defaultLabel(n)} has a label that isn't text`)
   }
@@ -640,7 +652,26 @@ function parsePicture(item: unknown, n: number): FusionPicture {
       picture.people = [chosen[0], chosen[1]]
     }
   }
+
+  if (originals !== undefined && originals !== null) {
+    if (!Array.isArray(originals) || originals.length > 2) throw new GameError(`${label}: those photos of the two people aren't valid. Add them again.`)
+    const paths = [0, 1].map((slot): string | null => {
+      const path = originals[slot]
+      if (path === undefined || path === null || path === '') return null
+      if (typeof path !== 'string' || path.length > 300 || !MEDIA_PATH.test(path)) {
+        throw new GameError(`${label}: the photo of the ${slot === 0 ? 'first' : 'second'} person isn't valid. Add it again.`)
+      }
+      return path
+    })
+    if (paths[0] !== null || paths[1] !== null) picture.originals = [paths[0], paths[1]]
+  }
   return picture
+}
+
+/** A picture's two originals as the reveal shows them: [null, null] for none. */
+function originalsOf(picture: FusionPicture | undefined): [string | null, string | null] {
+  const originals = picture?.originals
+  return Array.isArray(originals) ? [originals[0] ?? null, originals[1] ?? null] : [null, null]
 }
 
 function wholePoints(value: unknown, name: string): number {
