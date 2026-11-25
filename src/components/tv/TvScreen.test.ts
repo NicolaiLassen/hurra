@@ -8,8 +8,10 @@ import { prerender } from 'react-dom/static'
 import { describe, expect, it, vi } from 'vitest'
 import { devTv } from '@/components/tv/devFixture'
 import PairingScreen from '@/components/tv/PairingScreen'
+import RecapScene from '@/components/tv/RecapScene'
+import { recapSlides } from '@/components/tv/recapSlides'
 import TvScreen from '@/components/tv/TvScreen'
-import { FIXTURE_SESSION_ID } from '@/lib/fixtures'
+import { FIXTURE_SESSION_ID, fixtureRecapDoc } from '@/lib/fixtures'
 import { LiveSessionProvider } from '@/lib/useLive'
 
 vi.mock('@/lib/supabase', () => ({ supabase: {} }))
@@ -200,6 +202,23 @@ describe('the TV scene for each fixture', () => {
 
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
     await expect(html('fixture=removed')).resolves.toBe('')
+  })
+})
+
+describe("the recap's final podium", () => {
+  it("cheers the night's winners in the frame's language: no exclamation mark, no glow or rings, nothing under the floor", async () => {
+    const doc = fixtureRecapDoc()
+    const startAt = recapSlides(doc).findIndex((slide) => slide.kind === 'podium')
+    expect(startAt).toBeGreaterThan(0)
+    const { prelude } = await prerender(createElement(RecapScene, { doc, partyName: 'Birthday party', startAt }))
+    const page = (await new Response(prelude).text()).replaceAll('<!-- -->', '')
+    expect(page).toContain('Hurra for Bo, Freja and Maja')
+    expect(page.replace(/<[^>]*>/g, '')).not.toContain('!')
+    const off = page.match(/.{0,80}(drop-shadow|text-shadow|ring-[1-9]|from-gold|text-primary|text-(xs|sm|base|lg|xl|2xl|3xl)\b).{0,20}/)
+    expect(off?.[0]).toBeUndefined()
+    // Paper steps, the winners' points on gold.
+    expect(page).toContain('bg-paper')
+    expect(page).toContain('rounded-chip bg-gold')
   })
 })
 

@@ -218,13 +218,13 @@ describe('opening the recap page', () => {
 describe('nightHeadline', () => {
   it('cheers the winner of a night that is over, and says by how much', () => {
     expect(nightHeadline(nightOf({ Lea: 18, Hanne: 12, Jonas: 12, Bo: 1 }, [chapter('Quiz', ['Lea'], [])]))).toEqual({
-      title: 'Hurra for Lea!',
+      title: 'Hurra for Lea',
       line: 'Lea took the night with 18 points, 6 points ahead of Hanne and Jonas.',
     })
   })
 
   it('cheers everyone tied first, and keeps to the present while a round still runs', () => {
-    expect(nightHeadline(nightOf({ Ana: 7, Bo: 7, Cy: 2 }))).toEqual({ title: 'Hurra for Ana and Bo!', line: 'Ana and Bo share the night with 7 points each.' })
+    expect(nightHeadline(nightOf({ Ana: 7, Bo: 7, Cy: 2 }))).toEqual({ title: 'Hurra for Ana and Bo', line: 'Ana and Bo share the night with 7 points each.' })
     const running = [chapter('Quiz', [], [], false)]
     expect(nightHeadline(nightOf({ Ana: 1, Bo: 0 }, running))).toEqual({ title: 'Ana leads the night', line: '1 point so far.' })
     expect(nightHeadline(nightOf({ Ana: 3, Bo: 3 }, running)).title).toBe('Ana and Bo lead the night')

@@ -120,7 +120,9 @@ describe('the recap preview', () => {
     const doc = fixtureRecapDoc()
     const text = await html(createElement(RecapPreview, { doc }))
     for (const chapter of doc.chapters) expect(text).toContain(chapter.title)
-    expect(text).toContain('Hurra for Bo, Freja and Maja!')
+    expect(text).toContain('Hurra for Bo, Freja and Maja')
+    // The product's one exclamation mark is a game's winner screen; the night's podium has none.
+    expect(text).not.toContain('Maja!')
     expect(text).toContain('Top hunter')
   })
 })

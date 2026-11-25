@@ -308,8 +308,8 @@ function MiniSlide({ doc, slide }: { doc: RecapDoc; slide: TvPeekSlide }) {
       const order = [1, 0, 2].filter((i) => i < top.length)
       body = (
         <div className="grid h-full grid-rows-[auto_1fr] px-[6cqw] pt-[5cqw]">
-          <p className="truncate text-center text-[5.5cqw] font-black text-primary">
-            Hurra for {listNames(top.filter((row) => row.points === top[0].points).map((row) => row.name))}!
+          <p className="truncate text-center text-[5.5cqw] wide text-paper">
+            Hurra for {listNames(top.filter((row) => row.points === top[0].points).map((row) => row.name))}
           </p>
           <div className="flex items-end justify-center gap-[3cqw]">
             {order.map((i) => (

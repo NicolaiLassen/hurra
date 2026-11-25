@@ -13,7 +13,7 @@ block in [src/index.css](../src/index.css), and the approved
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
 [Who is fused? on the TV](#who-is-fused-on-the-tv) · [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
-[The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
+[The recap on the TV](#the-recap-on-the-tv) · [The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
 [The host room](#the-host-room) ·
 [The acceptance test](#the-acceptance-test)
 
@@ -415,6 +415,20 @@ everything fades in, and only the confetti moves.
   is only the logo's pieces in the logo's colours: the pink dot, the teal
   curl, the violet wave and the gold star. It bursts once and is gone in
   about three seconds; with reduced motion there is none.
+
+## The recap on the TV
+
+[RecapScene.tsx](../src/components/tv/RecapScene.tsx) takes the whole
+screen, without the frame, in the same language: labels at the floor or
+above, cards on the raised surface, icon chips by their job (gold a win,
+pink the hunt, paper the rest), the progress in paper on rule, and no glow,
+rings or gold washes. In the race each bar is its guest's own colour
+(identity) and only the leader's points are gold. The night's podium is a
+game's winner podium: "Hurra for Bo, Freja and Maja" in `wide` paper,
+untilted, over paper steps of clearly different heights, the winners'
+points on gold and their crown. It has no exclamation mark: the product's
+one is a game's winner screen (the owner may move it to the night's
+winner).
 
 ## The phone
 
