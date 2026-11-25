@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * A picture as the screens draw it: the image when the host uploaded one,
- * else its number large on a confetti card (the print on the wall is the real
- * thing). Phones use the thumbnail, lazily; the TV uses the full image.
+ * else its number large in paper-2 on the overlay surface (the print on the
+ * wall is the real thing; violet is a guest's colour, so never a picture's). Phones use the thumbnail, lazily; the TV uses the full image.
  */
 export function PictureArt({
   picture,
@@ -42,10 +42,7 @@ export function PictureArt({
     <div
       role="img"
       aria-label={`Picture ${picture.label}`}
-      className={cn(
-        'grid place-items-center bg-confetti-violet/15 font-black text-confetti-violet',
-        className,
-      )}
+      className={cn('grid place-items-center bg-overlay font-black text-paper-2', className)}
     >
       <span className={cn('text-5xl leading-none tabular-nums', numberClassName)}>{picture.n}</span>
     </div>

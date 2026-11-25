@@ -72,6 +72,7 @@ describe('the TV scene for each fixture', () => {
     ['fixture=pong-final', 'Beer pong | Final result'],
     ['fixture=background&players=45', 'Quiz | Question 3 of 10'],
     ['fixture=final&players=45', 'Last one standing | The final knockout'],
+    ['fixture=fusion-final', 'Who is fused? | Final result'],
   ])('%s: the programme strap says what is on', async (search, expected) => {
     expect(strapOf(await html(search))).toBe(expected)
   })
@@ -180,6 +181,21 @@ describe('the TV scene for each fixture', () => {
       expect(strap).toContain('bg-gold')
       expect(strap).toContain('group-has-[[data-tv-field]]/frame:text-gold')
     }
+  })
+
+  it("speaks Who is fused? in the frame's language: no exclamation marks, no violet or glow, nothing under the floor", async () => {
+    for (const search of ['fixture=fusion-locked', 'fixture=fusion-reveal', 'fixture=fusion-final']) {
+      const page = await html(search)
+      const stage = page.slice(page.indexOf('data-frame="stage"'), page.indexOf('data-frame="band"'))
+      expect(stage, search).toContain('data-frame="stage"')
+      expect(stage.replace(/<[^>]*>/g, ''), search).not.toContain('!')
+      expect(stage, search).not.toMatch(/confetti-violet|radial-gradient|drop-shadow|ring-\d|text-(xs|sm|base|lg|xl|[2-9]xl)\b/)
+    }
+    // The final names the sharpest eyes on paper steps, the winners' points on gold.
+    const final = await html('fixture=fusion-final')
+    expect(final).toContain('have the sharpest eyes.')
+    expect(final).toContain('bg-paper')
+    expect(final).toContain('rounded-chip bg-gold')
   })
 
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {

@@ -1,4 +1,4 @@
-import { CrownIcon, DetectiveIcon, QuestionIcon } from '@phosphor-icons/react'
+import { CrownIcon, QuestionIcon } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion, type Transition } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
@@ -24,14 +24,17 @@ const FRESH_MS = 15_000
 const spring: Transition = { type: 'spring', stiffness: 220, damping: 26 }
 
 /**
- * The TV while fusion holds the stage: the wall of numbered pictures, the
- * revealed ones with their two people, and each new reveal as a moment of its
- * own (the picture fills the stage and the two names spring in beside it).
+ * The TV while fusion holds the stage (docs/identity.md): one line on what to
+ * do (the strap already names the game and where it is), the wall of
+ * numbered pictures on raised tiles, the revealed ones with their two people
+ * on a solid panel, and each new reveal as a moment of its own (the picture
+ * fills the stage and the two names spring in beside it). No washes, no
+ * rings: the newest reveal's tile steps up to the overlay surface.
  */
 export default function TvView({ players, publicState, tallies, serverNow, mediaUrl, finished }: TvViewProps<FusionGame>) {
   const pub = publicOf(publicState)
   if (!pub) {
-    return <div className="grid min-h-0 flex-1 place-items-center text-3xl text-muted-foreground">Hanging the pictures…</div>
+    return <div className="grid min-h-0 flex-1 place-items-center text-tv-name text-paper-2 short:text-tv-band">Hanging the pictures…</div>
   }
   const total = pub.pictures.length
   const revealed = pub.pictures.filter((p) => p.revealed).length
@@ -40,39 +43,35 @@ export default function TvView({ players, publicState, tallies, serverNow, media
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-6 short:gap-4">
       <header className="flex shrink-0 items-end justify-between gap-8">
-        <div className="min-w-0">
-          <p className="flex items-center gap-3 text-2xl font-semibold tracking-widest text-confetti-violet uppercase short:text-xl">
-            <DetectiveIcon weight="duotone" className="size-8 short:size-7" />
-            Who is fused?
-          </p>
-          <h2 className="mt-1 text-5xl font-black text-balance short:text-4xl">
-            {finished || pub.phase === 'done'
-              ? 'Final result'
-              : pub.phase === 'voting'
-                ? 'Find the prints on the wall. Vote on your phone!'
-                : revealed === 0
-                  ? 'Voting is closed. Time for the reveal!'
-                  : `${revealed} of ${total} revealed`}
-          </h2>
-        </div>
+        {/* What to do now; where the game is ("Voting is closed", "2 of 6 revealed") is the strap's. */}
+        <h2 className="min-w-0 text-tv-name font-black text-balance short:text-tv-band">
+          {finished || pub.phase === 'done'
+            ? null
+            : pub.phase === 'voting'
+              ? 'Find the prints on the wall. Vote on your phone.'
+              : revealed === 0
+                ? 'Time for the reveal.'
+                : `${total - revealed} ${total - revealed === 1 ? 'picture' : 'pictures'} still to reveal.`}
+        </h2>
         {pub.phase === 'voting' ? (
-          <p className="shrink-0 text-right">
-            <span key={totalVotes(tallies)} className="animate-count-pop block text-7xl font-black text-primary tabular-nums short:text-6xl">
+          <p className="flex shrink-0 items-baseline gap-3 text-right">
+            <span key={totalVotes(tallies)} className="animate-count-pop tv-num text-tv-score text-paper short:text-tv-name">
               {totalVotes(tallies)}
             </span>
-            <span className="text-2xl text-muted-foreground">votes so far</span>
+            <span className="text-tv-tab text-paper-2 short:text-tv-floor">votes so far</span>
           </p>
         ) : (
           leader && (
-            <div className="flex shrink-0 items-center gap-4">
+            <div className="flex shrink-0 items-center gap-5 short:gap-4">
               <div className="relative">
-                <Avatar name={nameOf(players, leader.playerId)} className="size-16" />
+                <Avatar name={nameOf(players, leader.playerId)} playerId={leader.playerId} className="size-16 short:size-14" />
                 <AvatarBadge icon={CrownIcon} tone="gold" size="lg" />
               </div>
               <div>
-                <p className="text-xl text-muted-foreground">Sharpest eye{pub.phase === 'done' ? '' : ' so far'}</p>
-                <p className="max-w-[18rem] truncate text-3xl font-bold">
-                  {nameOf(players, leader.playerId)} <span className="text-primary tabular-nums">{leader.points}</span>
+                <p className="text-tv-floor text-paper-2">Sharpest eye{pub.phase === 'done' ? '' : ' so far'}</p>
+                <p className="flex max-w-[22rem] min-w-0 items-baseline gap-3 text-tv-band font-bold short:text-tv-field">
+                  <span className="min-w-0 truncate">{nameOf(players, leader.playerId)}</span>
+                  <span className="shrink-0 tv-num text-gold">{leader.points}</span>
                 </p>
               </div>
             </div>
@@ -150,41 +149,36 @@ function Tile({
   const revealed = picture.revealed
   return (
     <li
-      className={cn(
-        '@container relative overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/10 transition-shadow duration-700',
-        latest && 'ring-4 ring-confetti-violet shadow-[0_0_40px_color-mix(in_oklab,var(--confetti-violet)_45%,transparent)]',
-      )}
+      className={cn('@container relative overflow-hidden rounded-tile transition-colors duration-700', latest ? 'bg-overlay' : 'bg-raised')}
     >
       <PictureArt
         picture={picture}
         mediaUrl={mediaUrl}
         size="full"
-        className={cn('absolute inset-0 size-full transition-opacity duration-700', revealed && 'opacity-60')}
-        numberClassName="text-[length:42cqw]"
+        className="absolute inset-0 size-full"
+        // A revealed picture's panel says who it was; its number stays on the label.
+        numberClassName={cn('text-[length:42cqw]', revealed && 'invisible')}
       />
-      <span className="absolute top-[4cqw] left-[4cqw] max-w-[80cqw] truncate rounded-full bg-background/85 px-[4cqw] py-[1.5cqw] text-[length:8cqw] leading-none font-black">
+      {/* Labels at the TV's floor at least, so a wall of many small tiles still reads from the sofa. */}
+      <span className="absolute top-[4cqw] left-[4cqw] max-w-[80cqw] truncate rounded-chip bg-ground px-[4cqw] py-[1.5cqw] text-[length:max(var(--text-tv-floor),8cqw)] leading-none font-black">
         {picture.label}
       </span>
       {revealed ? (
-        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background via-background/85 to-transparent px-[5cqw] pt-[16cqw] pb-[5cqw]">
-          <div className="flex -space-x-[3cqw]">
+        <div className="absolute inset-x-0 bottom-0 bg-raised px-[5cqw] pt-[4cqw] pb-[5cqw]">
+          <div className="flex gap-[2cqw]">
             {revealed.people.map((id, i) => (
-              <Avatar
-                key={id}
-                name={nameOf(players, id, revealed.names?.[i])}
-                className="size-[16cqw] ring-[0.8cqw] ring-background"
-              />
+              <Avatar key={id} name={nameOf(players, id, revealed.names?.[i])} playerId={id} className="size-[16cqw]" />
             ))}
           </div>
           {revealed.people.map((id, i) => (
-            <p key={id} className="mt-[1.5cqw] truncate text-[length:8.5cqw] leading-tight font-bold">
+            <p key={id} className="mt-[1.5cqw] truncate text-[length:max(var(--text-tv-floor),8.5cqw)] leading-tight font-bold">
               {nameOf(players, id, revealed.names?.[i])}
             </p>
           ))}
-          <p className="mt-[1cqw] truncate text-[length:6cqw] text-muted-foreground">{countsLine(revealed, true)}</p>
+          <p className="mt-[1cqw] truncate text-[length:max(var(--text-tv-floor),6cqw)] text-paper-2">{countsLine(revealed, true)}</p>
         </div>
       ) : (
-        <span className="absolute right-[4cqw] bottom-[4cqw] flex items-center gap-[1.5cqw] rounded-full bg-background/85 px-[4cqw] py-[1.5cqw] text-[length:7cqw] font-semibold tabular-nums">
+        <span className="absolute right-[4cqw] bottom-[4cqw] flex items-center gap-[1.5cqw] rounded-chip bg-ground px-[4cqw] py-[1.5cqw] text-[length:max(var(--text-tv-floor),7cqw)] leading-none font-semibold tabular-nums">
           {phase === 'voting' ? (
             plural(votes, 'vote')
           ) : (
@@ -244,20 +238,12 @@ function RevealMoment({
       {moment && picture && revealed && (
         <motion.div
           key={`${moment.n}:${moment.at}`}
-          className="absolute inset-0 z-20 overflow-hidden rounded-3xl bg-background ring-1 ring-confetti-violet/30"
+          className="absolute inset-0 z-20 overflow-hidden bg-ground"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                'radial-gradient(45% 75% at 50% -5%, color-mix(in oklch, var(--confetti-violet) 30%, transparent), transparent 75%)',
-            }}
-          />
           <div className="relative flex size-full items-center justify-center gap-[4vw] p-[3vw]">
             <motion.div
               initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.92 }}
@@ -269,10 +255,10 @@ function RevealMoment({
                 picture={picture}
                 mediaUrl={mediaUrl}
                 size="full"
-                className="size-full rounded-3xl object-contain shadow-2xl shadow-black/60"
+                className="size-full rounded-tile object-contain"
                 numberClassName="text-[length:26vh]"
               />
-              <span className="absolute top-4 left-4 rounded-full bg-background/85 px-5 py-2 text-4xl font-black">
+              <span className="absolute top-4 left-4 rounded-chip bg-ground px-5 py-2 text-tv-band leading-none font-black short:text-tv-field">
                 {picture.label}
               </span>
             </motion.div>
@@ -281,7 +267,7 @@ function RevealMoment({
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-4xl font-semibold text-muted-foreground short:text-3xl"
+                className="text-tv-band font-semibold text-paper-2 short:text-tv-field"
               >
                 {picture.label} was
               </motion.p>
@@ -295,11 +281,8 @@ function RevealMoment({
                   }
                   className="flex min-w-0 items-center gap-6"
                 >
-                  <Avatar
-                    name={nameOf(players, id, revealed.names?.[i])}
-                    className="size-36 ring-4 ring-confetti-violet/60 short:size-28"
-                  />
-                  <span className="min-w-0 truncate text-8xl font-black short:text-7xl">
+                  <Avatar name={nameOf(players, id, revealed.names?.[i])} playerId={id} className="size-36 short:size-28" />
+                  <span className="min-w-0 truncate text-tv-code font-black short:text-tv-answer">
                     {nameOf(players, id, revealed.names?.[i])}
                   </span>
                 </motion.div>
@@ -308,7 +291,7 @@ function RevealMoment({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1.4 }}
-                className="text-4xl text-muted-foreground short:text-3xl"
+                className="text-tv-band text-paper-2 short:text-tv-field"
               >
                 {countsLine(revealed)}
               </motion.p>

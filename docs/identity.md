@@ -12,7 +12,7 @@ block in [src/index.css](../src/index.css), and the approved
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
-[The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
+[Who is fused? on the TV](#who-is-fused-on-the-tv) · [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
 [The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
 [The host room](#the-host-room) ·
 [The acceptance test](#the-acceptance-test)
@@ -329,6 +329,23 @@ quiz is ("Question 3 of 10"), so the stage never repeats it.
   size (444 px at 720p). The night's top five is not on the TV during a
   question; if it is wanted, it joins the band as one slim line (The TV's
   frame).
+
+## Who is fused? on the TV
+
+[src/games/fusion/TvView.tsx](../src/games/fusion/TvView.tsx) and
+[FinalTvView.tsx](../src/games/fusion/FinalTvView.tsx). The strap names the
+game and says where it is ("Voting is closed", "2 of 6 revealed"), so the
+stage only says what to do ("Find the prints on the wall. Vote on your
+phone.", "Time for the reveal."). The wall is raised tiles with paper
+numerals on the overlay surface, a label chip on the ground, and a revealed
+picture's two people on a solid raised panel; the newest reveal's tile steps
+up to overlay. No violet (a guest's colour), no washes, rings or glow. Small
+labels on a tile never go under the floor (`max(var(--text-tv-floor), 8cqw)`).
+The vote count is paper; gold is only the sharpest eye's points and crown.
+The final: "Ana has the sharpest eye." over the top three on paper steps of
+clearly different heights (the winners' points on gold), and the best
+disguise under them, fitted with `short:` and `low:` steps so it stands whole
+with two band lines at every size.
 
 ## The standings
 
