@@ -1,13 +1,16 @@
 import {
+  ArrowCounterClockwiseIcon,
   CheckIcon,
   CrownIcon,
   DotsThreeIcon,
   EyeIcon,
   EyeSlashIcon,
-  LockKeyIcon,
-  SparkleIcon,
+  GridFourIcon,
+  PlayIcon,
+  QuestionIcon,
   TelevisionSimpleIcon,
   WarningIcon,
+  type Icon,
 } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
@@ -20,7 +23,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,32 +30,62 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { PlayerId } from '@/games/core/Game'
 import {
-  plural,
-  type FusionGame,
+  canAsk,
+  headline,
+  hostSteps,
+  mayVote,
+  PHASE_CHIP,
+  type HostConfirm,
+  type HostStep,
+  type StepIcon,
+} from '@/games/fusion/host'
+import type { FusionGame, FusionState } from '@/games/fusion/logic'
+import { Pair, PictureArt } from '@/games/fusion/parts'
+import {
+  countsLine,
+  isLegacyState,
+  readPublic,
   type FusionHostAction,
   type FusionPublicPicture,
-  type FusionState,
-} from '@/games/fusion/logic'
-import { Pair, PictureArt } from '@/games/fusion/parts'
-import { nameOf, pickSignature, publicOf, totalVotes } from '@/games/fusion/view'
+  type FusionPublicState,
+} from '@/games/fusion/shapes'
+import { nameOf, pickSignature } from '@/games/fusion/view'
 import type { HostViewProps } from '@/games/types'
-import { withRanks } from '@/lib/format'
+import { useServerTime } from '@/lib/gameClock'
 import type { Player } from '@/lib/types'
+import { cn } from '@/lib/utils'
+
+const ICONS: Record<StepIcon, Icon> = {
+  play: PlayIcon,
+  wall: GridFourIcon,
+  ask: QuestionIcon,
+  reveal: EyeIcon,
+  crown: CrownIcon,
+}
 
 /**
- * The control room: Lock voting, Reveal next and Crown as the one gold step
- * (docs/identity.md), crowning early in the menu beside Reveal next, the votes
- * per picture, and who is in each picture behind Show who (the host's phone
- * is out in the room, so the key stays hidden until asked for).
+ * Participant fusion in the control room (docs/engine-v2.md, 8.4): where the
+ * round is, one gold button for its next step and the steps that skip ahead
+ * in the menu beside it (docs/identity.md, The host room), every picture with
+ * its own Ask, and who is in each picture behind Show who, because the host's
+ * phone is out in the room. Each step names the step it was made for, so a
+ * double tap or a race with a timer does nothing.
  */
-export default function HostView({ session, game, players, state, publicState, tallies, act, mediaUrl }: HostViewProps<FusionGame>) {
+export default function HostView({ session, game, players, state, publicState, tallies, serverNow, act, mediaUrl }: HostViewProps<FusionGame>) {
   const [showWho, setShowWho] = useState(false)
-  const [crowningEarly, setCrowningEarly] = useState(false)
   // One host action at a time: its button shows it is busy, the others wait.
   const [pending, setPending] = useState<string | null>(null)
-  const pub = publicOf(publicState)
+  const [confirming, setConfirming] = useState<HostStep | null>(null)
+  const pub = readPublic(publicState)
+  const now = useServerTime(serverNow, 500, pub !== null && pub.phase !== 'done')
   if (state === undefined) return <p className="text-paper-2">Loading the pictures…</p>
-  if (!state || !pub) return <p className="text-paper-2">Hanging the pictures…</p>
+  if (!pub) return <p className="text-paper-2">Getting the pictures ready…</p>
+
+  const legacy = state !== null && isLegacyState(state)
+  const steps = hostSteps(pub, state, tallies, players, now)
+  const busy = pending !== null
+  const onAir = session.spotlight_game_id === game.id
+  const unset = pub.pictures.filter((p) => p.revealed === null && !state?.key?.[p.n]).length
 
   async function send(id: string, action: FusionHostAction, close?: string[]) {
     setPending(id)
@@ -66,127 +98,124 @@ export default function HostView({ session, game, players, state, publicState, t
     }
   }
 
-  const total = pub.pictures.length
-  const revealed = pub.pictures.filter((p) => p.revealed).length
-  const next = pub.pictures.find((p) => !p.revealed)
-  const unset = pub.pictures.filter((p) => !p.revealed && !state.key[p.n]).length
-  const busy = pending !== null
+  const take = (step: HostStep) => {
+    if (step.confirm) setConfirming(step)
+    else void send(stepId(step), step.action, step.close)
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="text-lg font-extrabold">
-          {pub.phase === 'voting'
-            ? `${plural(totalVotes(tallies), 'vote')} on ${plural(total, 'picture')}`
-            : pub.phase === 'locked'
-              ? `Voting closed. ${revealed} of ${total} revealed`
-              : 'Done'}
-        </p>
-        <Button variant="ghost" className="ml-auto" onClick={() => setShowWho((s) => !s)}>
+    // grid-cols-1: one column as wide as the panel, so long texts wrap instead of widening it.
+    <div className="grid grid-cols-1 gap-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {/* The phase as a word on the overlay: gold is the next step's. */}
+        <Badge size="lg" variant="secondary">
+          {legacy ? 'Started before the update' : PHASE_CHIP[pub.phase]}
+        </Badge>
+        <p className="text-lg font-extrabold">{headline(pub, now)}</p>
+        {pub.phase === 'asking' && pub.current && <SecondsLeft endsAt={pub.current.endsAt} now={now} />}
+        <Button variant="ghost" className="ml-auto" onClick={() => setShowWho((shown) => !shown)}>
           {showWho ? <EyeSlashIcon /> : <EyeIcon />}
           {showWho ? 'Hide who' : 'Show who'}
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {pub.phase === 'voting' && (
-          <ConfirmButton
-            title="Lock voting?"
-            description="Guests can't vote or change their votes after this. Then you reveal the pictures one by one on the TV."
-            confirm="Lock voting"
-            disabled={busy}
-            pending={pending === 'lock'}
-            onConfirm={() => void send('lock', { type: 'lock' })}
-          >
-            <LockKeyIcon />
-            Lock voting
-          </ConfirmButton>
-        )}
-        {pub.phase === 'locked' && next && (
-          <Button
-            size="lg"
-            disabled={busy || !state.key[next.n]}
-            isPending={pending === `reveal:${next.n}`}
-            onClick={() => void send(`reveal:${next.n}`, { type: 'reveal', n: next.n }, [next.key])}
-          >
-            <SparkleIcon />
-            Reveal next: {next.label}
-          </Button>
-        )}
-        {pub.phase === 'locked' &&
-          (next ? (
-            // Crowning early sits in the menu, so nothing stands beside Reveal next. It still asks first.
+      {legacy ? (
+        <Notice icon={ArrowCounterClockwiseIcon}>
+          This round started before the update and can't go on. End it, then restart it from the program: its pictures and
+          people are kept.
+        </Notice>
+      ) : (
+        pub.phase !== 'done' && (
+          <>
+            {!onAir && (
+              <Notice icon={TelevisionSimpleIcon}>
+                Participant fusion isn't on the TV. Show it on the TV first: the pictures play there.
+              </Notice>
+            )}
+            {unset > 0 && (
+              <Notice icon={WarningIcon}>
+                {unset === 1 ? "1 picture doesn't" : `${unset} pictures don't`} have their two people set yet. Use Show who to
+                set them before you ask them.
+              </Notice>
+            )}
+          </>
+        )
+      )}
+
+      {(steps.main || steps.extra.length > 0) && (
+        <div className="flex items-center gap-2">
+          {steps.main && (
+            <Button
+              size="lg"
+              className="h-12 flex-1 text-base sm:h-11 sm:flex-none sm:px-6"
+              disabled={busy}
+              isPending={pending === stepId(steps.main)}
+              onClick={() => take(steps.main!)}
+            >
+              <StepGlyph icon={steps.main.icon} />
+              {steps.main.label}
+            </Button>
+          )}
+          {steps.extra.length > 0 && (
+            // Not modal, so the dialog it opens doesn't fight it for focus.
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="icon-lg" disabled={busy} aria-label="More steps for this game">
+                <Button variant="secondary" size="icon-lg" className="size-12 sm:size-11" disabled={busy} aria-label="More steps for this game">
                   <DotsThreeIcon />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-auto min-w-56">
-                <DropdownMenuItem onSelect={() => setCrowningEarly(true)}>
-                  <CrownIcon />
-                  Crown the face detective now…
-                </DropdownMenuItem>
+                {steps.extra.map((step) => (
+                  <DropdownMenuItem key={stepId(step)} onSelect={() => take(step)}>
+                    <StepGlyph icon={step.icon} />
+                    {step.label}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : (
-            <Button size="lg" disabled={busy} isPending={pending === 'finish'} onClick={() => void send('finish', { type: 'finish' })}>
-              <CrownIcon />
-              Crown the face detective
-            </Button>
-          ))}
-      </div>
+          )}
+        </div>
+      )}
+
+      {pub.phase === 'asking' && pub.current && state && (
+        <LockedPips count={tallies[pub.current.key] ?? 0} total={mayVote(state, pub.current.n, players)} />
+      )}
+      {steps.line && <p className="-mt-2 text-sm text-paper-2">{steps.line}</p>}
 
       <ConfirmDialog
-        open={crowningEarly}
-        onOpenChange={setCrowningEarly}
-        title="Crown the face detective now?"
-        description={`${plural(total - revealed, 'picture')} ${total - revealed === 1 ? "isn't" : "aren't"} revealed yet. They stay secret, and their votes don't count.`}
-        confirm="Crown now"
-        onConfirm={() => void send('finish', { type: 'finish' })}
+        confirm={confirming?.confirm ?? null}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming) void send(stepId(confirming), confirming.action, confirming.close)
+          setConfirming(null)
+        }}
       />
-
-      {pub.phase === 'locked' && next && session.spotlight_game_id !== game.id && (
-        <p className="flex items-start gap-2 text-sm font-bold text-paper">
-          <TelevisionSimpleIcon weight="fill" className="mt-0.5 shrink-0" />
-          The reveal plays on the TV: show this game on the TV before you reveal.
-        </p>
-      )}
-
-      {unset > 0 && pub.phase !== 'done' && (
-        <p className="flex items-start gap-2 text-sm font-bold text-paper">
-          <WarningIcon weight="fill" className="mt-0.5 shrink-0" />
-          {unset === 1 ? "1 picture doesn't" : `${unset} pictures don't`} have their two people set yet. Use Show who to
-          set them before their reveal.
-        </p>
-      )}
 
       <ul className="divide-y divide-rule">
         {pub.pictures.map((picture) => (
           <PictureRow
             key={picture.n}
             picture={picture}
+            pub={pub}
             state={state}
             players={players}
-            votes={tallies[picture.key] ?? 0}
             showWho={showWho}
+            legacy={legacy}
             busy={busy}
             pending={pending}
             mediaUrl={mediaUrl}
             onSetKey={(people) => void send(`key:${picture.n}`, { type: 'setKey', n: picture.n, people })}
-            onReveal={() => void send(`reveal:${picture.n}`, { type: 'reveal', n: picture.n }, [picture.key])}
+            onAsk={() => void send(`ask:${picture.n}`, { type: 'ask', n: picture.n })}
           />
         ))}
       </ul>
 
       {pub.top.length > 0 && (
         <section>
-          <h3 className="mb-2 text-sm font-extrabold">
-            {pub.phase === 'done' ? 'Sharpest eyes' : 'Sharpest eyes so far'}
-          </h3>
-          <ol className="grid gap-1.5">
-            {withRanks(pub.top).map((row) => (
-              <li key={row.playerId} className="flex items-center gap-2.5">
+          <h3 className="mb-2 text-sm font-extrabold">{pub.phase === 'done' ? 'Sharpest eyes' : 'Sharpest eyes so far'}</h3>
+          <ol className="divide-y divide-rule">
+            {pub.top.map((row) => (
+              <li key={row.playerId} className="flex items-center gap-3 py-1.5">
                 <span className="tv-num w-5 text-right text-base text-paper-3">{row.rank}</span>
                 <Avatar name={nameOf(players, row.playerId)} playerId={row.playerId} className="size-7" />
                 <span className="min-w-0 flex-1 truncate font-bold">{nameOf(players, row.playerId)}</span>
@@ -200,49 +229,116 @@ export default function HostView({ session, game, players, state, publicState, t
   )
 }
 
+/** A step's id for its pending state: the action it sends. */
+function stepId(step: HostStep): string {
+  const action = step.action as { type: string; n?: number; from?: string }
+  return [action.type, action.from, action.n].filter((part) => part !== undefined).join(':')
+}
+
+function StepGlyph({ icon }: { icon: StepIcon }) {
+  const Glyph = ICONS[icon]
+  return <Glyph />
+}
+
+/** A note in the card: a solid panel with its icon, never a glass callout (docs/identity.md). */
+function Notice({ icon: Glyph, children }: { icon: Icon; children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-3 rounded-lg bg-overlay p-3 text-sm font-semibold text-paper">
+      <Glyph weight="fill" className="mt-0.5 size-5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+/** The time left on the picture asked, its number in condensed numerals: "9 s left", then "Time's up". Paper, never gold. */
+function SecondsLeft({ endsAt, now }: { endsAt: number; now: number }) {
+  const left = endsAt - now
+  if (left <= 0) return <span className="text-lg font-bold text-paper-2">Time's up</span>
+  return (
+    <span className="text-lg font-bold text-paper">
+      <span className="tv-num text-xl">{Math.ceil(left / 1000)}</span> s left
+    </span>
+  )
+}
+
+/**
+ * How many have locked in: a square pip per guest who may, filled in paper as
+ * locks come in, and "6 of 12 have locked in". Exact here (the host's own
+ * count), and counts only: never who.
+ */
+function LockedPips({ count, total }: { count: number; total: number }) {
+  const pips = Math.max(total, count)
+  return (
+    <div className="flex items-center gap-3" role="img" aria-label={`${count} of ${pips} have locked in`}>
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+        {Array.from({ length: pips }, (_, i) => (
+          <span
+            key={i}
+            className={cn('size-2.5 rounded-[2px] transition-colors duration-500', i < count ? 'bg-paper' : 'border-[1.5px] border-rule')}
+          />
+        ))}
+      </div>
+      <p className="shrink-0 text-sm whitespace-nowrap text-paper-2">
+        <span className="tv-num text-lg text-paper">
+          {count} of {pips}
+        </span>{' '}
+        have locked in
+      </p>
+    </div>
+  )
+}
+
+/** One picture: its thumbnail and label, where it stands, how the room did, its people behind Show who, and its own Ask. */
 function PictureRow({
   picture,
+  pub,
   state,
   players,
-  votes,
   showWho,
+  legacy,
   busy,
   pending,
   mediaUrl,
   onSetKey,
-  onReveal,
+  onAsk,
 }: {
   picture: FusionPublicPicture
-  state: FusionState
+  pub: FusionPublicState
+  state: FusionState | null
   players: Player[]
-  votes: number
   showWho: boolean
+  legacy: boolean
   busy: boolean
   pending: string | null
   mediaUrl: HostViewProps['mediaUrl']
   onSetKey: (people: [PlayerId, PlayerId]) => void
-  onReveal: () => void
+  onAsk: () => void
 }) {
-  const key = state.key[picture.n] ?? null
+  const key = state?.key?.[picture.n] ?? null
   const result = picture.revealed
+  const onNow = (pub.phase === 'asking' || pub.phase === 'reveal') && pub.current?.n === picture.n
+  const askable = !legacy && !result && !onNow && canAsk(pub.phase)
 
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
-      <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="size-12 shrink-0 rounded-lg" numberClassName="text-xl" />
+      <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="h-15 w-12 shrink-0 rounded-chip" labelClassName="text-[13px]" />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-bold">{picture.label}</p>
-        <p className="text-sm text-paper-2">
-          {result
-            ? result.voters === 0
-              ? 'Nobody voted on it'
-              : `${result.both} of ${result.voters} got both, ${result.one} got one`
-            : `${votes} of ${players.length} voted`}
+        <p className="flex items-center gap-2">
+          <span className="truncate font-bold">{picture.label}</span>
+          {onNow ? (
+            <Badge variant="secondary">On now</Badge>
+          ) : result ? (
+            <Badge variant="ghost">Revealed</Badge>
+          ) : (
+            <Badge variant="outline">Not asked</Badge>
+          )}
         </p>
+        {result && <p className="text-sm text-paper-2">{countsLine(result)}</p>}
       </div>
 
       {result ? (
         <Pair people={result.people} kept={result.names} players={players} className="text-sm" />
-      ) : showWho && state.phase !== 'done' ? (
+      ) : showWho && state && !legacy && pub.phase !== 'done' ? (
         <KeyEditor
           // Starts again from the saved key whenever it changes.
           key={pickSignature(key)}
@@ -254,28 +350,29 @@ function PictureRow({
           onSave={onSetKey}
         />
       ) : showWho && key ? (
-        <Pair people={key} kept={key.map((id) => state.names?.[id] ?? 'A guest')} players={players} className="text-sm" />
+        <Pair people={key} kept={key.map((id) => state?.names?.[id] ?? 'A guest')} players={players} className="text-sm" />
       ) : key ? (
-        <Badge variant="secondary">
+        <Badge variant="ghost">
           <CheckIcon />
           People set
         </Badge>
       ) : (
-        <Badge variant="outline" className="text-paper">
+        <Badge variant="outline">
           <WarningIcon />
           Who is it?
         </Badge>
       )}
 
-      {state.phase === 'locked' && !result && (
+      {askable && (
         <Button
           variant="secondary"
           disabled={busy || !key}
-          isPending={pending === `reveal:${picture.n}`}
-          onClick={onReveal}
+          isPending={pending === `ask:${picture.n}`}
+          onClick={onAsk}
           title={key ? undefined : 'Set who is in it first'}
         >
-          Reveal
+          <QuestionIcon />
+          Ask
         </Button>
       )}
     </li>
@@ -330,82 +427,30 @@ function KeyEditor({
         </Select>
       ))}
       {ready && (
-        <Button size="sm" disabled={disabled} isPending={pending} onClick={() => onSave(draft)}>
+        <Button size="sm" variant="secondary" disabled={disabled} isPending={pending} onClick={() => onSave(draft)}>
           Save
         </Button>
       )}
-      {same && <p className="w-full text-xs text-destructive">Pick two different people</p>}
+      {same && <p className="w-full text-xs text-paper-2">Pick two different people</p>}
     </div>
   )
 }
 
-/** Asks first, for a step chosen from a menu. */
-function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirm,
-  onConfirm,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  confirm: string
-  onConfirm: () => void
-}) {
+/** Asks first, for a step that crowns while pictures are left. */
+function ConfirmDialog({ confirm, onCancel, onConfirm }: { confirm: HostConfirm | null; onCancel: () => void; onConfirm: () => void }) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle>{confirm?.title}</AlertDialogTitle>
+          <AlertDialogDescription>{confirm?.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{confirm}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-
-/** A big button that asks first. */
-function ConfirmButton({
-  title,
-  description,
-  confirm,
-  variant = 'default',
-  disabled,
-  pending,
-  onConfirm,
-  children,
-}: {
-  title: string
-  description: string
-  confirm: string
-  variant?: 'default' | 'secondary'
-  disabled: boolean
-  pending: boolean
-  onConfirm: () => void
-  children: ReactNode
-}) {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button size="lg" variant={variant} disabled={disabled} isPending={pending}>
-          {children}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{confirm}</AlertDialogAction>
+          <AlertDialogCancel>{confirm?.cancel}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            <CrownIcon />
+            {confirm?.action}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

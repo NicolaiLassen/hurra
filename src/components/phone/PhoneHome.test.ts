@@ -112,9 +112,9 @@ describe('the phone home', () => {
     expect(await phone('quiz-leaderboard')).toContain('Quiz After question 3 of 10')
   })
 
-  it('fusion voting off the TV is its own section with an outlined Vote; locked on the TV is "On the TV"', async () => {
+  it('fusion, a stage game now, holds the main card off the TV as on it; a round from before the update says "On the TV"', async () => {
     const voting = await phone('fusion-old-voting')
-    expect(voting).toContain('Who is fused? Vote on the pictures: 5 of 6 done')
+    expect(voting).toContain('Who is fused? Since 20:10')
     expect(voting).not.toContain('Live')
     expect(await phone('fusion-legacy')).toContain('Who is fused? On the TV')
   })

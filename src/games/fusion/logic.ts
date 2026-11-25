@@ -1,12 +1,14 @@
 // Participant fusion (docs/engine-v2.md, 8.4). Before the party an image model
-// fuses two guests' faces into one portrait per print; the prints hang on the
-// wall, numbered. Guests vote on their phones for who is in each print, the
-// host locks voting and then reveals the prints one by one on the TV.
+// fuses two guests' faces into one portrait per print. On the night the game
+// takes the TV like the quiz: each picture shows large one at a time (the
+// showing), then all of them at once (the wall), then the host asks them one
+// by one. Each phone picks the two guests in the picture and locks in before
+// the countdown ends, and the reveal shows who it was.
 //
-// Votes are prompts, never actions: one prompt per picture (p1 to pN), all open
-// from the start, answered straight to the database and changeable until the
-// host locks voting. The lock closes them all, so the next request sees every
-// vote in info.answers, and each reveal scores its picture from them.
+// Guesses are prompts, never actions: one prompt per picture (p1 to pN),
+// opened when the host asks it, `final` (the first lock counts), with the
+// countdown's end plus a grace second as its deadline. The reveal (the host's
+// Reveal now, or the timer) gets every lock at once in ctx.answers.
 //
 // Who is in each picture (the key) is the secret. It lives in the host-only
 // settings and the state, and reaches publicState only once that picture is
@@ -20,10 +22,59 @@ import {
   type GamePlayer,
   type Highlight,
   type PlayerId,
-  type PromptSpec,
   type RecapRound,
   type Scores,
 } from '../core/Game'
+import {
+  DEFAULT_SECONDS,
+  DEFAULT_SHOW_SECONDS,
+  defaultLabel,
+  GRACE_MS,
+  isLegacyState,
+  LEGACY_MESSAGE,
+  listNames,
+  MAX_LABEL_LENGTH,
+  MAX_PICTURES,
+  MAX_POINTS,
+  MAX_SECONDS,
+  MAX_SHOW_SECONDS,
+  MIN_SECONDS,
+  MIN_SHOW_SECONDS,
+  pictureKey,
+  plural,
+  pointsFor,
+  REVEAL_HOLD_MS,
+  TOP_SIZE,
+  VOTE_SPEC,
+  WAKE_MARGIN_MS,
+  type FusionHostAction,
+  type FusionPhase as Phase,
+  type FusionPlayerView as PlayerViewShape,
+  type FusionPublicPicture as PublicPicture,
+  type FusionPublicState as PublicState,
+  type FusionRules,
+  type FusionTopRow,
+} from './shapes'
+
+export {
+  defaultLabel,
+  GRACE_MS,
+  listNames,
+  MAX_LABEL_LENGTH,
+  MAX_PICTURES,
+  MAX_POINTS,
+  MAX_SECONDS,
+  MAX_SHOW_SECONDS,
+  MIN_SECONDS,
+  MIN_SHOW_SECONDS,
+  pictureKey,
+  plural,
+  pointsFor,
+  REVEAL_HOLD_MS,
+  VOTE_SPEC,
+  WAKE_MARGIN_MS,
+}
+export type { FusionHostAction }
 
 export type FusionPicture = {
   /** What the print says, e.g. "#3". Blank in the settings means "#n". */
@@ -36,15 +87,17 @@ export type FusionPicture = {
 
 export type FusionConfig = {
   pictures: FusionPicture[]
-  /** Points for each of the two people a guest got right. */
+  /** Points for each of the two people a guest got right: a whole number from 0 to 10. */
   pointsPerPerson: number
-  /** Extra points for getting both people of a picture right. */
+  /** Extra points for getting both people of a picture right: a whole number from 0 to 10. */
   bonusForBoth: number
+  /** Seconds to guess each picture: 10 to 90. */
+  seconds: number
+  /** Seconds each picture shows in the showing: 3 to 20. */
+  showSeconds: number
 }
 
-export type FusionPhase = 'voting' | 'locked' | 'done'
-
-/** One revealed picture's votes. Only voters who aren't in the picture count. */
+/** One revealed picture's locks. Only voters who aren't in the picture count. */
 export type FusionResult = {
   both: number
   one: number
@@ -52,103 +105,74 @@ export type FusionResult = {
   voters: number
   /** How many of the two each voter got right. */
   hits: Record<PlayerId, number>
+  /** When it was revealed. Missing in saves from the background version. */
+  at?: number
 }
 
 export type FusionState = {
-  phase: FusionPhase
+  phase: Phase
   /** Who is in each picture, by picture number. Secret until that picture is revealed. */
   key: Record<string, [PlayerId, PlayerId]>
-  /** The names of the people in the key, for anyone who leaves the party before their picture is revealed. */
+  /** The names of the people in the key, for anyone who leaves before their picture is revealed. */
   names: Record<PlayerId, string>
-  /** Picture numbers, in reveal order. */
+  /** Picture numbers, in the order they were asked and revealed. */
   revealed: number[]
   results: Record<string, FusionResult>
   totals: Record<PlayerId, number>
-  lastReveal: { n: number; at: number } | null
-}
-
-export type FusionHostAction =
-  | { type: 'setKey'; n: number; people: [PlayerId, PlayerId] }
-  | { type: 'lock' }
-  | { type: 'reveal'; n: number }
-  | { type: 'finish' }
-
-export type FusionPublicPicture = {
-  n: number
-  /** Its prompt key: what phones answer. */
-  key: string
-  label: string
-  image: string | null
-  revealed: {
-    people: [PlayerId, PlayerId]
-    /** The people's names when it was revealed, for anyone who has left since. */
-    names?: [string, string]
-    both: number
-    one: number
-    none: number
-    voters: number
-  } | null
-}
-
-export type FusionPublicState = {
-  phase: FusionPhase
-  pictures: FusionPublicPicture[]
-  /** The top 5 face detectives, most points first. */
-  top: { playerId: PlayerId; points: number }[]
-  lastReveal: { n: number; at: number } | null
-  /** The points rules, for the phones' explanations. */
-  scoring?: { perPerson: number; bothBonus: number }
-}
-
-export type FusionPlayerView = {
-  points: number
-  /** For each revealed picture this player voted on (and isn't in): how many of the two they got right. */
-  hits: Record<string, number>
+  /** When the showing started (database clock); null before it, and again once a picture is asked. */
+  showStartedAt: number | null
+  /** The picture asked now (asking) or revealed last (reveal); null in other phases. */
+  current: number | null
+  openedAt: number | null
+  endsAt: number | null
+  revealedAt: number | null
 }
 
 /** What this game keeps on a player's profile. */
 export type FusionProfile = { detective?: number }
 
-export const MAX_PICTURES = 40
-export const MAX_LABEL_LENGTH = 20
-export const MAX_POINTS = 10
-
-/** The prompt phones answer for picture n. */
-export const pictureKey = (n: number) => `p${n}`
-/** The label a picture gets when the settings leave it blank. */
-export const defaultLabel = (n: number) => `#${n}`
-
-/** Each picture's vote: two players, never yourself, changeable until voting is locked. */
-export const VOTE_SPEC: PromptSpec = { kind: 'choice', options: 'players', min: 2, max: 2, exclude_self: true }
+// The background version's public shapes, for the screens being replaced
+// (docs/engine-v2.md, 8.4): they read saved JSON through view.ts's publicOf.
+// New code reads through shapes.ts; these go once the old screens have.
+/** @deprecated The background version's phases: read through shapes.ts. */
+export type FusionPhase = 'voting' | 'locked' | 'done'
+/** @deprecated The background version's picture: read through shapes.ts. */
+export type FusionPublicPicture = {
+  n: number
+  key: string
+  label: string
+  image: string | null
+  revealed: { people: [PlayerId, PlayerId]; names?: [string, string]; both: number; one: number; none: number; voters: number } | null
+}
+/** @deprecated The background version's public state: read through shapes.ts. */
+export type FusionPublicState = {
+  phase: FusionPhase
+  pictures: FusionPublicPicture[]
+  top: { playerId: PlayerId; points: number }[]
+  lastReveal: { n: number; at: number } | null
+  scoring?: { perPerson: number; bothBonus: number }
+}
+/** @deprecated The background version's view: read through shapes.ts. */
+export type FusionPlayerView = { points: number; hits: Record<string, number> }
 
 /** A game-media path as uploads make them: `<session>/<game>/<uuid>.jpg`, nothing that climbs or points elsewhere. */
 const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
 
-/** The points one picture gives a voter who got `hits` of its two people. */
-export function pointsFor(hits: number, scoring: { perPerson: number; bothBonus: number }): number {
-  return hits * scoring.perPerson + (hits >= 2 ? scoring.bothBonus : 0)
-}
-
-/** "Ana", "Ana and Bo", "Ana, Bo and Cy", "Ana, Bo, Cy and 2 more". */
-export function listNames(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? ''
-  if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
-}
-
-export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
-
-export class FusionGame extends Game<
-  FusionState,
-  never,
-  FusionPublicState,
-  FusionPlayerView,
-  FusionConfig,
-  FusionHostAction
-> {
+/**
+ * The stage round: the host starts the showing, the wall follows, then the
+ * host asks the pictures one by one (each its own countdown, revealed by the
+ * timer or by Reveal now), and crowns the face detective at the end.
+ */
+export class FusionGame extends Game<FusionState, never, PublicState, PlayerViewShape, FusionConfig, FusionHostAction> {
   readonly type = 'fusion'
-  readonly presentation = 'background'
-  readonly defaultConfig: FusionConfig = { pictures: [], pointsPerPerson: 1, bonusForBoth: 0 }
+  readonly presentation = 'stage'
+  readonly defaultConfig: FusionConfig = {
+    pictures: [],
+    pointsPerPerson: 1,
+    bonusForBoth: 0,
+    seconds: DEFAULT_SECONDS,
+    showSeconds: DEFAULT_SHOW_SECONDS,
+  }
 
   parseConfig(input: Record<string, unknown>): FusionConfig {
     const raw = input.pictures
@@ -158,13 +182,19 @@ export class FusionGame extends Game<
       pictures: raw.map((item, i) => parsePicture(item, i + 1)),
       pointsPerPerson: wholePoints(input.pointsPerPerson, 'Points per right person'),
       bonusForBoth: wholePoints(input.bonusForBoth, 'The bonus for both'),
+      seconds: wholeIn(input.seconds, MIN_SECONDS, MAX_SECONDS, `The time to guess must be ${MIN_SECONDS} to ${MAX_SECONDS} seconds`),
+      showSeconds: wholeIn(
+        input.showSeconds,
+        MIN_SHOW_SECONDS,
+        MAX_SHOW_SECONDS,
+        `The showing must be ${MIN_SHOW_SECONDS} to ${MAX_SHOW_SECONDS} seconds a picture`,
+      ),
     }
   }
 
   setup(ctx: GameContext<FusionConfig>): FusionState {
-    const { pictures } = ctx.config
     const key: FusionState['key'] = {}
-    pictures.forEach((picture, i) => {
+    ctx.config.pictures.forEach((picture, i) => {
       if (!picture.people) return
       // Settings can be made before the night; someone in them may have left since.
       if (!picture.people.every((id) => ctx.players.some((p) => p.id === id))) {
@@ -172,27 +202,25 @@ export class FusionGame extends Game<
       }
       key[i + 1] = [picture.people[0], picture.people[1]]
     })
-    pictures.forEach((_, i) => ctx.openPrompt(pictureKey(i + 1), VOTE_SPEC))
-    ctx.announce('Who is fused?', {
-      detail: `${plural(pictures.length, 'picture')} on the wall. Vote on your phone.`,
-      icon: 'detective',
-      tone: 'violet',
-      sound: 'gong',
-    })
+    // No prompt and no announcement yet: the TV's "Hurra presents" card opens the game.
     return {
-      phase: 'voting',
+      phase: 'lobby',
       key,
       names: namesOf(key, ctx.players, {}),
       revealed: [],
       results: {},
       totals: {},
-      lastReveal: null,
+      showStartedAt: null,
+      current: null,
+      openedAt: null,
+      endsAt: null,
+      revealedAt: null,
     }
   }
 
   parseAction(): never {
-    // Votes go straight to the database as prompts; this game takes no moves.
-    throw new GameError('Vote by tapping a picture instead')
+    // Guesses go straight to the database as prompts; this game takes no moves.
+    throw new GameError('This game takes guesses, not moves')
   }
 
   handleAction(state: FusionState): FusionState {
@@ -203,10 +231,16 @@ export class FusionGame extends Game<
     if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new GameError('Unknown host action')
     const action = input as Record<string, unknown>
     switch (action.type) {
-      case 'lock':
-        return { type: 'lock' }
+      case 'show':
+        return { type: 'show' }
       case 'finish':
         return { type: 'finish' }
+      case 'wall':
+        if (action.from === 'lobby' || action.from === 'showing') return { type: 'wall', from: action.from }
+        if (action.from === 'reveal') return { type: 'wall', from: 'reveal', n: pictureNumber(action.n) }
+        break
+      case 'ask':
+        return { type: 'ask', n: pictureNumber(action.n) }
       case 'reveal':
         return { type: 'reveal', n: pictureNumber(action.n) }
       case 'setKey': {
@@ -222,17 +256,65 @@ export class FusionGame extends Game<
 
   // Every host action names its step (docs/engine-v2.md, 3.5): a picture number,
   // or a phase. One whose step has passed returns the state unchanged, which
-  // the engine answers as skipped: a double tap on Lock or Reveal does nothing.
+  // the engine answers as skipped: a double tap, or a race with a timer.
   handleHostAction(state: FusionState, action: FusionHostAction, ctx: GameContext<FusionConfig>): FusionState {
+    // A round started with the background version can't go on: End it and restart it.
+    if (isLegacyState(state)) throw new GameError(LEGACY_MESSAGE)
+    const s = readState(state)
     switch (action.type) {
-      case 'setKey':
-        return this.setKey(state, action.n, action.people, ctx)
-      case 'lock':
-        return this.lock(state, ctx)
+      case 'show':
+        if (s.phase !== 'lobby') return state
+        return { ...s, phase: 'showing', showStartedAt: ctx.now }
+      case 'wall':
+        if (action.from === 'reveal') return s.phase === 'reveal' && s.current === action.n ? toWall(s) : state
+        return s.phase === action.from ? toWall(s) : state
+      case 'ask':
+        return this.ask(state, s, action.n, ctx)
       case 'reveal':
-        return this.reveal(state, action.n, ctx)
+        // The timer may have revealed it already.
+        if (s.phase !== 'asking' || s.current !== action.n) return state
+        return this.reveal(s, ctx)
+      case 'setKey':
+        return this.setKey(state, s, action.n, action.people, ctx)
       case 'finish':
-        return this.finish(state, ctx)
+        return this.finish(state, s, ctx)
+    }
+  }
+
+  wakeAt(state: FusionState, info: GameInfo<FusionConfig>): number | null {
+    if (isLegacyState(state)) return null
+    const s = readState(state)
+    switch (s.phase) {
+      case 'showing':
+        return s.showStartedAt === null ? null : s.showStartedAt + showingMs(info.config)
+      case 'asking':
+        return s.endsAt === null ? null : s.endsAt + GRACE_MS + WAKE_MARGIN_MS
+      case 'reveal':
+        return s.revealedAt === null ? null : s.revealedAt + REVEAL_HOLD_MS
+      default:
+        return null
+    }
+  }
+
+  /** The showing ends on the wall; time's up reveals the picture; a reveal goes back to the wall. */
+  onWake(state: FusionState, ctx: GameContext<FusionConfig>): FusionState {
+    if (isLegacyState(state)) return state
+    const s = readState(state)
+    switch (s.phase) {
+      case 'showing':
+      case 'reveal':
+        return toWall(s)
+      case 'asking': {
+        if (s.current === null) return toWall(s)
+        const key = pictureKey(s.current)
+        if (ctx.answers[key]) return this.reveal(s, ctx)
+        // The database hasn't closed it yet, which WAKE_MARGIN_MS rules out. Never
+        // score a picture without its locks: close it and wait for Reveal now.
+        if (key in ctx.prompts && ctx.prompts[key].closedAt === null) ctx.closePrompt(key)
+        return state
+      }
+      default:
+        return state
     }
   }
 
@@ -242,77 +324,97 @@ export class FusionGame extends Game<
 
   /** The top totals among players still in the party, all tied ones; nobody when nobody scored. */
   winners(state: FusionState, info: GameInfo<FusionConfig>): PlayerId[] {
-    return leaders(state, info)
+    return leaders(readState(state), info)
   }
 
   onEnd(state: FusionState, ctx: GameContext<FusionConfig>, by: 'game' | 'host'): FusionState {
     // The crowning announced the result already ('game'): stay quiet then.
+    if (by === 'game' && state.phase === 'done') return state
+    const s = readState(state)
     if (by === 'host') {
-      const top = leaders(state, ctx)
-      const names = top.map((id) => nameIn(ctx.players, state.names, id))
+      const top = leaders(s, ctx)
+      const names = top.map((id) => nameIn(ctx.players, s.names, id))
       ctx.announce('Participant fusion is over', {
         detail:
           top.length > 0
-            ? `${listNames(names)} ${top.length > 1 ? 'shared' : 'had'} the sharpest eye with ${plural(state.totals[top[0]], 'point')}`
+            ? `${listNames(names)} ${top.length > 1 ? 'shared' : 'had'} the sharpest eye with ${plural(s.totals[top[0]], 'point')}`
             : 'Nobody scored this time',
         icon: 'trophy',
         tone: 'violet',
         sound: 'gong',
       })
     }
-    return state.phase === 'done' ? state : { ...state, phase: 'done' }
+    // A picture asked when the host ended it stays unscored and secret.
+    return { ...s, phase: 'done', showStartedAt: null, current: null, openedAt: null, endsAt: null, revealedAt: null }
   }
 
   scores(state: FusionState): Scores {
-    return { ...state.totals }
+    return { ...readState(state).totals }
   }
 
-  publicState(state: FusionState, info: GameInfo<FusionConfig>): FusionPublicState {
+  publicState(state: FusionState, info: GameInfo<FusionConfig>): PublicState {
+    const s = readState(state)
+    const legacy = isLegacyState(state)
+    const rules = rulesOf(info.config)
+    const pictures = info.config.pictures.map((picture, i): PublicPicture => {
+      const n = i + 1
+      return {
+        n,
+        key: pictureKey(n),
+        label: picture.label,
+        image: picture.image ?? null,
+        // Who is in it only once it is revealed: never a key before that.
+        revealed: revealedOf(s, n, info.players),
+      }
+    })
+    const asking = s.phase === 'asking' || s.phase === 'reveal'
+    const current = s.current
     return {
-      phase: state.phase,
-      pictures: info.config.pictures.map((picture, i) => {
-        const n = i + 1
-        const result = state.revealed.includes(n) ? state.results[n] : undefined
-        const people = state.key[n]
-        return {
-          n,
-          key: pictureKey(n),
-          label: picture.label,
-          image: picture.image ?? null,
-          // Who is in it only once it is revealed: never a key before that.
-          revealed:
-            result && people
-              ? {
-                  people: [people[0], people[1]],
-                  names: [nameIn(info.players, state.names, people[0]), nameIn(info.players, state.names, people[1])],
-                  both: result.both,
-                  one: result.one,
-                  none: result.none,
-                  voters: result.voters,
-                }
-              : null,
-        }
-      }),
-      top: ranked(state, info).slice(0, 5),
-      lastReveal: state.lastReveal,
-      scoring: scoringOf(info.config),
+      // The background version's voting and locked read as a lobby that never starts.
+      phase: legacy ? 'lobby' : s.phase,
+      pictures,
+      rules,
+      showing:
+        !legacy && s.phase === 'showing' && s.showStartedAt !== null
+          ? { startedAt: s.showStartedAt, endsAt: s.showStartedAt + showingMs(info.config) }
+          : null,
+      current:
+        !legacy && asking && current !== null && s.openedAt !== null && s.endsAt !== null
+          ? {
+              n: current,
+              step: s.phase === 'asking' ? s.revealed.length + 1 : s.revealed.indexOf(current) + 1,
+              key: pictureKey(current),
+              openedAt: s.openedAt,
+              endsAt: s.endsAt,
+              revealedAt: s.phase === 'reveal' ? s.revealedAt : null,
+            }
+          : null,
+      top: ranked(s, info).slice(0, TOP_SIZE),
     }
   }
 
-  playerView(state: FusionState, playerId: PlayerId): FusionPlayerView {
+  playerView(state: FusionState, playerId: PlayerId, info: GameInfo<FusionConfig>): PlayerViewShape {
+    const s = readState(state)
     const hits: Record<string, number> = {}
-    for (const n of state.revealed) {
-      const got = state.results[n]?.hits[playerId]
-      if (got !== undefined) hits[n] = got
+    for (const n of s.revealed) {
+      const result = s.results[n]
+      if (result && Object.hasOwn(result.hits, playerId)) hits[n] = result.hits[playerId]
     }
-    return { points: state.totals[playerId] ?? 0, hits }
+    const asking = !isLegacyState(state) && (s.phase === 'asking' || s.phase === 'reveal') && s.current !== null
+    return {
+      points: s.totals[playerId] ?? 0,
+      rank: ranked(s, info).find((row) => row.playerId === playerId)?.rank ?? null,
+      hits,
+      inPicture: asking && (s.key[s.current!]?.includes(playerId) ?? false),
+    }
   }
 
   /** Revealed pictures only: a picture the host never revealed keeps its people secret. */
   recap(round: RecapRound<FusionState, FusionConfig>): Highlight[] {
     if (!round.finished || !round.state) return []
-    const { state, config } = round
-    const nameOf = (id: PlayerId) => round.players.find((p) => p.id === id)?.name ?? state.names?.[id] ?? 'A guest'
+    const { config } = round
+    const state = readState(round.state)
+    const nameOf = (id: PlayerId) => round.players.find((p) => p.id === id)?.name ?? state.names[id] ?? 'A guest'
     const labelOf = (n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
     const revealedAt = (n: number) =>
       round.log.find((row) => row.kind === 'game.record' && row.data.type === 'revealed' && row.data.n === n)?.at
@@ -374,87 +476,88 @@ export class FusionGame extends Game<
 
   // Host actions -------------------------------------------------------------
 
-  private setKey(state: FusionState, n: number, people: [PlayerId, PlayerId], ctx: GameContext<FusionConfig>): FusionState {
-    const picture = pictureOf(ctx.config, n)
-    if (state.revealed.includes(n)) throw new GameError(`${picture.label} is already revealed`)
+  /** Opens picture n's guess: its countdown starts now. From the lobby, the showing, the wall or a reveal. */
+  private ask(state: FusionState, s: FusionState, n: number, ctx: GameContext<FusionConfig>): FusionState {
+    const picture = ctx.config.pictures[n - 1]
+    if (!picture) throw new GameError(`There is no picture ${defaultLabel(n)}`)
+    // Asked already: a double tap, or revealed since.
+    if (s.revealed.includes(n) || (s.phase === 'asking' && s.current === n)) return state
+    if (s.phase === 'asking') throw new GameError(`Reveal ${labelOf(ctx.config, s.current!)} first`)
+    if (s.phase === 'done') return state
+    if (!s.key[n]) throw new GameError(`Set who is in ${picture.label} first`)
+    const endsAt = ctx.now + rulesOf(ctx.config).seconds * 1000
+    ctx.openPrompt(pictureKey(n), VOTE_SPEC, { closesAt: endsAt + GRACE_MS })
+    return { ...s, phase: 'asking', current: n, openedAt: ctx.now, endsAt, revealedAt: null, showStartedAt: null }
+  }
+
+  /** Scores the picture being asked from its final locks and reveals it (Reveal now, or time's up). */
+  private reveal(s: FusionState, ctx: GameContext<FusionConfig>): FusionState {
+    const n = s.current!
+    const label = labelOf(ctx.config, n)
+    const key = pictureKey(n)
+    const votes = ctx.answers[key]
+    if (!votes) throw new GameError(`The votes for ${label} are still open`)
+    const people = s.key[n]
+    if (!people) throw new GameError(`Set who is in ${label} first`)
+
+    const result = scoreVotes(votes, people)
+    const rules = rulesOf(ctx.config)
+    const totals = { ...s.totals }
+    for (const [id, hits] of Object.entries(result.hits)) {
+      const points = pointsFor(hits, rules)
+      if (points > 0) totals[id] = (totals[id] ?? 0) + points
+    }
+    ctx.revealPrompt(key)
+    // No announcement: the TV and every phone show the reveal themselves. The log keeps it for the recap.
+    const { both, one, none, voters } = result
+    ctx.record(
+      'revealed',
+      { n, label, people: [...people], both, one, none, voters },
+      { about: people.filter((id) => ctx.players.some((p) => p.id === id)) },
+    )
+    return {
+      ...s,
+      phase: 'reveal',
+      revealed: [...s.revealed, n],
+      results: { ...s.results, [n]: { ...result, at: ctx.now } },
+      totals,
+      revealedAt: ctx.now,
+    }
+  }
+
+  private setKey(
+    state: FusionState,
+    s: FusionState,
+    n: number,
+    people: [PlayerId, PlayerId],
+    ctx: GameContext<FusionConfig>,
+  ): FusionState {
+    const picture = ctx.config.pictures[n - 1]
+    if (!picture) throw new GameError(`There is no picture ${defaultLabel(n)}`)
+    if (s.phase === 'done') return state
+    if (s.revealed.includes(n)) throw new GameError(`${picture.label} is already revealed`)
     const [a, b] = people
     if (a === b) throw new GameError('Pick two different people')
     if (!ctx.players.some((p) => p.id === a) || !ctx.players.some((p) => p.id === b)) {
       throw new GameError('Pick two people who are in the party')
     }
-    const current = state.key[n]
+    const current = s.key[n]
     if (current && current.includes(a) && current.includes(b)) return state
-    const key = { ...state.key, [n]: [a, b] as [PlayerId, PlayerId] }
-    return { ...state, key, names: namesOf(key, ctx.players, state.names) }
+    const key = { ...s.key, [n]: [a, b] as [PlayerId, PlayerId] }
+    return { ...s, key, names: namesOf(key, ctx.players, s.names) }
   }
 
-  private lock(state: FusionState, ctx: GameContext<FusionConfig>): FusionState {
-    if (state.phase !== 'voting') return state
-    ctx.config.pictures.forEach((_, i) => {
-      const key = pictureKey(i + 1)
-      if (key in ctx.prompts) ctx.closePrompt(key)
-    })
-    ctx.announce('Voting is closed', {
-      detail: 'The reveal is coming up on the TV',
-      icon: 'megaphone',
-      tone: 'violet',
-      sound: 'ticktock',
-    })
-    return { ...state, phase: 'locked' }
-  }
-
-  private reveal(state: FusionState, n: number, ctx: GameContext<FusionConfig>): FusionState {
-    if (state.phase === 'voting') throw new GameError('Lock voting first')
-    if (state.phase === 'done') return state
-    const picture = pictureOf(ctx.config, n)
-    // A double tap on Reveal next: this one is out already.
-    if (state.revealed.includes(n)) return state
-    const people = state.key[n]
-    if (!people) throw new GameError(`Set who is in ${picture.label} first`)
-    const key = pictureKey(n)
-    const votes = ctx.answers[key]
-    if (!votes) throw new GameError(`The votes for ${picture.label} are still open`)
-
-    const result = scoreVotes(votes, people)
-    const scoring = scoringOf(ctx.config)
-    const totals = { ...state.totals }
-    for (const [id, hits] of Object.entries(result.hits)) {
-      const points = pointsFor(hits, scoring)
-      if (points > 0) totals[id] = (totals[id] ?? 0) + points
-    }
-    ctx.revealPrompt(key)
-    const names = people.map((id) => nameIn(ctx.players, state.names, id))
-    ctx.announce(`${picture.label} was ${names[0]} and ${names[1]}!`, {
-      detail: result.voters === 0 ? 'Nobody voted on this one' : `${result.both} of ${result.voters} got both`,
-      icon: 'detective',
-      tone: 'violet',
-      sound: 'gotcha',
-    })
-    const { both, one, none, voters } = result
-    ctx.record(
-      'revealed',
-      { n, label: picture.label, people: [...people], both, one, none, voters },
-      { about: people.filter((id) => ctx.players.some((p) => p.id === id)) },
-    )
-    return {
-      ...state,
-      revealed: [...state.revealed, n],
-      results: { ...state.results, [n]: result },
-      totals,
-      lastReveal: { n, at: ctx.now },
-    }
-  }
-
-  private finish(state: FusionState, ctx: GameContext<FusionConfig>): FusionState {
-    if (state.phase === 'voting') throw new GameError('Lock voting first')
-    if (state.phase === 'done') return state
-    const top = leaders(state, ctx)
+  private finish(state: FusionState, s: FusionState, ctx: GameContext<FusionConfig>): FusionState {
+    if (s.phase === 'asking') throw new GameError(`Reveal ${labelOf(ctx.config, s.current!)} first`)
+    if (s.phase === 'done') return state
+    const done: FusionState = { ...s, phase: 'done', showStartedAt: null, current: null, openedAt: null, endsAt: null, revealedAt: null }
+    const top = leaders(s, ctx)
     if (top.length === 0) {
       ctx.announce('Participant fusion is over', { detail: 'Nobody scored this time', icon: 'trophy', tone: 'violet' })
-      return { ...state, phase: 'done' }
+      return done
     }
-    const points = state.totals[top[0]]
-    const names = top.map((id) => nameIn(ctx.players, state.names, id))
+    const points = s.totals[top[0]]
+    const names = top.map((id) => nameIn(ctx.players, s.names, id))
     const shared = top.length > 1
     ctx.announce(`${listNames(names)} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}!`, {
       detail: plural(points, 'point'),
@@ -475,11 +578,74 @@ export class FusionGame extends Game<
       ctx.updateProfile(id, { detective: (isCount(before) ? before : 0) + 1 })
     }
     ctx.record('crowned', { winners: top, points }, { about: top })
-    return { ...state, phase: 'done' }
+    return done
   }
 }
 
 // Helpers ----------------------------------------------------------------------
+
+/**
+ * A saved state with every field, whatever version saved it: the background
+ * version's saves lack the stage round's fields (null here) and keep their
+ * phase, which isLegacyState tells apart. Never changes a full state.
+ */
+export function readState(raw: FusionState): FusionState {
+  const s = (raw ?? {}) as Partial<FusionState>
+  const time = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  return {
+    ...s,
+    phase: s.phase ?? 'lobby',
+    key: s.key ?? {},
+    names: s.names ?? {},
+    revealed: Array.isArray(s.revealed) ? s.revealed : [],
+    results: s.results ?? {},
+    totals: s.totals ?? {},
+    showStartedAt: time(s.showStartedAt),
+    current: time(s.current),
+    openedAt: time(s.openedAt),
+    endsAt: time(s.endsAt),
+    revealedAt: time(s.revealedAt),
+  }
+}
+
+/** The wall: no picture on. When the showing started stays until a picture is asked, so the wall knows when it came. */
+function toWall(s: FusionState): FusionState {
+  return { ...s, phase: 'wall', current: null, openedAt: null, endsAt: null, revealedAt: null }
+}
+
+/** The round's timing and points, from its frozen settings, with the defaults for settings saved before they existed. */
+export function rulesOf(config: Partial<FusionConfig>): FusionRules {
+  const number = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
+  return {
+    seconds: number(config.seconds, DEFAULT_SECONDS),
+    showSeconds: number(config.showSeconds, DEFAULT_SHOW_SECONDS),
+    perPerson: number(config.pointsPerPerson, 1),
+    bothBonus: number(config.bonusForBoth, 0),
+  }
+}
+
+/** How long the whole showing takes: every picture its seconds. */
+const showingMs = (config: FusionConfig) => (Array.isArray(config.pictures) ? config.pictures.length : 0) * rulesOf(config).showSeconds * 1000
+
+const labelOf = (config: FusionConfig, n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
+
+/** A revealed picture as the room sees it, or null before its reveal. */
+function revealedOf(s: FusionState, n: number, players: readonly GamePlayer[]): PublicPicture['revealed'] {
+  const index = s.revealed.indexOf(n)
+  const result = index >= 0 ? s.results[n] : undefined
+  const people = s.key[n]
+  if (!result || !people) return null
+  return {
+    people: [people[0], people[1]],
+    names: [nameIn(players, s.names, people[0]), nameIn(players, s.names, people[1])],
+    both: result.both,
+    one: result.one,
+    none: result.none,
+    voters: result.voters,
+    step: index + 1,
+    at: typeof result.at === 'number' ? result.at : null,
+  }
+}
 
 function parsePicture(item: unknown, n: number): FusionPicture {
   if (item === null || typeof item !== 'object' || Array.isArray(item)) {
@@ -520,9 +686,11 @@ function parsePicture(item: unknown, n: number): FusionPicture {
 }
 
 function wholePoints(value: unknown, name: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > MAX_POINTS) {
-    throw new GameError(`${name} must be a whole number from 0 to ${MAX_POINTS}`)
-  }
+  return wholeIn(value, 0, MAX_POINTS, `${name} must be a whole number from 0 to ${MAX_POINTS}`)
+}
+
+function wholeIn(value: unknown, min: number, max: number, message: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) throw new GameError(message)
   return value
 }
 
@@ -533,24 +701,20 @@ function pictureNumber(value: unknown): number {
   return value
 }
 
-function pictureOf(config: FusionConfig, n: number): FusionPicture {
-  const picture = config.pictures[n - 1]
-  if (!picture) throw new GameError(`There is no picture ${defaultLabel(n)}`)
-  return picture
-}
-
 const isPlayerId = (value: unknown): value is PlayerId =>
   typeof value === 'string' && value.length > 0 && value.length <= 64
 
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
 
-const scoringOf = (config: FusionConfig) => ({ perPerson: config.pointsPerPerson, bothBonus: config.bonusForBoth })
-
-/** Scores one picture's final votes. People in the picture know who they are: they don't score on it. */
-function scoreVotes(votes: readonly Answer[], people: readonly PlayerId[]): FusionResult {
-  const result: FusionResult = { both: 0, one: 0, none: 0, voters: 0, hits: {} }
+/**
+ * Scores one picture's locks. The people in the picture know who they are:
+ * they don't score on it, so a lock from them (a crafted one) counts for
+ * nothing. The first lock is the only one (the prompt is final).
+ */
+function scoreVotes(votes: readonly Answer[], people: readonly PlayerId[]): Omit<FusionResult, 'at'> {
+  const result: Omit<FusionResult, 'at'> = { both: 0, one: 0, none: 0, voters: 0, hits: {} }
   for (const vote of votes) {
-    if (people.includes(vote.playerId)) continue
+    if (people.includes(vote.playerId) || Object.hasOwn(result.hits, vote.playerId)) continue
     const choice = 'choice' in vote.answer ? new Set(vote.answer.choice) : new Set<string>()
     const hits = Math.min(2, people.filter((id) => choice.has(id)).length)
     result.hits[vote.playerId] = hits
@@ -562,17 +726,26 @@ function scoreVotes(votes: readonly Answer[], people: readonly PlayerId[]): Fusi
   return result
 }
 
-/** Players still in the party with points, most first; ties keep the party's order (never jsonb key order). */
-function ranked(state: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>) {
-  return info.players
-    .filter((p) => (state.totals[p.id] ?? 0) > 0)
-    .map((p) => ({ playerId: p.id, points: state.totals[p.id] }))
-    .sort((a, b) => b.points - a.points)
+/**
+ * Players still in the party with points, most first, with competition ranks
+ * (1, 2, 2, 4); ties keep the party's order (never jsonb key order).
+ */
+function ranked(s: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>): FusionTopRow[] {
+  const rows = info.players
+    .map((p, order) => ({ playerId: p.id, points: s.totals[p.id] ?? 0, order }))
+    .filter((row) => row.points > 0)
+    .sort((a, b) => b.points - a.points || a.order - b.order)
+  let rank = 0
+  return rows.map((row, i) => {
+    if (i === 0 || rows[i - 1].points !== row.points) rank = i + 1
+    return { playerId: row.playerId, points: row.points, rank }
+  })
 }
 
-function leaders(state: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>): PlayerId[] {
-  const rows = ranked(state, info)
-  return rows.filter((row) => row.points === rows[0].points).map((row) => row.playerId)
+function leaders(s: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>): PlayerId[] {
+  return ranked(s, info)
+    .filter((row) => row.rank === 1)
+    .map((row) => row.playerId)
 }
 
 /** A player's name now, else the one kept with the key, else a placeholder. */
