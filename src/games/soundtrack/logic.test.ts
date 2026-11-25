@@ -446,6 +446,21 @@ describe('the review of typed answers', () => {
     ])
   })
 
+  it('gives spellings of one key the rule judges differently a row each, so nobody is judged by someone else\'s spelling', () => {
+    const song = { ...config.songs[0], title: 'Someone Like You', alsoTitles: [] }
+    const split = buildReview({ playedAt: [0] }, { ...config, songs: [song] }, {
+      's1.title': answersOf(0, [
+        ['a', { text: 'Some1 like you' }, 100],
+        ['b', { text: 'Some one like you' }, 200],
+        ['c', { text: 'Some1 like you' }, 300],
+      ]),
+    })
+    expect(split[0].title.map((row) => [row.key, row.text, row.players, row.verdict])).toEqual([
+      ['some1likeyou', 'Some1 like you', ['a', 'c'], 'close'],
+      ['some1likeyou#2', 'Some one like you', ['b'], 'exact'],
+    ])
+  })
+
   it('reads picks: wall indices, no photo as null, texts as saved', () => {
     const picks = readPicks(
       { playedAt: [0, 0], wall: [0, 1, 2, 3, 4] },

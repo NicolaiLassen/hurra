@@ -34,7 +34,7 @@ import {
   type RecapRound,
   type Scores,
 } from '../core/Game'
-import { counts as verdictCounts, judge, normalise } from './match'
+import { counts as verdictCounts, judge, normalise, type Judgement } from './match'
 import {
   MAX_TYPED,
   NO_PHOTO,
@@ -389,16 +389,38 @@ function byReviewOrder(a: ReviewRow, b: ReviewRow): number {
   )
 }
 
-/** One part's answers, in arrival order, grouped by their normalised key and judged once per group. */
+/**
+ * One part's answers, in arrival order, grouped by their normalised key. Each
+ * spelling is judged on its own, and spellings of one key the rule judges
+ * differently get rows of their own ("some1likeyou" and "some1likeyou#2"), so
+ * nobody's answer is judged by the spelling someone else typed.
+ */
 function reviewPart(list: readonly Answer[], part: TypedPart, accepted: readonly string[], other: readonly string[]): ReviewRow[] {
-  const groups = new Map<string, { players: PlayerId[]; spellings: Map<string, number> }>()
+  type Group = { players: PlayerId[]; spellings: Map<string, number>; judged: Judgement }
+  const groups = new Map<string, Group>()
+  const judgedText = new Map<string, Judgement>()
+  /** Per normalised key, the row key of each way its spellings were judged, in arrival order. */
+  const rowKeys = new Map<string, Map<string, string>>()
   for (const answer of list) {
     const text = textOf(answer.answer)
     if (text === null) continue
-    const key = normalise(text)
+    const base = normalise(text)
+    let judged = judgedText.get(text)
+    if (!judged) {
+      judged = base === '' ? { verdict: 'wrong', reason: null, off: null } : judge(text, part, accepted, other)
+      judgedText.set(text, judged)
+    }
+    const how = `${judged.verdict}:${judged.reason ?? ''}:${judged.off ?? ''}`
+    const ways = rowKeys.get(base) ?? new Map<string, string>()
+    rowKeys.set(base, ways)
+    let key = ways.get(how)
+    if (key === undefined) {
+      key = ways.size === 0 ? base : `${base}#${ways.size + 1}`
+      ways.set(how, key)
+    }
     let group = groups.get(key)
     if (!group) {
-      group = { players: [], spellings: new Map() }
+      group = { players: [], spellings: new Map(), judged }
       groups.set(key, group)
     }
     if (group.players.includes(answer.playerId)) continue
@@ -416,8 +438,8 @@ function reviewPart(list: readonly Answer[], part: TypedPart, accepted: readonly
         most = count
       }
     }
-    const judged = key === '' ? { verdict: 'wrong' as const, reason: null, off: null } : judge(text, part, accepted, other)
-    rows.push({ key, text, players: group.players, verdict: judged.verdict, reason: judged.reason, off: judged.off, accepted: false })
+    const { verdict, reason, off } = group.judged
+    rows.push({ key, text, players: group.players, verdict, reason, off, accepted: false })
   }
   return rows.sort(byReviewOrder)
 }

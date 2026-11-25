@@ -116,7 +116,11 @@ export type CloseReason =
 
 /** One distinct typed answer to one part of one song, with everyone who typed it. */
 export type ReviewRow = {
-  /** The normalised answer (match.ts normalise): how answers group, and what Accept names. */
+  /**
+   * The normalised answer (match.ts normalise): how answers group, and what
+   * Accept names. Spellings of one key the rule judges differently get a row
+   * each, the later ones keyed "some1likeyou#2".
+   */
   key: string
   /** The spelling most of them typed (on a tie, the first to arrive), trimmed. */
   text: string

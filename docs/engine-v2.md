@@ -3813,8 +3813,11 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   `match.test.ts` holds the spec's example table of 70 invented rows, and
   these kinder readings.
 - **The review** (`buildReview`, at the lock): per played song and typed part,
-  the answers grouped by their normalised key, each group judged once, with
-  the spelling most of them typed and the guests in arrival order; close
+  the answers grouped by their normalised key, with the spelling most of
+  them typed and the guests in arrival order. Each spelling is judged on its
+  own, and spellings of one key the rule judges differently get rows of
+  their own (`some1likeyou`, `some1likeyou#2`), so nobody is judged by
+  another guest's spelling; close
   first, then wrong, typo and exact. Accept changes a row's `accepted` and
   nothing else.
 - **Scoring**, from the state whenever it is read: event, title and singer
