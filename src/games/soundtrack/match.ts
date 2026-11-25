@@ -124,7 +124,7 @@ export function forms(text: string): Form[] {
   s = s.replace(/[&+]/g, ' and ')
   s = s.replace(/['‘’`´]/g, '')
   const full = s.replace(/[()[\]{}]/g, ' ')
-  const short = s.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ').split(/\s[-–—]\s/)[0]
+  const short = s.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ').split(/\s[-\u2013\u2014]\s/)[0]
   const out: Form[] = []
   const seen = new Set<string>()
   const add = (words: string[]) => {

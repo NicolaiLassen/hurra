@@ -37,7 +37,7 @@ export const SAMPLE_SONGS = [
 ] as const
 
 const EXTRA_CAPTIONS = ['A wedding, 2015', 'Ski trip, 2017', 'Moving day, 2020', 'Concert, 2022']
-const WRONG = ['Night Harbour', 'Glass Rain', 'Copper Sun', 'Lake Dancers', 'The Tin Owls', 'Velvet Roads', 'Coldplay']
+const WRONG = ['Night Harbour', 'Glass Rain', 'Copper Sun', 'Lake Dancers', 'The Tin Owls', 'Velvet Roads', 'Amber Coast']
 
 /** A sample game-media path, uuid-shaped like an upload's, so nothing in it names a song. */
 const photoPath = (n: number) => `f1c7a000-0000-4000-8000-000000001001/f1c7a000-0000-4000-8000-000000003005/f1c7a000-0000-4000-8000-${String(7000 + n).padStart(12, '0')}.jpg`
