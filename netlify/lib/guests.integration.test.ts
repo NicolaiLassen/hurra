@@ -358,6 +358,19 @@ describe('what each screen sees', () => {
     expect(await names(ana, 'scoreboard')).toEqual(['Ana', 'Bo', 'Quentin'])
   })
 
+  it('a host gives points only to guests who joined: an award to a name still expected is refused', async () => {
+    const zelda = (await snapshot(host, party, 'host')).guests!.find((g) => g.name === 'Zelda')!
+    const award = (playerId: string) =>
+      host.client.from('score_events').insert({ session_id: party.id, player_id: playerId, points: 5 })
+    const refused = await award(zelda.id)
+    expect(refused.error?.code).toBe('42501')
+    expect(await rows('score_events', 'player_id', zelda.id)).toEqual([])
+    // The same host still gives points to a guest who joined (who took a listed name).
+    expect(outcome(await award(quentin.playerId))).toBe('ok')
+    const { data } = await admin.from('score_events').delete().eq('player_id', quentin.playerId).select('id')
+    expect(data).toHaveLength(1)
+  })
+
   it('the recap counts the guests who came', async () => {
     const { data, error } = await host.client.rpc('session_recap', { p_session_id: party.id })
     expect(error).toBeNull()

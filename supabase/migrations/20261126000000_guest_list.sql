@@ -64,6 +64,13 @@ alter policy "Hosts and members read players" on public.players
   using ((select public.is_host())
          or (session_id = any ((select public.my_session_ids())::uuid[]) and joined_at is not null));
 
+-- A host gives points only to a guest who joined, as game_commit does: an
+-- award never lands on a name still waiting on the list (where every screen
+-- would get its id, and whoever took the name next would get its points).
+alter policy "Hosts give points" on public.score_events
+  with check ((select public.is_host())
+              and exists (select 1 from public.players p where p.id = player_id and p.joined_at is not null));
+
 -- 3. The scoreboard view: joined guests only ------------------------------------------
 -- The init file's view with one line added (the same columns). It feeds the
 -- snapshot's standings, game_load's scoreboard, session_recap's standings and
@@ -1602,6 +1609,11 @@ begin
   end if;
   if pg_get_viewdef('public.scoreboard'::regclass) not like '%joined_at IS NOT NULL%' then
     v_problems := v_problems || 'the scoreboard view shows expected guests'::text;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'score_events'
+                 and policyname = 'Hosts give points' and cmd = 'INSERT'
+                 and with_check like '%is_host()%' and with_check like '%joined_at IS NOT NULL%') then
+    v_problems := v_problems || 'the host award policy is missing or gives points to expected guests'::text;
   end if;
   if not exists (select 1 from pg_trigger t where t.tgrelid = 'public.players'::regclass
                  and t.tgname = 'players_logged' and not t.tgisinternal and t.tgenabled <> 'D') then

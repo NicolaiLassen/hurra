@@ -636,7 +636,8 @@ are `players.user_id`, `players.session_id` and `score_events.awarded_by`.
 players" lets members read joined rows only (`joined_at is not null`); hosts
 read every row, so the host's direct rename and delete work on expected rows
 too. The players' grants are stated again, with `joined_at`, like `user_id`,
-in no client write grant (docs/guest-list.md, 3.2).
+in no client write grant. "Hosts give points" takes only a guest who joined,
+as `game_commit` does (docs/guest-list.md, 3.2).
 
 ### 2.6 The scoreboard view
 
@@ -1244,8 +1245,9 @@ transaction, so nothing was applied).
 the current one. It adds: `players.joined_at` in no client insert or update
 grant; the new functions exist and authenticated and service_role may run
 them; the `players_joined` check; the `joined_at is not null` filters in the
-members' policy, the scoreboard view, `session_snapshot`, `game_load`,
-`check_answer`, `session_recap`, and at least six times in `game_commit`; the
+members' policy, the host award policy, the scoreboard view,
+`session_snapshot`, `game_load`, `check_answer`, `session_recap`, and at least
+six times in `game_commit`; the
 snapshot's `'guests'` and `'freed'` keys; the `players_logged` trigger
 enabled (docs/guest-list.md, 3.13).
 

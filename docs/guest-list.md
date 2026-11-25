@@ -41,7 +41,7 @@ Ximena and Ulrik for guests still expected.
 | --- | --- |
 | What is a guest on the list? | A `players` row the host made, with `user_id` null. Its id is the guest's id from the list to the night, so settings can store it. |
 | How is "joined" told apart? | The public column `players.joined_at`: null while expected, the join time once taken. Rows from before the migration got their `created_at`. The check `players_joined` keeps `(user_id is null) = (joined_at is null)`. No user id ever reaches a client. |
-| Where is "only joined guests" enforced? | At the source, in the database: `session_snapshot` (players, standings), the `scoreboard` view, `game_load`, `game_commit`, `check_answer`, `session_recap` and the members' read policy on `players`. Every screen and every game keeps reading what it read before, and sees only joined guests. |
+| Where is "only joined guests" enforced? | At the source, in the database: `session_snapshot` (players, standings), the `scoreboard` view, `game_load`, `game_commit`, `check_answer`, `session_recap`, the members' read policy on `players` and the host award policy on `score_events`. Every screen and every game keeps reading what it read before, and sees only joined guests. |
 | Who sees expected guests? | Hosts: the snapshot's `guests` (host page only), `info.guests` in game logic, `guests` in a settings editor and a host view. Anyone with the join code: the free names only (`guest_list`), nothing else about them. |
 | How does a guest take a name? | `claim_guest(join code, name)`: by name, so no id or code of an expected guest leaves the database to someone who isn't in the party. One atomic `update ... where user_id is null`. |
 | A typed name that matches a free name? | `join_session` refuses with `on_list` (the listed name in HINT); the phone offers "Yes, I'm Ana", which takes it. Never taken silently. |
@@ -122,6 +122,18 @@ remove):
 alter policy "Hosts and members read players" on public.players
   using ((select public.is_host())
          or (session_id = any ((select public.my_session_ids())::uuid[]) and joined_at is not null));
+```
+
+A host gives points (the award page's direct insert into `score_events`) only
+to a guest who joined, as `game_commit` does. Without it, an award racing a
+free (from a second host device) would land on a name still waiting on the
+list: its id would reach every screen in the snapshot's `game_points`, and
+whoever took the name next would get the points.
+
+```sql
+alter policy "Hosts give points" on public.score_events
+  with check ((select public.is_host())
+              and exists (select 1 from public.players p where p.id = player_id and p.joined_at is not null));
 ```
 
 ### 3.3 The scoreboard view
@@ -255,7 +267,7 @@ the file. The delete waits for a running `game_commit`.
 The guest photos file's block, copied whole, plus: `players.joined_at` in no
 client insert or update grant; the new functions exist and authenticated and
 service_role may run them; the `players_joined` check and the column exist;
-the members' policy, the scoreboard view, `session_snapshot`, `game_load`,
+the members' policy, the host award policy, the scoreboard view, `session_snapshot`, `game_load`,
 `check_answer` and `session_recap` carry the `joined_at is not null` filters,
 and `game_commit` at least six times; the snapshot still carries the photos
 and sound volume keys and now `'guests'` and `'freed'`; the `players_logged`
@@ -359,7 +371,8 @@ without a change of their own:
 - **The TV:** the board and its tiers by count, the header and strip, the
   winner's screen, the band, the recap's slides.
 - **The host room:** the header's "12 guests, joining is open", Players (n),
-  the award page (`getPlayerByCode` skips expected rows), the move dialog,
+  the award page (`getPlayerByCode` skips expected rows, and the database
+  refuses an award to one), the move dialog,
   the recap preview.
 - **Games:** `info.players`, Last one standing's dealing, the quiz's answered
   counts, `scores`, `recap()`'s `round.players`; any view, score, point, badge,
@@ -759,8 +772,8 @@ editor with a picture naming an expected guest).
 covers every new function and the replaced policy, view and functions: five
 phones taking one name at once (one wins), one phone taking two names in two
 tabs, `on_list` with a look-alike, what phones, TVs and hosts see, the recap,
-`game_load`'s guests and `'players'` against `'guests'` answers, a commit that
-races a free, a full free, renames and removals, Remove from the list's filter,
+`game_load`'s guests and `'players'` against `'guests'` answers, a host award
+to a name still expected (refused), a commit that races a free, a full free, renames and removals, Remove from the list's filter,
 and a move code used on an expected guest. `realtime.integration.test.ts`
 checks that list changes ping the stage only and a free pings the room. Every
 older suite passes unchanged: that is the proof a normal join, move, removal
