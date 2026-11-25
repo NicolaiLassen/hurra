@@ -169,7 +169,14 @@ export function StartField({ id, seconds, onChange }: { id: string; seconds: num
         className="tv-num w-24 text-lg md:text-lg"
         value={draft ?? startText(seconds)}
         aria-invalid={invalid || undefined}
-        onFocus={() => setDraft(startText(seconds))}
+        // Typing replaces what is there: a song still at the start opens empty
+        // (its placeholder shows the form), and a set time is selected. Typed
+        // after "0:00", "0:48" would read "0:000:48" and be dropped on leaving.
+        onFocus={(e) => {
+          const text = seconds === 0 ? '' : startText(seconds)
+          setDraft(text)
+          if (text) e.currentTarget.select()
+        }}
         onBlur={() => setDraft(null)}
         onChange={(e) => {
           setDraft(e.target.value)
