@@ -10,6 +10,8 @@
 // &fresh=1           the stage game took the stage just now: its title card shows
 // &later=<seconds>   the clock moved on (a final screen's 3 minutes run out)
 // &news=banner|ticker|interrupt|stage|points   arrives 1.5 s after the page opens
+// &then=<scene>      the party 1.5 s after the page opens is in that fixture scene instead, its games' start times kept, so a
+//                    game on the stage moves on from one phase to the next (a transition to look at)
 // &host=1            a host's own browser: "Host preview"
 // &name=<text>       the party's name (a long one checks the bug's ellipsis)
 // &question=<text>   the quiz's question, and &options=A|B|C|D its options (long ones check the fit)
@@ -63,9 +65,17 @@ export function devTv(search: URLSearchParams): DevTv | null {
   snapshot = withQuestion(snapshot, search.get('question'), search.get('options'))
   const later = Number(search.get('later'))
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
+  const then = search.get('then')
+  let next: Snapshot | undefined
+  if (news && NEWS.includes(news)) next = withNews(snapshot, news)
+  else if (isFixtureScene(then) || TV_SCENES.includes(then as TvOnlyScene)) {
+    let moved = build(then as FixtureScene | TvOnlyScene)
+    if (size !== null && Number.isInteger(size) && size >= 0 && then !== 'empty') moved = resize(moved, size)
+    next = keepStarts(snapshot, moved)
+  }
   return {
     snapshot,
-    later: news && NEWS.includes(news) ? withNews(snapshot, news) : undefined,
+    later: next,
     paired: resize(fixtureSnapshot('lobby', 'tv'), size !== null && Number.isInteger(size) && size > 0 ? size : 12),
     partyName: 'Birthday party',
     recap: scene === 'recap' ? fixtureRecapDoc() : undefined,
@@ -153,6 +163,14 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
     default:
       return fixtureSnapshot(scene, 'tv')
   }
+}
+
+/** `next` with the games' start times (and the stage's) of `first`, so a screen keyed on them stays mounted. */
+function keepStarts(first: Snapshot, next: Snapshot): Snapshot {
+  const started = new Map(first.games.map((g) => [g.id, g.started_at]))
+  const games = next.games.map((g) => (started.has(g.id) ? { ...g, started_at: started.get(g.id) ?? g.started_at } : g))
+  const session = next.session && first.session ? { ...next.session, spotlight_at: first.session.spotlight_at } : next.session
+  return { ...next, games, session }
 }
 
 /** The party with `size` guests: the fixture's first ones, or more after them. */

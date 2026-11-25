@@ -33,7 +33,7 @@ function Fixture({ search }: { search: URLSearchParams }) {
   if (!setup) {
     return (
       <NotFound title="No such fixture">
-        Scenes: {[...FIXTURE_SCENES, ...TV_SCENES].join(', ')}. Add players=8, 24 or 45, fresh=1, later=200, host=1, or news=
+        Scenes: {[...FIXTURE_SCENES, ...TV_SCENES].join(', ')}. Add players=8, 24 or 45, fresh=1, later=200, host=1, then=(a scene), or news=
         {NEWS.join('|')}.
       </NotFound>
     )
