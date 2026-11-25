@@ -50,15 +50,17 @@ export function wallWords(revealed: number, total: number, onStage: boolean): Wo
 export type Part = { text: string; leader?: boolean }
 
 /**
- * Where you stand in the round: "You have 3 points, 4th so far.", the rank
- * gold only at 1st; "No points yet." once a picture is revealed; nothing
- * before (a late joiner's null view reads as no points).
+ * Where you stand in the round: "You have 3 points, 4th of the face
+ * detectives so far.", the rank gold only at 1st, and named for the round so
+ * it isn't read as the night's place on the card below; "No points yet." once
+ * a picture is revealed; nothing before (a late joiner's null view reads as no
+ * points).
  */
 export function placeParts(view: FusionPlayerView | null, anyRevealed: boolean): Part[] | null {
   const points = view?.points ?? 0
   if (points <= 0) return anyRevealed ? [{ text: 'No points yet.' }] : null
   if (!view?.rank) return [{ text: `You have ${plural(points, 'point')}.` }]
-  return [{ text: `You have ${plural(points, 'point')}, ` }, { text: ordinal(view.rank), leader: view.rank === 1 }, { text: ' so far.' }]
+  return [{ text: `You have ${plural(points, 'point')}, ` }, { text: ordinal(view.rank), leader: view.rank === 1 }, { text: ' of the face detectives so far.' }]
 }
 
 /** How a revealed picture went for this guest. */

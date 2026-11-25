@@ -69,12 +69,12 @@ describe('the wall', () => {
   })
 
   it('says where you stand, the rank gold only for the leader', () => {
-    expect(text(placeParts(view({ points: 3, rank: 4 }), true))).toBe('You have 3 points, 4th so far.')
+    expect(text(placeParts(view({ points: 3, rank: 4 }), true))).toBe('You have 3 points, 4th of the face detectives so far.')
     expect(placeParts(view({ points: 3, rank: 4 }), true)?.some((part) => part.leader)).toBe(false)
     expect(placeParts(view({ points: 1, rank: 1 }), true)).toEqual([
       { text: 'You have 1 point, ' },
       { text: '1st', leader: true },
-      { text: ' so far.' },
+      { text: ' of the face detectives so far.' },
     ])
     expect(text(placeParts(view({ points: 2 }), true))).toBe('You have 2 points.')
     expect(text(placeParts(view(), true))).toBe('No points yet.')

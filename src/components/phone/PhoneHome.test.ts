@@ -127,7 +127,7 @@ describe('the phone home', () => {
     const wall = await phone('fusion-wall')
     expect(wall).toContain('Who is fused? 3 of 12 revealed')
     expect(wall).toContain('The next picture is coming up. Watch the TV.')
-    expect(wall).toContain('You have 4 points, 1st so far.')
+    expect(wall).toContain('You have 4 points, 1st of the face detectives so far.')
     expect(wall).toContain('Your guesses #3 Ana and Noah Not this time. #2 Freja and Oscar You got one of the two (+1). #1 Mads and Ida You got both (+3).')
     expect(await phone('fusion-crown')).toContain('That was the last picture. The face detective is crowned soon.')
   })
@@ -164,7 +164,7 @@ describe('the phone home', () => {
     // Tokens name their guests too, so each name reads twice in plain text.
     expect(both).toContain('#4 It was Bo Bo Maja Maja')
     expect(both).toContain('Your guess Bo Bo Right Maja Maja Right')
-    expect(both).toContain('You have 7 points, 1st so far.')
+    expect(both).toContain('You have 7 points, 1st of the face detectives so far.')
     expect(await phone('fusion-reveal-one')).toContain('You got one of the two. +1 point')
     expect(await phone('fusion-reveal-one')).toContain('Not in it')
     expect(await phone('fusion-reveal-none')).toContain('Not this time.')

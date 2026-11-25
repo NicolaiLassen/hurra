@@ -300,7 +300,7 @@ export function TwoTokens({ people, players, names }: { people: readonly PlayerI
   )
 }
 
-/** "You have 3 points, 4th so far.": the rank gold only for the leader. */
+/** "You have 3 points, 4th of the face detectives so far.": the rank gold only for the leader. */
 export function PlaceLine({ parts, className }: { parts: Part[] | null; className?: string }) {
   if (!parts) return null
   return (
