@@ -38,11 +38,10 @@ function subscribe(onChange: () => void) {
   }
 }
 
+/** The store behind useTypingFocus: subscribe to focus changes, then read whether a text field has the focus. */
+export const typingStore = { subscribe, read: () => typing }
+
 /** True while a text field on the page has the focus. */
 export function useTypingFocus(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => typing,
-    () => false,
-  )
+  return useSyncExternalStore(typingStore.subscribe, typingStore.read, () => false)
 }
