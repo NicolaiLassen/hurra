@@ -9,8 +9,8 @@ import { accentOf, gameModules, preloadTvScreens } from './registry'
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
 const NOT_READY = "This game isn't ready yet"
 
-it('registers the four games, in order, with their logic, screens and bots', () => {
-  expect([...gameLogic.keys()]).toEqual(['in-person', 'elimination', 'quiz', 'fusion'])
+it('registers the five games, in order, with their logic, screens and bots', () => {
+  expect([...gameLogic.keys()]).toEqual(['in-person', 'elimination', 'quiz', 'fusion', 'soundtrack'])
   expect(gameModules.map((m) => m.logic.type)).toEqual([...gameLogic.keys()])
   expect([...gameBots.keys()]).toEqual([...gameLogic.keys()])
   for (const m of gameModules) expect(m.logic.constructor, m.logic.type).toBe(gameLogic.get(m.logic.type)!.constructor)
