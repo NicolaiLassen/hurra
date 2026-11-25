@@ -64,6 +64,18 @@ export function candidatesFor(players: readonly Player[], meId: PlayerId, query:
 
 const NO_MATCH = 3
 
+/**
+ * What the phone's picker calls each guest: their first name, so a tile and
+ * a line stay short ("Mads and Ida"), or their whole name where another guest
+ * shares that first name (Anna Holm and Anna Berg).
+ */
+export function shortNames(players: readonly Pick<Player, 'id' | 'name'>[]): Map<PlayerId, string> {
+  const first = (name: string) => name.trim().split(/\s+/)[0] ?? name
+  const counts = new Map<string, number>()
+  for (const p of players) counts.set(foldName(first(p.name)), (counts.get(foldName(first(p.name))) ?? 0) + 1)
+  return new Map(players.map((p) => [p.id, (counts.get(foldName(first(p.name))) ?? 0) > 1 ? p.name.trim() : first(p.name)]))
+}
+
 /** 0 when the name starts with the search, 1 when a later word does, 2 when it only contains it. */
 function matchRank(name: string, needle: string): number {
   if (name.startsWith(needle)) return 0

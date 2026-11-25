@@ -1,63 +1,70 @@
-import { CrownIcon, DetectiveIcon } from '@phosphor-icons/react'
+import { CrownIcon } from '@phosphor-icons/react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
-import { listNames, plural, type FusionGame } from '@/games/fusion/logic'
-import { nameOf, publicOf } from '@/games/fusion/view'
+import type { FusionGame } from '@/games/fusion/logic'
+import { resultWords } from '@/games/fusion/phoneLines'
+import { readPublic, readView, revealedCount } from '@/games/fusion/shapes'
+import { nameOf } from '@/games/fusion/view'
 import type { ResultViewProps } from '@/games/types'
 
-/** The phone's result once fusion is over: "You have the sharpest eye.", or who did and how you did. */
-export default function ResultView({ game, player, players, publicState, view, gamePoints }: ResultViewProps<FusionGame>) {
-  const pub = publicOf(publicState)
+/**
+ * The phone's result once fusion is over: "You have the sharpest eye.", or
+ * who did, with how you did on a raised card. Solid surfaces; gold only for
+ * the crown.
+ */
+export default function ResultView({ game, player, players, publicState, view: rawView, gamePoints }: ResultViewProps<FusionGame>) {
+  const pub = readPublic(publicState)
+  const view = readView(rawView)
   const winners = game.winners
-  const won = winners.includes(player.id)
+  const others = winners.filter((id) => id !== player.id)
   const points = view?.points ?? gamePoints[player.id] ?? 0
-  const hits = Object.values(view?.hits ?? {})
-  const both = hits.filter((h) => h >= 2).length
-  const revealed = pub?.pictures.filter((p) => p.revealed).length ?? 0
-  const rank = pub?.top.findIndex((row) => row.playerId === player.id) ?? -1
+  // A save from the background version has no rank in the view: its place in the top five, if there.
+  const rank = view?.rank ?? (pub?.top.find((row) => row.playerId === player.id)?.rank || null)
+  const words = resultWords({
+    title: game.title,
+    winners: (winners.includes(player.id) ? others : winners).map((id) => nameOf(players, id)),
+    meWon: winners.includes(player.id),
+    points,
+    both: Object.values(view?.hits ?? {}).filter((hits) => hits >= 2).length,
+    revealed: pub ? revealedCount(pub) : 0,
+    total: pub?.pictures.length ?? 0,
+    rank: points > 0 ? rank : null,
+  })
 
-  if (won) {
+  if (words.kind === 'won') {
     return (
-      <div className="space-y-3 rounded-phone bg-raised p-6 text-center">
-        <CrownIcon weight="fill" className="mx-auto size-14 text-gold" />
-        <p className="text-3xl font-black">{winners.length > 1 ? 'You share the sharpest eye.' : 'You have the sharpest eye.'}</p>
-        <p className="text-muted-foreground">
-          {plural(points, 'point')}
-          {both > 0 ? `, both people right on ${plural(both, 'picture')}` : ''}. Face detective.
-        </p>
+      <div className="grid grid-cols-1 justify-items-start gap-3 rounded-phone bg-raised p-5">
+        <span className="relative">
+          <Avatar name={player.name} playerId={player.id} className="size-16" />
+          <AvatarBadge icon={CrownIcon} tone="gold" size="lg" />
+        </span>
+        <div className="grid grid-cols-1 gap-1">
+          <p className="text-phone-head leading-tight font-extrabold text-balance">{words.head}</p>
+          <p className="text-paper-2">{words.line}</p>
+          {words.tie && <p className="text-sm font-semibold">{words.tie}</p>}
+        </div>
       </div>
     )
   }
 
+  if (words.kind === 'nobody') return <p className="text-lg text-paper-2">{words.head}</p>
+
   return (
-    <div className="space-y-4">
-      {winners.length > 0 ? (
-        <div className="flex items-center gap-3">
-          <span className="flex shrink-0 -space-x-2">
-            {winners.slice(0, 3).map((id) => (
-              <span key={id} className="relative">
-                <Avatar name={nameOf(players, id)} playerId={id} className="size-10 ring-2 ring-ground" />
-                <AvatarBadge icon={CrownIcon} tone="gold" size="sm" />
-              </span>
-            ))}
-          </span>
-          <p className="min-w-0 text-lg font-bold">
-            {listNames(winners.map((id) => nameOf(players, id)))} {winners.length > 1 ? 'had the sharpest eyes' : 'had the sharpest eye'}
-          </p>
-        </div>
-      ) : (
-        <p className="flex items-center gap-2 text-lg font-bold">
-          <DetectiveIcon weight="duotone" className="size-6 text-confetti-violet" />
-          Nobody scored this time
-        </p>
-      )}
-      <div className="rounded-phone bg-raised p-4">
-        <p className="text-2xl font-black tabular-nums">You scored {plural(points, 'point')}</p>
-        <p className="text-sm text-muted-foreground">
-          {revealed > 0
-            ? `Both people right on ${both} of ${plural(revealed, 'revealed picture')}${rank > 0 ? `. You're number ${rank + 1} of the face detectives.` : '.'}`
-            : 'No pictures were revealed.'}
-        </p>
+    <div className="grid grid-cols-1 gap-4">
+      <div className="flex items-center gap-4">
+        <span className="flex shrink-0 gap-2">
+          {winners.slice(0, 3).map((id) => (
+            <span key={id} className="relative">
+              <Avatar name={nameOf(players, id)} playerId={id} className="size-12" />
+              <AvatarBadge icon={CrownIcon} tone="gold" size="md" />
+            </span>
+          ))}
+        </span>
+        <p className="min-w-0 text-xl leading-tight font-extrabold text-balance">{words.head}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-1 rounded-phone bg-raised p-5">
+        <p className="text-phone-head leading-tight font-extrabold">{words.scored}</p>
+        <p className="text-paper-2">{words.detail}</p>
       </div>
     </div>
   )

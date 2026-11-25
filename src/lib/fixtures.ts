@@ -33,6 +33,10 @@ export const FUSION_STAGE_SCENES = [
   'fusion-reveal',
   'fusion-reveal-2',
   'fusion-reveal-40',
+  'fusion-reveal-one',
+  'fusion-reveal-none',
+  'fusion-reveal-missed',
+  'fusion-reveal-you',
   'fusion-crown',
   'fusion-final',
 ] as const
@@ -577,24 +581,30 @@ function othersFor(start: number, skip: readonly string[]): string[] {
   return Array.from({ length: ids.length }, (_, i) => ids[(start + i) % ids.length]).filter((id) => !skip.includes(id))
 }
 
+/** How Sofie's lock on the picture being asked or revealed went: both, one or none of the two, or no lock. */
+type SofieGuess = 0 | 1 | 2 | null
+
 /**
  * Player v's locked guess on picture n, sorted as the database stores choices,
  * or null for no lock. Sofie got both on #1, one on #2, none on #3, and both on
- * the picture of the asking and reveal scenes; the others follow a pattern.
+ * the picture of the asking and reveal scenes (`sofie` for the reveal's other
+ * outcomes); the others follow a pattern.
  */
-function stageGuess(v: number, n: number, current: number | null): [string, string] | null {
+function stageGuess(v: number, n: number, current: number | null, sofie: SofieGuess = 0): [string, string] | null {
   const people = stagePair(n)
   const me = ids[v]
   if (people.includes(me)) return null
   const kind =
     v === SOFIE_AT
-      ? n === 1 || n === current
-        ? 0
-        : n === 2
-          ? 1
-          : n === 3
-            ? 2
-            : (v + 2 * n) % 3
+      ? n === current
+        ? sofie
+        : n === 1
+          ? 0
+          : n === 2
+            ? 1
+            : n === 3
+              ? 2
+              : (v + 2 * n) % 3
       : (v + n) % 5 === 0
         ? null
         : (v + 2 * n) % 3
@@ -604,7 +614,20 @@ function stageGuess(v: number, n: number, current: number | null): [string, stri
   return sortedPair(...pair)
 }
 
-type StageKind = 'lobby' | 'showing' | 'wall' | 'asking' | 'asking-locked' | 'asking-you' | 'reveal' | 'crown' | 'final'
+type StageKind =
+  | 'lobby'
+  | 'showing'
+  | 'wall'
+  | 'asking'
+  | 'asking-locked'
+  | 'asking-you'
+  | 'reveal'
+  | 'reveal-one'
+  | 'reveal-none'
+  | 'reveal-missed'
+  | 'reveal-you'
+  | 'crown'
+  | 'final'
 
 /** fusion-asking-40 as its kind and its number of pictures. */
 function stageOf(scene: FusionStageScene): { kind: StageKind; count: number } {
@@ -621,8 +644,18 @@ function fusionStage(scene: FusionStageScene) {
   const keyed = (n: number) => !(kind === 'lobby' && count === 12 && n > 10)
   const before = count === 2 ? 1 : count === 40 ? 15 : 3
   const phase: 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done' =
-    kind === 'asking-locked' || kind === 'asking-you' ? 'asking' : kind === 'crown' ? 'wall' : kind === 'final' ? 'done' : kind
-  const current = phase === 'asking' || phase === 'reveal' ? (kind === 'asking-you' ? 6 : before + 1) : null
+    kind === 'asking-locked' || kind === 'asking-you'
+      ? 'asking'
+      : kind.startsWith('reveal')
+        ? 'reveal'
+        : kind === 'crown'
+          ? 'wall'
+          : kind === 'final'
+            ? 'done'
+            : (kind as 'lobby' | 'showing' | 'wall' | 'asking')
+  const current = phase === 'asking' || phase === 'reveal' ? (kind === 'asking-you' || kind === 'reveal-you' ? 6 : before + 1) : null
+  // The reveal's other outcomes on Sofie's phone: one of the two, none, or no lock (#6 she is in herself).
+  const sofie: SofieGuess = kind === 'reveal-one' ? 1 : kind === 'reveal-none' ? 2 : kind === 'reveal-missed' ? null : 0
   const revealed =
     kind === 'final' || kind === 'crown'
       ? numbers
@@ -663,7 +696,7 @@ function fusionStage(scene: FusionStageScene) {
     const people = stagePair(n)
     const result: Result = { both: 0, one: 0, none: 0, voters: 0, hits: {}, at: timesOf(i).at }
     ids.forEach((id, v) => {
-      const guess = stageGuess(v, n, current)
+      const guess = stageGuess(v, n, current, sofie)
       if (!guess) return
       const hit = guess.filter((g) => people.includes(g)).length
       result.hits[id] = hit
@@ -776,7 +809,7 @@ function fusionStage(scene: FusionStageScene) {
   const answers: Record<string, Record<string, AnswerPayload>> = {}
   ids.forEach((id, v) => {
     for (const n of revealed) {
-      const guess = stageGuess(v, n, current)
+      const guess = stageGuess(v, n, current, sofie)
       if (guess) answers[id] = { ...answers[id], [`p${n}`]: { choice: guess } }
     }
   })
