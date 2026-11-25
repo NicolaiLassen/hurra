@@ -60,9 +60,20 @@ describe('the TV scene for each fixture', () => {
     ['fixture=quiz-question', 'Quiz | Question 3 of 10'],
     ['fixture=quiz-reveal', 'Quiz | Question 3 of 10'],
     ['fixture=quiz-leaderboard', 'Quiz | After question 3 of 10'],
+    ['fixture=fusion-lobby', 'Who is fused? | 12 pictures, starting soon'],
+    ['fixture=fusion-showing', 'Who is fused? | Showing 3 of 12'],
+    ['fixture=fusion-showing-2', 'Who is fused? | Showing 2 of 2'],
+    ['fixture=fusion-wall', 'Who is fused? | 3 of 12 revealed'],
+    ['fixture=fusion-wall-40', 'Who is fused? | 15 of 40 revealed'],
+    ['fixture=fusion-asking', 'Who is fused? | Picture 4 of 12'],
+    ['fixture=fusion-asking-you', 'Who is fused? | Picture 4 of 12'],
+    ['fixture=fusion-reveal', 'Who is fused? | Picture 4 of 12'],
+    ['fixture=fusion-crown', 'Who is fused? | 12 of 12 revealed'],
+    ['fixture=fusion-final', 'Who is fused? | Final result'],
+    // The background version's rounds read as a lobby that never starts.
+    ['fixture=fusion-legacy', 'Who is fused? | 6 pictures, starting soon'],
+    ['fixture=fusion-old-reveal', 'Who is fused? | 6 pictures, starting soon'],
     ['fixture=fusion-old-voting', 'Next | Last one standing then Quiz'],
-    ['fixture=fusion-legacy', 'Who is fused? | Voting is closed'],
-    ['fixture=fusion-old-reveal', 'Who is fused? | 2 of 6 revealed'],
     ['fixture=final', 'Last one standing | The final knockout'],
     ['fixture=background', 'Quiz | Question 3 of 10'],
     ['fixture=archived', 'The end | Final standings'],
@@ -147,6 +158,32 @@ describe('the TV scene for each fixture', () => {
       expect(page).toMatch(/data-frame="strap"[^>]*>\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
       expect(page.split('group-has-[[data-tv-field]]/frame:text-ink').length - 1).toBe(2)
     }
+  })
+
+  it("shows Participant fusion's phases on the stage, and an old round from before the update safely as its lobby", async () => {
+    for (const [scene, phase] of [
+      ['fusion-lobby', 'lobby'],
+      ['fusion-showing', 'showing'],
+      ['fusion-wall', 'wall'],
+      ['fusion-asking', 'asking'],
+      ['fusion-reveal', 'reveal'],
+      ['fusion-crown', 'wall'],
+      ['fusion-legacy', 'lobby'],
+      ['fusion-old-reveal', 'lobby'],
+    ]) {
+      await expect(html(`fixture=${scene}`)).resolves.toContain(`data-fusion-phase="${phase}"`)
+    }
+    // Off the stage, its line in the band says where it is.
+    const band = await html('fixture=fusion-old-voting')
+    expect(band.slice(band.indexOf('data-frame="band"'))).toContain('Starting soon')
+  })
+
+  it("crowns fusion's face detective on the winner's screen, with the best disguise at its reveal's time", async () => {
+    const page = (await html('fixture=fusion-final')).replace(/<[^>]*>/g, '')
+    expect(page).toMatch(/Hurra for \w+!/)
+    expect(page).toMatch(/The sharpest eyes?, with \d+ points?( each)?\./)
+    expect(page).toMatch(/Best disguise: #\d+\. (Only \d+ of \d+|Nobody) saw \w+ and \w+\./)
+    expect(page).toContain('The third hurra is saved for the night')
   })
 
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {

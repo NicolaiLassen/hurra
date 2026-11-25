@@ -1,111 +1,125 @@
-import { CrownIcon, DetectiveIcon } from '@phosphor-icons/react'
+import { DetectiveIcon } from '@phosphor-icons/react'
+import { CARD } from '@/components/tv/look'
 import { BandCount, BandLine, BandText, Tab } from '@/components/tv/onAir'
-import { plural, type FusionGame } from '@/games/fusion/logic'
-import { nameOf, publicOf, totalVotes } from '@/games/fusion/view'
+import type { FusionGame } from '@/games/fusion/logic'
+import { readPublic, revealedCount, strapWords, type FusionPublicState } from '@/games/fusion/shapes'
 import type { TvStatusProps } from '@/games/types'
-
-type Pub = NonNullable<ReturnType<typeof publicOf>>
+import { useServerTime } from '@/lib/gameClock'
+import type { Player } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 /**
- * Fusion on the TV while it runs (docs/identity.md, The TV's frame). In the
- * band while another game holds the stage: the votes, then the reveal's
- * progress. In the strap while it holds the stage: where the game is. As a
- * card: pictures and votes, then the reveal's progress. CSS only, no motion
- * library.
+ * Participant fusion on the TV while it runs (docs/identity.md, The TV's
+ * frame). In the strap while it holds the stage: where the round is ("12
+ * pictures, starting soon", "Showing 3 of 12", "4 of 12 revealed", "Picture 4
+ * of 12", "Final result"). In the band, when another screen holds the stage:
+ * its paper tab and the same, with the figures and names standing out. As a
+ * card beside the podium: the title and the same words. CSS only, no motion
+ * library: the registry brings this file to every phone.
  */
 export default function TvStatus(props: TvStatusProps<FusionGame>) {
   if (props.variant === 'band') return <BandStatus {...props} />
-  if (props.variant === 'strap') return strapWords(publicOf(props.publicState), props.game.status === 'finished')
+  if (props.variant === 'strap') return <StrapWords {...props} />
   return <CardStatus {...props} />
 }
 
 TvStatus.variants = ['band', 'strap'] as const
 
-function revealedOf(pub: Pub): number {
-  return pub.pictures.filter((p) => p.revealed).length
+/** The database clock, ticking only while the showing runs: the picture on show moves on by itself. */
+function useNow(pub: FusionPublicState | null, serverNow: () => number) {
+  return useServerTime(serverNow, 250, pub?.phase === 'showing')
 }
 
-function strapWords(pub: Pub | null, finished: boolean): string {
-  if (finished || pub?.phase === 'done') return 'Final result'
-  if (!pub) return 'Hanging the pictures'
-  const total = pub.pictures.length
-  if (pub.phase === 'voting') return `${plural(total, 'picture')} on the wall. Vote on your phone`
-  const revealed = revealedOf(pub)
-  return revealed === 0 ? 'Voting is closed' : `${revealed} of ${total} revealed`
+function StrapWords({ game, publicState, serverNow }: TvStatusProps<FusionGame>) {
+  const pub = readPublic(publicState)
+  const now = useNow(pub, serverNow)
+  return game.status === 'finished' ? 'Final result' : strapWords(pub, now)
 }
 
-function BandStatus({ game, publicState, tallies }: TvStatusProps<FusionGame>) {
-  const pub = publicOf(publicState)
-  const total = pub?.pictures.length ?? 0
-  return (
-    <BandLine tab={<Tab tone="paper">{game.title}</Tab>}>
-      {pub?.phase === 'voting' ? (
+const nameOf = (players: readonly Player[], id: string, kept: string) => players.find((p) => p.id === id)?.name ?? kept
+
+/** What the round is doing, its figures and names in <strong> (paper, bold) on the band and the card. */
+function Status({ pub, players, locked, now }: { pub: FusionPublicState; players: readonly Player[]; locked: number; now: number }) {
+  const current = pub.current ? pub.pictures.find((p) => p.n === pub.current!.n) : undefined
+  switch (pub.phase) {
+    case 'lobby':
+      return <>Starting soon</>
+    case 'showing':
+      return <>{strapWords(pub, now)}</>
+    case 'wall': {
+      const revealed = revealedCount(pub)
+      return revealed > 0 ? (
         <>
-          <BandCount>{plural(totalVotes(tallies), 'vote')}</BandCount>
-          <BandText>
-            on {plural(total, 'picture')}. Vote on your phone
-          </BandText>
+          <strong>
+            {revealed} of {pub.pictures.length}
+          </strong>{' '}
+          revealed
         </>
       ) : (
-        pub && (
+        <>{strapWords(pub)}</>
+      )
+    }
+    case 'asking':
+      return (
+        <>
+          <strong>{locked}</strong> {locked === 1 ? 'has' : 'have'} locked in on <strong>{current?.label}</strong>
+        </>
+      )
+    case 'reveal': {
+      const reveal = current?.revealed
+      if (!current || !reveal) return <>{strapWords(pub)}</>
+      return (
+        <>
+          <strong>{current.label}</strong> was <strong>{nameOf(players, reveal.people[0], reveal.names[0])}</strong> and{' '}
+          <strong>{nameOf(players, reveal.people[1], reveal.names[1])}</strong>
+        </>
+      )
+    }
+    case 'done':
+      return <>Final result</>
+  }
+}
+
+function BandStatus({ game, players, publicState, tallies, serverNow }: TvStatusProps<FusionGame>) {
+  const pub = readPublic(publicState)
+  const now = useNow(pub, serverNow)
+  const locked = pub?.current ? (tallies[pub.current.key] ?? 0) : 0
+  return (
+    <BandLine tab={<Tab tone="paper">{game.title}</Tab>}>
+      {pub ? (
+        pub.phase === 'asking' ? (
+          // The count in the band's figures, as Last one standing's "18 of 24 still in".
           <>
-            <BandCount>
-              {revealedOf(pub)} of {total} revealed
-            </BandCount>
-            <BandText>Voting is closed</BandText>
+            <BandCount>{locked}</BandCount>
+            <BandText>
+              {locked === 1 ? 'has' : 'have'} locked in on <strong>{pub.pictures.find((p) => p.n === pub.current?.n)?.label}</strong>
+            </BandText>
           </>
+        ) : (
+          <BandText>
+            <Status pub={pub} players={players} locked={locked} now={now} />
+          </BandText>
         )
+      ) : (
+        <BandText>Getting ready</BandText>
       )}
     </BandLine>
   )
 }
 
-function CardStatus({ game, players, publicState, tallies }: TvStatusProps<FusionGame>) {
-  const pub = publicOf(publicState)
-
+function CardStatus({ game, players, publicState, tallies, serverNow }: TvStatusProps<FusionGame>) {
+  const pub = readPublic(publicState)
+  const now = useNow(pub, serverNow)
+  const locked = pub?.current ? (tallies[pub.current.key] ?? 0) : 0
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-3 rounded-3xl bg-raised p-5 short:gap-2 short:p-4">
-      <header className="flex min-w-0 items-center gap-2.5">
-        <DetectiveIcon weight="duotone" className="size-7 shrink-0 text-paper-2 short:size-6" />
-        <h3 className="min-w-0 flex-1 truncate text-xl font-bold short:text-lg">{game.title}</h3>
+    <section className={cn(CARD, 'grid min-w-0 grid-cols-1 gap-3 p-5 short:gap-2 short:p-4')}>
+      <header className="flex min-w-0 items-center gap-3">
+        <DetectiveIcon weight="duotone" className="size-8 shrink-0 text-paper-2 short:size-7" />
+        <h3 className="min-w-0 flex-1 truncate text-tv-tab font-bold short:text-tv-floor">{game.title}</h3>
       </header>
-      {pub && <Card pub={pub} players={players} tallies={tallies} />}
+      <p className="text-tv-floor text-paper-2 [&_strong]:font-bold [&_strong]:text-paper">
+        {pub ? <Status pub={pub} players={players} locked={locked} now={now} /> : 'Getting ready'}
+      </p>
     </section>
-  )
-}
-
-function Card({ pub, players, tallies }: Pick<TvStatusProps<FusionGame>, 'players' | 'tallies'> & { pub: Pub }) {
-  const total = pub.pictures.length
-  const votes = totalVotes(tallies)
-  const revealed = revealedOf(pub)
-  // How far voting is: every guest voting on every picture fills the bar.
-  const share = total > 0 && players.length > 0 ? Math.min(1, votes / (total * players.length)) : 0
-  const leader = pub.top[0]
-
-  return (
-    <>
-      {pub.phase === 'voting' ? (
-        <>
-          <p className="text-2xl font-bold short:text-xl">Vote on your phone</p>
-          <p className="text-lg text-paper-2 short:text-base">
-            {plural(total, 'picture')}, {plural(votes, 'vote')}
-          </p>
-          <div className="h-2 overflow-hidden rounded-full bg-rule" role="img" aria-label={`${Math.round(share * 100)}% voted`}>
-            <div className="h-full rounded-full bg-paper transition-[width] duration-700" style={{ width: `${share * 100}%` }} />
-          </div>
-        </>
-      ) : (
-        <p className="text-xl font-bold short:text-lg">
-          {pub.phase === 'locked' ? `Voting closed. ${revealed} of ${total} revealed` : 'The reveal is done'}
-        </p>
-      )}
-      {leader && (
-        <p className="flex min-w-0 items-center gap-2 text-lg">
-          <CrownIcon weight="fill" className="shrink-0 text-gold" />
-          <span className="min-w-0 truncate">{nameOf(players, leader.playerId)}</span>
-          <span className="ml-auto shrink-0 font-bold text-gold tabular-nums">{leader.points}</span>
-        </p>
-      )}
-    </>
   )
 }
