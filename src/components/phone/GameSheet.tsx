@@ -11,8 +11,8 @@ import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/she
  * stands) and a close button; the game scrolls under it.
  *
  * Nothing in the sheet's frame may set a transform, filter or backdrop filter:
- * games draw full-screen layers of their own inside it (the scan sheet, the
- * fusion picker), which must stay fixed to the screen.
+ * games draw full-screen layers of their own inside it (such as the scan
+ * sheet), which must stay fixed to the screen.
  */
 export default function GameSheet({
   open,

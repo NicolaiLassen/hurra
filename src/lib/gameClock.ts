@@ -1,7 +1,7 @@
-// Time and sound for games' timed screens (the quiz's, Participant fusion's):
-// the database clock re-read on a timer (games get `serverNow` through their
-// props, never the live session), and each moment's sound played once. A
-// UI-only helper in src/lib, so a game uses it without importing another game.
+// Time and sound for games' timed screens: the database clock re-read on a
+// timer (games get `serverNow` through their props, never the live session),
+// and each moment's sound played once. A UI-only helper in src/lib, so a game
+// uses it without importing another game.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { SoundName } from '@/games/core/sounds'
 import { playSound } from '@/lib/sound'

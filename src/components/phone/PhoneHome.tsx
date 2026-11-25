@@ -162,8 +162,8 @@ function Home({
 
       {/* One keyed list: a live game that loses the main card (to another
           game, a result card, or its own section) keeps its view, out of
-          sight, so a full-screen layer it has open (the fusion picker, the
-          scan sheet, a knockout dialog) stays on top until the guest is done.
+          sight, so a full-screen layer it has open (such as the scan sheet or
+          a knockout dialog) stays on top until the guest is done.
           Game layers are position: fixed (see GameSheet), so the hidden
           wrapper doesn't clip them. */}
       {[liveMain, held].map(
