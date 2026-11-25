@@ -10,6 +10,7 @@ import type {
   AnswerPayload,
   AnyGame,
   GameData,
+  GameGuest,
   GameInfo,
   GamePlayer,
   LogEntry,
@@ -58,7 +59,7 @@ type GameRow = {
   winners: PlayerId[]
   wake_at: number | null
 }
-type StateRow = { state: unknown; version: number; round: number; config: unknown; members: PlayerId[] }
+type StateRow = { state: unknown; version: number; round: number; config: unknown; members: PlayerId[]; saved_at: number }
 type PromptRow = {
   key: string
   round: number
@@ -89,7 +90,10 @@ export class FakeParty {
   /** A paired TV: sync() sends from this user. */
   readonly screenUser = 'screen-user'
   readonly sessionId: string
+  /** The guests who joined, in join order: only they play. */
   players: GamePlayer[] = []
+  /** Names on the guest list nobody has taken yet (expected guests), in the order the host added them. */
+  guests: GamePlayer[] = []
   /** 'room', 'stage', 'stage <prompt key>' (a tally) and 'player <id>', in the order they were sent. */
   pings: string[] = []
   spotlight: string | null = null
@@ -113,6 +117,10 @@ export class FakeParty {
   private readonly rows: LogRow[] = []
   private readonly users = new Map<PlayerId, string>()
   private readonly codes = new Map<PlayerId, string>()
+  /** When each joined player joined (players.joined_at). */
+  private readonly joinedAt = new Map<PlayerId, number>()
+  /** The order rows were made in (players.created_at), for game_load's guests. */
+  private readonly created = new Map<PlayerId, number>()
   /** Everyone who was ever in the party, with the name they had. */
   private readonly everyone: { id: PlayerId; name: string }[] = []
   private readonly idRandom = seededRandom(4242)
@@ -231,7 +239,13 @@ export class FakeParty {
     if (!this.players.some((p) => p.id === playerId)) {
       throw new FakeDbError(403, 'not_player', "You're not a player in this party")
     }
-    const normalised = checkAnswer(prompt.spec, answer, this.players.map((p) => p.id), playerId)
+    const normalised = checkAnswer(
+      prompt.spec,
+      answer,
+      this.players.map((p) => p.id),
+      playerId,
+      this.guestList().map((g) => g.id),
+    )
     const subs = this.subs.get(`${gameId}/${key}`) ?? new Map<PlayerId, SubRow>()
     this.subs.set(`${gameId}/${key}`, subs)
     const old = subs.get(playerId)
@@ -269,6 +283,8 @@ export class FakeParty {
     this.players.push(player)
     this.users.set(player.id, `user-${++this.ids}`)
     this.codes.set(player.id, this.code())
+    this.created.set(player.id, this.created.size)
+    this.joinedAt.set(player.id, this.now)
     this.everyone.push({ id: player.id, name })
     if (!silent) {
       this.write('player.joined', null, null, 'player', player.id, [player.id], { name, player_id: player.id })
@@ -279,10 +295,84 @@ export class FakeParty {
   }
 
   removePlayer(playerId: PlayerId): void {
+    const player = this.dropPlayer(playerId)
+    this.created.delete(playerId)
+    this.write('player.removed', null, null, 'host', playerId, [playerId], { name: player.name, player_id: playerId })
+    this.beginTx()
+    this.ping('room')
+  }
+
+  /** The host adds a name to the guest list (host_add_guests): a guest still expected, who doesn't play. */
+  listGuest(name: string): GamePlayer {
+    const guest: GamePlayer = { id: this.uuid(), name, profile: {} }
+    this.guests.push(guest)
+    this.codes.set(guest.id, this.code())
+    this.created.set(guest.id, this.created.size)
+    this.write('guest.added', null, null, 'host', guest.id, [guest.id], { name, player_id: guest.id })
+    this.beginTx()
+    this.ping('stage')
+    return guest
+  }
+
+  /**
+   * A phone takes a free name (claim_guest): the guest joins under the id the
+   * list gave them. As in the database, join times are whole ms: a name freed
+   * and taken again counts as a re-join only when the claim comes at least
+   * 1 ms after the game's last save (tick() in between).
+   */
+  claimGuest(guestId: PlayerId): GamePlayer {
+    const guest = this.guests.find((g) => g.id === guestId)
+    if (!guest) throw new FakeDbError(409, 'guest_taken', 'Someone just took that name')
+    this.guests = this.guests.filter((g) => g.id !== guestId)
+    const player: GamePlayer = { id: guest.id, name: guest.name, profile: {} }
+    this.players.push(player)
+    this.users.set(player.id, `user-${++this.ids}`)
+    this.joinedAt.set(player.id, this.now)
+    this.everyone.push({ id: player.id, name: player.name })
+    this.write('player.joined', null, null, 'player', player.id, [player.id], { name: player.name, player_id: player.id, listed: true })
+    this.beginTx()
+    this.ping('stage')
+    return player
+  }
+
+  /**
+   * The host frees a name someone took (host_free_guest): everything the taker
+   * earned goes (points, scores, views, answers, toasts only they could read),
+   * and the guest is back on the list as expected, same id, new code.
+   */
+  freeGuest(playerId: PlayerId): GamePlayer {
+    const player = this.dropPlayer(playerId)
+    // Not in the recap's players any more: the row is an expected guest again (session_recap).
+    const index = this.everyone.findIndex((p) => p.id === playerId)
+    if (index >= 0) this.everyone.splice(index, 1)
+    const guest: GamePlayer = { id: player.id, name: player.name, profile: {} }
+    this.guests.push(guest)
+    this.codes.set(guest.id, this.code())
+    for (const item of this.feed) {
+      if (item.audience?.includes(playerId)) item.audience = item.audience.filter((id) => id !== playerId)
+    }
+    this.feed = this.feed.filter((item) => item.audience === null || item.audience.length > 0)
+    this.write('player.freed', null, null, 'host', playerId, [playerId], { name: player.name, player_id: playerId })
+    this.beginTx()
+    this.ping('room')
+    return guest
+  }
+
+  /** Everyone on the guest list, joined or not, as game_load gives it (by when the row was made). */
+  guestList(): GameGuest[] {
+    const joined = new Set(this.players.map((p) => p.id))
+    return [...this.players, ...this.guests]
+      .sort((a, b) => (this.created.get(a.id) ?? 0) - (this.created.get(b.id) ?? 0))
+      .map((p) => ({ id: p.id, name: p.name, joined: joined.has(p.id) }))
+  }
+
+  /** What deleting a player's row takes with it through the foreign keys. */
+  private dropPlayer(playerId: PlayerId): GamePlayer {
     const player = this.players.find((p) => p.id === playerId)
     if (!player) throw new Error(`No player ${playerId} in this party`)
     this.players = this.players.filter((p) => p.id !== playerId)
     this.users.delete(playerId)
+    this.joinedAt.delete(playerId)
     for (const views of this.views.values()) views.delete(playerId)
     for (const [gameId, scores] of this.gameScores) {
       const rest = { ...scores }
@@ -291,9 +381,7 @@ export class FakeParty {
     }
     this.scoreEvents = this.scoreEvents.filter((e) => e.player_id !== playerId)
     for (const subs of this.subs.values()) subs.delete(playerId)
-    this.write('player.removed', null, null, 'host', playerId, [playerId], { name: player.name, player_id: playerId })
-    this.beginTx()
-    this.ping('room')
+    return player
   }
 
   /** A host award (score_events with this game's id), as the award page gives it. */
@@ -386,7 +474,8 @@ export class FakeParty {
       gameId,
       round: st.round,
       session: { id: this.sessionId, name: 'Party', data: loaded.session.data },
-      players: loaded.players,
+      players: loaded.players.map((p) => ({ id: p.id, name: p.name, profile: p.profile })),
+      guests: loaded.guests ?? [],
       scoreboard: loaded.scoreboard,
       config: st.config,
       now: this.now,
@@ -478,9 +567,17 @@ export class FakeParty {
         wake_at: game.wake_at,
       },
       settings: structuredClone(this.settings.get(gameId) ?? {}),
-      current: st ? { state: st.state, version: st.version, round: st.round, config: st.config, members: [...st.members] } : null,
+      current: st
+        ? { state: st.state, version: st.version, round: st.round, config: st.config, members: [...st.members], saved_at: st.saved_at }
+        : null,
       session: { id: this.sessionId, name: 'Party', data: structuredClone(this.sessionData), spotlight_game_id: this.spotlight },
-      players: this.players.map((p) => ({ id: p.id, name: p.name, profile: structuredClone(p.profile) })),
+      players: this.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        profile: structuredClone(p.profile),
+        joined_at: this.joinedAt.get(p.id) ?? this.now,
+      })),
+      guests: this.guestList(),
       caller: { player_id: null, is_host: false, is_screen: false },
       scoreboard: this.scoreboard(),
       awards: this.awards(gameId, game.started_at),
@@ -565,11 +662,11 @@ export class FakeParty {
 
     // State.
     if (starting) {
-      this.states.set(game.id, { state, version: (st?.version ?? 0) + 1, round, config, members: [...p.members] })
+      this.states.set(game.id, { state, version: (st?.version ?? 0) + 1, round, config, members: [...p.members], saved_at: this.now })
       this.prompts.set(game.id, new Map())
       for (const key of [...this.subs.keys()]) if (key.startsWith(`${game.id}/`)) this.subs.delete(key)
     } else {
-      this.states.set(game.id, { ...st!, state, version: st!.version + 1, members: [...p.members] })
+      this.states.set(game.id, { ...st!, state, version: st!.version + 1, members: [...p.members], saved_at: this.now })
     }
 
     // Projections, for players still in the party.
@@ -879,7 +976,14 @@ export class FakeParty {
  * prompt spec, with the same rules and messages (docs/engine-v2.md, 2.7).
  * Throws a FakeDbError with code 'answer_invalid'.
  */
-export function checkAnswer(spec: PromptSpec, payload: unknown, playerIds: readonly PlayerId[], playerId: PlayerId): AnswerPayload {
+export function checkAnswer(
+  spec: PromptSpec,
+  payload: unknown,
+  playerIds: readonly PlayerId[],
+  playerId: PlayerId,
+  /** Everyone on the guest list, joined or not, for options 'guests'. The players when left out. */
+  guestIds: readonly PlayerId[] = playerIds,
+): AnswerPayload {
   const invalid = (message: string) => new FakeDbError(400, 'answer_invalid', message)
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload) || JSON.stringify(payload).length > 2048) {
     throw invalid('That answer is not valid')
@@ -888,7 +992,10 @@ export function checkAnswer(spec: PromptSpec, payload: unknown, playerIds: reado
   if (spec.kind === 'choice') {
     const choice = typeof input.choice === 'string' ? [input.choice] : Array.isArray(input.choice) ? input.choice : null
     if (!choice || choice.length === 0) throw invalid('Pick an option')
-    const options = spec.options === 'players' ? playerIds.filter((id) => !(spec.exclude_self && id === playerId)) : spec.options
+    const options =
+      spec.options === 'players' || spec.options === 'guests'
+        ? (spec.options === 'players' ? playerIds : guestIds).filter((id) => !(spec.exclude_self && id === playerId))
+        : spec.options
     if (choice.some((c) => typeof c !== 'string' || !options.includes(c))) throw invalid('That is not one of the options')
     if (new Set(choice).size !== choice.length) throw invalid('Pick each option only once')
     const min = spec.min ?? 1

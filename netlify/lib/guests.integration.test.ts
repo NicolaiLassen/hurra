@@ -432,6 +432,45 @@ describe('games and guests still expected', () => {
   })
 })
 
+describe('a name freed and taken again while a game runs', () => {
+  it('leaves as the old person and joins as the new one at the next save', async () => {
+    const { party } = await listedParty('Re-join', ['Ana'])
+    const ana = await world.claimGuest(party, 'Ana')
+    const bo = await world.guest(party, 'Bo')
+    const gameId = await world.game(host, party, 'probe', 'Probe', { movesToWin: 9, seconds: 10 })
+    await engine(host, { type: 'start', gameId, stage: false })
+    expect((await engine(ana, { type: 'action', gameId, action: { type: 'move' } })).status).toBe(200)
+
+    // No save in between (the host page's sync didn't run): the id is back in the party under a new person.
+    expect(outcome(await free(host, ana.playerId))).toBe('ok')
+    expect(await rows('game_scores', 'player_id', ana.playerId)).toEqual([])
+    expect(await rows('game_player_views', 'player_id', ana.playerId)).toEqual([])
+    const next = await world.claimGuest(party, 'Ana')
+    expect(next.playerId).toBe(ana.playerId)
+    expect((await engine(bo, { type: 'action', gameId, action: { type: 'move' } })).status).toBe(200)
+
+    const [state] = await rows<{ state: { joined: string[]; left: string[] }; members: string[] }>('game_states', 'game_id', gameId)
+    expect(state.state.left).toEqual([ana.playerId])
+    expect(state.state.joined).toEqual([ana.playerId])
+    expect(state.members.sort()).toEqual([ana.playerId, bo.playerId].sort())
+    const { data: effects } = await admin
+      .from('event_log')
+      .select('data')
+      .eq('game_id', gameId)
+      .eq('kind', 'game.effects')
+      .not('data->members', 'is', null)
+    expect(effects?.map((row) => row.data.members)).toEqual([{ joined: [ana.playerId], left: [ana.playerId] }])
+    // The new person has a view again. What the game kept for the id is the
+    // game's to drop on leave (the probe keeps its moves, so it scores them).
+    expect((await rows('game_player_views', 'player_id', ana.playerId)).length).toBe(1)
+
+    // The next save is an ordinary one.
+    expect((await engine(next, { type: 'action', gameId, action: { type: 'move' } })).status).toBe(200)
+    const [after] = await rows<{ state: { joined: string[]; left: string[] } }>('game_states', 'game_id', gameId)
+    expect(after.state).toMatchObject({ joined: [ana.playerId], left: [ana.playerId] })
+  })
+})
+
 // The commit race ------------------------------------------------------------------------------------
 
 describe('a save that races a free', () => {

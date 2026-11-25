@@ -63,6 +63,20 @@ describe('testInfo and seededRandom', () => {
     expect(info.players).toEqual([{ id: 'ana', name: 'ana', profile: {} }])
   })
 
+  it('gives the players as the guest list, all joined, unless the test names expected guests', () => {
+    expect(testInfo({}, ['ana', 'bo']).guests).toEqual([
+      { id: 'ana', name: 'ana', joined: true },
+      { id: 'bo', name: 'bo', joined: true },
+    ])
+    const players = [{ id: 'cy', name: 'Cy', profile: {} }]
+    expect(testInfo({}, [], { players }).guests).toEqual([{ id: 'cy', name: 'Cy', joined: true }])
+    const guests = [
+      { id: 'ana', name: 'ana', joined: true },
+      { id: 'zelda', name: 'Zelda', joined: false },
+    ]
+    expect(testInfo({}, ['ana'], { guests }).guests).toEqual(guests)
+  })
+
   it('is deterministic', () => {
     const a = seededRandom(3)
     const b = seededRandom(3)

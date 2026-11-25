@@ -1,18 +1,23 @@
 // Helpers for unit-testing game plugins (docs/engine-v2.md, 3.4).
 import type { Answer, AnswerPayload, GameInfo, GamePlayer, PlayerId } from './Game'
 
-/** Info with players named after their ids, round 1, no prompts, an empty scoreboard and a fixed clock. */
+/**
+ * Info with players named after their ids, round 1, no prompts, an empty
+ * scoreboard and a fixed clock. The guest list is the players, all joined,
+ * unless `overrides.guests` names expected guests too.
+ */
 export function testInfo<Config>(
   config: Config,
   playerIds: PlayerId[],
   overrides: Partial<GameInfo<Config>> = {},
 ): GameInfo<Config> {
-  const players: GamePlayer[] = playerIds.map((id) => ({ id, name: id, profile: {} }))
+  const players: readonly GamePlayer[] = overrides.players ?? playerIds.map((id) => ({ id, name: id, profile: {} }))
   return {
     gameId: 'game-1',
     round: 1,
     session: { id: 'session-1', name: 'Test party', data: {} },
     players,
+    guests: players.map((p) => ({ id: p.id, name: p.name, joined: true })),
     scoreboard: {},
     config,
     now: 1_000,

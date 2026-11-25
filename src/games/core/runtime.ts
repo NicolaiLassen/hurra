@@ -9,6 +9,7 @@ import {
   type AnswerPayload,
   type AnyGame,
   type GameData,
+  type GameGuest,
   type GameInfo,
   type GamePlayer,
   type PlayerId,
@@ -31,9 +32,20 @@ export type Loaded = {
     wake_at: number | null
   }
   settings: Record<string, unknown>
-  current: { state: unknown; version: number; round: number; config: unknown; members: PlayerId[] } | null
+  current: {
+    state: unknown
+    version: number
+    round: number
+    config: unknown
+    members: PlayerId[]
+    /** When the game was last saved (game_states.updated_at). Missing on a database before the guest list. */
+    saved_at?: number
+  } | null
   session: { id: string; name: string; data: GameData; spotlight_game_id: string | null }
-  players: GamePlayer[]
+  /** The guests who joined, in join order, each with when they joined (missing before the guest list). */
+  players: (GamePlayer & { joined_at?: number })[]
+  /** Everyone on the guest list, joined or still expected. Missing on a database before the guest list. */
+  guests?: GameGuest[]
   caller: { player_id: PlayerId | null; is_host: boolean; is_screen: boolean }
   scoreboard: Record<PlayerId, number>
   /** This round's score_events for this game: host awards and game bonuses. */
@@ -180,11 +192,14 @@ export function step(logic: AnyGame, loaded: Loaded, request: EngineRequest, env
     }
 
     // 4. Info. A new round starts with no prompts (game_commit deletes the old ones).
+    //    Only the guests who joined play; the whole guest list is for names.
+    const players: GamePlayer[] = loaded.players.map((p) => ({ id: p.id, name: p.name, profile: p.profile }))
     info = {
       gameId: game.id,
       round: starting ? (current?.round ?? 0) + 1 : current!.round,
       session: { id: loaded.session.id, name: loaded.session.name, data: loaded.session.data },
-      players: loaded.players,
+      players,
+      guests: loaded.guests ?? players.map((p) => ({ id: p.id, name: p.name, joined: true })),
       scoreboard: loaded.scoreboard,
       config,
       now: env.now,
@@ -200,20 +215,41 @@ export function step(logic: AnyGame, loaded: Loaded, request: EngineRequest, env
     // 6. Membership: who left and who joined since the last save, as actor
     //    system in a second context that shares the request's effects. These
     //    hooks fail open: a throw keeps the state from before it.
+    //    A member who joined after the last save is an id the host freed and
+    //    someone took again (a genuine member always joined before the save
+    //    that made them one): it leaves as the old person, then joins as the
+    //    new one, so the new person never inherits the old one's round.
     if (!starting) {
       const known = new Set(current!.members)
       const present = new Set(presentIds)
-      left = current!.members.filter((id) => !present.has(id))
-      joined = presentIds.filter((id) => !known.has(id))
+      const savedAt = current!.saved_at
+      const rejoined =
+        savedAt === undefined
+          ? []
+          : loaded.players
+              .filter((p) => known.has(p.id) && p.joined_at !== undefined && p.joined_at > savedAt)
+              .map((p) => p.id)
+      left = [...current!.members.filter((id) => !present.has(id)), ...rejoined]
+      joined = presentIds.filter((id) => !known.has(id) || rejoined.includes(id))
       if ((left.length > 0 && logic.onPlayerLeave) || (joined.length > 0 && logic.onPlayerJoin)) {
+        // The leave hooks of a re-joined id see a party without it, so their effects aimed at it are dropped.
+        const leaving =
+          rejoined.length === 0
+            ? null
+            : createGameContext({ ...info, players: info.players.filter((p) => !rejoined.includes(p.id)) }, env.random, {
+                actor: { kind: 'system' },
+                unknownPlayers: 'skip',
+                effects,
+              })
         const system = createGameContext(info, env.random, { actor: { kind: 'system' }, unknownPlayers: 'skip', effects })
         for (const id of left) {
           if (!logic.onPlayerLeave) break
-          state = failOpen(effects, state, (s) => logic.onPlayerLeave!(s, id, system.ctx), `${logic.type}.onPlayerLeave`)
+          const leaveCtx = leaving && rejoined.includes(id) ? leaving.ctx : system.ctx
+          state = failOpen(effects, state, (s) => logic.onPlayerLeave!(s, id, leaveCtx), `${logic.type}.onPlayerLeave`)
         }
         for (const id of joined) {
           if (!logic.onPlayerJoin) break
-          const player = loaded.players.find((p) => p.id === id)!
+          const player = players.find((p) => p.id === id)!
           state = failOpen(effects, state, (s) => logic.onPlayerJoin!(s, player, system.ctx), `${logic.type}.onPlayerJoin`)
         }
       }
