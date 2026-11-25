@@ -7,9 +7,11 @@ import {
   freshStage,
   joinPlace,
   mainArea,
+  newsStage,
   resultLine,
   runningFor,
   sceneLine,
+  strapNews,
   TITLE_CARD_FRESH_MS,
   titleCardKey,
   topOfGame,
@@ -75,6 +77,37 @@ describe('mainArea', () => {
     expect(mainArea({ kind: 'standings', lastGame: null }, withView)).toEqual({ kind: 'board', over: false, nowPlaying: null })
     expect(mainArea({ kind: 'over' }, withView)).toEqual({ kind: 'board', over: true, nowPlaying: null })
     expect(mainArea({ kind: 'recap' }, withView)).toEqual({ kind: 'recap' })
+  })
+})
+
+describe('news on the stage', () => {
+  const hunt = game('h', { game_type: 'elimination', title: 'Last one standing' })
+  const bannersOf = (type: string): 'banner' | 'sound-only' => (type === 'quiz' ? 'sound-only' : 'banner')
+
+  it("lets a live game's own stageBanners decide, and keeps the board and the recap as they were", () => {
+    expect(newsStage({ kind: 'stage', game: hunt, finished: false }, bannersOf)).toEqual({ kind: 'stage', gameId: 'h', banners: 'banner' })
+    expect(newsStage({ kind: 'stage', game: game('q'), finished: false }, bannersOf)).toEqual({ kind: 'stage', gameId: 'q', banners: 'sound-only' })
+    expect(newsStage({ kind: 'board', over: false, nowPlaying: null }, bannersOf)).toEqual({ kind: 'board' })
+    expect(newsStage({ kind: 'recap' }, bannersOf)).toEqual({ kind: 'recap' })
+  })
+
+  it("plays only the sound of a game's news on its own final screen, which shows the result itself", () => {
+    expect(newsStage({ kind: 'stage', game: { ...hunt, status: 'finished' }, finished: true }, bannersOf)).toEqual({
+      kind: 'stage',
+      gameId: 'h',
+      banners: 'sound-only',
+    })
+  })
+
+  it("takes down a strap from the game whose winner's screen has just taken the stage, and keeps any other", () => {
+    const winnerNews = { id: 1, game_id: 'h' }
+    const party = { id: 2, game_id: null }
+    const final = { kind: 'stage', game: { ...hunt, status: 'finished' }, finished: true } as const
+    expect(strapNews(winnerNews, final)).toBeUndefined()
+    expect(strapNews(party, final)).toBe(party)
+    expect(strapNews(winnerNews, { kind: 'stage', game: hunt, finished: false })).toBe(winnerNews)
+    expect(strapNews(winnerNews, { kind: 'board', over: false, nowPlaying: null })).toBe(winnerNews)
+    expect(strapNews(undefined, final)).toBeUndefined()
   })
 })
 

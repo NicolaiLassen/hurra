@@ -2,6 +2,7 @@
 // scene from stage.ts, so the screen's rules are unit-tested. The core decides
 // when a game's screens show, never what is in them.
 import { boardTier } from '@/components/tv/fit'
+import type { NewsStage } from '@/components/tv/news'
 import { listNames } from '@/lib/recap'
 import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
@@ -34,6 +35,28 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
     case 'final':
       return { kind: 'stage', game: scene.game, finished: true }
   }
+}
+
+/**
+ * How news.ts routes an announcement for what fills the stage. A game's final
+ * screen shows its own result, so that game's news (its winner's) only plays
+ * its sound there and never lays a strap over the winner's screen. While a
+ * game runs, its own `stageBanners` decide.
+ */
+export function newsStage(area: MainArea, bannersOf: (gameType: string) => 'banner' | 'sound-only'): NewsStage {
+  if (area.kind === 'recap') return { kind: 'recap' }
+  if (area.kind === 'board') return { kind: 'board' }
+  return { kind: 'stage', gameId: area.game.id, banners: area.finished ? 'sound-only' : bannersOf(area.game.game_type) }
+}
+
+/**
+ * The news strap's announcement while `area` shows: none from the game whose
+ * final screen holds the stage, for a strap that went up a moment before its
+ * winner's screen took over (the news and the finish can reach the TV in two
+ * reads). Its sound has played already.
+ */
+export function strapNews<T extends { game_id: string | null }>(item: T | undefined, area: MainArea): T | undefined {
+  return item && area.kind === 'stage' && area.finished && item.game_id === area.game.id ? undefined : item
 }
 
 /**

@@ -198,7 +198,8 @@ function withQuestion(s: Snapshot, text: string | null, options: string | null):
   return { ...s, games }
 }
 
-let nextId = 900
+// Past every id the scenes hold (pong-final's news is 950), so the news is newer than all of them.
+let nextId = 1000
 function say(id: number, message: string, patch: Partial<FeedItem> = {}): FeedItem {
   return {
     id,

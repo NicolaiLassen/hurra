@@ -6,9 +6,8 @@ import Board from '@/components/tv/Board'
 import Corner from '@/components/tv/Corner'
 import Header from '@/components/tv/Header'
 import Lobby from '@/components/tv/Lobby'
-import type { NewsStage } from '@/components/tv/news'
 import RecapScene from '@/components/tv/RecapScene'
-import { byOldestStart, joinPlace, mainArea, sceneLine } from '@/components/tv/scene'
+import { byOldestStart, joinPlace, mainArea, newsStage, sceneLine, strapNews } from '@/components/tv/scene'
 import StageView from '@/components/tv/StageView'
 import Strip from '@/components/tv/Strip'
 import TitleCard from '@/components/tv/TitleCard'
@@ -96,13 +95,9 @@ function Screen({
     .sort(byOldestStart)
   const finished = recentlyFinished(snapshot, now).filter((g) => g.id !== stageId)
 
-  const newsStage: NewsStage =
-    area.kind === 'recap'
-      ? { kind: 'recap' }
-      : area.kind === 'stage'
-        ? { kind: 'stage', gameId: area.game.id, banners: stageBannersOf(area.game.game_type) }
-        : { kind: 'board' }
-  const { banner, ticker } = useNews(snapshot.feed, newsStage)
+  const news = useNews(snapshot.feed, newsStage(area, stageBannersOf))
+  const banner = strapNews(news.banner, area)
+  const ticker = news.ticker
   const titleCard = useTitleCard(shown, session, now)
   const titleOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.title
 
