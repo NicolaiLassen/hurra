@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import RecapPreview from '@/components/host/RecapPreview'
 import { gameLogic } from '@/games/logic'
+import { knockedOutIds } from '@/games/registry'
 import { FIXTURE_SCENES, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import { buildRecapDoc } from '@/lib/recap'
 import { recordedRawRecap } from '@/lib/recap.recorded'
@@ -64,6 +65,14 @@ describe('the control room', () => {
     expect(text).toContain('In the background')
     expect(text).toContain('Show on the TV')
     expect(text).toContain('1 TV paired')
+  })
+
+  it('marks every guest the live hunt has knocked out with the word Out in the player list', async () => {
+    const snapshot = fixtureSnapshot('background', 'host')
+    const out = knockedOutIds(snapshot.games)
+    expect(out.size).toBeGreaterThan(0)
+    const text = await controlRoom('background')
+    expect(text.split(' Out ').length - 1).toBe(out.size)
   })
 
   it('counts down a final screen, with Back to standings', async () => {

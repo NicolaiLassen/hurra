@@ -11,6 +11,7 @@ import PairingScreen from '@/components/tv/PairingScreen'
 import RecapScene from '@/components/tv/RecapScene'
 import { recapSlides } from '@/components/tv/recapSlides'
 import TvScreen from '@/components/tv/TvScreen'
+import { knockedOutIds } from '@/games/registry'
 import { FIXTURE_SESSION_ID, fixtureRecapDoc } from '@/lib/fixtures'
 import { LiveSessionProvider } from '@/lib/useLive'
 
@@ -144,6 +145,23 @@ describe('the TV scene for each fixture', () => {
       const lines = [...page.matchAll(/<(p|span) class="([^"]*)">at hurra\.test<\/\1>/g)]
       expect(lines).toHaveLength(2)
       for (const [, , className] of lines) expect(className).not.toContain('truncate')
+    }
+  })
+
+  it('puts the word Out in pink beside every guest the live hunt has knocked out on the standings board', async () => {
+    for (const search of ['fixture=between&players=12', 'fixture=pong&players=12']) {
+      const setup = devTv(new URLSearchParams(search))!
+      const out = knockedOutIds(setup.snapshot.games)
+      const names = setup.snapshot.players.filter((p) => out.has(p.id)).map((p) => p.name)
+      const page = await html(search)
+      // Static HTML has the rows that need no measuring: the places under the hero.
+      const shown = names.filter((name) => page.includes(`>${name}</span>`))
+      expect(shown.length, search).toBeGreaterThan(0)
+      for (const name of shown) {
+        // The name's row (not its token's slate) carries the word.
+        const rows = page.split(`>${name}</span>`).slice(1)
+        expect(rows.some((after) => /^.{0,240}?text-pink[^"]*">Out</s.test(after)), `${search}: ${name}`).toBe(true)
+      }
     }
   })
 
