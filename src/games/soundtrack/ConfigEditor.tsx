@@ -1,4 +1,4 @@
-import { MusicNotesPlusIcon, PlusIcon, TrashIcon, WarningCircleIcon } from '@phosphor-icons/react'
+import { MusicNotesPlusIcon, PlusIcon, ShuffleIcon, TrashIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,16 @@ import { toast } from '@/lib/toast'
 /** Where an upload lands: a song's photo, an extra photo's, or a new extra photo. */
 type Target = `song:${number}` | `extra:${number}` | 'extra:new'
 
+/** The items in a random order (the editor runs in the host's browser, not in the game's logic). */
+function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
 /**
  * Lydspor's settings (spec section 12), as lists rather than a markup format:
  * a card per song with its photo, title, singer, the other answers that
@@ -45,7 +55,9 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
   const { problems, warnings } = checkConfig(config)
   const placed = placeIssues(problems, warnings, config.songs, config.extraPhotos.length)
   const [uploading, setUploading] = useState<Partial<Record<Target, number>>>({})
-  const busy = Object.values(uploading).some((n) => (n ?? 0) > 0)
+  const [mixing, setMixing] = useState<{ done: number; of: number } | null>(null)
+  const [mixed, setMixed] = useState(false)
+  const busy = Object.values(uploading).some((n) => (n ?? 0) > 0) || mixing !== null
   const ids = `lydspor-${game.id}`
 
   // An upload takes a while: when it lands, it patches the settings as they
@@ -67,6 +79,7 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
   const setExtras = (extraPhotos: SoundtrackPhoto[]) => change({ extraPhotos })
 
   async function upload(target: Target, file: File) {
+    setMixed(false)
     setUploading((u) => ({ ...u, [target]: (u[target] ?? 0) + 1 }))
     try {
       const path = await media.upload(file)
@@ -87,7 +100,47 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
     }
   }
 
+  /**
+   * Every photo is public, and its file carries the time it was uploaded: a
+   * guest who sorts the wall by it reads the songs' order when the host
+   * uploaded them song by song. This uploads every photo again, in a random
+   * order, so the times say nothing. Photos uploaded again before a failure
+   * keep their new paths; a second tap mixes them all again.
+   */
+  async function mixUploadOrder() {
+    const current = readSettings(latest.current.raw)
+    const paths = [...new Set([...current.songs.map((s) => s.photo), ...current.extraPhotos.map((p) => p.photo)].filter((p) => p !== ''))]
+    if (paths.length === 0) return
+    const moved = new Map<string, string>()
+    setMixed(false)
+    setMixing({ done: 0, of: paths.length })
+    try {
+      for (const path of shuffled(paths)) {
+        const response = await fetch(media.url(path, 'full'))
+        if (!response.ok) throw new Error(`A photo couldn't be read back (${response.status})`)
+        const blob = await response.blob()
+        moved.set(path, await media.upload(new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' })))
+        setMixing({ done: moved.size, of: paths.length })
+      }
+      setMixed(true)
+    } catch (error) {
+      toast.error((error as Error).message || "The photos couldn't be mixed. Try again.")
+    } finally {
+      if (moved.size > 0) {
+        const { raw: now, onChange: save } = latest.current
+        const latestConfig = readSettings(now)
+        save({
+          ...latestConfig,
+          songs: latestConfig.songs.map((s) => ({ ...s, photo: moved.get(s.photo) ?? s.photo })),
+          extraPhotos: latestConfig.extraPhotos.map((p) => ({ ...p, photo: moved.get(p.photo) ?? p.photo })),
+        })
+      }
+      setMixing(null)
+    }
+  }
+
   const url = (path: string) => (path ? media.url(path, 'thumb') : null)
+  const photoCount = config.songs.filter((s) => s.photo !== '').length + config.extraPhotos.filter((p) => p.photo !== '').length
   const perSong = pointsPerSong(config.points)
 
   return (
@@ -208,6 +261,23 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
           )}
         </ol>
         <Issues issues={placed.fields.extras} />
+        <div className="grid grid-cols-1 gap-2 border-t border-rule pt-3">
+          <p className="text-sm text-paper-2">
+            A phone can read when each photo was uploaded. Once every photo is in, mix the upload order and save, so the times
+            say nothing about which song is which.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="secondary" size="lg" disabled={busy || photoCount === 0} onClick={() => void mixUploadOrder()}>
+              <ShuffleIcon />
+              {mixing ? `Mixing, ${mixing.done} of ${mixing.of}` : 'Mix the upload order'}
+            </Button>
+            {mixed && (
+              <p role="status" className="text-sm font-semibold">
+                Mixed. Save the settings to keep it.
+              </p>
+            )}
+          </div>
+        </div>
       </Panel>
 
       <Panel id={`${ids}-points`} title="Points and pace">

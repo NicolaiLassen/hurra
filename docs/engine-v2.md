@@ -3759,7 +3759,12 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   warning (fewer than 4 extra photos, a long caption, a shared singer, a short
   title or singer, two near titles, an extra answer that counts already, a
   feat. part); `parseConfig` refuses the first problem. Lengths count code
-  points, as Postgres does.
+  points, as Postgres does. The photos are public, and each file's
+  Last-Modified is its upload time: uploaded song by song, the times would
+  read the wall's secret. So the editor's **Mix the upload order** uploads
+  every photo again in a random order (fetched from its public URL,
+  re-encoded and uploaded as new paths), to tap once every photo is in,
+  then save.
 - **Setup**: the wall is the songs' photos and the extra photos, shuffled with
   `ctx.random` and lettered A on. Which letter is each song's photo
   (`wall.indexOf(i)`) is the secret, with the titles and singers in the
