@@ -76,7 +76,7 @@ describe('the cue card', () => {
       'Song 1: Paper Lanterns, Mira Holm. Play track 1 from 0:48 while Ida tells the story. Check the close answers below. The night the boat broke down.',
     )
     expect(line(cue({ phase: 'standings', played: 8, revealed: 4 }))).toBe(
-      "Lydspor's top 5 is on the TV. Next, track 5 is Natlys (Radio Edit), R.O.S.A., from 0:20. Tap Reveal song 5, then play the hook while Ida tells the story.",
+      'Lydspor’s top 5 is on the TV. Next, track 5 is Natlys (Radio Edit), R.O.S.A., from 0:20. Tap Reveal song 5, then play the hook while Ida tells the story.',
     )
   })
 
@@ -84,7 +84,7 @@ describe('the cue card', () => {
     expect(cue({ phase: 'reveal', played: 8, revealed: 8 }).text).toMatch(/Then pause Spotify and tap Show the top 5\.$/)
     expect(cue({ phase: 'reveal', played: 6, revealed: 6 }).text).toMatch(/Then pause Spotify and tap Show the top 5\.$/)
     expect(cue({ phase: 'reveal', played: 8, revealed: 8, standingsEvery: 0 }).text).toMatch(/Then pause Spotify and tap Crown Lydspor\.$/)
-    expect(line(cue({ phase: 'standings', played: 8, revealed: 8 }))).toBe("Lydspor's top 5 is on the TV. Pause Spotify. Tap Crown Lydspor.")
+    expect(line(cue({ phase: 'standings', played: 8, revealed: 8 }))).toBe('Lydspor’s top 5 is on the TV. Pause Spotify. Tap Crown Lydspor.')
   })
 
   it('works without a storyteller and without the settings', () => {

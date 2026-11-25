@@ -101,11 +101,11 @@ export function cueOf({ where, config, playedAt, lockedAt, tallies, playing, tit
       }
     }
     case 'standings': {
-      if (revealed >= played) return { lead: `${title}'s top 5 is on the TV.`, text: 'Pause Spotify. Tap Crown Lydspor.', counts: null, note: null }
+      if (revealed >= played) return { lead: `${title}’s top 5 is on the TV.`, text: 'Pause Spotify. Tap Crown Lydspor.', counts: null, note: null }
       const next = revealed + 1
       const track = named(song(next)) ? `Next, track ${next} is ${named(song(next))}${from(song(next))}. ` : ''
       return {
-        lead: `${title}'s top 5 is on the TV.`,
+        lead: `${title}’s top 5 is on the TV.`,
         text: `${track}Tap Reveal song ${next}, then play the hook ${story}.`,
         counts: null,
         note: noteOf(song(next)),

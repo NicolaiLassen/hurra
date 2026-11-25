@@ -48,7 +48,7 @@ export default function PlayerCard({ game, publicState, view: rawView, myAnswers
     status = song?.inPhoto
       ? `Song ${pub.reveal.n}: you’re in the photo`
       : view?.rank
-        ? `You’re ${ordinal(view.rank)}, with ${view.points}`
+        ? `You’re ${ordinal(view.rank)}, with ${view.points} Lydspor ${view.points === 1 ? 'point' : 'points'}`
         : `Song ${pub.reveal.n}: ${song?.points ?? 0} of ${pointsPerSong(pub.points)} points`
   } else status = 'Lydspor is over'
 

@@ -15,10 +15,10 @@ export function numberWord(n: number): string {
 
 export const plural = (n: number, word: string, words = `${word}s`) => `${n} ${n === 1 ? word : words}`
 
-/** "Ida's", from the storyteller setting. */
-const possessive = (name: string) => `${name}'s`
+/** "Ida’s", from the storyteller setting, with the curly apostrophe the phones use. */
+const possessive = (name: string) => `${name}’s`
 
-/** The lobby's first line: the host's intro, else "Eight songs from Ida's life." or "Eight songs, eight stories." */
+/** The lobby's first line: the host's intro, else "Eight songs from Ida’s life." or "Eight songs, eight stories." */
 export function lobbyLine(pub: Pick<SoundtrackPublicState, 'intro' | 'storyteller' | 'total'>): string {
   const intro = pub.intro.trim()
   if (intro) return intro

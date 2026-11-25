@@ -42,10 +42,10 @@ const at = (n: number) => Array.from({ length: n }, (_, i) => 1_000 + i)
 
 describe("Lydspor's TV words", () => {
   it('opens with the intro, else the songs and whose life they are from', () => {
-    expect(lobbyLine(PUB)).toBe("Eight songs from Ida's life.")
+    expect(lobbyLine(PUB)).toBe('Eight songs from Ida’s life.')
     expect(lobbyLine({ ...PUB, storyteller: '' })).toBe('Eight songs, eight stories.')
     expect(lobbyLine({ ...PUB, total: 1, storyteller: '' })).toBe('One song, one story.')
-    expect(lobbyLine({ ...PUB, total: 12 })).toBe("Twelve songs from Ida's life.")
+    expect(lobbyLine({ ...PUB, total: 12 })).toBe('Twelve songs from Ida’s life.')
     expect(lobbyLine({ ...PUB, intro: '  Songs from a summer.  ' })).toBe('Songs from a summer.')
     expect(numberWord(13)).toBe('13')
   })

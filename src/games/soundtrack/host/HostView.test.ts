@@ -86,7 +86,7 @@ describe("Lydspor's host card", () => {
 
   it('shows the top 5 the TV shows, above the last close answers', async () => {
     const shown = text(await hostCard('standings'))
-    expect(shown.indexOf("Lydspor's top 5 on the TV")).toBeGreaterThan(-1)
-    expect(shown.indexOf("Lydspor's top 5 on the TV")).toBeLessThan(shown.indexOf('Close answers, song 4'))
+    expect(shown.indexOf('Lydspor’s top 5 on the TV')).toBeGreaterThan(-1)
+    expect(shown.indexOf('Lydspor’s top 5 on the TV')).toBeLessThan(shown.indexOf('Close answers, song 4'))
   })
 })

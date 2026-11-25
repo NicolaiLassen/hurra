@@ -315,7 +315,7 @@ function TopFive({ pub, players, title }: { pub: SoundtrackPublicState; players:
     : pub.top
   return (
     <section>
-      <h3 className="mb-2 text-sm font-extrabold">{pub.final ? `${title}'s final places` : `${title}'s top 5 on the TV`}</h3>
+      <h3 className="mb-2 text-sm font-extrabold">{pub.final ? `${title}’s final places` : `${title}’s top 5 on the TV`}</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-paper-2">Nobody has scored yet.</p>
       ) : (
