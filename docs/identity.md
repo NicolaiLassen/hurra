@@ -228,7 +228,9 @@ edges never cuts anything off. Games play inside it and get it for free.
   [scene.ts](../src/components/tv/scene.ts) decides, and its tests pin it.
   No stock icon.
 - **The bug** (top right): the party's name in `paper-2` (a long one ends in
-  an ellipsis), the time of night in `tv-num`, and the logo.
+  an ellipsis), the time of night in `tv-num`, and the logo. Over a winner's
+  colour field the bug's words turn ink and the strap's tab stands on ink
+  (see [The winner's screen](#the-winners-screen)).
 - **The stage**: the full width between the strap and the band, clipped at
   its edges so a scene that runs out of room never paints over the band. What
   a stage screen gets at 1080p: 800 px of height with one band line and 732
@@ -365,7 +367,9 @@ everything fades in, and only the confetti moves.
   the TV, behind the frame (a fixed layer under the stage, so no ancestor of
   the stage may set a `transform` or `filter`). It carries
   `data-tv-field="<colour>"`, so the frame can set its words in ink while it
-  shows, with `has-[[data-tv-field]]:`. Paper stays paper on it; ink reads
+  shows: the frame's `main` is `group/frame`, and over the field the strap's
+  tab stands on ink with gold words and the bug's name and clock turn ink
+  (`group-has-[[data-tv-field]]/frame:`). Paper stays paper on it; ink reads
   6.9 to 1 or more on every guest colour.
 - **On it, in ink:** the winner's photo, or their name slate inverted (their
   colour on ink, so it stands out of a field of the same colour), tilted 4

@@ -142,6 +142,10 @@ describe('the TV scene for each fixture', () => {
       expect(page.replace(/<[^>]*>/g, '')).toMatch(/Hurra for \w+!/)
       expect(page).toContain('The third hurra is saved for the night')
       expect(page).toContain('data-tv-field')
+      // Over the field the frame's strap tab stands on ink and the bug's words turn ink.
+      expect(page).toContain('group/frame')
+      expect(page).toMatch(/data-frame="strap"[^>]*>\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
+      expect(page.split('group-has-[[data-tv-field]]/frame:text-ink').length - 1).toBe(2)
     }
   })
 
