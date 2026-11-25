@@ -108,8 +108,10 @@ public `game-media` bucket (hosts upload; JPEG only).
 A game is a folder in `src/games/<name>/`. The core never changes for a new
 game: everything goes through the SDK in [src/games/core](../src/games/core).
 [elimination](../src/games/elimination) (*Last one standing*) is the full example
-of a move-based game, [quiz](../src/games/quiz) of one played with prompts, and
-[in-person](../src/games/in-person) is the smallest.
+of a move-based game, [quiz](../src/games/quiz) of one played with prompts,
+[soundtrack](../src/games/soundtrack) (*Lydspor*) of typed answers (text
+prompts that stay changeable until a lock, judged once by a forgiving match),
+and [in-person](../src/games/in-person) is the smallest.
 
 **`logic.ts`**: a class extending `Game` from
 [src/games/core/Game.ts](../src/games/core/Game.ts). It runs on the server, inside
@@ -157,6 +159,14 @@ The rules:
 - `onWake` must move `wakeAt` forward or to null.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
 - `recap()` reveals only what the finished round showed the room.
+- A typed answer (a `text` prompt) is stored as the guest typed it, trimmed.
+  Judge it on the server, once, when the prompts lock, never on the phone,
+  and never show one guest's text to anyone else: Lydspor keeps its verdicts
+  in the state and shows each guest only how their own answer went.
+- Settings a host types into an editor get a `check...` function beside
+  `parseConfig` that returns every problem and warning, so the editor shows
+  them as the host types and the start refuses the first (the quiz's
+  `checkQuizConfig`, Lydspor's `checkConfig`).
 
 **Screens**, typed against the logic in [src/games/types.ts](../src/games/types.ts),
 each optional but the first:
@@ -199,7 +209,11 @@ real engine step with `simulateParty`, and check the game's own example with
 screen also opens on a sample party: `/play/x?fixture=<scene>`,
 `/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
 (the scenes are listed in `fixtures.ts`), and `/dev/tokens` draws the token
-sheet ([identity.md](identity.md#the-acceptance-test)).
+sheet ([identity.md](identity.md#the-acceptance-test)). A game may build its
+scenes by playing its real logic, as Lydspor's `samples.ts` does, so their
+state, public state and views always agree; its scenes are
+`soundtrack-lobby`, `-playing`, `-last-call`, `-locked`, `-reveal`,
+`-standings` and `-final`. Sample content is always invented.
 
 ## Local development
 
