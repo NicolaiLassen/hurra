@@ -43,6 +43,28 @@ const uid = (kind: number, n: number) => `f1c7a000-0000-4000-8000-${String(kind 
 export const FIXTURE_SESSION_ID = uid(1, 1)
 
 const NAMES = ['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Ida', 'Emil', 'Clara', 'Noah', 'Maja', 'Oscar']
+/** Guests on the sample party's guest list who haven't joined yet (docs/guest-list.md, 11.1). */
+export const FIXTURE_EXPECTED_NAMES = ['Zelda', 'Quentin', 'Ximena', 'Ulrik']
+/** More invented names, for a guest list as long as the party is built for. */
+const MORE_NAMES = [
+  'Astrid', 'Bjørn', 'Cecilie', 'Dagny', 'Elias', 'Filippa', 'Gorm', 'Halfdan', 'Iben', 'Jens Peter Østergaard',
+  'Kamma', 'Leo', 'Merle', 'Nanna', 'Ole', 'Pil', 'Rasmus', 'Signe-Marie Kjærsgaard', 'Tove', 'Uffe', 'Vibeke', 'Yrsa',
+  'Æbbe', 'Øystein', 'Åse', 'Benedikte', 'Carsten', 'Ditte', 'Eskild',
+]
+
+/**
+ * The free names of a sample guest list, for the join page's dev fixture
+ * (/join/x?fixture=guests): the twelve sample guests and the four still
+ * expected, then more invented names up to `count`. In the order a host
+ * might paste them; the phone sorts them itself.
+ */
+export function fixtureFreeNames(count = 16): string[] {
+  const names = [...NAMES, ...FIXTURE_EXPECTED_NAMES]
+  for (let n = 0; names.length < count; n++) {
+    names.push(MORE_NAMES[n % MORE_NAMES.length] + (n >= MORE_NAMES.length ? ` ${Math.floor(n / MORE_NAMES.length) + 1}` : ''))
+  }
+  return names.slice(0, Math.max(0, count))
+}
 const CODES = ['A4N7Q', 'B7Q3M', 'M2D5S', 'S9F4X', 'F3R8J', 'L6R2T', 'I5D9K', 'E8M3P', 'C2L7W', 'N4H6Y', 'J7M2A', 'O3S8C']
 const ids = NAMES.map((_, i) => uid(2, i + 1))
 const [ANA, BO, MADS, SOFIE, FREJA, LARS, IDA, EMIL, CLARA, NOAH, MAJA, OSCAR] = ids

@@ -6,7 +6,7 @@
 // what the page shows on its first render of each snapshot.
 import { createElement, type ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { FixtureMode } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
@@ -16,6 +16,13 @@ import { FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SESSION_ID, fixtureRecapDoc, fi
 import type { RecapDoc } from '@/lib/recap'
 import type { Snapshot } from '@/lib/types'
 import { LiveSessionProvider } from '@/lib/useLive'
+import { freedNameOf } from '@/pages/joinScreen'
+
+/** Reports the join page's router state: what a freed phone's join page reads its name from. */
+function JoinStateProbe({ onState }: { onState: (state: unknown) => void }) {
+  onState(useLocation().state)
+  return null
+}
 
 // No network here: the provider renders the fixture, and nothing calls the client while rendering.
 vi.mock('@/lib/supabase', () => ({ supabase: {} }))
@@ -167,6 +174,24 @@ describe('the phone home', () => {
     expect(text).toContain("You're no longer in Birthday party")
     expect(text).toContain('Join again')
     expect(text).not.toContain('Show my code')
+  })
+
+  it('a guest whose name the host freed: no notice, straight back to Who are you? with the name (snapshot.freed)', async () => {
+    const freed = { ...fixtureSnapshot('removed', 'phone'), freed: true }
+    const html = await phoneMarkup(freed)
+    // The phone home renders only the redirect to the join page (react-router's Navigate draws nothing).
+    expect(plain(html).trim()).toBe('')
+    expect(html).not.toContain('no longer in')
+    const followed: string[] = []
+    const join = createElement(JoinStateProbe, { onState: (state: unknown) => followed.push(freedNameOf(state) ?? 'none') })
+    await markupOf(
+      createElement(
+        MemoryRouter,
+        { initialEntries: [{ pathname: '/join/HURRA30', state: { freed: 'Sofie' } }] },
+        createElement(Routes, null, createElement(Route, { path: '/join/:joinCode', element: join })),
+      ),
+    )
+    expect(followed).toEqual(['Sofie'])
   })
 
   it('a guest whose player moved to another phone: the moved notice, also after a sleep (snapshot.moved)', async () => {

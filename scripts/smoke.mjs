@@ -15,7 +15,9 @@
 //
 // What it checks, in order: the site and the engine's 401; keep_alive for
 // anon; the host's party and games; 3 guests joining with anonymous sign-ins;
-// pairing a TV; pings on private topics (a rename reaches a guest, an answer
+// pairing a TV; the guest list (the host lists two names, a new phone sees
+// only the free names and takes one, the TV sees only the guest who took it,
+// the host frees it and the phone reads that it was freed); pings on private topics (a rename reaches a guest, an answer
 // reaches the host as a tally, a guest's forged broadcast reaches nobody);
 // secrets (game settings, states and the log stay host-only, the quiz's
 // answer stays out of public state until its reveal); guest photos (a guest's
@@ -266,6 +268,33 @@ try {
   let anaRoom
   let hostStage
   let tvStage
+  await step('the guest list', async () => {
+    const added = await data(
+      host.client.rpc('host_add_guests', { p_session_id: sessionId, p_names: ['Smoke Listed', 'Smoke Spare'] }),
+      'host_add_guests',
+    )
+    check(added.added.length === 2 && added.skipped.length === 0, 'the host lists 2 names')
+    const phone = await anonymous('a listed guest')
+    const free = await data(phone.client.rpc('guest_list', { p_join_code: joinCode }), 'guest_list')
+    check(
+      Array.isArray(free) && free.includes('Smoke Listed') && free.includes('Smoke Spare') && free.every((name) => typeof name === 'string'),
+      'a new phone sees the free names, and only names',
+    )
+    const typed = await phone.client.rpc('join_session', { p_join_code: joinCode, p_name: 'smoke listed' })
+    check(typed.error?.details === 'on_list' && typed.error?.hint === 'Smoke Listed', 'typing a listed name offers it (on_list)')
+    const taken = await data(phone.client.rpc('claim_guest', { p_join_code: joinCode, p_name: 'Smoke Listed' }), 'claim_guest')
+    check(taken.id === added.added[0].id && taken.user_id === phone.userId, 'the phone takes the name, under the id the list gave it')
+    const onTv = await snapshot(tv, sessionId, 'tv')
+    const names = onTv.players.map((p) => p.name)
+    check(names.includes('Smoke Listed') && !names.includes('Smoke Spare') && onTv.guests === null, 'the TV sees the guest who took the name, never one still expected')
+    const hostView = await snapshot(host, sessionId, 'host')
+    check(hostView.guests?.some((g) => g.name === 'Smoke Spare' && g.joined_at === null), "the host's snapshot lists Smoke Spare as still expected")
+    await data(host.client.rpc('host_free_guest', { p_player_id: taken.id }), 'host_free_guest')
+    const freed = await snapshot(phone, sessionId, 'phone')
+    check(freed.member === false && freed.freed === true && freed.moved === false, "the freed phone's snapshot says freed")
+    check((await snapshot(tv, sessionId, 'tv')).players.length === 3, 'the TV is back to the 3 guests')
+  })
+
   await step('pings on private topics', async () => {
     anaRoom = await listen(guests.Ana, `room:${sessionId}`)
     await listen(guests.Ana, `player:${guests.Ana.player.id}`)

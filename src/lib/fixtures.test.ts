@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SCENES, fixtureRecapDoc, fixtureSnapshot, isFixtureScene } from './fixtures'
+import {
+  FIXTURE_EXPECTED_NAMES,
+  FIXTURE_NOW,
+  FIXTURE_PLAYER_ID,
+  FIXTURE_SCENES,
+  fixtureFreeNames,
+  fixtureRecapDoc,
+  fixtureSnapshot,
+  isFixtureScene,
+} from './fixtures'
+import { foldName } from './format'
 import { backgroundGames, phoneLayout, tvScene } from './stage'
 
 const screens = ['phone', 'tv', 'host'] as const
@@ -104,5 +114,19 @@ describe('fixtureRecapDoc', () => {
     expect(Object.keys(doc.players)).toContain(FIXTURE_PLAYER_ID)
     expect(doc.race.length).toBeLessThanOrEqual(120)
     expect(doc.timeline.length).toBeLessThanOrEqual(60)
+  })
+})
+
+describe('fixtureFreeNames', () => {
+  it('gives the sample guests and the four still expected, then more invented names, never the same name twice', () => {
+    const sixteen = fixtureFreeNames()
+    expect(sixteen).toHaveLength(16)
+    expect(sixteen.slice(12)).toEqual(FIXTURE_EXPECTED_NAMES)
+    const many = fixtureFreeNames(45)
+    expect(many).toHaveLength(45)
+    expect(new Set(many.map(foldName)).size).toBe(45)
+    expect(fixtureFreeNames(90)).toHaveLength(90)
+    expect(new Set(fixtureFreeNames(90).map(foldName)).size).toBe(90)
+    expect(fixtureFreeNames(3)).toEqual(['Ana', 'Bo', 'Mads'])
   })
 })
