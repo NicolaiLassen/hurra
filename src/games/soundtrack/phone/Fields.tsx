@@ -1,5 +1,5 @@
 import { CheckIcon, XIcon } from '@phosphor-icons/react'
-import type { KeyboardEvent } from 'react'
+import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
 import { MAX_TYPED, promptKey, type TypedPart } from '@/games/soundtrack/types'
 import { fieldState, type FieldState } from '@/games/soundtrack/typing'
 import { cn } from '@/lib/utils'
@@ -116,6 +116,20 @@ function Field({
   onClear: () => void
 }) {
   const underId = `${id}-under`
+  const input = useRef<HTMLInputElement>(null)
+  const leave = useRef(onBlur)
+  useLayoutEffect(() => {
+    leave.current = onBlur
+  })
+  // A field removed while it has the focus (the last call or the lock changes
+  // the screen) is left, which saves it: the blur the browser fires as it
+  // goes comes in the middle of React's commit, and React drops it.
+  useLayoutEffect(() => {
+    const element = input.current
+    return () => {
+      if (element && element === document.activeElement) leave.current(element.value)
+    }
+  }, [])
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     // keyCode 229: a keyboard still composing a word sends its own Enter after it.
     if (event.key !== 'Enter' || event.nativeEvent.keyCode === 229) return
@@ -142,6 +156,7 @@ function Field({
       </div>
       <div className="relative mt-1.5">
         <input
+          ref={input}
           id={id}
           name={`lydspor-s${n}-${part}`}
           type="text"
