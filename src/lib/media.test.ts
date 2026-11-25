@@ -169,6 +169,15 @@ describe('paths and URLs', () => {
     expect(gameMediaUrl('s/g/2f1c.jpg')).toBe('http://127.0.0.1:54321/storage/v1/object/public/game-media/s/g/2f1c.jpg')
     expect(gameMediaUrl('s/g/2f1c.jpg', 'thumb')).toBe('http://127.0.0.1:54321/storage/v1/object/public/game-media/s/g/2f1c.thumb.jpg')
   })
+
+  it('draws the fixtures’ sample pictures in dev builds: 4:5, two hues from the number, the thumbnail smaller', () => {
+    const full = decodeURIComponent(gameMediaUrl('fixture/fusion-3.jpg'))
+    const thumb = decodeURIComponent(gameMediaUrl('fixture/fusion-3.jpg', 'thumb'))
+    expect(full).toMatch(/^data:image\/svg\+xml,<svg [^>]*width="1280" height="1600"/)
+    expect(thumb).toMatch(/width="320" height="400"/)
+    expect(full).not.toBe(decodeURIComponent(gameMediaUrl('fixture/fusion-4.jpg')))
+    expect(new Set(full.match(/hsl\(\d+/g)).size).toBe(2)
+  })
 })
 
 describe('countingUploads', () => {

@@ -54,6 +54,7 @@ const HEX_ALLOWED: Record<string, string> = {
 const COLOR_FN_ALLOWED: Record<string, string> = {
   'index.css': "Hurra's colours are defined here",
   'lib/photos.tsx': 'the drawn sample faces of dev builds, a hue per name',
+  'lib/sampleMedia.ts': "the drawn sample pictures of dev builds' fixtures, two hues per picture number",
   [THIS_FILE]: "this guard's own examples",
 }
 

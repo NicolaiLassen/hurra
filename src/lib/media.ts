@@ -10,6 +10,7 @@
 // it as <uuid>.thumb.jpg, so a file name never says who is in a picture. Only
 // hosts upload; everyone reads through the bucket's public URL.
 import { GameCallError, newRequestId } from '@/lib/gameApi'
+import { isSamplePath, samplePicture } from '@/lib/sampleMedia'
 import { supabase } from '@/lib/supabase'
 
 export const GAME_MEDIA_BUCKET = 'game-media'
@@ -176,8 +177,13 @@ export function countingUploads<T>(upload: (file: File) => Promise<T>, count: (c
   }
 }
 
-/** The public URL of a game-media path. Phones use 'thumb' (with loading="lazy"); the TV uses 'full'. */
+/**
+ * The public URL of a game-media path. Phones use 'thumb' (with loading="lazy");
+ * the TV uses 'full'. Dev builds draw the fixtures' sample paths (fixture/...)
+ * instead (src/lib/sampleMedia.ts).
+ */
 export function gameMediaUrl(path: string, size: 'full' | 'thumb' = 'full'): string {
+  if (import.meta.env.DEV && isSamplePath(path)) return samplePicture(path, size)
   return supabase.storage.from(GAME_MEDIA_BUCKET).getPublicUrl(size === 'thumb' ? thumbPath(path) : path).data.publicUrl
 }
 
