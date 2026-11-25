@@ -168,7 +168,7 @@ export function fieldFit(count: number, width: number, height: number, layouts: 
 /**
  * The join block's two forms, measured: the QR code on paper with the code
  * (`block` high and `blockWidth` wide, which the field's column must give
- * it), or one line with the code (`line` high, its address shortening to fit).
+ * it), or its short form, the code over the address (`line` high).
  */
 export type JoinSizes = { block: number; blockWidth: number; line: number }
 

@@ -347,7 +347,9 @@ fills whatever stage the frame gives it:
 - **The field:** everyone else in plain rows on the ground, no cards and no
   bars, in fit.ts's row layouts (the floor of 28 px in the smallest), filled
   top to bottom. The join block stands under it while joining is open: the
-  QR code on paper, the code at `text-tv-code` and the page's own address.
+  QR code on paper, the code at `text-tv-code` and the page's own address,
+  one step smaller again on a low screen (`low:`), so it still fits a 720p
+  board.
 - **Movers** are a triangle and a count in `paper-2`, never green or red.
 - **Gold** is the leader's: their points, the crown, the rank and points of
   anyone tied for first (everyone tied for first wears the crown). Nothing
@@ -356,8 +358,9 @@ fills whatever stage the frame gives it:
   everyone a live game's `knockedOut` hook names.
 - **When it doesn't fit:** places that don't fit under the hero join the
   field, the leader's column narrows (half, then 44, then 38 percent), the
-  join block gives way to its one line, and as a last resort the field ends
-  in "and 17 more". No text goes under the floor to make room.
+  join block gives way to its short form ("Join with HURRA30" over the
+  address, which is never cut), and as a last resort the field ends in "and
+  17 more". No text goes under the floor to make room.
 
 ## The winner's screen
 

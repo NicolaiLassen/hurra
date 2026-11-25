@@ -129,6 +129,16 @@ describe('the TV scene for each fixture', () => {
     expect(stage).not.toContain('data-fit="invite"')
   })
 
+  it("never cuts the board's join address short: the short form gives it a line of its own", async () => {
+    for (const players of [12, 45]) {
+      const page = await html(`fixture=standings&players=${players}`)
+      // The QR block's and the short form's, one of them kept mounted out of sight.
+      const lines = [...page.matchAll(/<(p|span) class="([^"]*)">at hurra\.test<\/\1>/g)]
+      expect(lines).toHaveLength(2)
+      for (const [, , className] of lines) expect(className).not.toContain('truncate')
+    }
+  })
+
   it('crowns every guest tied for first on the podium, not only the middle step', async () => {
     const crowns = (page: string) => page.split('data-crown').length - 1
     // With 45 guests, Felix and Luna share first place on 12 points.
