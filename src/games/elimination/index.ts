@@ -29,6 +29,8 @@ export const elimination = defineGameModule({
   ConfigEditor,
   // Players scan each other's codes to knock them out, also with the camera app.
   acceptsScans: true,
+  // Pink is the hunt: its tab is pink with the popper's stripes wherever the frame draws it.
+  accent: 'hunt',
   // Everyone dealt in who no longer stands: lists of the party mark them Out.
   knockedOut: (publicState) => (Array.isArray(publicState?.out) ? publicState.out.filter((id) => typeof id === 'string') : []),
   profileBadges: (data) => {

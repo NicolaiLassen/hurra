@@ -28,13 +28,13 @@ const OVER_FIELD = [
  * takes the whole width of the frame's top row, over the programme strap and
  * the bug, so it never covers the stage (a quiz's answered count included) or
  * the band. The game's title on the tab, pink with the popper's stripes for
- * the hunt's news and gold for anything else on air, then the news on paper
+ * any news from the hunt (`hunt`: its GameModule.accent) and gold for
+ * anything else on air, then the news on paper
  * with its detail after it. It wipes in from its left edge and fades out;
  * with reduced motion it only fades.
  */
-export default function Banner({ item, source }: { item: FeedItem | undefined; source?: string }) {
+export default function Banner({ item, source, hunt = false }: { item: FeedItem | undefined; source?: string; hunt?: boolean }) {
   const reduce = useReducedMotion()
-  const hunt = item?.tone === 'pink'
   return (
     <div data-frame="news" className="pointer-events-none fixed inset-x-[5vw] top-[5vh] z-40" aria-live="polite">
       <AnimatePresence>

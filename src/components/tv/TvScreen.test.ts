@@ -144,8 +144,26 @@ describe('the TV scene for each fixture', () => {
       expect(page).toContain('data-tv-field')
       // Over the field the frame's strap tab stands on ink and the bug's words turn ink.
       expect(page).toContain('group/frame')
-      expect(page).toMatch(/data-frame="strap"[^>]*>\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
+      expect(page).toMatch(/data-frame="strap"[^>]*>(\s*<span aria-hidden="true" class="stripes[^"]*"><\/span>)?\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
       expect(page.split('group-has-[[data-tv-field]]/frame:text-ink').length - 1).toBe(2)
+    }
+  })
+
+  it("wears the hunt's pink on its programme strap: stripes and a pink tab, its words pink on ink over its winner's colour", async () => {
+    const strapOf = (page: string) => page.slice(page.indexOf('data-frame="strap"'), page.indexOf('data-frame="bug"'))
+    for (const search of ['fixture=hunt', 'fixture=final']) {
+      const strap = strapOf(await html(search))
+      expect(strap).toContain('class="stripes')
+      expect(strap).toContain('bg-pink')
+      expect(strap).toContain('group-has-[[data-tv-field]]/frame:text-pink')
+      expect(strap).not.toContain('bg-gold')
+    }
+    // Any other game on the stage keeps the gold tab of what is on air, gold on ink over its winner's colour.
+    for (const search of ['fixture=quiz-question', 'fixture=pong-final']) {
+      const strap = strapOf(await html(search))
+      expect(strap).not.toContain('class="stripes')
+      expect(strap).toContain('bg-gold')
+      expect(strap).toContain('group-has-[[data-tv-field]]/frame:text-gold')
     }
   })
 

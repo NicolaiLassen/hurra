@@ -26,7 +26,7 @@ Only Hurra's colours exist: the theme resets Tailwind's stock palette, so
 | --- | --- |
 | `gold` | What is on air, the leader or winner, and the one next step on a screen (the default Button). Never decoration, never a quiz key. |
 | `gold-rim` | Pressed gold. Never text. |
-| `pink` | The hunt (Last one standing): its tab, the word Out and the stripe across a knocked-out guest's token, the scan action. |
+| `pink` | The hunt (Last one standing): its tab, the word Out and the stripe across a knocked-out guest's token, the scan action. The core never names the game: a game asks for it with `GameModule.accent: 'hunt'`, and every tab the frame draws for it (the news strap, the programme strap, a phone's tab) turns pink with the stripes. |
 | `danger` | Destructive host actions only. |
 | `key-a` to `key-d` | The quiz key: A coral, B pink, C teal, D violet. Always with the letter and in its fixed place. Pink and teal sit on a diagonal, because people with deuteranopia see them as almost the same colour. |
 | `guest-coral`, `guest-teal`, `guest-violet`, `guest-sky`, `guest-lime`, `guest-paper` | Identity only: a guest's token, their own phone, the winner's field. |
@@ -218,8 +218,8 @@ inside the 5 percent safe area (`px-[5vw] py-[5vh]`), so a TV that crops its
 edges never cuts anything off. Games play inside it and get it for free.
 
 - **The programme strap** (top left,
-  [Header.tsx](../src/components/tv/Header.tsx)): a tilted gold tab with one
-  short word for what is on (the stage game's title, Next, Standings, The
+  [Header.tsx](../src/components/tv/Header.tsx)): a tilted gold tab (the
+  hunt's is pink with the stripes) with one short word for what is on (the stage game's title, Next, Standings, The
   end), then a paper strap with where it is. While a game holds the stage the
   strap carries the game's own words, its `TvStatus` `strap` variant
   ("Question 3 of 10"); a game without them gets "Running since 21:40", or
@@ -260,7 +260,10 @@ edges never cuts anything off. Games play inside it and get it for free.
   a strap across the whole top row for 8 seconds, over the programme strap
   and the bug, so it never covers the stage (a quiz's answered count
   included) or the band. Its tab is the game's title, pink with the stripes
-  for the hunt's news and gold for anything else on air. News from a game in
+  for any news from the hunt and gold for anything else on air. A game's
+  own news never covers its final screen, which shows the result itself:
+  there it only plays its sound (`newsStage` in scene.ts). Over a winner's
+  colour the strap stands on that colour, not the ground. News from a game in
   the background is the band's event line (the ticker), with its time.
   Nothing crawls, there is no "Breaking" label and no red, and an event line
   changes only when something happens. The TV says a game's news without its

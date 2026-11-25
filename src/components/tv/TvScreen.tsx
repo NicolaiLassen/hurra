@@ -15,7 +15,7 @@ import { useEffectsVolume } from '@/components/tv/useEffectsVolume'
 import { useGains } from '@/components/tv/useGains'
 import { useNews } from '@/components/tv/useNews'
 import { useTitleCard } from '@/components/tv/useTitleCard'
-import { getGameModule } from '@/games/registry'
+import { accentOf, getGameModule } from '@/games/registry'
 import { withRanks } from '@/lib/format'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
@@ -100,6 +100,7 @@ function Screen({
   const ticker = news.ticker
   const titleCard = useTitleCard(shown, session, now)
   const titleOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.title
+  const gameTypeOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.game_type
 
   // The band has the games in the background. Beside the podium, in the room
   // the board leaves: the game on the stage without a screen of its own, and
@@ -139,7 +140,7 @@ function Screen({
         </>
       )}
       <TitleCard game={titleCard} />
-      <Banner item={banner} source={titleOf(banner?.game_id)} />
+      <Banner item={banner} source={titleOf(banner?.game_id)} hunt={accentOf(gameTypeOf(banner?.game_id)) === 'hunt'} />
       <Corner live={connected && pings === 'ok'} hostPreview={hostPreview} />
     </main>
   )

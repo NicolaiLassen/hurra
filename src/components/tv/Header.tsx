@@ -1,16 +1,18 @@
 import Logo from '@/components/Logo'
 import { clockTime } from '@/components/tv/clock'
-import { Tab } from '@/components/tv/onAir'
+import { Stripes, Tab } from '@/components/tv/onAir'
 import type { SceneLine } from '@/components/tv/scene'
 import { GameStatus } from '@/components/tv/StatusCard'
+import { accentOf } from '@/games/registry'
 import type { SessionGame } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 /**
  * The top of the TV's frame (docs/identity.md, The TV's frame): at the left
- * the programme strap, a tilted gold tab with one word for what is on and a
- * paper strap saying where it is ("Question 3 of 10", "Quiz then Who is
- * fused?"); at the right the bug, the party's name, the time of night and the
- * logo. Big news takes this row's whole width for a moment (Banner).
+ * the programme strap, a tilted gold tab (the hunt's is pink) with one word
+ * for what is on and a paper strap saying where it is ("Question 3 of 10",
+ * "Quiz then Who is fused?"); at the right the bug, the party's name, the
+ * time of night and the logo. Big news takes this row's whole width for a moment (Banner).
  * Over a winner's colour field (WinnerMoment's `data-tv-field`, found through
  * the frame's `group/frame`) the tab stands on ink and the bug's words turn
  * ink, so both read on any guest colour.
@@ -24,11 +26,24 @@ export default function Header({ line, name, now }: { line: SceneLine; name: str
   )
 }
 
-/** The tab and the paper strap. The strap's words end in an ellipsis when they run out of room. */
+/**
+ * The tab and the paper strap. The strap's words end in an ellipsis when they
+ * run out of room. The hunt's tab (GameModule.accent) is pink with the
+ * popper's stripes, its words pink on ink over its winner's colour.
+ */
 function Strap({ line }: { line: SceneLine }) {
+  const hunt = accentOf(line.game?.game_type) === 'hunt'
   return (
     <div data-frame="strap" className="flex min-w-0 items-center">
-      <Tab size="strap" className="max-w-[36rem] shrink-0 group-has-[[data-tv-field]]/frame:bg-ink group-has-[[data-tv-field]]/frame:text-gold">
+      {hunt && <Stripes size="strap" />}
+      <Tab
+        size="strap"
+        tone={hunt ? 'pink' : 'gold'}
+        className={cn(
+          'max-w-[36rem] shrink-0 group-has-[[data-tv-field]]/frame:bg-ink',
+          hunt ? 'group-has-[[data-tv-field]]/frame:text-pink' : 'group-has-[[data-tv-field]]/frame:text-gold',
+        )}
+      >
         {line.tab}
       </Tab>
       <p className="-ml-1 flex h-14 min-w-0 items-center bg-paper px-6 text-tv-body text-ink short:h-12 short:px-5 short:text-tv-tab">

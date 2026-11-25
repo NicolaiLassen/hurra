@@ -21,7 +21,7 @@ import QueryGate from '@/components/QueryGate'
 import SoundToggle from '@/components/SoundToggle'
 import Standings from '@/components/Standings'
 import { Button } from '@/components/ui/button'
-import { getGameModule, knockedOutIds } from '@/games/registry'
+import { accentOf, getGameModule, knockedOutIds } from '@/games/registry'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
 import { PHONE_SOUNDS } from '@/lib/sound'
@@ -102,8 +102,9 @@ function Home({
   const scene = tvScene(snapshot, now)
   const stageId = scene.kind === 'live' ? scene.game.id : null
   // The game the TV shows, live or its final screen: its tab is gold, the colour of what is on air.
+  // The hunt's tab is always its pink (GameModule.accent), as its own section draws it.
   const airId = scene.kind === 'live' || scene.kind === 'final' ? scene.game.id : null
-  const toneOf = (game: SessionGame): TabTone => (game.id === airId ? 'air' : 'plain')
+  const toneOf = (game: SessionGame): TabTone => (accentOf(game.game_type) === 'hunt' ? 'hunt' : game.id === airId ? 'air' : 'plain')
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
   const liveMain = main.kind === 'game' ? main.game : null

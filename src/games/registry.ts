@@ -11,6 +11,9 @@ export const gameModules: GameModule[] = [inPerson, elimination, quiz, fusion]
 
 export const getGameModule = (type: string) => gameModules.find((m) => m.logic.type === type)
 
+/** A game's colour on air (GameModule.accent): 'hunt' for the hunt's pink, else undefined. */
+export const accentOf = (gameType: string | null | undefined) => (gameType ? getGameModule(gameType)?.accent : undefined)
+
 /**
  * Loads every game's TV screens now (lazyScreen), for the TV as it opens: it
  * runs all evening, and a deploy meanwhile removes the files its app knows.
