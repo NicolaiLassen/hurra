@@ -499,17 +499,31 @@ its words in [guestListWords.ts](../src/components/host/guestListWords.ts).
 - Title **"Guest list"**, and at its right the `secondary` **"Add guests"**
   with `UserPlusIcon` (not on an archived party).
 - The line under the title:
-  - an empty list: **"Add the guests you invited. When they join, they tap
+  - while the host has listed nobody (an empty list, or only guests who typed
+    their names): **"Add the guests you invited. When they join, they tap
     their name instead of typing it, and you can name them in a game's
-    settings before they arrive."**
+    settings before they arrive."** A listed name is one still expected, or
+    taken later than its row was made (`wasListed` in
+    [src/lib/guestList.ts](../src/lib/guestList.ts)); a typed join's row is
+    made and joined at the same moment;
   - otherwise **"12 of 30 here. 18 still expected."**;
-  - nobody expected: **"Everyone on the list is here."**
+  - nobody expected, once the host listed names: **"Everyone on the list is
+    here."**
 - When guests are expected: from 9 of them a search, **"Find a name on the
   list"** (no match: **"Nobody called “Ulr” on the list."**); the heading
   **"Still expected (18)"**; a row per guest, sorted the Danish way, with the
   28 px token and the name in bold, and a menu (**"More actions for Zelda"**):
   **"Rename…"** and, after a separator, **"Remove from the list…"**
   (destructive).
+- Under the rows, from 2 expected and not on an archived party, the ghost
+  **"Remove everyone still expected…"** (`UsersThreeIcon`): a paste that went
+  wrong is undone in one step. Its confirm: **"Remove everyone still
+  expected?"**, **"The 18 names nobody has taken yet leave the guest list, and
+  game settings that name them lose those picks. Guests who joined stay."**,
+  the destructive **"Remove 18 names"**; toast **"Removed 18 names from the
+  list"**. One delete of the party's rows with `joined_at` null
+  (`removeExpectedGuests`), so a guest who joins meanwhile stays; each row is
+  logged as `guest.removed`.
 - Joined guests are not repeated here: they are in Players.
 - The card shows only where the database keeps a guest list (the host's
   snapshot has `guests`), so the new app on an older database shows none.
@@ -519,23 +533,43 @@ its words in [guestListWords.ts](../src/components/host/guestListWords.ts).
 [src/components/host/AddGuestsDialog.tsx](../src/components/host/AddGuestsDialog.tsx).
 A dialog: **"Add guests"**, **"One name per line. Paste your whole list, or
 add a few at a time."**, the field **"Names"** (10 rows, placeholder Ana, Bo,
-Mads Holm), and under it, live: **"3 names"**, **"3 names, 1 repeated"**, or
-**"Over 100 names: add the rest after these"**. Buttons: **"Cancel"** and the
-gold **"Add 3 guests"** ("Add 1 guest"; repeats are not counted; disabled with
-no names). Cmd or Ctrl with Enter adds too; Enter starts a new line.
+Mads Holm), and under it, live: **"3 names"**, **"3 names. On more than one
+line: Mads. Two people? Add a last name or an initial."**, or **"Over 100
+names: add the rest after these"**; then the names exactly as they will be
+stored, numbered, in an overlay well (at most 9 rows tall, then it scrolls),
+a repeated one marked **"repeated"**. Buttons: **"Cancel"** and the gold
+**"Add 3 guests"** ("Add 1 guest"; repeats are not counted; disabled with no
+names). Cmd or Ctrl with Enter adds too; Enter starts a new line.
+
+What a pasted line becomes (`namesFromText` and `nameInLine` in
+[src/lib/guestList.ts](../src/lib/guestList.ts)): a list mark (`-`, `*`, `•`,
+`·`, `1.`, `1)`) goes; a Markdown table row gives its first cell, and the
+table's header row (the row right above its `|---|` separator) and the
+separator go; a row copied from a rendered table or a sheet (cells split by
+tabs) gives its first column; a note in brackets at the end goes ("Ana Holm
+(cousin)" is Ana Holm); a Markdown heading (`# Guests`) and a first line that
+is only a header word (Name, Names, Navn, Guests, Gæster, Who, Hvem, a colon
+after it aside) are not names. So the owner's planning table pasted as it is,
+or copied from a viewer, gives one clean name per guest.
 
 On the answer:
 
 - Some added: toast **"Added 12 guests"** (or **"Added Zelda"**), and when
-  some were left out: **"Already on the list: Ana and Bo."** and/or **"Over
-  40 characters: 1 name."** Names left out read as the list has them (a
-  pasted "bo" reads Bo).
+  some were left out: **"Already on the list: Ana and Bo."**, **"Mads was on
+  more than one line: added once."** and/or **"Over 40 characters: 1 name."**
+  Names read as the list has them (a pasted "bo" reads Bo). A repeat of a
+  name that was already on the list is only "already on the list".
 - None added, all already there: **"Everyone you added is already on the
   list"**.
-- Names over 40 characters stay in the field, alone, with **"This name is over
-  40 characters. Shorten it and add it again."** (or the plural). Names past the
-  first 100 stay too, with **"These are the names after the first 100. Add
-  them now."** Otherwise the dialog closes.
+- What stays in the field, each kind with its line above the field (bold
+  paper): a name this Add listed that was on more than one line, as the list
+  has it, with **"Mads was on more than one line, so the list has one Mads. If
+  they are two people, add a last name or an initial to the one here and add
+  it again. If not, you're done."**; names over 40 characters, with **"This
+  name is over 40 characters. Shorten it and add it again."** (or the
+  plural); names past the first 100, with **"These are the names after the
+  first 100. Add them now."** Otherwise the dialog closes. Editing the field
+  clears those lines.
 - Refusals under the field: **"Add at most 100 names at a time."**, the
   database's `list_full` words, **"This party is over."**
 
@@ -554,10 +588,17 @@ the row only while nobody has taken it; a guest who joined a moment before
 stays, with **"That name isn't waiting on the list any more. If they just
 joined, they're in Players."** Logged as `guest.removed`.
 
-### 7.5 Free the name (Players)
+### 7.5 Free the name (Players and the award page)
 
 Each player's menu gains **"Free the name…"** (`ArrowUUpLeftIcon`) after
-"Move to a new phone…". The confirm:
+"Move to a new phone…", and the award page (where Scan player lands at the
+door) gains a section under New phone?: **"Wrong name?"**, **"If this phone
+took Ana by mistake, free the name. It goes back on the guest list, and the
+phone asks Who are you? again."** and the `secondary` **"Free the name"**,
+which opens the same confirm and, once the name is free, goes back to the
+control room. Both use
+[src/components/host/FreeNameConfirm.tsx](../src/components/host/FreeNameConfirm.tsx).
+The confirm:
 
 - **"Free the name Ana?"**
 - **"Ana goes back on the guest list as still expected, and the phone that
@@ -567,8 +608,28 @@ Each player's menu gains **"Free the name…"** (`ArrowUUpLeftIcon`) after
 - The gold **"Free the name"**: not destructive, since the guest can take the
   name again; Remove stays the destructive one.
 - Toast **"Ana is free again"**.
+- For a name the guest typed (never listed: joined the moment its row was
+  made), the first line says **"Mads H goes on the guest list as still
+  expected, ..."**, then **"Another spelling of a name on the list? Free it
+  and take Mads H off the list."**, and a `secondary` **"Free and take off the
+  list"** beside the gold button: it frees the name, then removes it from the
+  list (`removeGuest`), so the stray spelling never shows on arriving phones.
+  Toast **"Mads H is free and off the list"**.
 
-### 7.6 Nothing else changes in the room
+### 7.6 Remove (Players)
+
+Every joined guest is also their place on the guest list, so Players' Remove
+takes them off the list and out of the settings that name them. Its confirm
+(`removePlayerDescription`) says so: **"Remove Ana?"**, **"Their points go with
+them, and the games running now carry on without them. Ana also leaves the
+guest list, and game settings that name Ana lose that pick. Took the wrong
+name? Free the name instead: it stays on the list. On a new phone? Move them
+instead: their points stay."** The "Took the wrong name?" sentence and a
+`secondary` **"Free the name instead"** (which opens 7.5) appear only for a
+name that was on the list before this guest took it. On a database without
+the guest list the words are the ones from before.
+
+### 7.7 Nothing else changes in the room
 
 The header's count, Players (n), the award page, the move dialog and the recap
 count and list joined guests, as before.
@@ -598,10 +659,12 @@ count and list joined guests, as before.
 
 | What happened | What the host does |
 | --- | --- |
-| Someone tapped the wrong name | Free the name on it. Their phone goes back to Who are you?. |
-| Someone typed another spelling of a listed name (Ulle for Ulrik) | Free the name on Ulle (the phone goes back to Who are you?, where they tap Ulrik), then Remove from the list on Ulle. |
+| Someone tapped the wrong name | Free the name on it (Players' menu, or Scan player and the award page's Wrong name?). Their phone goes back to Who are you?. |
+| A guest says their name is taken | The same: Free the name on it. The guest's phone already says to ask the host ("If someone took yours, ask the host to free it."). |
+| Someone typed another spelling of a listed name (Ulle for Ulrik) | Free the name on Ulle and choose "Free and take off the list" (the phone goes back to Who are you?, where they tap Ulrik). |
+| A paste added rubbish | Remove everyone still expected, then paste again. |
 | A guest on the list isn't coming | Remove from the list, or leave the name: a guest who never joins appears nowhere. |
-| Someone left the party | Remove, as before. |
+| Someone left the party | Remove, as before. It also takes them off the guest list and out of settings that name them; the confirm says so and offers Free the name for a listed name. |
 
 **Remove an expected guest:** the row is deleted, `guest.removed`, a stage
 ping. Settings that named the id now name nobody (fusion's editor shows
@@ -846,9 +909,16 @@ reads `freed: true`, and the TV is back to the guests it had.
    name, as they could type any name. Closing joining and Free the name are the
    host's tools.
 7. **Two guests with the same first name** must be listed apart ("Ana K.",
-   "Ana M."): the paste reports the second as already on the list.
+   "Ana M."): a paste with the same name on two lines adds it once, says so,
+   and keeps the second in the field to be told apart (7.2).
 8. **A guest who taps "I'm not on the list" with another spelling** joins as
-   someone new and leaves the listed name expected; the host fixes it in two
-   steps (8). Settings that named the listed id still point at it.
+   someone new and leaves the listed name expected; the host fixes it with
+   Free and take off the list (7.5). Settings that named the listed id still
+   point at it.
 9. **A long list in the room:** with many guests still expected, the Guest
    list card makes the right column long on a laptop; the search finds a name.
+10. **A name someone took that belongs to another guest** stays taken until
+   the host frees it. The real guest's phone says why the name is missing and
+   to ask the host; a typed name gets the hint for both fixes (6.4). The
+   freed note on the taker's phone says the name went back to the list, also
+   after Free and take off the list, where it did not.

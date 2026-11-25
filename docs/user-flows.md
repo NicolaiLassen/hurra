@@ -270,10 +270,14 @@ flowchart TD
   PLR["Player row: rank, avatar, name, badges, points"]:::screen -- "name, or menu: Give points" --> AW["/p/:code Award points"]:::screen
   PLR -- "menu: Rename" --> PLR
   PLR -- "menu: Move to a new phone" --> MOVE["A 6-character code with its time left,<br/>the join link as a QR"]:::closed
-  PLR -- "menu: Remove, after a confirm" --> REMV["Player removed, their points with them<br/>live games carry on without them"]:::closed
+  PLR -- "menu: Remove, after a confirm" --> REMV["Player removed, their points with them<br/>off the guest list too; live games carry on without them"]:::closed
+  REMV -. "a listed name: Free the name instead" .-> FREE
   PLR -- "menu: Free the name, after a confirm" --> FREE["Back on the guest list as still expected,<br/>the phone asks Who are you? again, its points go"]:::closed
-  GL["Guest list: 12 of 30 here. 18 still expected.<br/>Still expected, with a search from 9"]:::screen -- "Add guests" --> ADDG["One name per line, pasted or typed<br/>Added 12 guests, and what was left out"]:::closed
-  ADDG -- "a name over 40 characters stays in the field" --> ADDG
+  AW -- "Wrong name? Free the name" --> FREE
+  FREE -- "a typed name: Free and take off the list" --> GLR
+  GL["Guest list: 12 of 30 here. 18 still expected.<br/>Still expected, with a search from 9"]:::screen -- "Add guests" --> ADDG["One name per line, pasted or typed, a table too<br/>the names as they will be stored, then Added 12 guests"]:::closed
+  ADDG -- "a name over 40 characters, or on two lines, stays in the field" --> ADDG
+  GL -- "Remove everyone still expected, after a confirm" --> GLR
   GL -- "menu: Rename" --> GL
   GL -- "menu: Remove from the list, after a confirm" --> GLR["The name leaves the list<br/>settings that named it lose that pick"]:::closed
   FREE --> GL
@@ -284,9 +288,11 @@ Before the party the host adds every guest's name; a guest who joins taps
 theirs under Who are you?, and game settings, such as fusion's "Who is in
 it?", can name guests who haven't joined yet, marked "(not here yet)". The
 card lists only the guests still expected: joined guests are in Players. Free
-the name is for a guest who tapped the wrong name; for another spelling (Ulle
-for Ulrik), free Ulle, then remove Ulle from the list. A name on the list that
-never joins appears nowhere else. The words of each screen are in
+the name is for a guest who tapped the wrong name, from Players' menu or the
+award page; for another spelling (Ulle for Ulrik), Free and take off the list
+on Ulle. Remove also takes a guest off the list, and its confirm offers Free
+the name for a listed name. Remove everyone still expected undoes a paste that
+went wrong. A name on the list that never joins appears nowhere else. The words of each screen are in
 [guest-list.md](guest-list.md), section 7.
 
 Each live game has its own card, so its controls sit with its title and its End

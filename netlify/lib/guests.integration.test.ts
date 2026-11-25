@@ -701,6 +701,27 @@ describe('exits and the list in the log', () => {
     expect(log.map((row) => [row.kind, row.data.name])).toEqual([['guest.removed', 'Zelda']])
   })
 
+  it('Remove everyone still expected deletes every name nobody took in that party only; guests and joined rows stay', async () => {
+    // removeExpectedGuests in src/lib/queries.ts.
+    const removeExpected = (person: Person, party: Party) =>
+      person.client.from('players').delete().eq('session_id', party.id).is('joined_at', null).select('id')
+    const { party, ids } = await listedParty('Remove everyone expected', ['| Name | Note |', '|---|---|', 'Zelda', 'Ulrik'])
+    const other = await listedParty('Another party', ['Quentin'])
+    const ana = await world.guest(party, 'Ana')
+    const ulrik = await world.user()
+    expect(outcome(await claim(ulrik, party, 'Ulrik'))).toBe('ok')
+    // A guest deletes nothing (the delete policy is the host's).
+    expect((await removeExpected(ana, party)).data).toEqual([])
+    const removed = await removeExpected(host, party)
+    expect(removed.error).toBeNull()
+    expect(removed.data!.map((r) => r.id).sort()).toEqual([ids['| Name | Note |'], ids['|---|---|'], ids.Zelda].sort())
+    expect((await playerRow(ids.Ulrik)).user_id).toBe(ulrik.userId)
+    expect((await playerRow(ana.playerId)).joined_at).not.toBeNull()
+    expect(await playerRow(other.ids.Quentin)).toBeDefined()
+    const log = await logOf(party, ['guest.removed'])
+    expect(log.map((row) => row.data.name).sort()).toEqual(['Zelda', '|---|---|', '| Name | Note |'].sort())
+  })
+
   it("a move code the host issued for a guest still expected joins the phone that uses it", async () => {
     const { party, ids } = await listedParty('Move code on the list', ['Ulrik'])
     const { data: code, error } = await host.client.rpc('host_issue_transfer', { p_player_id: ids.Ulrik })

@@ -14,6 +14,7 @@ import {
   loadMembership,
   OnListError,
   publishRecap,
+  removeExpectedGuests,
   removeGuest,
   removePlayer,
   renamePlayer,
@@ -308,6 +309,18 @@ describe('the host’s guest list', () => {
     const error = (await removeGuest(PLAYER).catch((e: unknown) => e)) as GameCallError
     expect(error.code).toBe('not_found')
     expect(error.message).toContain("isn't waiting on the list any more")
+  })
+
+  it('removeExpectedGuests deletes every name in the party nobody has taken, and says how many', async () => {
+    db.state.respond = () => ok([{ id: 'a' }, { id: 'b' }])
+    await expect(removeExpectedGuests(SESSION)).resolves.toBe(2)
+    const call = db.state.calls[0]
+    expect(call.table).toBe('players')
+    expect(op(call, 'delete')).toEqual([])
+    expect(op(call, 'eq')).toEqual(['session_id', SESSION])
+    expect(op(call, 'is')).toEqual(['joined_at', null])
+    db.state.respond = () => ok([])
+    await expect(removeExpectedGuests(SESSION)).resolves.toBe(0)
   })
 })
 

@@ -1,4 +1,4 @@
-import { DotsThreeIcon, MagnifyingGlassIcon, PencilSimpleIcon, UserMinusIcon, UserPlusIcon } from '@phosphor-icons/react'
+import { DotsThreeIcon, MagnifyingGlassIcon, PencilSimpleIcon, UserMinusIcon, UserPlusIcon, UsersThreeIcon } from '@phosphor-icons/react'
 import { useMemo, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import Confirm from '@/components/Confirm'
@@ -18,8 +18,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { listCounts, matchNames, sortNames } from '@/lib/guestList'
-import { removeGuest, renamePlayer } from '@/lib/queries'
+import { removeExpectedGuests, removeGuest, renamePlayer } from '@/lib/queries'
 import type { ListedGuest, Snapshot } from '@/lib/types'
+import { toast } from '@/lib/toast'
 import { useLive } from '@/lib/useLive'
 
 /** From this many expected guests on, the list gets a search field. */
@@ -28,9 +29,10 @@ const SEARCH_FROM = 9
 /**
  * The guest list (docs/guest-list.md, 7.1): the names the host added before
  * the party, how many have joined, and the guests still expected, each with
- * Rename and Remove from the list. Joined guests are not repeated here: they
- * are in Players. Shown only where the database keeps a guest list (the
- * host's snapshot has `guests`).
+ * Rename and Remove from the list, and Remove everyone still expected under
+ * the list (a paste that went wrong, undone in one step). Joined guests are
+ * not repeated here: they are in Players. Shown only where the database keeps
+ * a guest list (the host's snapshot has `guests`).
  */
 export default function GuestListPanel({ snapshot, className }: { snapshot: Snapshot; className?: string }) {
   const session = snapshot.session!
@@ -40,6 +42,7 @@ export default function GuestListPanel({ snapshot, className }: { snapshot: Snap
   const [search, setSearch] = useState('')
   const renaming = useDialogTarget<ListedGuest>()
   const removing = useDialogTarget<ListedGuest>()
+  const [clearing, setClearing] = useState(false)
 
   const expected = useMemo(() => sortNames((snapshot.guests ?? []).filter((g) => g.joined_at === null)), [snapshot.guests])
   if (!snapshot.guests) return null
@@ -104,6 +107,12 @@ export default function GuestListPanel({ snapshot, className }: { snapshot: Snap
               </li>
             ))}
           </ul>
+          {!over && expected.length > 1 && (
+            <Button variant="ghost" className="justify-self-start text-paper-2" onClick={() => setClearing(true)}>
+              <UsersThreeIcon />
+              Remove everyone still expected…
+            </Button>
+          )}
         </CardContent>
       )}
 
@@ -121,6 +130,23 @@ export default function GuestListPanel({ snapshot, className }: { snapshot: Snap
           await renamePlayer(renaming.target.id, name)
           refresh()
         }}
+      />
+
+      <Confirm
+        open={clearing}
+        onOpenChange={setClearing}
+        title="Remove everyone still expected?"
+        description={
+          `The ${expected.length} names nobody has taken yet leave the guest list, and game settings that name them ` +
+          'lose those picks. Guests who joined stay.'
+        }
+        confirmLabel={`Remove ${expected.length} names`}
+        onConfirm={() =>
+          void call(async () => {
+            const removed = await removeExpectedGuests(session.id)
+            toast.success(`Removed ${removed} ${removed === 1 ? 'name' : 'names'} from the list`)
+          })
+        }
       />
 
       <Confirm

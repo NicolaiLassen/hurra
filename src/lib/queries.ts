@@ -513,6 +513,16 @@ export async function removeGuest(playerId: string): Promise<void> {
 }
 
 /**
+ * Removes every name nobody has taken from the party's guest list, in one
+ * step (a paste that went wrong). Never a guest who joined. Resolves with how
+ * many names went.
+ */
+export async function removeExpectedGuests(sessionId: string): Promise<number> {
+  const result = await supabase.from('players').delete().eq('session_id', sessionId).is('joined_at', null).select('id')
+  return unwrap<unknown[] | null>(result)?.length ?? 0
+}
+
+/**
  * A 6-character code that moves this player to a new phone, valid 5 minutes.
  * `expiresAt` is by this device's clock (Date.now()), taken before the call,
  * so the time left shown is never longer than the real one.

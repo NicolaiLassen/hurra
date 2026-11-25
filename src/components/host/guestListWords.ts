@@ -1,12 +1,17 @@
 // The host room's words for the guest list (docs/guest-list.md, 7): the card's
-// line, what Add guests did, and the Free the name confirm. Pure, so the unit
-// tests pin them.
+// line, what Add guests did, and the Free the name and Remove confirms. Pure,
+// so the unit tests pin them.
 import { foldName } from '@/lib/format'
+import { MAX_NAMES_PER_ADD } from '@/lib/guestList'
 import type { AddedGuests } from '@/lib/queries'
 
-/** The Guest list card's line under its title, from listCounts. */
-export function guestListLine({ here, expected, total }: { here: number; expected: number; total: number }): string {
-  if (total === 0) {
+/**
+ * The Guest list card's line under its title, from listCounts. The invitation
+ * while the host has listed nobody yet, even when guests joined by typing
+ * their names.
+ */
+export function guestListLine({ here, expected, total, listed }: { here: number; expected: number; total: number; listed: number }): string {
+  if (total === 0 || listed === 0) {
     return (
       'Add the guests you invited. When they join, they tap their name instead of typing it, ' +
       "and you can name them in a game's settings before they arrive."
@@ -33,8 +38,14 @@ export type AddSummary = {
   description?: string
   /** Something was added (a success toast), or nothing was (a plain note). */
   added: boolean
-  /** Names over 40 characters, as given: the dialog stays open with only these in the field. */
+  /** Names over 40 characters, as given: the dialog stays open with these in the field. */
   tooLong: string[]
+  /**
+   * Each name this Add put on the list that was on more than one line of the
+   * paste, once, as the list has it: the dialog stays open with these in the
+   * field, in case they are two people.
+   */
+  repeated: string[]
 }
 
 /**
@@ -45,31 +56,95 @@ export type AddSummary = {
 export function addSummary({ added, skipped }: AddedGuests, listed: readonly string[] = []): AddSummary {
   const known = [...added.map((g) => g.name), ...listed]
   const asListed = (name: string) => known.find((k) => foldName(k) === foldName(name)) ?? name.trim()
-  const already = [...new Set(skipped.filter((s) => s.reason !== 'too_long').map((s) => asListed(s.name)))]
+  const already = [...new Set(skipped.filter((s) => s.reason === 'taken').map((s) => asListed(s.name)))]
   const tooLong = skipped.filter((s) => s.reason === 'too_long').map((s) => s.name)
+  // A repeat of a name this Add put on the list (a repeat of one already there is just "already on the list").
+  const addedKeys = new Set(added.map((g) => foldName(g.name)))
+  const repeatedByKey = new Map<string, string>()
+  for (const s of skipped) {
+    const key = foldName(s.name)
+    if (s.reason === 'repeat' && addedKeys.has(key) && !repeatedByKey.has(key)) repeatedByKey.set(key, asListed(s.name))
+  }
+  const repeated = [...repeatedByKey.values()]
+  const parts = [
+    already.length > 0 ? `Already on the list: ${someNames(already)}.` : null,
+    repeated.length > 0 ? `${someNames(repeated)} ${repeated.length === 1 ? 'was' : 'were'} on more than one line: added once.` : null,
+    tooLong.length > 0 ? `Over 40 characters: ${count(tooLong.length, 'name', 'names')}.` : null,
+  ].filter((part) => part !== null)
   if (added.length > 0) {
-    const parts = [
-      already.length > 0 ? `Already on the list: ${someNames(already)}.` : null,
-      tooLong.length > 0 ? `Over 40 characters: ${count(tooLong.length, 'name', 'names')}.` : null,
-    ].filter((part) => part !== null)
     return {
       title: added.length === 1 ? `Added ${added[0].name}` : `Added ${added.length} guests`,
       description: parts.length > 0 ? parts.join(' ') : undefined,
       added: true,
       tooLong,
+      repeated,
     }
   }
-  if (already.length > 0 && tooLong.length === 0) return { title: 'Everyone you added is already on the list', added: false, tooLong }
-  if (already.length > 0) return { title: `Already on the list: ${someNames(already)}`, added: false, tooLong }
-  return { title: null, added: false, tooLong }
+  if (already.length > 0 && tooLong.length === 0 && repeated.length === 0) {
+    return { title: 'Everyone you added is already on the list', added: false, tooLong, repeated }
+  }
+  if (already.length > 0) return { title: `Already on the list: ${someNames(already)}`, added: false, tooLong, repeated }
+  return { title: null, added: false, tooLong, repeated }
 }
 
-/** The Free the name confirm's words, built from what applies. */
-export function freeNameDescription({ name, points, joiningOpen }: { name: string; points: number; joiningOpen: boolean }): string {
+/** What the Add guests dialog says above the names it kept in the field: why each kind is still there. */
+export function keptNote({ tooLong, repeated, over }: { tooLong: number; repeated: string[]; over: number }): string[] {
   return [
-    `${name} goes back on the guest list as still expected, and the phone that has the name asks Who are you? again.`,
+    repeated.length === 1
+      ? `${repeated[0]} was on more than one line, so the list has one ${repeated[0]}. If they are two people, add a last ` +
+        "name or an initial to the one here and add it again. If not, you're done."
+      : null,
+    repeated.length > 1
+      ? `${someNames(repeated)} were each on more than one line, so the list has each of them once. If any are two ` +
+        "people, add a last name or an initial to the one here and add it again. If not, you're done."
+      : null,
+    tooLong === 1 ? 'This name is over 40 characters. Shorten it and add it again.' : null,
+    tooLong > 1 ? 'These are over 40 characters. Shorten them and add them again.' : null,
+    over > 0 ? `These are the names after the first ${MAX_NAMES_PER_ADD}. Add them now.` : null,
+  ].filter((part) => part !== null)
+}
+
+/**
+ * The Free the name confirm's words, built from what applies. `typed`: the
+ * guest typed this name (it was never on the list), so it goes on the list
+ * for the first time, and the confirm also offers to take it off (a spelling
+ * of a listed name, Mads H for Mads Holm).
+ */
+export function freeNameDescription({
+  name,
+  points,
+  joiningOpen,
+  typed = false,
+}: {
+  name: string
+  points: number
+  joiningOpen: boolean
+  typed?: boolean
+}): string {
+  return [
+    typed
+      ? `${name} goes on the guest list as still expected, and the phone that has the name asks Who are you? again.`
+      : `${name} goes back on the guest list as still expected, and the phone that has the name asks Who are you? again.`,
     points !== 0 ? `The ${count(points, 'point', 'points')} it earned as ${name} ${Math.abs(points) === 1 ? 'goes' : 'go'} with it.` : null,
+    typed ? `Another spelling of a name on the list? Free it and take ${name} off the list.` : null,
     joiningOpen ? null : 'Joining is closed: open it so they can pick their name.',
+  ]
+    .filter((part) => part !== null)
+    .join(' ')
+}
+
+/**
+ * Players' Remove confirm. Every joined guest is also their place on the
+ * guest list, so Remove takes them off it and out of game settings that name
+ * them. `listed`: the name was on the list before this guest took it, so a
+ * wrong name is fixed with Free the name, which keeps it on the list.
+ */
+export function removePlayerDescription({ name, listed, canFree }: { name: string; listed: boolean; canFree: boolean }): string {
+  return [
+    'Their points go with them, and the games running now carry on without them.',
+    canFree ? `${name} also leaves the guest list, and game settings that name ${name} lose that pick.` : null,
+    canFree && listed ? 'Took the wrong name? Free the name instead: it stays on the list.' : null,
+    'On a new phone? Move them instead: their points stay.',
   ]
     .filter((part) => part !== null)
     .join(' ')
