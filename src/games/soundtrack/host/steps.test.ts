@@ -36,8 +36,12 @@ describe('the gold step', () => {
     expect(nextStep(at({ phase: 'done', played: 8, revealed: 8 }))).toBeNull()
   })
 
-  it('crowns straight after the last reveal when the top 5 is not due, or never shown', () => {
-    expect(nextStep(at({ phase: 'reveal', played: 6, revealed: 6 }))).toMatchObject({ label: 'Crown Lydspor' })
+  it('always shows the top 5 after the last song played, then crowns; never when top 5s are off', () => {
+    expect(nextStep(at({ phase: 'reveal', played: 6, revealed: 6 }))).toMatchObject({ label: 'Show the top 5', action: { type: 'standings', after: 6 } })
+    expect(nextStep(at({ phase: 'reveal', played: 7, total: 8, revealed: 7 }))).toMatchObject({ label: 'Show the top 5', action: { type: 'standings', after: 7 } })
+    expect(nextStep(at({ phase: 'standings', played: 6, revealed: 6 }))).toMatchObject({ label: 'Crown Lydspor' })
+    expect(menuSteps(at({ phase: 'reveal', played: 6, revealed: 6 })).map((s) => s.label)).toContain('Skip the top 5: crown Lydspor')
+    expect(nextStep(at({ phase: 'reveal', played: 6, revealed: 5 }))).toMatchObject({ label: 'Reveal song 6' })
     expect(nextStep(at({ phase: 'reveal', played: 8, revealed: 8, standingsEvery: 0 }))).toMatchObject({ label: 'Crown Lydspor' })
     expect(topDue(at({ phase: 'reveal', revealed: 4, standingsEvery: 0 }))).toBe(false)
     expect(topDue(at({ phase: 'standings', revealed: 4 }))).toBe(false)

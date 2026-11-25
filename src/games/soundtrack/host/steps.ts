@@ -37,9 +37,16 @@ export type Step = {
   confirm?: { title: string; description: string; label: string }
 }
 
-/** The top 5 is due after this reveal: the settings' every n reveals, as the bot and the TV count them. */
-export const topDue = (where: Pick<Where, 'phase' | 'revealed' | 'standingsEvery'>) =>
-  where.phase === 'reveal' && where.standingsEvery > 0 && where.revealed > 0 && where.revealed % where.standingsEvery === 0
+/**
+ * The top 5 is due after this reveal: the settings' every n reveals, as the
+ * bot counts them, and always after the last song played, so the final top 5
+ * and the photos that had no song reach the TV however many songs ran.
+ */
+export const topDue = (where: Pick<Where, 'phase' | 'revealed' | 'played' | 'standingsEvery'>) =>
+  where.phase === 'reveal' &&
+  where.standingsEvery > 0 &&
+  where.revealed > 0 &&
+  (where.revealed % where.standingsEvery === 0 || where.revealed === where.played)
 
 /** "Song 7 won't play", "Songs 7 and 8 won't play", "Songs 6 to 8 won't play". */
 export function songsLeft(from: number, to: number, verb: string): string {

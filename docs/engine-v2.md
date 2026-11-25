@@ -3781,7 +3781,7 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   | `lock` | playing or last call, sent with every played key in `close` | reads every answer into `picks`, builds `review`, reveals every prompt |
   | `reveal { index }` | locked, reveal or top 5, in order | `revealed + 1`; records `song_revealed` |
   | `accept { index, part, key, accepted }` | a revealed song's close or wrong row, until the crown | sets that row's `accepted`; records `answer_accepted` or `answer_unaccepted` |
-  | `standings { after }` | reveal, `after` the songs revealed | the top 5 |
+  | `standings { after }` | reveal, `after` the songs revealed | the top 5: offered every `standingsEvery` reveals and always after the last song played, so its "These had no song" shows however many songs ran |
   | `crown` | lobby, locked, reveal or top 5 | the own averages, the payout, the winner |
   | `setInPhoto`, `sitOut` | before the crown | replace the list |
 
@@ -3858,7 +3858,8 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   one with a typo inside a word, one 3 letters off or a wrong one, pick
   photos and swap them; the scripted host plays the songs 3 s apart, calls
   the last call, reveals 3 s apart, accepts the first close title of each
-  reveal, shows the top 5 and crowns.
+  reveal, shows the top 5 when it is due and after the last reveal, and
+  crowns.
 
 ## 9. Testing plan
 

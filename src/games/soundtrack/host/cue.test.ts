@@ -82,7 +82,8 @@ describe('the cue card', () => {
 
   it('says what follows the last reveal', () => {
     expect(cue({ phase: 'reveal', played: 8, revealed: 8 }).text).toMatch(/Then pause Spotify and tap Show the top 5\.$/)
-    expect(cue({ phase: 'reveal', played: 6, revealed: 6 }).text).toMatch(/Then pause Spotify and tap Crown Lydspor\.$/)
+    expect(cue({ phase: 'reveal', played: 6, revealed: 6 }).text).toMatch(/Then pause Spotify and tap Show the top 5\.$/)
+    expect(cue({ phase: 'reveal', played: 8, revealed: 8, standingsEvery: 0 }).text).toMatch(/Then pause Spotify and tap Crown Lydspor\.$/)
     expect(line(cue({ phase: 'standings', played: 8, revealed: 8 }))).toBe("Lydspor's top 5 is on the TV. Pause Spotify. Tap Crown Lydspor.")
   })
 

@@ -153,7 +153,7 @@ export const bot: GameBot = {
           if (close) return { action: { type: 'accept', index: revealed - 1, part: 'title', key: close.key, accepted: true } }
         }
         if (sight.now - (state.lockedAt ?? 0) < STEP_MS * (revealed + 1)) return null
-        if (state.phase === 'reveal' && config.standingsEvery > 0 && revealed % config.standingsEvery === 0) {
+        if (state.phase === 'reveal' && config.standingsEvery > 0 && (revealed % config.standingsEvery === 0 || revealed === played)) {
           return { action: { type: 'standings', after: revealed } }
         }
         return revealed < played ? { action: { type: 'reveal', index: revealed } } : { action: { type: 'crown' } }
