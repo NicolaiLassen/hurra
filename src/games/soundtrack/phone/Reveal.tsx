@@ -1,4 +1,5 @@
 import { CheckIcon } from '@phosphor-icons/react'
+import { useState } from 'react'
 import { ordinal } from '@/components/phone/text'
 import { pointsPerSong } from '@/games/soundtrack/logic'
 import { letterOf, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
@@ -64,7 +65,7 @@ export function Reveal({
       </p>
 
       <div className="relative mt-3 h-[132px] overflow-hidden rounded-phone bg-overlay">
-        {photo && <PhotoImage src={mediaUrl(photo.path, 'thumb')} className="absolute inset-0 size-full" />}
+        {photo && <HeroPhoto thumb={mediaUrl(photo.path, 'thumb')} full={mediaUrl(photo.path, 'full')} />}
         {reveal.event >= 0 && <LetterChip index={reveal.event} size="hero" />}
         {reveal.caption && (
           <span className="absolute bottom-3 left-0 z-[2] h-8 max-w-[calc(100%-1rem)] truncate bg-paper pr-3.5 pl-3 text-[17px] leading-8 font-extrabold text-ink">
@@ -123,6 +124,33 @@ export function Reveal({
         ) : null}
       </p>
     </div>
+  )
+}
+
+/**
+ * The revealed song's photo across the phone: the thumbnail at once, then the
+ * full photo over it once it has loaded, so a real photo is sharp on a 3x
+ * screen. If the full one fails, the thumbnail stays.
+ */
+function HeroPhoto({ thumb, full }: { thumb: string; full: string }) {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  return (
+    <>
+      <PhotoImage src={thumb} className="absolute inset-0 size-full" />
+      {full !== '' && (
+        <img
+          src={full}
+          alt=""
+          decoding="async"
+          draggable={false}
+          onLoad={() => setLoaded(full)}
+          className={cn(
+            'absolute inset-0 size-full object-cover transition-opacity duration-300 motion-reduce:transition-none',
+            loaded === full ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      )}
+    </>
   )
 }
 
