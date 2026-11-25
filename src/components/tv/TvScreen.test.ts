@@ -90,6 +90,11 @@ describe('the TV scene for each fixture', () => {
     expect(band).toContain('Last one standing')
     expect(band).toContain('Who is fused?')
     expect(band.split('data-fit="band-line"').length - 1).toBe(2)
+    // Three games underneath: the oldest keeps its own line and the newer two share Also running, never a third line.
+    const between = await html('fixture=between')
+    const lines = between.slice(between.indexOf('data-frame="band"'), between.indexOf('</footer>'))
+    expect(lines.split('data-fit="band-line"').length - 1).toBe(2)
+    expect(lines).toContain('Also running')
     // The recap has no frame: no strap and no band.
     const recap = await html('fixture=recap')
     expect(recap).not.toContain('data-frame="strap"')
