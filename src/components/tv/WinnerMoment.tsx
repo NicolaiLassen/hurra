@@ -26,6 +26,8 @@ const WIDTH_SLACK = 0.97
 const TOKEN_MAX = 360
 /** A tilted square's bounding box against its side: cos 4 degrees plus sin 4 degrees. */
 const TILTED = 1.07
+/** A short podium step with the name over the points: two 33 px lines, the gap and the padding, px. */
+const STACKED_STEP = 84
 
 /** Each guest colour as a text class, spelled out so Tailwind finds it: the name on the inverted slate. */
 const GUEST_TEXT: Record<GuestColor, string> = {
@@ -253,7 +255,11 @@ export function NightSoFar({
   const compact = height > 0 && height - (tokens ? 92 : 0) < 150
   const least = compact ? 56 : 112
   const tallest = height > 0 ? Math.max(least, Math.min(216, height - (tokens ? 92 : 0))) : 216
-  const lowest = Math.max(least, Math.min(tallest - 32, Math.round(tallest * 0.55)))
+  let lowest = Math.max(least, Math.min(tallest - 32, Math.round(tallest * 0.55)))
+  // A short step stacks the name over the points, so a gain chip never squeezes the name out (720p, 768p):
+  // every step gets the room for two lines while the steps still differ in height.
+  if (compact) lowest = Math.max(lowest, Math.min(STACKED_STEP, tallest - 32))
+  const stacked = compact && lowest >= STACKED_STEP
   const steps = [tallest, Math.round((tallest + lowest) / 2), lowest]
   const podium = ranked.length > 0 && (height === 0 || height >= least)
   // Three steps in at most 60 percent of the width, between 176 and 296 px each.
@@ -299,20 +305,26 @@ export function NightSoFar({
                   <div
                     className={cn(
                       'relative flex w-full justify-between gap-3 rounded-t-chip bg-paper text-ink',
-                      compact ? 'items-center px-4 py-2' : 'items-start p-5 short:p-4',
+                      stacked ? 'items-center px-4 py-1.5' : compact ? 'items-center px-4 py-2' : 'items-start p-5 short:p-4',
                     )}
                     style={{ height: steps[Math.min(row.rank, 3) - 1] }}
                   >
-                    <div className={cn('flex min-w-0', compact ? 'items-center gap-2.5' : 'flex-col gap-1')}>
+                    <div className={cn('flex min-w-0', compact && !stacked ? 'items-center gap-2.5' : 'flex-col gap-1')}>
                       <p className="flex min-w-0 items-center gap-2.5">
                         {/* An ink edge, so a guest whose colour is paper still shows on the paper step. */}
-                        {!tokens && <Avatar name={row.name} playerId={row.player_id} className="size-10 ring-2 ring-ink" />}
-                        <span className="min-w-0 truncate tv-num text-tv-field">{row.name}</span>
+                        {!tokens && <Avatar name={row.name} playerId={row.player_id} className={cn('shrink-0 ring-2 ring-ink', stacked ? 'size-8' : 'size-10')} />}
+                        <span className={cn('min-w-0 truncate tv-num text-tv-field', stacked && 'leading-none')}>{row.name}</span>
                       </p>
                       <p className="flex shrink-0 items-center gap-2.5">
-                        <span className="tv-num text-tv-field">{row.points}</span>
+                        <span className={cn('tv-num text-tv-field', stacked && 'leading-none')}>{row.points}</span>
                         {gain > 0 && (
-                          <span className={cn('rounded-chip px-2 tv-num text-tv-floor', winners.includes(row.player_id) ? 'bg-gold' : 'bg-ink text-paper')}>
+                          <span
+                            className={cn(
+                              'rounded-chip px-2 tv-num text-tv-floor',
+                              stacked && 'leading-[1.1]',
+                              winners.includes(row.player_id) ? 'bg-gold' : 'bg-ink text-paper',
+                            )}
+                          >
                             +{gain}
                           </span>
                         )}
