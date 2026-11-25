@@ -86,7 +86,7 @@ const TABLE: Row[] = [
   { part: 'singer', accepted: ['Coldwave'], typed: 'Colwdave', expect: 'typo', why: 'A swap of two letters counts once: 1 of 8' },
   { part: 'singer', accepted: ['Coldwave'], typed: 'Coldwav', expect: 'typo', why: 'One letter missing of 8' },
   { part: 'singer', accepted: ['Coldwave'], typed: 'Coldwaev', expect: 'typo', why: 'A swap at the end' },
-  { part: 'singer', accepted: ['Coldwave'], typed: 'Coldplay', expect: 'wrong', why: '4 wrong letters of 8 is another band' },
+  { part: 'singer', accepted: ['Coldwave'], typed: 'Coldhorn', expect: 'wrong', why: '4 wrong letters of 8 is another band' },
   { part: 'singer', accepted: ['Paper Lanterns'], typed: 'Paper Lantrens', expect: 'typo', why: 'A swap: 1 of 13' },
   { part: 'singer', accepted: ['Paper Lanterns'], typed: 'Papr Lantern', expect: 'typo', why: '2 of 13' },
   { part: 'singer', accepted: ['Paper Lanterns'], typed: 'Papir Lanterner', expect: 'close:spelling', why: '3 wrong of 13: the host decides' },
@@ -122,7 +122,7 @@ describe('the example table', () => {
 
 describe('distance', () => {
   it('counts a swap of two neighbours once', () => {
-    expect(distance('coldplay', 'coldpaly')).toBe(1)
+    expect(distance('coldwave', 'coldwvae')).toBe(1)
   })
 
   it('is the optimal string alignment distance, not full Damerau', () => {
