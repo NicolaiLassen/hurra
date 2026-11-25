@@ -365,8 +365,10 @@ without importing it. The strap says where the round is ("Showing 3 of 12",
   uniform tiles that never tilt. Each tile has its label chip at
   `max(28px, min(11cqw, 50px))`, every chip on one wall in the same face
   (`wide`, or the condensed one for all where any label needs it). A revealed
-  tile carries a solid `ground` band across the picture's foot with the two
-  first names, one per line, at `max(28px, min(13cqw, 44px))`; a tile under
+  tile carries the two first names as two paper name chips at the picture's
+  foot, tilted like its label chip (one each way), at
+  `max(28px, min(13cqw, 44px))`, with the picture whole behind them (the
+  owner's choice over a solid band, 25 Nov); a tile under
   132 by 165 px carries the two tokens instead, since a name there would go
   under the floor (from 17 pictures at 720p; the party's 12 always show names).
 - **Gold** is the strap's tab, the countdown's last 5 seconds and the leader's

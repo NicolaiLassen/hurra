@@ -581,15 +581,22 @@ function NameBand({ reveal, players, mode, wipe }: { reveal: FusionReveal; playe
     <div
       aria-label={`${names[0]} and ${names[1]}`}
       className={cn(
-        'absolute inset-x-0 bottom-0 bg-ground px-[6cqw] py-[3.5cqw]',
+        'absolute inset-x-[5cqw] bottom-[5cqw] flex flex-col items-start gap-[2.5cqw]',
         wipe && 'animate-strap-in [animation-delay:500ms] motion-reduce:animate-none',
       )}
     >
       {mode === 'names' ? (
         names.map((name, i) => (
-          <p key={reveal.people[i]} className="truncate tv-num leading-[1.1] text-paper" style={{ fontSize: TILE_NAME_SIZE }}>
+          <span
+            key={reveal.people[i]}
+            className={cn(
+              'inline-block max-w-full truncate rounded-chip bg-paper px-[0.28em] py-[0.1em] tv-num leading-[1.1] text-ink',
+              i === 0 ? '-rotate-2' : 'rotate-1',
+            )}
+            style={{ fontSize: TILE_NAME_SIZE }}
+          >
             {firstName(name)}
-          </p>
+          </span>
         ))
       ) : (
         <div className="flex gap-[5cqw]">
