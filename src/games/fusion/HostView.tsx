@@ -263,27 +263,19 @@ function SecondsLeft({ endsAt, now }: { endsAt: number; now: number }) {
 
 /**
  * How many have locked in: a square pip per guest who may, filled in paper as
- * locks come in, and "6 of 12 have locked in". Exact here (the host's own
- * count), and counts only: never who.
+ * locks come in; the line under the steps says the count. Exact here (the
+ * host's own count), and counts only: never who.
  */
 function LockedPips({ count, total }: { count: number; total: number }) {
   const pips = Math.max(total, count)
   return (
-    <div className="flex items-center gap-3" role="img" aria-label={`${count} of ${pips} have locked in`}>
-      <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-        {Array.from({ length: pips }, (_, i) => (
-          <span
-            key={i}
-            className={cn('size-2.5 rounded-[2px] transition-colors duration-500', i < count ? 'bg-paper' : 'border-[1.5px] border-rule')}
-          />
-        ))}
-      </div>
-      <p className="shrink-0 text-sm whitespace-nowrap text-paper-2">
-        <span className="tv-num text-lg text-paper">
-          {count} of {pips}
-        </span>{' '}
-        have locked in
-      </p>
+    <div className="flex flex-wrap gap-1" role="img" aria-label={`${count} of ${pips} have locked in`}>
+      {Array.from({ length: pips }, (_, i) => (
+        <span
+          key={i}
+          className={cn('size-2.5 rounded-[2px] transition-colors duration-500', i < count ? 'bg-paper' : 'border-[1.5px] border-rule')}
+        />
+      ))}
     </div>
   )
 }
@@ -321,7 +313,13 @@ function PictureRow({
 
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
-      <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="h-15 w-12 shrink-0 rounded-chip" labelClassName="text-[13px]" />
+      <PictureArt
+        picture={picture}
+        mediaUrl={mediaUrl}
+        size="thumb"
+        className="h-15 w-12 shrink-0 rounded-chip bg-overlay"
+        labelClassName="text-[13px]"
+      />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2">
           <span className="truncate font-bold">{picture.label}</span>
