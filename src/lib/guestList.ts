@@ -18,6 +18,8 @@ export type PastedNames = {
   repeats: number
   /** How many names are past the first 100, left for another Add. */
   over: number
+  /** Those names, in order, for the field after the first 100 went in. */
+  rest: string[]
 }
 
 /** One name per line, as Add guests reads a paste. */
@@ -34,7 +36,7 @@ export function namesFromText(text: string): PastedNames {
     if (seen.has(key)) repeats++
     seen.add(key)
   }
-  return { names, repeats, over: all.length - names.length }
+  return { names, repeats, over: all.length - names.length, rest: all.slice(MAX_NAMES_PER_ADD) }
 }
 
 const collator = new Intl.Collator('da', { sensitivity: 'base' })

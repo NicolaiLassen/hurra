@@ -11,20 +11,23 @@ describe('namesFromText', () => {
       names: ['Ana', 'Bo', 'Cy', 'Dee', 'Eve', 'Fay', 'Gus', 'Mads Holm', '-Ina'],
       repeats: 0,
       over: 0,
+      rest: [],
     })
   })
 
   it('counts repeats by the folded name and keeps them for the database to skip', () => {
-    expect(namesFromText('Søren\nsoren\nANA\nana\nAna')).toEqual({ names: ['Søren', 'soren', 'ANA', 'ana', 'Ana'], repeats: 3, over: 0 })
+    expect(namesFromText('Søren\nsoren\nANA\nana\nAna')).toEqual({ names: ['Søren', 'soren', 'ANA', 'ana', 'Ana'], repeats: 3, over: 0, rest: [] })
   })
 
-  it('takes at most 100 names and says how many are left', () => {
+  it('takes at most 100 names and keeps the rest for another Add', () => {
     const lines = Array.from({ length: 130 }, (_, i) => `Guest ${i + 1}`).join('\n')
     const pasted = namesFromText(lines)
     expect(pasted.names).toHaveLength(100)
     expect(pasted.names.at(-1)).toBe('Guest 100')
     expect(pasted.over).toBe(30)
-    expect(namesFromText('')).toEqual({ names: [], repeats: 0, over: 0 })
+    expect(pasted.rest).toHaveLength(30)
+    expect([pasted.rest[0], pasted.rest.at(-1)]).toEqual(['Guest 101', 'Guest 130'])
+    expect(namesFromText('')).toEqual({ names: [], repeats: 0, over: 0, rest: [] })
   })
 })
 

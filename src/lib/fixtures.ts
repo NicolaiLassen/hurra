@@ -9,10 +9,11 @@
 // gets what row level security would give it: a phone (as Sofie) gets `me`
 // and its own targeted announcements, the TV and the host page get room-wide
 // ones only, and only the host page gets `states` (with the quiz's answers and
-// the fusion key) and `screens`.
+// the fusion key), `screens` and `guests` (the guest list: the twelve players
+// as joined and four guests still expected, docs/guest-list.md).
 import type { Screen } from './live'
 import type { RecapDoc } from './recap'
-import type { AnswerPayload, FeedItem, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
+import type { AnswerPayload, FeedItem, ListedGuest, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
 
 export const FIXTURE_SCENES = [
   'lobby',
@@ -88,7 +89,18 @@ const PLAYERS: Player[] = NAMES.map((name, i) => ({
   code: CODES[i],
   profile: PROFILES[ids[i]] ?? {},
   created_at: FIXTURE_NOW - (110 - i * 4) * MIN,
+  joined_at: FIXTURE_NOW - (110 - i * 4) * MIN,
 }))
+
+/**
+ * The host's guest list (docs/guest-list.md, 11.1): the twelve players as
+ * joined, and the four the host listed before the party who haven't joined
+ * yet, by name as the database sorts it. Only the host page reads it.
+ */
+const GUESTS: ListedGuest[] = [
+  ...PLAYERS.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })),
+  ...FIXTURE_EXPECTED_NAMES.map((name, i) => ({ id: uid(2, NAMES.length + i + 1), name, joined_at: null, created_at: FIXTURE_NOW - (170 - i) * MIN })),
+].sort((a, b) => a.name.localeCompare(b.name))
 
 const BASE_SESSION: Session = {
   id: FIXTURE_SESSION_ID,
@@ -761,6 +773,7 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
       states: null,
       screens: null,
       recap: null,
+      guests: null,
     }
   }
   const w = world(scene)
@@ -812,6 +825,7 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
     states: screen === 'host' ? states : null,
     screens: screen === 'host' ? 1 : null,
     recap: w.recapAt ? { published_at: w.recapAt } : null,
+    guests: screen === 'host' ? GUESTS : null,
   }
 }
 

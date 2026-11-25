@@ -673,6 +673,21 @@ describe('exits and the list in the log', () => {
     ])
   })
 
+  it("the host room's Remove from the list deletes a name nobody took, and never a guest who just took it", async () => {
+    // removeGuest in src/lib/queries.ts: the delete keeps to rows still expected and reads back what it deleted.
+    const removeGuest = (id: string) => host.client.from('players').delete().eq('id', id).is('joined_at', null).select('id')
+    const { party, ids } = await listedParty('Remove from the list', ['Zelda', 'Ulrik'])
+    expect((await removeGuest(ids.Zelda)).data).toEqual([{ id: ids.Zelda }])
+    expect(await playerRow(ids.Zelda)).toBeUndefined()
+    const ulrik = await world.user()
+    expect(outcome(await claim(ulrik, party, 'Ulrik'))).toBe('ok')
+    const late = await removeGuest(ids.Ulrik)
+    expect([late.error, late.data]).toEqual([null, []])
+    expect((await playerRow(ids.Ulrik)).user_id).toBe(ulrik.userId)
+    const log = await logOf(party, ['guest.removed', 'player.removed'])
+    expect(log.map((row) => [row.kind, row.data.name])).toEqual([['guest.removed', 'Zelda']])
+  })
+
   it("a move code the host issued for a guest still expected joins the phone that uses it", async () => {
     const { party, ids } = await listedParty('Move code on the list', ['Ulrik'])
     const { data: code, error } = await host.client.rpc('host_issue_transfer', { p_player_id: ids.Ulrik })

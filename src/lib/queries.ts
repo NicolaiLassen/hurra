@@ -456,10 +456,60 @@ export async function removePlayer(sessionId: string, playerId: string): Promise
   await removeGuestPhoto(playerId).catch(() => undefined)
   await clearPlayerFolder(sessionId, playerId)
   unwrap(await supabase.from('players').delete().eq('id', playerId))
+  await syncLiveGames(sessionId)
+}
+
+/** A sync to every live game of the party, so onPlayerLeave and isFinished run at once. A failed sync is not an error. */
+async function syncLiveGames(sessionId: string): Promise<void> {
   const live = unwrap<{ id: string }[]>(
     await supabase.from('session_games').select('id').eq('session_id', sessionId).eq('status', 'active').is('archived_at', null),
   )
   await Promise.allSettled(live.map((game) => callGame({ type: 'sync', gameId: game.id })))
+}
+
+// Host: the guest list (docs/guest-list.md, 7) ------------------------------------------------
+
+/** Why host_add_guests left a name out: over 40 characters, repeated in the same paste, or already in the party. */
+export type SkipReason = 'too_long' | 'repeat' | 'taken'
+/** What host_add_guests did, in the order the names were given: names added as stored (clean), skipped ones as given. */
+export type AddedGuests = { added: { id: string; name: string }[]; skipped: { name: string; reason: SkipReason }[] }
+
+/**
+ * Adds names to the guest list as guests still expected (host_add_guests), in
+ * order. Blank lines are dropped without a word. Refusals: 'too_many' (over
+ * 100 names), 'list_full' (over 200 expected; its words say how many more
+ * fit), 'archived', 'not_host', 'not_found'.
+ */
+export async function addGuests(sessionId: string, names: readonly string[]): Promise<AddedGuests> {
+  const result = unwrap<AddedGuests | null>(await supabase.rpc('host_add_guests', { p_session_id: sessionId, p_names: names }))
+  return { added: result?.added ?? [], skipped: result?.skipped ?? [] }
+}
+
+/**
+ * Free the name: a guest who joined goes back on the list as still expected,
+ * under the same id, and the phone that had the name goes back to "Who are
+ * you?". Like removePlayer: the photo first and the guest's folder, best
+ * effort; then host_free_guest, which takes everything the name earned with
+ * it; then a photo saved in between (its previous_photo); then a sync to every
+ * live game, so onPlayerLeave runs at once. Refusals: 'not_joined' (already
+ * free), 'not_found', 'not_host'.
+ */
+export async function freeGuest(sessionId: string, playerId: string): Promise<void> {
+  await removeGuestPhoto(playerId).catch(() => undefined)
+  await clearPlayerFolder(sessionId, playerId)
+  const freed = unwrap<{ previous_photo?: string | null } | null>(await supabase.rpc('host_free_guest', { p_player_id: playerId }))
+  if (freed?.previous_photo) await removePlayerPhotos([freed.previous_photo]).catch(() => undefined)
+  // The name is free whatever happens next: the next timer or move runs the hooks.
+  await syncLiveGames(sessionId).catch(() => undefined)
+}
+
+/**
+ * Removes a name nobody has taken from the guest list. Never a guest who
+ * joined meanwhile: Players' Remove is for them.
+ */
+export async function removeGuest(playerId: string): Promise<void> {
+  const result = await supabase.from('players').delete().eq('id', playerId).is('joined_at', null).select('id')
+  expectRow(result, "That name isn't waiting on the list any more. If they just joined, they're in Players.")
 }
 
 /**

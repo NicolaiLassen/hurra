@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GameCallError } from './gameApi'
 import {
+  addGuests,
   archiveSession,
   awardPoints,
   claimGuest,
   createSession,
+  freeGuest,
   freeGuestNames,
   getPlayerByCode,
   issuePlayerTransfer,
@@ -12,6 +14,7 @@ import {
   loadMembership,
   OnListError,
   publishRecap,
+  removeGuest,
   removePlayer,
   renamePlayer,
   revokePlayerTransfer,
@@ -251,6 +254,60 @@ describe('the guest list', () => {
     })
     const error = (await claimGuest('party', 'Ana').catch((e: unknown) => e)) as GameCallError
     expect([error.code, error.message]).toEqual(['guest_taken', "Someone just took Ana. If that's you, ask the host to free your name."])
+  })
+})
+
+describe('the host’s guest list', () => {
+  it('addGuests sends the names in order and gives what was added and skipped', async () => {
+    const answer = { added: [{ id: PLAYER, name: 'Zelda' }], skipped: [{ name: 'Ana', reason: 'taken' }] }
+    db.state.respondRpc = () => ok(answer)
+    await expect(addGuests(SESSION, ['Zelda', 'Ana'])).resolves.toEqual(answer)
+    expect(db.state.rpcs).toEqual([{ name: 'host_add_guests', args: { p_session_id: SESSION, p_names: ['Zelda', 'Ana'] } }])
+    db.state.respondRpc = () => ({
+      data: null,
+      error: { message: "The guest list holds at most 200 names that haven't joined yet. 4 more fit.", details: 'list_full', code: 'PT409' },
+      status: 409,
+    })
+    const error = (await addGuests(SESSION, ['A', 'B', 'C', 'D', 'E']).catch((e: unknown) => e)) as GameCallError
+    expect([error.code, error.message]).toEqual(['list_full', "The guest list holds at most 200 names that haven't joined yet. 4 more fit."])
+  })
+
+  it('freeGuest removes the photo first, frees the name, then syncs every live game', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+    db.state.respondRpc = (name) => ok(name === 'host_free_guest' ? { id: PLAYER, name: 'Ana', previous_photo: null } : null)
+    db.state.respond = (call) => (call.table === 'session_games' ? ok([{ id: 'live-1' }]) : ok(null))
+    await freeGuest(SESSION, PLAYER)
+    expect(db.state.rpcs.map((r) => r.name)).toEqual(['host_remove_photo', 'host_free_guest'])
+    expect(db.state.rpcs[1].args).toEqual({ p_player_id: PLAYER })
+    const synced = fetch.mock.calls.map((call) => JSON.parse((call[1] as RequestInit).body as string))
+    expect(synced.map((b) => [b.type, b.gameId])).toEqual([['sync', 'live-1']])
+  })
+
+  it('freeGuest passes a refusal on, and a failed sync afterwards is not an error', async () => {
+    db.state.respondRpc = (name) =>
+      name === 'host_free_guest'
+        ? { data: null, error: { message: 'Ana is already free', details: 'not_joined', code: 'PT409' }, status: 409 }
+        : ok(null)
+    const error = (await freeGuest(SESSION, PLAYER).catch((e: unknown) => e)) as GameCallError
+    expect([error.code, error.message]).toEqual(['not_joined', 'Ana is already free'])
+    db.state.respondRpc = () => ok({ id: PLAYER, name: 'Ana', previous_photo: null })
+    db.state.respond = (call) => (call.table === 'session_games' ? { data: null, error: { message: 'boom', code: '57014' }, status: 500 } : ok(null))
+    await expect(freeGuest(SESSION, PLAYER)).resolves.toBeUndefined()
+  })
+
+  it('removeGuest deletes only a name nobody has taken, and says when it is no longer waiting', async () => {
+    db.state.respond = () => ok([{ id: PLAYER }])
+    await removeGuest(PLAYER)
+    const call = db.state.calls[0]
+    expect(call.table).toBe('players')
+    expect(op(call, 'delete')).toEqual([])
+    expect(op(call, 'eq')).toEqual(['id', PLAYER])
+    expect(op(call, 'is')).toEqual(['joined_at', null])
+    db.state.respond = () => ok([])
+    const error = (await removeGuest(PLAYER).catch((e: unknown) => e)) as GameCallError
+    expect(error.code).toBe('not_found')
+    expect(error.message).toContain("isn't waiting on the list any more")
   })
 })
 
