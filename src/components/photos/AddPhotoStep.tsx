@@ -63,8 +63,8 @@ export default function AddPhotoStep({ player, onDone }: { party: PublicSession;
     <Screen className="flex min-h-dvh flex-col justify-center">
       {picker.inputs}
       <Logo className="size-16" />
-      <p className="mt-6 text-muted-foreground">You're in, {player.name}!</p>
-      <h1 className="text-3xl font-bold text-balance">{saved ? 'Looking good!' : 'Add a photo'}</h1>
+      <p className="mt-6 text-muted-foreground">You're in, {player.name}.</p>
+      <h1 className="text-3xl font-bold text-balance">{saved ? 'Looking good.' : 'Add a photo'}</h1>
       {/* Two lines kept for the text, so the screen doesn't jump as it changes. */}
       {save.error ? (
         <p key="error" role="alert" className="mt-2 min-h-12 text-destructive">

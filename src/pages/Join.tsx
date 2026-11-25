@@ -106,7 +106,7 @@ function WhileClosed({
 function PartyOver({ party }: { party: PublicSession }) {
   return (
     <Notice title="This party is over" actions={<WayBack back="party" />}>
-      {party.name} has ended. Thanks for coming!
+      {party.name} has ended. Thanks for coming.
     </Notice>
   )
 }

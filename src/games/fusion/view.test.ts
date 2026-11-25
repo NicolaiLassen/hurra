@@ -109,7 +109,7 @@ describe('reveals', () => {
     expect(outcomeOf(revealed, 'me', 1, scoring)).toBe('You got 1 of 2 (+1)')
     expect(outcomeOf(revealed, 'me', 0, scoring)).toBe('You got 0 of 2')
     expect(outcomeOf(revealed, 'me', undefined, scoring)).toBe("You didn't vote on this one")
-    expect(outcomeOf(revealed, 'a', undefined, scoring)).toBe("That's you! No points on your own picture.")
+    expect(outcomeOf(revealed, 'a', undefined, scoring)).toBe("That's you. No points on your own picture.")
     expect(outcomeOf(revealed, 'me', 1, undefined)).toBe('You got 1 of 2 (+1)')
   })
 

@@ -22,7 +22,7 @@ export function outcomeOf(
   hits: number | undefined,
   scoring: Scoring,
 ): string {
-  if (picture.revealed?.people.includes(meId)) return "That's you! No points on your own picture."
+  if (picture.revealed?.people.includes(meId)) return "That's you. No points on your own picture."
   if (hits === undefined) return "You didn't vote on this one"
   const points = revealPoints(hits, scoring)
   const gain = points > 0 ? ` (+${points})` : ''
