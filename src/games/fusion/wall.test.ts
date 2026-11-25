@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NAMES_MIN_HEIGHT, NAMES_MIN_WIDTH, TILE_CHIP_SIZE, TILE_NAME_SIZE, tileChipFace, wallGap, wallImageSize, wallLayout } from './wall'
+import { NAMES_MIN_HEIGHT, NAMES_MIN_WIDTH, TILE_CHIP_SIZE, TILE_NAME_SIZE, tileChipFace, wallChipFace, wallGap, wallImageSize, wallLayout } from './wall'
 
 /** The stage each TV gives a game, with one band line and with two (docs/identity.md, The TV's frame). */
 const STAGES = {
@@ -103,6 +103,15 @@ describe('the wall text', () => {
     // 40 at 720p with two band lines: even "#10" is too wide for an 83 px tile.
     expect(tileChipFace('#10', 83)).toBe('condensed')
     expect(tileChipFace('#9', 83)).toBe('wide')
+  })
+
+  it('gives every chip on a wall one face: condensed for all when any label needs it', () => {
+    const labels = Array.from({ length: 12 }, (_, i) => `#${i + 1}`)
+    expect(wallChipFace(labels, 268)).toBe('wide')
+    expect(wallChipFace([...labels, 'The viking'], 268)).toBe('wide')
+    expect(wallChipFace([...labels, 'The viking'], 152)).toBe('condensed')
+    expect(wallChipFace(['#1', '#9'], 83)).toBe('wide')
+    expect(wallChipFace(['#9', '#10'], 83)).toBe('condensed')
   })
 })
 

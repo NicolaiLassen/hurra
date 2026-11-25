@@ -71,8 +71,12 @@ export function wallImageSize(tileLongEdge: number, dpr: number): 'thumb' | 'ful
 
 /** The label chip's text on a tile: a share of the tile's width, never under the TV's 28 px floor or over 50 px. */
 export const TILE_CHIP_SIZE = 'max(28px, min(11cqw, 50px))'
-/** A revealed tile's names: a share of the tile's width, never under the floor or over 44 px. */
-export const TILE_NAME_SIZE = 'max(28px, min(9cqw, 44px))'
+/**
+ * A revealed tile's names, the wall's payoff read from the sofa: a share of
+ * the tile's width (35 px on the party's 268 px tiles at 1080p), never under
+ * the floor or over 44 px.
+ */
+export const TILE_NAME_SIZE = 'max(28px, min(13cqw, 44px))'
 
 /** Archivo's advance widths in em at 125 percent wide and weight 900, a little generous: '#', capitals, digits, lower case, space. */
 const WIDE_EM = { hash: 0.86, upper: 0.86, digit: 0.74, lower: 0.66, space: 0.3 } as const
@@ -83,7 +87,7 @@ const WIDE_EM = { hash: 0.86, upper: 0.86, digit: 0.74, lower: 0.66, space: 0.3 
  * wall, or "#10" on a 720p one), so the label isn't cut to "#...". At the
  * chip's size on that tile (TILE_CHIP_SIZE), with its padding.
  */
-export function tileChipFace(label: string, tileWidth: number): 'wide' | 'condensed' {
+export function tileChipFace(label: string, tileWidth: number): ChipFace {
   const size = Math.max(28, Math.min(0.11 * tileWidth, 50))
   const em = Array.from(label).reduce((sum, c) => {
     if (c === ' ') return sum + WIDE_EM.space
@@ -92,4 +96,11 @@ export function tileChipFace(label: string, tileWidth: number): 'wide' | 'conden
     return sum + (c === c.toUpperCase() && c !== c.toLowerCase() ? WIDE_EM.upper : WIDE_EM.lower)
   }, 0.6)
   return em * size <= 0.85 * tileWidth ? 'wide' : 'condensed'
+}
+
+export type ChipFace = 'wide' | 'condensed'
+
+/** One face for every chip on a wall, so the labels read as one set: condensed for all when any label needs it. */
+export function wallChipFace(labels: readonly string[], tileWidth: number): ChipFace {
+  return labels.some((label) => tileChipFace(label, tileWidth) === 'condensed') ? 'condensed' : 'wide'
 }

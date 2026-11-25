@@ -17,10 +17,11 @@ import {
 import { EASE_OUT, firstName, FRESH_MS, momentId, nameOf } from '@/games/fusion/tvLook'
 import { Countdown, Leaders, PictureImage, Pips } from '@/games/fusion/tvParts'
 import { usePictures, type PictureCache } from '@/games/fusion/usePictures'
-import { TILE_CHIP_SIZE, TILE_NAME_SIZE, tileChipFace, wallImageSize, wallLayout, type WallLayout } from '@/games/fusion/wall'
+import { TILE_CHIP_SIZE, TILE_NAME_SIZE, wallChipFace, wallImageSize, wallLayout, type ChipFace, type WallLayout } from '@/games/fusion/wall'
 import type { TvViewProps } from '@/games/types'
 import { useMomentSound, useMomentSoundAt, useServerTime } from '@/lib/gameClock'
 import type { Player, SessionGame } from '@/lib/types'
+import { usePlayerPhoto } from '@/lib/photoIndex'
 import { useElementSize } from '@/lib/useElementSize'
 import { cn } from '@/lib/utils'
 
@@ -126,9 +127,8 @@ function Lobby({ pub, cache }: { pub: FusionPublicState; cache: PictureCache }) 
     <div className="absolute inset-0 flex flex-col">
       <div className="my-auto flex max-w-[90rem] flex-col items-start gap-10 short:gap-7 low:gap-5">
         <h2 className="wide text-tv-code text-balance text-paper short:text-tv-question low:text-tv-answer">Two guests, one face</h2>
-        <p className="text-tv-name font-semibold text-paper short:text-tv-band low:text-tv-field">
-          {total === 1 ? '1 picture. Who is in it?' : `${total} pictures. Who is in each?`}
-        </p>
+        {/* The strap already counts the pictures ("12 pictures, starting soon"): the stage asks the question. */}
+        <p className="text-tv-name font-semibold text-paper short:text-tv-band low:text-tv-field">{total === 1 ? 'Who is in it?' : 'Who is in each picture?'}</p>
         <p className="max-w-[72rem] text-tv-body text-balance text-paper-2 short:text-tv-tab low:text-tv-floor">
           Each picture shows here first. Then you guess them one by one on your phone: {scoringLine(pub.rules)}
         </p>
@@ -331,7 +331,7 @@ function AskingColumn({
         <div className="flex min-w-0 flex-1 flex-col items-start">
           <LabelChip label={picture.label} className={COLUMN_CHIP} />
           <h2 className={cn(COLUMN_HEAD, 'mt-8 short:mt-6 low:mt-4')}>Who is in it?</h2>
-          <p className={cn(COLUMN_LINE, 'mt-4 short:mt-3 low:mt-2')}>Pick two on your phone and lock in.</p>
+          <p className={cn(COLUMN_LINE, 'mt-4 short:mt-3 low:mt-2')}>{now < current.endsAt ? 'Pick two on your phone and lock in.' : 'The answer is coming.'}</p>
         </div>
         <Countdown left={current.endsAt - now} />
       </div>
@@ -374,27 +374,21 @@ function RevealColumn({
   const [fresh] = useState(() => current.revealedAt !== null && serverNow() - current.revealedAt < FRESH_MS)
   useMomentSound(fresh ? momentId(game, current.key, 'reveal') : null, 'gotcha')
   const scored = pub.top.filter((row) => row.points > 0)
+  const names = [nameOf(players, reveal.people[0], reveal.names[0]), nameOf(players, reveal.people[1], reveal.names[1])]
+  // The token's slate already says a first name: the name is printed beside it only over a photo, or when the slate
+  // says less than the name (Anna Holm), as the board's hero does (docs/identity.md, The standings).
+  const photos = [usePlayerPhoto(reveal.people[0], names[0]), usePlayerPhoto(reveal.people[1], names[1])]
+  const named = names.map((name, i) => photos[i] !== null || firstName(name) !== name.trim())
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <LabelChip label={picture.label} className={COLUMN_CHIP} />
       <p className={cn(COLUMN_LINE, 'mt-6 short:mt-4 low:mt-2')}>It was</p>
-      <ol className="mt-4 grid shrink-0 gap-6 short:mt-3 short:gap-4 low:mt-2 low:gap-3">
-        {reveal.people.map((id, i) => {
-          const name = nameOf(players, id, reveal.names[i])
-          return (
-            <motion.li
-              key={id}
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE_OUT, delay: i === 0 ? 0.25 : 0.7 }}
-              className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5"
-            >
-              <Avatar name={name} playerId={id} className={cn('size-40 short:size-32 low:size-24', i === 0 ? '-rotate-4' : 'rotate-3')} />
-              <span className="min-w-0 truncate text-tv-answer leading-[1.1] font-extrabold text-paper short:text-tv-score low:text-tv-name">{name}</span>
-            </motion.li>
-          )
-        })}
+      {/* Two rows with a name beside a photo; two slates, which say their names themselves, side by side. */}
+      <ol className={cn('mt-4 shrink-0 short:mt-3 low:mt-2', named.some(Boolean) ? 'grid gap-6 short:gap-4 low:gap-3' : 'flex gap-10 short:gap-8 low:gap-6')}>
+        {reveal.people.map((id, i) => (
+          <RevealRow key={id} id={id} name={names[i]} named={named[i]} first={i === 0} pair={!named.some(Boolean)} />
+        ))}
       </ol>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, ease: EASE_OUT, delay: 1.4 }} className="mt-8 shrink-0 short:mt-6 low:mt-3">
         <Counts reveal={reveal} />
@@ -405,6 +399,26 @@ function RevealColumn({
         </IfRoom>
       )}
     </div>
+  )
+}
+
+/** One of the two in the picture, landing as a hero token, with the name beside it when `named`; a size up as a `pair` of slates. */
+function RevealRow({ id, name, named, first, pair }: { id: string; name: string; named: boolean; first: boolean; pair: boolean }) {
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE_OUT, delay: first ? 0.25 : 0.7 }}
+      className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5"
+      aria-label={named ? undefined : name}
+    >
+      <Avatar
+        name={name}
+        playerId={id}
+        className={cn(pair ? 'size-48 short:size-40 low:size-32' : 'size-40 short:size-32 low:size-24', first ? '-rotate-4' : 'rotate-3')}
+      />
+      {named && <span className="min-w-0 truncate text-tv-answer leading-[1.1] font-extrabold text-paper short:text-tv-score low:text-tv-name">{name}</span>}
+    </motion.li>
   )
 }
 
@@ -468,6 +482,10 @@ function Wall({
   const size = wallImageSize(Math.max(layout.tileWidth, layout.tileHeight), dpr)
   // The hanging takes at most about half a second, whatever the count.
   const stagger = Math.min(0.04, 0.5 / Math.max(1, pub.pictures.length))
+  const face = wallChipFace(
+    pub.pictures.filter((p) => p.image !== null).map((p) => p.label),
+    layout.tileWidth,
+  )
   return (
     <ul
       aria-label="The pictures"
@@ -480,6 +498,7 @@ function Wall({
           picture={picture}
           players={players}
           layout={layout}
+          face={face}
           size={size}
           mediaUrl={mediaUrl}
           morph={morph}
@@ -495,6 +514,7 @@ function Tile({
   picture,
   players,
   layout,
+  face,
   size,
   mediaUrl,
   morph,
@@ -504,6 +524,8 @@ function Tile({
   picture: FusionPublicPicture
   players: Player[]
   layout: WallLayout
+  /** The wall's one chip face (wallChipFace). */
+  face: ChipFace
   size: 'thumb' | 'full'
   mediaUrl: MediaUrl
   morph: boolean
@@ -535,11 +557,11 @@ function Tile({
       >
         {picture.image !== null && (
           <span className="absolute top-[5cqw] left-[5cqw] flex max-w-[90cqw]" style={{ fontSize: TILE_CHIP_SIZE }}>
-            {/* A letter chip, in the condensed face where the wide one would cut the label short. */}
+            {/* A letter chip, every one on the wall in the condensed face where the wide one would cut a label short. */}
             <span
               className={cn(
                 'inline-block max-w-full -rotate-2 truncate rounded-chip bg-paper py-[0.12em] leading-none text-ink',
-                tileChipFace(picture.label, layout.tileWidth) === 'wide' ? 'wide px-[0.3em]' : 'tv-num px-[0.24em]',
+                face === 'wide' ? 'wide px-[0.3em]' : 'tv-num px-[0.24em]',
               )}
             >
               {picture.label}
