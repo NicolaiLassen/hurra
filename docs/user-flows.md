@@ -544,7 +544,7 @@ sequenceDiagram
 | The winning move | The card shows the winner | The game's screen shows the winner; banner and one fanfare | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
 | Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished lately row | The generic result card or row |
 | Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | No change: the result stays until the next game | No change |
-| The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main. Whatever the guest had open in the game that had the main card (a vote being picked, a knockout being confirmed) stays on top until they finish | Same |
+| The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main. Whatever the guest had open in the game that had the main card (such as a knockout being confirmed) stays on top until they finish | Same |
 | The host restarts the finished game | Live again, a new round | Its screen if it takes the TV | Dealt in again | Dealt in |
 | The host archives the party | Archived note | Final standings, or the recap if shown | That's a wrap!, Your night when published | Same |
 
