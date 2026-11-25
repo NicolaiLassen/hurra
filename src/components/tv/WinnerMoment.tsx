@@ -143,7 +143,8 @@ function OnTheField({
   return (
     <section className="relative flex shrink-0 items-center gap-14 text-ink short:gap-10" style={{ height: height || undefined, paddingBottom: edge }}>
       {height > 0 && (
-        <div className="flex shrink-0 items-center" style={{ gap: side * 0.12 }}>
+        // Inset by the tilt's overhang, so the stage's clipped edge never cuts a corner off the first token.
+        <div className="flex shrink-0 items-center" style={{ gap: side * 0.12, paddingLeft: Math.ceil((side * (TILTED - 1)) / 2) + 2 }}>
           {shown.map((p, i) => (
             <WinnerToken key={p.id} player={p} side={side} tilt={i % 2 === 0 ? -4 : 3} />
           ))}

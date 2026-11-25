@@ -78,7 +78,8 @@ export default function QuizPodium({ game, players, pub }: { game: SessionGame; 
       {!reduce && <Confetti />}
 
       <div className="flex min-w-0 shrink-0 items-center gap-12 short:gap-8 low:gap-6">
-        <div className="flex shrink-0 -space-x-6">
+        {/* Inset by the tilt's overhang, so the stage's clipped edge never cuts a token's corner. */}
+        <div className="m-2 flex shrink-0 -space-x-6 short:m-1.5">
           {winners.slice(0, 3).map((id, i) => (
             <motion.div
               key={id}
