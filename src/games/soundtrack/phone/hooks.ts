@@ -28,13 +28,19 @@ const SETTLE_MS = 350
 
 /**
  * With the keyboard up (spec 4.3 and 4.6.1): whenever a field inside `keep`
- * takes the focus, and whenever the visible viewport resizes, scrolls the
- * least it can so `keep`'s bottom sits 12 px above the keyboard, never so far
- * that `top` goes higher than 12 px from the top. Without `top`, the element
- * just before `keep` (an opened board row); a top that is hidden (that row on
- * a narrow phone) gives way to `keep` itself.
+ * takes the focus, whenever the visible viewport resizes, and whenever
+ * `shift` changes (something mounted above, such as the new song's banner),
+ * scrolls the least it can so `keep`'s bottom sits 12 px above the keyboard,
+ * never so far that `top` goes higher than 12 px from the top. Without `top`,
+ * the element just before `keep` (an opened board row); a top that is hidden
+ * (that row on a narrow phone) gives way to `keep` itself.
  */
-export function useKeyboardKeep(keep: RefObject<HTMLElement | null>, top?: RefObject<HTMLElement | null>) {
+export function useKeyboardKeep(keep: RefObject<HTMLElement | null>, top?: RefObject<HTMLElement | null>, shift?: unknown) {
+  const again = useRef<() => void>(() => undefined)
+  // iOS Safari has no scroll anchoring: a banner mounted above would push the fields behind the keyboard.
+  useEffect(() => {
+    again.current()
+  }, [shift])
   useEffect(() => {
     let frame = 0
     const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -72,7 +78,9 @@ export function useKeyboardKeep(keep: RefObject<HTMLElement | null>, top?: RefOb
     }
     document.addEventListener('focusin', onFocusIn)
     window.visualViewport?.addEventListener('resize', run)
+    again.current = run
     return () => {
+      again.current = () => undefined
       cancelAnimationFrame(frame)
       for (const timer of timers) clearTimeout(timer)
       document.removeEventListener('focusin', onFocusIn)

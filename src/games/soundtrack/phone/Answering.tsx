@@ -2,7 +2,7 @@ import { CaretRightIcon, ImageIcon, MicrophoneStageIcon, MusicNoteIcon, PlusIcon
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { clockTime } from '@/components/phone/text'
-import { isTypingTarget } from '@/components/phone/useTypingFocus'
+import { isTypingTarget, useTypingFocus } from '@/components/phone/useTypingFocus'
 import type { AnswerPayload } from '@/games/core/Game'
 import {
   letterOf,
@@ -100,6 +100,10 @@ export function Answering({
   const [open, setOpen] = useState<{ n: number; part: TypedPart } | null>(null)
   const [sheetSong, setSheetSong] = useState<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  // The swap toast steps aside while the guest types, as the Show my code bar does.
+  const typingNow = useTypingFocus()
+  // While a toast shows, room under the game so its last rows scroll clear of it.
+  const toastRoom = answers.notice !== null && !typingNow && 'pb-24'
 
   const setTab = useCallback(
     (next: Tab) => {
@@ -342,7 +346,7 @@ export function Answering({
     const missing = missingParts(played, answers.has)
     const shown = missing.slice(0, 4)
     return (
-      <div ref={rootRef} className="grid grid-cols-1">
+      <div ref={rootRef} className={cn('grid grid-cols-1', toastRoom)}>
         <div className="flex items-center gap-3">
           <span className={cn('text-[64px] leading-[0.82] tv-num', left <= 5 ? 'text-gold' : 'text-paper')} aria-hidden>
             {left}
@@ -389,7 +393,7 @@ export function Answering({
   )
 
   return (
-    <div ref={rootRef} className="grid scroll-mt-4 grid-cols-1">
+    <div ref={rootRef} className={cn('grid scroll-mt-4 grid-cols-1', toastRoom)}>
       <TabSwitch tab={tab} answered={answered} total={total} onTab={showTab} />
       {banner && <div className="mt-3">{banner}</div>}
       {tab === 'now' ? (
@@ -403,6 +407,7 @@ export function Answering({
           thumbUrl={thumbUrl}
           onOpenSheet={openSheet}
           onOpenBoard={() => showTab('board')}
+          bannerShown={Boolean(banner)}
         />
       ) : (
         <div className="mt-3 grid grid-cols-1">
@@ -450,7 +455,7 @@ export function Answering({
             }}
           />
         )}
-        {answers.notice && <SwapToast notice={answers.notice} busy={answers.photoBusy} onUndo={() => void answers.undo()} />}
+        {answers.notice && !typingNow && <SwapToast notice={answers.notice} busy={answers.photoBusy} onUndo={() => void answers.undo()} />}
       </>
     )
   }
@@ -527,6 +532,7 @@ function NowPlaying({
   thumbUrl,
   onOpenSheet,
   onOpenBoard,
+  bannerShown,
 }: {
   n: number
   pub: SoundtrackPublicState
@@ -537,11 +543,13 @@ function NowPlaying({
   thumbUrl: (path: string) => string
   onOpenSheet: (n: number) => void
   onOpenBoard: () => void
+  /** The new song's banner is up, above the heading: the fields are kept in view again. */
+  bannerShown: boolean
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const fields = useRef<HTMLDivElement>(null)
   const eventHead = useRef<HTMLDivElement>(null)
-  useKeyboardKeep(fields, heading)
+  useKeyboardKeep(fields, heading, bannerShown)
   const typing = focusedKey !== null
   const photo = answers.events[n - 1] ?? null
   const hasTitle = answers.has(n, 'title')
