@@ -120,6 +120,42 @@ describe('the example table', () => {
   })
 })
 
+// Beyond the table: an accepted text is also read with its leading "the"
+// kept, with Mister, Saint and Doctor as written and spelled out, and with its
+// numbers spelled out, so a typo in those words is forgiven however the host
+// typed the setting. A number still never takes a typo.
+const KINDER: Row[] = [
+  { part: 'singer', accepted: ['The Lanterns'], typed: 'Teh Lanterns', expect: 'typo', why: 'A misspelled leading "the" is one letter' },
+  { part: 'singer', accepted: ['The Lanterns'], typed: 'Th Lanterns', expect: 'typo', why: 'A short "the" too' },
+  { part: 'title', accepted: ['The Pale Harbour'], typed: 'Teh Pale Harbour', expect: 'typo', why: 'In a title too' },
+  { part: 'singer', accepted: ['The Lanterns'], typed: 'Lanterns, The', expect: 'close:extra', why: 'Still only a leading "the" drops out' },
+  { part: 'title', accepted: ['7 Years'], typed: 'Sevn Years', expect: 'typo', why: 'A typo in a number word, with the setting in digits' },
+  { part: 'title', accepted: ['22'], typed: 'Twnety Two', expect: 'typo', why: 'Two number words, with the setting in digits' },
+  { part: 'title', accepted: ['Seven Ferries'], typed: 'Sevn Ferries', expect: 'typo', why: 'The same with the setting in words' },
+  { part: 'title', accepted: ['Route 41'], typed: 'Route 14', expect: 'close:spelling', why: 'A number never takes a typo' },
+  { part: 'title', accepted: ['33'], typed: 'thirty four', expect: 'close:spelling', why: 'Another number in words is not a typo' },
+  { part: 'title', accepted: ['Doctor Lind'], typed: 'Docter Lind', expect: 'typo', why: 'A typo in Doctor is one letter' },
+  { part: 'title', accepted: ['Dr. Lind'], typed: 'Docter Lind', expect: 'typo', why: 'Also when the setting says Dr' },
+  { part: 'title', accepted: ['Mister Velvet'], typed: 'Mistr Velvet', expect: 'typo', why: 'A typo in Mister' },
+  { part: 'title', accepted: ['Saint Hans'], typed: 'Sanit Hans', expect: 'typo', why: 'A swap in Saint' },
+  { part: 'title', accepted: ['Saint Hans'], typed: 'St Hans', expect: 'exact', why: 'Saint is still St' },
+]
+
+describe('kinder readings of an accepted text', () => {
+  it.each(KINDER.map((row) => [row.typed, row] as const))('%s', (_, row) => {
+    const result = judge(row.typed, row.part, row.accepted, row.other ?? [])
+    const got = result.verdict === 'close' ? `close:${result.reason}` : result.verdict
+    expect(got, `${row.typed} for ${row.accepted[0]}: ${row.why}`).toBe(row.expect)
+  })
+
+  it('leaves the group key and a typed answer\'s forms as they were', () => {
+    expect(forms('The Lanterns').map((f) => f.key)).toEqual(['lanterns'])
+    expect(forms('The Lanterns', true).map((f) => f.key)).toEqual(['lanterns', 'thelanterns'])
+    expect(forms('Dr. Lind', true).map((f) => f.key)).toEqual(['drlind', 'doctorlind'])
+    expect(normalise('The Lanterns')).toBe('lanterns')
+  })
+})
+
 describe('distance', () => {
   it('counts a swap of two neighbours once', () => {
     expect(distance('coldwave', 'coldwvae')).toBe(1)

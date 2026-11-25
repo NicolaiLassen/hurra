@@ -89,15 +89,29 @@ function asDigits(words: readonly string[]): string[] | null {
   return changed ? out : null
 }
 
+/** The long word of each short one, for an accepted text: "Dr" is also read "Doctor". */
+const LONG_WORD: Readonly<Record<string, string>> = { mr: 'mister', mrs: 'missus', st: 'saint', dr: 'doctor', vs: 'versus' }
+
+/**
+ * How words like Mister and Dr are read: `short` makes them the same word
+ * (step 8, every text); an accepted text is also read with them `kept` as
+ * written and `long`, so a typo in "Doctor" is one letter, not four.
+ */
+type SameWords = 'short' | 'kept' | 'long'
+
 /** Every run of characters other than a to z and 0 to 9 splits words. */
-const wordsOf = (text: string) =>
+const wordsOf = (text: string, same: SameWords = 'short') =>
   text
     .split(/[^a-z0-9]+/)
     .filter(Boolean)
-    .map((word) => SAME_WORD[word] ?? word)
+    .map((word) => {
+      if (same === 'kept') return word
+      const short = SAME_WORD[word] ?? word
+      return same === 'long' ? (LONG_WORD[short] ?? short) : short
+    })
 
-/** A feat. tail cut (the short form) or named feat (the full form), joining words dropped, a leading "the" dropped. */
-function tidy(words: string[], cutFeat: boolean): string[] {
+/** A feat. tail cut (the short form) or named feat (the full form), joining words dropped, a leading "the" dropped unless `keepThe`. */
+function tidy(words: string[], cutFeat: boolean, keepThe = false): string[] {
   let out = words
   if (cutFeat) {
     const at = out.findIndex((word, i) => i > 0 && FEAT.has(word))
@@ -107,7 +121,7 @@ function tidy(words: string[], cutFeat: boolean): string[] {
   }
   const kept = out.filter((word) => !CONNECTORS.has(word))
   if (kept.length > 0) out = kept
-  if (out.length > 1 && out[0] === 'the') out = out.slice(1)
+  if (!keepThe && out.length > 1 && out[0] === 'the') out = out.slice(1)
   return out
 }
 
@@ -116,8 +130,14 @@ function tidy(words: string[], cutFeat: boolean): string[] {
  * and a feat. tail dropped) and the full form (all its words), each also with
  * number words as digits, without duplicates or empty keys. The first is the
  * group key's form. A text with no letter or digit has one empty form.
+ *
+ * `accepted` reads an accepted text (the truth or an extra) in more ways,
+ * after the usual ones: with its leading "the" kept, so "Teh Lanterns" is one
+ * letter from "The Lanterns"; and with Mister, Saint, Doctor and the like as
+ * written and spelled out, so "Docter Lind" is one letter from "Doctor Lind".
+ * A kept "the" stays first in the sorted key, so "Lanterns, The" stays close.
  */
-export function forms(text: string): Form[] {
+export function forms(text: string, accepted = false): Form[] {
   let s = String(text).normalize('NFKC').toLowerCase()
   for (const [from, to] of LETTERS) s = s.replace(from, to)
   s = s.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -127,22 +147,71 @@ export function forms(text: string): Form[] {
   const short = s.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ').split(/\s[-\u2013\u2014]\s/)[0]
   const out: Form[] = []
   const seen = new Set<string>()
-  const add = (words: string[]) => {
+  const add = (words: string[], keptThe: boolean) => {
     const key = fold(words.join(''))
     if (!key || seen.has(key)) return
     seen.add(key)
-    out.push({ key, sorted: fold([...words].sort().join('')), words: words.map(fold) })
+    const sorted = keptThe ? ['the', ...words.slice(1).sort()] : [...words].sort()
+    out.push({ key, sorted: fold(sorted.join('')), words: words.map(fold) })
   }
-  for (const [form, cut] of [
-    [short, true],
-    [full, false],
-  ] as const) {
-    const words = tidy(wordsOf(form), cut)
-    const digits = asDigits(words)
-    if (digits) add(digits)
-    add(words)
+  const read = (same: SameWords, keepThe: boolean) => {
+    for (const [form, cut] of [
+      [short, true],
+      [full, false],
+    ] as const) {
+      const words = tidy(wordsOf(form, same), cut, keepThe)
+      const keptThe = keepThe && words.length > 1 && words[0] === 'the'
+      if (keepThe && !keptThe) continue
+      const digits = asDigits(words)
+      if (digits) add(digits, keptThe)
+      add(words, keptThe)
+    }
+  }
+  read('short', false)
+  if (accepted) {
+    for (const same of ['kept', 'long'] as const) read(same, false)
+    for (const same of ['short', 'kept', 'long'] as const) read(same, true)
   }
   if (out.length === 0) out.push({ key: '', sorted: '', words: [] })
+  return out
+}
+
+/** A number from 0 to 99 in English words: 7 is "seven", 22 is "twenty two". */
+function numberWords(n: number): string {
+  if (n < 10) return ONES[n]
+  if (n < 20) return TEENS[n - 10]
+  const ones = n % 10
+  return ones === 0 ? TENS[Math.floor(n / 10)] : `${TENS[Math.floor(n / 10)]} ${ONES[ones]}`
+}
+
+/** The text with its numbers 0 to 99 spelled out ("7 Years" is "seven Years"), or null when it has none. */
+function spelledOut(text: string): string | null {
+  let changed = false
+  const out = text.replace(/\d+/g, (digits) => {
+    const n = Number(digits)
+    if (digits.length > 2) return digits
+    changed = true
+    return ` ${numberWords(n)} `
+  })
+  return changed ? out : null
+}
+
+/**
+ * Every way an accepted text may be read (forms with `accepted`), and the
+ * same with its numbers spelled out, so a typo in a number word counts
+ * whether the host typed "7 Years" or "Seven Years". A typed key with digits
+ * never meets a spelled-out key, so "Route 14" is still not "Route 41".
+ */
+export function acceptedForms(text: string): Form[] {
+  const out = forms(text, true)
+  const spelled = spelledOut(text)
+  if (spelled === null) return out
+  const seen = new Set(out.map((form) => form.key))
+  for (const form of forms(spelled, true)) {
+    if (!form.key || seen.has(form.key)) continue
+    seen.add(form.key)
+    out.push(form)
+  }
   return out
 }
 
@@ -208,7 +277,14 @@ const WRONG: Judgement = { verdict: 'wrong', reason: null, off: null }
 export function judge(answer: string, part: TypedPart, accepted: readonly string[], otherPart: readonly string[]): Judgement {
   const mine = forms(answer)
   if (!mine[0].key) return WRONG
-  const theirs = accepted.flatMap((text) => forms(text)).filter((form) => form.key)
+  // Every accepted text's usual forms first, then the kinder readings, so a close reason is found on the usual ones first.
+  const theirs: Form[] = []
+  const seen = new Set<string>()
+  for (const form of [...accepted.flatMap((text) => forms(text)), ...accepted.flatMap((text) => acceptedForms(text))]) {
+    if (!form.key || seen.has(form.key)) continue
+    seen.add(form.key)
+    theirs.push(form)
+  }
   const pairs: [string, string][] = []
   for (const a of mine) {
     for (const t of theirs) {

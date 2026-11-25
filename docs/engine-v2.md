@@ -3805,7 +3805,13 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   letter right, numbers exact; optimal string alignment distance), `close`
   with a reason (the other part, words in another order, part of it, extra
   words, up to 2 letters more off) for the host to decide, else `wrong`.
-  `match.test.ts` holds the spec's example table of 70 invented rows.
+  An accepted text (the truth or an extra) is also read with its leading
+  "the" kept, with Mister, Saint, Doctor and the like as written and spelled
+  out, and with its numbers 0 to 99 spelled out, so "Teh Lanterns", "Docter
+  Lind" and "Sevn Years" count as typos however the host typed the setting;
+  a typed number still never takes a typo ("Route 14" is not "Route 41").
+  `match.test.ts` holds the spec's example table of 70 invented rows, and
+  these kinder readings.
 - **The review** (`buildReview`, at the lock): per played song and typed part,
   the answers grouped by their normalised key, each group judged once, with
   the spelling most of them typed and the guests in arrival order; close
