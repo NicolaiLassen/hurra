@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { PlayerId } from '@/games/core/Game'
 import { LabelChip, PictureArt } from '@/games/fusion/parts'
-import { barNames, type Part } from '@/games/fusion/phoneLines'
+import { barNames, TILE_NAME_CHARS, tileNameLines, type Part } from '@/games/fusion/phoneLines'
 import type { FusionPublicPicture } from '@/games/fusion/shapes'
 import { candidatesFor } from '@/games/fusion/view'
 import { useServerTime } from '@/lib/gameClock'
@@ -169,7 +169,7 @@ export function GuestPicker({
                 onClick={() => choose(p.id)}
                 className={cn(
                   // No transition onto the pick: it shows on the very next frame.
-                  'relative flex w-full flex-col items-center gap-1.5 rounded-phone bg-overlay px-1 pt-2.5 pb-2 text-paper outline-none select-none focus-visible:ring-3 focus-visible:ring-gold/50',
+                  'relative flex h-full w-full flex-col items-center gap-1.5 rounded-phone bg-overlay px-0.5 pt-2.5 pb-2 text-paper outline-none select-none focus-visible:ring-3 focus-visible:ring-gold/50',
                   'transition-opacity duration-150 motion-reduce:transition-none',
                   !busy && !picked && 'active:bg-rule',
                   picked && 'bg-paper text-ink',
@@ -185,7 +185,7 @@ export function GuestPicker({
                     </span>
                   )}
                 </span>
-                <span className="w-full truncate text-center text-[0.9375rem] leading-tight font-semibold">{names.get(p.id) ?? p.name}</span>
+                <TileName name={names.get(p.id) ?? p.name} />
               </button>
             </li>
           )
@@ -200,11 +200,33 @@ export function GuestPicker({
   )
 }
 
+/** A guest's name on a picker tile (tileNameLines): a line over TILE_NAME_CHARS characters steps down from 15 to 13 px. */
+function TileName({ name }: { name: string }) {
+  const lines = tileNameLines(name)
+  const long = lines.some((line) => line.length > TILE_NAME_CHARS)
+  return (
+    <span className={cn('grid w-full text-center leading-tight font-semibold', long ? 'text-[0.8125rem]' : 'text-[0.9375rem]')}>
+      {lines.map((line, i) => (
+        <span key={i} className="truncate">
+          {line}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 /**
  * The lock bar, at the bottom of the screen while the picker is up, on the
  * ground (solid, no blur): the two picks as tokens (or empty rule squares),
  * their names, and the gold Lock in, the screen's one next step, until two
  * are picked. Sending: the button says so and takes no tap.
+ *
+ * Fixed to the screen's foot, where Show my code stands at other times (it
+ * steps aside for the timed prompt), and never mid-screen on a short picker:
+ * the phone's toasts stack from 96 px up, and an open one there could take the
+ * Lock in tap. A spacer keeps the last row of guests above it. Fixed through
+ * `[position:fixed]`, not the `fixed` class, which PhoneHome shows even while
+ * the game's view is held out of sight (that is for layers a guest opened).
  */
 export function LockBar({
   pick,
@@ -222,25 +244,28 @@ export function LockBar({
   onLock: () => void
 }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 bg-ground px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="flex shrink-0 gap-1.5">
-          {[0, 1].map((slot) => {
-            const id = pick[slot]
-            const player = id ? players.find((p) => p.id === id) : undefined
-            return player ? (
-              <Avatar key={player.id} name={player.name} playerId={player.id} className="size-10" />
-            ) : (
-              <span key={`empty-${slot}`} className="size-10 rounded-token border-2 border-rule" />
-            )
-          })}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[1.0625rem] font-semibold">{barNames(names)}</span>
-        <Button size="xl" className="shrink-0 px-6" disabled={!canLock} isPending={sending} onClick={onLock}>
-          {sending ? 'Sending…' : 'Lock in'}
-        </Button>
+    <>
+      <div aria-hidden className="h-20" />
+      <div data-lock-bar="" className="inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] [position:fixed]">
+        <div className="mx-auto flex max-w-md items-center gap-3 px-4">
+          <span aria-hidden className="flex shrink-0 gap-1.5">
+            {[0, 1].map((slot) => {
+              const id = pick[slot]
+              const player = id ? players.find((p) => p.id === id) : undefined
+              return player ? (
+                <Avatar key={player.id} name={player.name} playerId={player.id} className="size-10" />
+              ) : (
+                <span key={`empty-${slot}`} className="size-10 rounded-token border-2 border-rule" />
+              )
+            })}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[1.0625rem] font-semibold">{barNames(names)}</span>
+          <Button size="xl" className="shrink-0 px-6" disabled={!canLock} isPending={sending} onClick={onLock}>
+            {sending ? 'Sending…' : 'Lock in'}
+          </Button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

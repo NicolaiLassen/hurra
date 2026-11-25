@@ -256,3 +256,24 @@ export function resultWords({
     detail: revealed > 0 ? `Both people right on ${both} of ${pictures}.${place}` : 'No pictures were revealed.',
   }
 }
+
+/** A name on a picker tile up to this many characters a line keeps 15 px; a longer one steps to 13 px. */
+export const TILE_NAME_CHARS = 8
+
+/**
+ * A guest's name on a picker tile, whole where it can be: it breaks after a
+ * hyphen or at a space onto a second line (Marie- over Louise, as the token's
+ * slate does), and a line over 8 characters steps down to 13 px, so
+ * Christoffer fits a 76 px tile on a 360 px phone. Only a longer line than
+ * that ends in an ellipsis.
+ */
+export function tileNameLines(name: string): string[] {
+  const trimmed = name.trim().replace(/\s+/g, ' ')
+  // The first break: after a hyphen (it stays on the first line) or at a space.
+  const hyphen = trimmed.search(/[-\u2010]./)
+  const space = trimmed.indexOf(' ')
+  const breaks = [hyphen > 0 ? hyphen + 1 : -1, space].filter((at) => at > 0)
+  if (breaks.length === 0) return [trimmed]
+  const at = Math.min(...breaks)
+  return [trimmed.slice(0, at).trim(), trimmed.slice(at).trim()]
+}

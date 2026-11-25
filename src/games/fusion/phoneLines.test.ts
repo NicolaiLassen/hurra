@@ -22,6 +22,8 @@ import {
   placeParts,
   resultWords,
   showingWords,
+  TILE_NAME_CHARS,
+  tileNameLines,
   timeUpWords,
   wallWords,
   type Outcome,
@@ -268,6 +270,24 @@ describe('the result card', () => {
     const html = await render(ResultView as ComponentType<never>, props)
     expect(plain(html)).toContain('Emil had the sharpest eye')
     expect(plain(html)).toContain("You scored 13 points Both people right on 3 of 12 pictures. You're 2nd of the face detectives.")
+  })
+})
+
+describe('a name on a picker tile', () => {
+  it('breaks after a hyphen or at a space, and stays whole otherwise', () => {
+    expect(tileNameLines('Ana')).toEqual(['Ana'])
+    expect(tileNameLines('Christoffer')).toEqual(['Christoffer'])
+    expect(tileNameLines('Marie-Louise')).toEqual(['Marie-', 'Louise'])
+    expect(tileNameLines('Anna  Holm')).toEqual(['Anna', 'Holm'])
+    expect(tileNameLines('Anne-Marie Holm')).toEqual(['Anne-', 'Marie Holm'])
+    expect(tileNameLines('Bo Marie-Holm')).toEqual(['Bo', 'Marie-Holm'])
+    expect(tileNameLines('Ida-')).toEqual(['Ida-'])
+  })
+
+  it('steps a line over 8 characters down a size', () => {
+    expect(TILE_NAME_CHARS).toBe(8)
+    expect('Christoffer'.length).toBeGreaterThan(TILE_NAME_CHARS)
+    expect(tileNameLines('Marie-Louise').every((line) => line.length <= TILE_NAME_CHARS)).toBe(true)
   })
 })
 
