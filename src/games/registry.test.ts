@@ -4,7 +4,7 @@ import { botExample, checkGameContract } from './core/contract'
 import { GameError } from './core/Game'
 import { jsonbRoundTrip } from './core/testing'
 import { gameLogic } from './logic'
-import { gameModules, preloadTvScreens } from './registry'
+import { accentOf, gameModules, preloadTvScreens } from './registry'
 
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
 const NOT_READY = "This game isn't ready yet"
@@ -14,6 +14,14 @@ it('registers the four games, in order, with their logic, screens and bots', () 
   expect(gameModules.map((m) => m.logic.type)).toEqual([...gameLogic.keys()])
   expect([...gameBots.keys()]).toEqual([...gameLogic.keys()])
   for (const m of gameModules) expect(m.logic.constructor, m.logic.type).toBe(gameLogic.get(m.logic.type)!.constructor)
+})
+
+it("gives only the hunt its pink accent, and nothing for a game the registry doesn't know", () => {
+  expect(accentOf('elimination')).toBe('hunt')
+  expect(gameModules.filter((m) => m.accent !== undefined).map((m) => m.logic.type)).toEqual(['elimination'])
+  expect(accentOf('quiz')).toBeUndefined()
+  expect(accentOf('no-such-game')).toBeUndefined()
+  expect(accentOf(null)).toBeUndefined()
 })
 
 it("makes every game's TV screens with lazyScreen, and the TV loads them all as it opens", () => {

@@ -8,8 +8,11 @@ import { prerender } from 'react-dom/static'
 import { describe, expect, it, vi } from 'vitest'
 import { devTv } from '@/components/tv/devFixture'
 import PairingScreen from '@/components/tv/PairingScreen'
+import RecapScene from '@/components/tv/RecapScene'
+import { recapSlides } from '@/components/tv/recapSlides'
 import TvScreen from '@/components/tv/TvScreen'
-import { FIXTURE_SESSION_ID } from '@/lib/fixtures'
+import { knockedOutIds } from '@/games/registry'
+import { FIXTURE_SESSION_ID, fixtureRecapDoc } from '@/lib/fixtures'
 import { LiveSessionProvider } from '@/lib/useLive'
 
 vi.mock('@/lib/supabase', () => ({ supabase: {} }))
@@ -81,6 +84,7 @@ describe('the TV scene for each fixture', () => {
     ['fixture=pong-final', 'Beer pong | Final result'],
     ['fixture=background&players=45', 'Quiz | Question 3 of 10'],
     ['fixture=final&players=45', 'Last one standing | The final knockout'],
+    ['fixture=fusion-final', 'Who is fused? | Final result'],
   ])('%s: the programme strap says what is on', async (search, expected) => {
     expect(strapOf(await html(search))).toBe(expected)
   })
@@ -99,6 +103,11 @@ describe('the TV scene for each fixture', () => {
     expect(band).toContain('Last one standing')
     expect(band).toContain('Darts')
     expect(band.split('data-fit="band-line"').length - 1).toBe(2)
+    // Three games underneath: the oldest keeps its own line and the newer two share Also running, never a third line.
+    const between = await html('fixture=between')
+    const lines = between.slice(between.indexOf('data-frame="band"'), between.indexOf('</footer>'))
+    expect(lines.split('data-fit="band-line"').length - 1).toBe(2)
+    expect(lines).toContain('Also running')
     // The recap has no frame: no strap and no band.
     const recap = await html('fixture=recap')
     expect(recap).not.toContain('data-frame="strap"')
@@ -138,6 +147,33 @@ describe('the TV scene for each fixture', () => {
     expect(stage).not.toContain('data-fit="invite"')
   })
 
+  it("never cuts the board's join address short: the short form gives it a line of its own", async () => {
+    for (const players of [12, 45]) {
+      const page = await html(`fixture=standings&players=${players}`)
+      // The QR block's and the short form's, one of them kept mounted out of sight.
+      const lines = [...page.matchAll(/<(p|span) class="([^"]*)">at hurra\.test<\/\1>/g)]
+      expect(lines).toHaveLength(2)
+      for (const [, , className] of lines) expect(className).not.toContain('truncate')
+    }
+  })
+
+  it('puts the word Out in pink beside every guest the live hunt has knocked out on the standings board', async () => {
+    for (const search of ['fixture=between&players=12', 'fixture=pong&players=12']) {
+      const setup = devTv(new URLSearchParams(search))!
+      const out = knockedOutIds(setup.snapshot.games)
+      const names = setup.snapshot.players.filter((p) => out.has(p.id)).map((p) => p.name)
+      const page = await html(search)
+      // Static HTML has the rows that need no measuring: the places under the hero.
+      const shown = names.filter((name) => page.includes(`>${name}</span>`))
+      expect(shown.length, search).toBeGreaterThan(0)
+      for (const name of shown) {
+        // The name's row (not its token's slate) carries the word.
+        const rows = page.split(`>${name}</span>`).slice(1)
+        expect(rows.some((after) => /^.{0,240}?text-pink[^"]*">Out</s.test(after)), `${search}: ${name}`).toBe(true)
+      }
+    }
+  })
+
   it('crowns every guest tied for first on the podium, not only the middle step', async () => {
     const crowns = (page: string) => page.split('data-crown').length - 1
     // With 45 guests, Felix and Luna share first place on 12 points.
@@ -153,7 +189,7 @@ describe('the TV scene for each fixture', () => {
       expect(page).toContain('data-tv-field')
       // Over the field the frame's strap tab stands on ink and the bug's words turn ink.
       expect(page).toContain('group/frame')
-      expect(page).toMatch(/data-frame="strap"[^>]*>\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
+      expect(page).toMatch(/data-frame="strap"[^>]*>(\s*<span aria-hidden="true" class="stripes[^"]*"><\/span>)?\s*<span class="[^"]*group-has-\[\[data-tv-field\]\]\/frame:bg-ink/)
       expect(page.split('group-has-[[data-tv-field]]/frame:text-ink').length - 1).toBe(2)
     }
   })
@@ -180,8 +216,53 @@ describe('the TV scene for each fixture', () => {
     expect(page).toContain('The third hurra is saved for the night')
   })
 
+  it("wears the hunt's pink on its programme strap: stripes and a pink tab, its words pink on ink over its winner's colour", async () => {
+    const strapOf = (page: string) => page.slice(page.indexOf('data-frame="strap"'), page.indexOf('data-frame="bug"'))
+    for (const search of ['fixture=hunt', 'fixture=final']) {
+      const strap = strapOf(await html(search))
+      expect(strap).toContain('class="stripes')
+      expect(strap).toContain('bg-pink')
+      expect(strap).toContain('group-has-[[data-tv-field]]/frame:text-pink')
+      expect(strap).not.toContain('bg-gold')
+    }
+    // Any other game on the stage keeps the gold tab of what is on air, gold on ink over its winner's colour.
+    for (const search of ['fixture=quiz-question', 'fixture=pong-final']) {
+      const strap = strapOf(await html(search))
+      expect(strap).not.toContain('class="stripes')
+      expect(strap).toContain('bg-gold')
+      expect(strap).toContain('group-has-[[data-tv-field]]/frame:text-gold')
+    }
+  })
+
+  it("speaks Participant fusion in the frame's language: no exclamation marks, no violet or glow, nothing under the floor", async () => {
+    for (const search of ['fixture=fusion-showing', 'fixture=fusion-wall', 'fixture=fusion-asking', 'fixture=fusion-reveal']) {
+      const page = await html(search)
+      const stage = page.slice(page.indexOf('data-frame="stage"'), page.indexOf('data-frame="band"'))
+      expect(stage, search).toContain('data-frame="stage"')
+      expect(stage.replace(/<[^>]*>/g, ''), search).not.toContain('!')
+      expect(stage, search).not.toMatch(/confetti-violet|radial-gradient|drop-shadow|ring-\d|text-(xs|sm|base|lg|xl|[2-9]xl)\b/)
+    }
+  })
+
   it('draws nothing for a screen that may not read the party: the page shows pairing instead', async () => {
     await expect(html('fixture=removed')).resolves.toBe('')
+  })
+})
+
+describe("the recap's final podium", () => {
+  it("cheers the night's winners in the frame's language: no exclamation mark, no glow or rings, nothing under the floor", async () => {
+    const doc = fixtureRecapDoc()
+    const startAt = recapSlides(doc).findIndex((slide) => slide.kind === 'podium')
+    expect(startAt).toBeGreaterThan(0)
+    const { prelude } = await prerender(createElement(RecapScene, { doc, partyName: 'Birthday party', startAt }))
+    const page = (await new Response(prelude).text()).replaceAll('<!-- -->', '')
+    expect(page).toContain('Hurra for Bo, Freja and Maja')
+    expect(page.replace(/<[^>]*>/g, '')).not.toContain('!')
+    const off = page.match(/.{0,80}(drop-shadow|text-shadow|ring-[1-9]|from-gold|text-primary|text-(xs|sm|base|lg|xl|2xl|3xl)\b).{0,20}/)
+    expect(off?.[0]).toBeUndefined()
+    // Paper steps, the winners' points on gold.
+    expect(page).toContain('bg-paper')
+    expect(page).toContain('rounded-chip bg-gold')
   })
 })
 

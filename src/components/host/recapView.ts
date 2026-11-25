@@ -275,7 +275,7 @@ export function nightHeadline(doc: Pick<RecapDoc, 'standings' | 'chapters'>): { 
   if (leaders.length > 1) {
     return running
       ? { title: `${names} lead the night`, line: `${pointsText(top)} each so far.` }
-      : { title: `Hurra for ${names}!`, line: `${names} share the night with ${pointsText(top)} each.` }
+      : { title: `Hurra for ${names}`, line: `${names} share the night with ${pointsText(top)} each.` }
   }
   // Everyone tied right behind, while they have points too.
   const nextRank = Math.min(...doc.standings.filter((row) => row.rank > 1).map((row) => row.rank))
@@ -283,7 +283,7 @@ export function nightHeadline(doc: Pick<RecapDoc, 'standings' | 'chapters'>): { 
   const ahead = next.length > 0 ? `, ${pointsText(top - next[0].points)} ahead of ${listNames(next.map((row) => row.name))}` : ''
   return running
     ? { title: `${names} leads the night`, line: `${pointsText(top)} so far${ahead}.` }
-    : { title: `Hurra for ${names}!`, line: `${names} took the night with ${pointsText(top)}${ahead}.` }
+    : { title: `Hurra for ${names}`, line: `${names} took the night with ${pointsText(top)}${ahead}.` }
 }
 
 /** An award's symbol: a highlight's icon, or the climber's arrow. */

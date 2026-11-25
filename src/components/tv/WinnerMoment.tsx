@@ -5,6 +5,7 @@ import Confetti from '@/components/Confetti'
 import Piece from '@/components/Piece'
 import type { Said } from '@/components/tv/boardLines'
 import { clockTime } from '@/components/tv/clock'
+import { nightPodium } from '@/components/tv/fit'
 import { cheer, firstName, nightLine, nightRanks, THIRD_HURRA } from '@/components/tv/winnerLines'
 import { GUEST_BG, guestLook, SLATE_LINE_HEIGHT, SLATE_TILT_DEG, slateLines, slateSize, type GuestColor } from '@/lib/guest'
 import { usePlayerPhoto } from '@/lib/photoIndex'
@@ -26,8 +27,6 @@ const WIDTH_SLACK = 0.97
 const TOKEN_MAX = 360
 /** A tilted square's bounding box against its side: cos 4 degrees plus sin 4 degrees. */
 const TILTED = 1.07
-/** A short podium step with the name over the points: two 33 px lines, the gap and the padding, px. */
-const STACKED_STEP = 84
 
 /** Each guest colour as a text class, spelled out so Tailwind finds it: the name on the inverted slate. */
 const GUEST_TEXT: Record<GuestColor, string> = {
@@ -145,7 +144,8 @@ function OnTheField({
   return (
     <section className="relative flex shrink-0 items-center gap-14 text-ink short:gap-10" style={{ height: height || undefined, paddingBottom: edge }}>
       {height > 0 && (
-        <div className="flex shrink-0 items-center" style={{ gap: side * 0.12 }}>
+        // Inset by the tilt's overhang, so the stage's clipped edge never cuts a corner off the first token.
+        <div className="flex shrink-0 items-center" style={{ gap: side * 0.12, paddingLeft: Math.ceil((side * (TILTED - 1)) / 2) + 2 }}>
           {shown.map((p, i) => (
             <WinnerToken key={p.id} player={p} side={side} tilt={i % 2 === 0 ? -4 : 3} />
           ))}
@@ -227,8 +227,10 @@ function InvertedSlate({ name, className, style }: { name: string; className?: s
  * with the third hurra's promise, and the night's top three on paper steps
  * of clearly different heights, fitted into `height` and the width it has:
  * the tokens stand on the steps while there is room for them, the steps
- * narrow on a small screen, and when the words don't fit beside them the
- * title goes first, then the line, and the third hurra's promise stays.
+ * narrow on a small screen and go to one row (name, gain and place) when the
+ * room is short, and when the words don't fit beside them the title goes
+ * first, then the line, and the third hurra's promise stays. In the least
+ * room the podium gives way to it (nightPodium in fit.ts).
  */
 export function NightSoFar({
   line,
@@ -248,20 +250,12 @@ export function NightSoFar({
   const [rootRef, root] = useElementSize<HTMLDivElement>()
   const [titleRef, title] = useElementSize<HTMLHeadingElement>()
   const [wholeRef, whole] = useElementSize<HTMLParagraphElement>()
+  const [promiseRef, promise] = useElementSize<HTMLParagraphElement>()
   const ranked = nightRanks(scores).slice(0, 3)
-  // The tokens stand on the steps while there is room; else a small one sits by the name on the step.
-  const tokens = height === 0 || height >= 260
-  // Steps with the name over the points, or in one row when the room is short.
-  const compact = height > 0 && height - (tokens ? 92 : 0) < 150
-  const least = compact ? 56 : 112
-  const tallest = height > 0 ? Math.max(least, Math.min(216, height - (tokens ? 92 : 0))) : 216
-  let lowest = Math.max(least, Math.min(tallest - 32, Math.round(tallest * 0.55)))
-  // A short step stacks the name over the points, so a gain chip never squeezes the name out (720p, 768p):
-  // every step gets the room for two lines while the steps still differ in height.
-  if (compact) lowest = Math.max(lowest, Math.min(STACKED_STEP, tallest - 32))
-  const stacked = compact && lowest >= STACKED_STEP
-  const steps = [tallest, Math.round((tallest + lowest) / 2), lowest]
-  const podium = ranked.length > 0 && (height === 0 || height >= least)
+  // The tokens on the steps, the steps in one row, their heights, and room for the podium at all (fit.ts).
+  const fit = nightPodium(height, promise.height)
+  const { tokens, compact, steps } = fit
+  const podium = ranked.length > 0 && fit.podium
   // Three steps in at most 60 percent of the width, between 176 and 296 px each.
   const stepWidth = root.width > 0 ? Math.max(176, Math.min(296, Math.floor((root.width * 0.6 - 24) / 3))) : 296
   // The words, as many as fit: the title and the line, the line alone, or the promise alone.
@@ -288,6 +282,10 @@ export function NightSoFar({
           <p ref={wholeRef} className={paragraph}>
             {words(true)}
           </p>
+          {/* One line of the promise, whatever the width, for nightPodium. */}
+          <p ref={promiseRef} className={cn(paragraph, 'w-max')}>
+            {THIRD_HURRA}
+          </p>
         </div>
         {titled && <h3 className="mb-3 wide text-tv-name short:mb-2 short:text-tv-band">The night so far</h3>}
         <p className={paragraph}>{words(said)}</p>
@@ -305,26 +303,21 @@ export function NightSoFar({
                   <div
                     className={cn(
                       'relative flex w-full justify-between gap-3 rounded-t-chip bg-paper text-ink',
-                      stacked ? 'items-center px-4 py-1.5' : compact ? 'items-center px-4 py-2' : 'items-start p-5 short:p-4',
+                      compact ? 'items-center px-4 py-2' : 'items-start p-5 short:p-4',
                     )}
                     style={{ height: steps[Math.min(row.rank, 3) - 1] }}
                   >
-                    <div className={cn('flex min-w-0', compact && !stacked ? 'items-center gap-2.5' : 'flex-col gap-1')}>
+                    <div className={cn('flex min-w-0', compact ? 'items-center gap-2.5' : 'flex-col gap-1')}>
                       <p className="flex min-w-0 items-center gap-2.5">
-                        {/* An ink edge, so a guest whose colour is paper still shows on the paper step. */}
-                        {!tokens && <Avatar name={row.name} playerId={row.player_id} className={cn('shrink-0 ring-2 ring-ink', stacked ? 'size-8' : 'size-10')} />}
-                        <span className={cn('min-w-0 truncate tv-num text-tv-field', stacked && 'leading-none')}>{row.name}</span>
+                        {/* An ink edge, so a guest whose colour is paper still shows on the paper step. In one row the name needs the room. */}
+                        {!tokens && !compact && <Avatar name={row.name} playerId={row.player_id} className="size-10 ring-2 ring-ink" />}
+                        <span className="min-w-0 truncate tv-num text-tv-field">{row.name}</span>
                       </p>
                       <p className="flex shrink-0 items-center gap-2.5">
-                        <span className={cn('tv-num text-tv-field', stacked && 'leading-none')}>{row.points}</span>
+                        {/* In one row the name keeps its room: the step shows this game's gain, the standings show the total. */}
+                        {!compact && <span className="tv-num text-tv-field">{row.points}</span>}
                         {gain > 0 && (
-                          <span
-                            className={cn(
-                              'rounded-chip px-2 tv-num text-tv-floor',
-                              stacked && 'leading-[1.1]',
-                              winners.includes(row.player_id) ? 'bg-gold' : 'bg-ink text-paper',
-                            )}
-                          >
+                          <span className={cn('rounded-chip px-2 tv-num text-tv-floor', winners.includes(row.player_id) ? 'bg-gold' : 'bg-ink text-paper')}>
                             +{gain}
                           </span>
                         )}

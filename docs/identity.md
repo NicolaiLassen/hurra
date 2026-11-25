@@ -14,9 +14,9 @@ block in [src/index.css](../src/index.css), and the approved
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
 [Participant fusion on the TV](#participant-fusion-on-the-tv) ·
 [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
-[The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
-[The host room](#the-host-room) ·
-[The acceptance test](#the-acceptance-test)
+[The recap on the TV](#the-recap-on-the-tv) · [The phone](#the-phone) ·
+[The host room](#the-host-room) · [Old names](#old-names) ·
+[Guards](#guards) · [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
 
@@ -27,7 +27,7 @@ Only Hurra's colours exist: the theme resets Tailwind's stock palette, so
 | --- | --- |
 | `gold` | What is on air, the leader or winner, and the one next step on a screen (the default Button). Never decoration, never a quiz key. |
 | `gold-rim` | Pressed gold. Never text. |
-| `pink` | The hunt (Last one standing): its tab, the word Out and the stripe across a knocked-out guest's token, the scan action. |
+| `pink` | The hunt (Last one standing): its tab, the word Out and the stripe across a knocked-out guest's token, the scan action. The core never names the game: a game asks for it with `GameModule.accent: 'hunt'`, and every tab the frame draws for it (the news strap, the programme strap, a phone's tab) turns pink with the stripes. |
 | `danger` | Destructive host actions only. |
 | `key-a` to `key-d` | The quiz key: A coral, B pink, C teal, D violet. Always with the letter and in its fixed place. Pink and teal sit on a diagonal, because people with deuteranopia see them as almost the same colour. |
 | `guest-coral`, `guest-teal`, `guest-violet`, `guest-sky`, `guest-lime`, `guest-paper` | Identity only: a guest's token, their own phone, the winner's field. |
@@ -148,8 +148,9 @@ jobs, with their props and variant names unchanged:
   `destructive` danger, `link` paper with a `paper-3` underline. Host sizes
   use the control radius; `xl` is the phone's 54 px button with the phone
   radius and 18 px text.
-- **Card:** a raised panel with no hairline. Its ring is transparent, so a
-  screen can colour it to mark a state (`ring-gold/40` for the game on the TV).
+- **Card:** a raised panel with no hairline. Its ring stays transparent: a
+  state is a word on a chip (see [The host room](#the-host-room)), never a
+  coloured edge.
 - **Badge:** square chips that carry words. `default` gold (on air, live,
   leading), `secondary`, `outline`, `ghost` (a plain word: Done, Ready),
   `destructive`, and `hunt` (pink: Out).
@@ -219,8 +220,8 @@ inside the 5 percent safe area (`px-[5vw] py-[5vh]`), so a TV that crops its
 edges never cuts anything off. Games play inside it and get it for free.
 
 - **The programme strap** (top left,
-  [Header.tsx](../src/components/tv/Header.tsx)): a tilted gold tab with one
-  short word for what is on (the stage game's title, Next, Standings, The
+  [Header.tsx](../src/components/tv/Header.tsx)): a tilted gold tab (the
+  hunt's is pink with the stripes) with one short word for what is on (the stage game's title, Next, Standings, The
   end), then a paper strap with where it is. While a game holds the stage the
   strap carries the game's own words, its `TvStatus` `strap` variant
   ("Question 3 of 10"); a game without them gets "Running since 21:40", or
@@ -261,11 +262,14 @@ edges never cuts anything off. Games play inside it and get it for free.
   a strap across the whole top row for 8 seconds, over the programme strap
   and the bug, so it never covers the stage (a quiz's answered count
   included) or the band. Its tab is the game's title, pink with the stripes
-  for the hunt's news and gold for anything else on air. News from a game in
+  for any news from the hunt and gold for anything else on air. A game's
+  own news never covers its final screen, which shows the result itself:
+  there it only plays its sound (`newsStage` in scene.ts). Over a winner's
+  colour the strap stands on that colour, not the ground. News from a game in
   the background is the band's event line (the ticker), with its time.
   Nothing crawls, there is no "Breaking" label and no red, and an event line
   changes only when something happens. The TV says a game's news without its
-  exclamation marks (`onAirText`).
+  exclamation marks (`onAirText` in src/lib, which a phone's toasts use too).
 - **Times** are only the ones the database holds (a game's start or finish,
   an announcement's), as clock times (`clockTime` in
   [clock.ts](../src/components/tv/clock.ts)): never "4 min ago" and never a
@@ -384,7 +388,8 @@ fills whatever stage the frame gives it:
 
 - **The leader's column:** the leader as a hero (their token at 264 px,
   their points at `text-tv-lead` in gold, what they last won at its finish
-  time and their lead, "2 ahead of Ana"), the next five places large (names
+  time, on two lines rather than cut when the column is narrow, and their
+  lead, "2 ahead of Ana"), the next five places large (names
   at `text-tv-name`, points at `text-tv-score`), and one line on how the last
   game moved the places ("Beer pong moved Luna up 4 places and Clara up 3.",
   from that game's points, `placesMoved` in
@@ -393,7 +398,9 @@ fills whatever stage the frame gives it:
 - **The field:** everyone else in plain rows on the ground, no cards and no
   bars, in fit.ts's row layouts (the floor of 28 px in the smallest), filled
   top to bottom. The join block stands under it while joining is open: the
-  QR code on paper, the code at `text-tv-code` and the page's own address.
+  QR code on paper, the code at `text-tv-code` and the page's own address,
+  one step smaller again on a low screen (`low:`), so it still fits a 720p
+  board.
 - **Movers** are a triangle and a count in `paper-2`, never green or red.
 - **Gold** is the leader's: their points, the crown, the rank and points of
   anyone tied for first (everyone tied for first wears the crown). Nothing
@@ -402,8 +409,9 @@ fills whatever stage the frame gives it:
   everyone a live game's `knockedOut` hook names.
 - **When it doesn't fit:** places that don't fit under the hero join the
   field, the leader's column narrows (half, then 44, then 38 percent), the
-  join block gives way to its one line, and as a last resort the field ends
-  in "and 17 more". No text goes under the floor to make room.
+  join block gives way to its short form ("Join with HURRA30" over the
+  address, which is never cut), and as a last resort the field ends in "and
+  17 more". No text goes under the floor to make room.
 
 ## The winner's screen
 
@@ -431,12 +439,29 @@ everything fades in, and only the confetti moves.
   and, always, "The third hurra is saved for the night's winner."; and the
   night's top three on paper steps of clearly different heights (a tie
   shares a height), the game's points on them as a chip, gold for its winner.
-  On a short screen the tokens move onto the steps, the steps go to one row,
-  and the words drop the title, then the line, never the third hurra.
+  On a short screen the tokens move onto the steps, the steps go to one row
+  (the name, this game's gain and the place: the standings carry the total),
+  and the words drop the title, then the line, never the third hurra. In the
+  least room (720p with two band lines) the podium gives way, so the promise
+  stands whole on one line (`nightPodium` in fit.ts).
 - **Confetti** ([src/components/Confetti.tsx](../src/components/Confetti.tsx))
   is only the logo's pieces in the logo's colours: the pink dot, the teal
   curl, the violet wave and the gold star. It bursts once and is gone in
   about three seconds; with reduced motion there is none.
+
+## The recap on the TV
+
+[RecapScene.tsx](../src/components/tv/RecapScene.tsx) takes the whole
+screen, without the frame, in the same language: labels at the floor or
+above, cards on the raised surface, icon chips by their job (gold a win,
+pink the hunt, paper the rest), the progress in paper on rule, and no glow,
+rings or gold washes. In the race each bar is its guest's own colour
+(identity) and only the leader's points are gold. The night's podium is a
+game's winner podium: "Hurra for Bo, Freja and Maja" in `wide` paper,
+untilted, over paper steps of clearly different heights, the winners'
+points on gold and their crown. It has no exclamation mark: the product's
+one is a game's winner screen (the owner may move it to the night's
+winner).
 
 ## The phone
 
@@ -447,6 +472,13 @@ running underneath in its own section (oldest start first, so Last one
 standing stays near the top all evening), what finished lately, Your night,
 the standings card below the fold, and Show my code in the thumb zone.
 
+- **A sheet never hides a timed question.** A game's full view opens in a
+  sheet over the home, and Last one standing's stays open after a camera
+  scan. When a timed question (a quiz question) opens on the main card, an
+  open sheet gives way so its seconds aren't missed, unless it is still
+  handling a scanned code (`sheetGivesWay` in
+  [running.ts](../src/components/phone/running.ts)). The sheet's game keeps
+  its state, and its section opens it again.
 - **One gold step.** Show my code is the home's one gold bar (the default
   Button). A game's section carries no gold button and no gold Live chip:
   its actions are `outline` Buttons (Scan, Vote, Answer now), and a row on
@@ -460,7 +492,10 @@ the standings card below the fold, and Show my code in the thumb zone.
   "Since 20:30" or "Finished at 22:41". A long name and its words wrap, the
   strap under the tab, instead of cutting either.
 - **Copy:** no exclamation marks ("You're in.", "That's a wrap."), and only
-  times the database holds, as clock times.
+  times the database holds, as clock times. A game's news in a toast is said
+  without its exclamation marks (`onAirText`), and a game's `red` tone (the
+  hunt's "You're out") shows as the hunt's pink (`announcementTone`): the
+  danger chip is only for errors.
 
 ### The quiz on a phone
 
@@ -524,6 +559,40 @@ showing ("Now showing #3.").
   alone, no red), and your place, named for the round: "You have 4 points,
   1st of the face detectives so far.", the rank gold only at 1st.
 
+## The host room
+
+The control room is a reskin of the same page: every function and every
+confirmation stays where it was. Its own rules:
+
+- **One gold step per item.** A game's host view has at most one gold button,
+  its next step (the quiz's Reveal now, Show the leaderboard, Next question or
+  Crown the winner; Participant fusion's Start the showing, Skip to the wall,
+  Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
+  that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
+  the menu beside it, behind the same confirmation, never next to it. Fusion's
+  Ask on each picture and the Save of who is in it are `secondary`. A
+  program's Start is gold only on the game that is the room's next step,
+  `nextStartId` in
+  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
+  game not started, while a TV is open and shows the standings. Back to
+  standings is gold on a final screen, Pair a TV while no TV is open.
+- **States are words** on chips:
+  [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
+  (Live, Open on the overlay; Done, Not started, Closed as plain words;
+  Archived in a rule outline). The game on the TV wears the gold On the TV
+  chip, since it is on air, with the clock time it started (`started_at`).
+  The connection dot is paper with Live, an empty ring with Catching up.
+- **The player list** marks a knocked-out guest with the token's `out` stripe
+  and the word Out in pink, from `knockedOutIds` (the games' generic
+  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
+  in paper: no medal coins in the room. There is no Away tag: the app holds
+  no presence data for players.
+- **Numbers that change in place** (the TV sound level, the quiz's totals and
+  gains, answered counts) are `tv-num`, so their columns hold still.
+- **Wells:** a settings form or a question is an `overlay` well in a raised
+  panel; cards inside a well stand on `raised`, their fields on `overlay`.
+  Warnings and notes are solid panels with an icon, never a glass callout.
+
 ## Old names
 
 The shadcn slots and the confetti names are aliases that point at the brand:
@@ -562,39 +631,6 @@ screen has moved.
   `cn('text-paper', 'text-tv-question')` keeps only the size. A new size,
   radius, easing or animation in index.css goes into `THEME_SCALES` in
   [src/lib/utils.ts](../src/lib/utils.ts), and the test fails until it does.
-
-## The host room
-
-The control room is a reskin of the same page: every function and every
-confirmation stays where it was. Its own rules:
-
-- **One gold step per item.** A game's host view has at most one gold button,
-  its next step (the quiz's Reveal now, Show the leaderboard, Next question or
-  Crown the winner; Participant fusion's Start the showing, Skip to the wall,
-  Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
-  that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
-  the menu beside it, behind the same confirmation, never next to it. Fusion's
-  Ask on each picture and the Save of who is in it are `secondary`. A program's Start is gold only on the game that is the room's next
-  step, `nextStartId` in
-  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
-  game not started, while a TV is open and shows the standings. Back to
-  standings is gold on a final screen, Pair a TV while no TV is open.
-- **States are words** on chips:
-  [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
-  (Live, Open on the overlay; Done, Not started, Closed as plain words;
-  Archived in a rule outline). The game on the TV wears the gold On the TV
-  chip, since it is on air, with the clock time it started (`started_at`).
-  The connection dot is paper with Live, an empty ring with Catching up.
-- **The player list** marks a knocked-out guest with the token's `out` stripe
-  and the word Out in pink, from `knockedOutIds` (the games' generic
-  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
-  in paper: no medal coins in the room. There is no Away tag: the app holds
-  no presence data for players.
-- **Numbers that change in place** (the TV sound level, the quiz's totals and
-  gains, answered counts) are `tv-num`, so their columns hold still.
-- **Wells:** a settings form or a question is an `overlay` well in a raised
-  panel; cards inside a well stand on `raised`, their fields on `overlay`.
-  Warnings and notes are solid panels with an icon, never a glass callout.
 
 ## The acceptance test
 

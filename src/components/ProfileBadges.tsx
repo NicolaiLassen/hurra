@@ -3,14 +3,19 @@ import type { GameData } from '@/lib/types'
 import type { ProfileBadge } from '@/games/types'
 import { cn } from '@/lib/utils'
 
+/**
+ * A badge's icon by its job (docs/identity.md, Colour jobs): gold only for a
+ * win, pink for the hunt's, and paper for anything else, since the guest
+ * colours (teal, violet) are identity only, never a status.
+ */
 const TONES: Record<NonNullable<ProfileBadge['tone']>, string> = {
-  gold: 'text-primary',
-  pink: 'text-confetti-pink',
-  teal: 'text-confetti-teal',
-  violet: 'text-confetti-violet',
+  gold: 'text-gold',
+  pink: 'text-pink',
+  teal: 'text-paper-2',
+  violet: 'text-paper-2',
 }
 
-/** The badges every game has put on a player's profile. */
+/** The badges every game has put on a player's profile: square chips on the overlay surface, like every chip with words. */
 export default function ProfileBadges({
   profile,
   size = 'sm',
@@ -33,7 +38,7 @@ export default function ProfileBadges({
         <span
           key={badge.label}
           className={cn(
-            'inline-flex items-center gap-1 rounded-full bg-white/10 font-semibold whitespace-nowrap',
+            'inline-flex items-center gap-1 rounded-chip bg-overlay font-semibold whitespace-nowrap',
             size === 'lg' ? 'px-3 py-1 text-lg' : 'px-2 py-0.5 text-xs',
           )}
         >

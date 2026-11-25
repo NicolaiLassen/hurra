@@ -52,7 +52,7 @@ const crowned = (row: Ranked) => row.rank === 1 && row.points > 0
  *   a line on how the last game moved the places;
  * - the field: everyone else in rows, in as many columns as they need, with
  *   the join block under them while joining is open (`invite`): the QR code
- *   on paper and the code, or its one line when the rows need the room.
+ *   on paper and the code, or its short form when the rows need the room.
  * The places that don't fit under the hero join the field, and the leader's
  * column narrows for a big party. Guests a live game has knocked out carry
  * the word Out (GameModule.knockedOut). `strip` draws the status cards'
@@ -222,7 +222,8 @@ function Hero({
           <p className="flex min-w-0 items-baseline gap-3 text-tv-field font-bold short:text-tv-body">
             {named && <span className="min-w-0 shrink truncate tv-num text-tv-name short:text-tv-band">{row.name}</span>}
             {out && <OutWord />}
-            {won && <span className="min-w-0 truncate">{won}</span>}
+            {/* Two lines when the column is narrow ("Won Last one standing / at 21:29"), never cut. */}
+            {won && <span className="line-clamp-2 min-w-0 text-balance">{won}</span>}
           </p>
         )}
         <p className="mt-1 flex items-baseline gap-4">
@@ -404,22 +405,29 @@ function JoinBlock({ ref, joinCode, hidden }: { ref: Ref<HTMLDivElement>; joinCo
       ref={ref}
       data-fit={hidden ? undefined : 'invite'}
       aria-hidden={hidden || undefined}
-      className={cn('flex w-max shrink-0 items-center gap-10 short:gap-7', hidden && 'invisible absolute bottom-0 left-0')}
+      className={cn('flex w-max shrink-0 items-center gap-10 short:gap-7 low:gap-6', hidden && 'invisible absolute bottom-0 left-0')}
     >
-      <div className="shrink-0 rounded-tile bg-paper p-5 text-ink short:p-4">
-        <QRCodeSVG value={joinUrl(joinCode)} size={232} level="M" bgColor="transparent" fgColor="currentColor" className="short:size-44" />
+      {/* One step smaller on a low screen (720p, 768p), so the code still fits a big party's board there. */}
+      <div className="shrink-0 rounded-tile bg-paper p-5 text-ink short:p-4 low:p-3">
+        <QRCodeSVG value={joinUrl(joinCode)} size={232} level="M" bgColor="transparent" fgColor="currentColor" className="short:size-44 low:size-32" />
       </div>
       <div className="min-w-0">
-        <p className="text-tv-field font-bold short:text-tv-body">Scan to join</p>
-        <p className="mt-2 text-tv-body text-paper-2 short:mt-1 short:text-tv-tab">or enter the code</p>
-        <p className="font-mono text-tv-code font-black tracking-[0.02em] short:text-tv-question">{joinCode}</p>
-        <p className="truncate text-tv-body text-paper-2 short:text-tv-tab">at {host()}</p>
+        <p className="text-tv-field font-bold short:text-tv-body low:text-tv-tab">Scan to join</p>
+        <p className="mt-2 text-tv-body text-paper-2 short:mt-1 short:text-tv-tab low:text-tv-floor">or enter the code</p>
+        <p className="font-mono text-tv-code font-black tracking-[0.02em] short:text-tv-question low:text-tv-answer low:leading-none">{joinCode}</p>
+        <p className="text-tv-body text-paper-2 [overflow-wrap:anywhere] short:text-tv-tab low:text-tv-floor">at {host()}</p>
       </div>
     </div>
   )
 }
 
-/** The join block in one line, when the field needs its room: "Join with HURRA30 at hurra.party". */
+/**
+ * The join block's short form, when the field needs its room: "Join with
+ * HURRA30" over "at hurra.party". The address has a line of its own, so it is
+ * never cut, and the form is as high at every width (the board's split is
+ * chosen by its height, so a height that changed with the split could flip
+ * the board back and forth).
+ */
 function JoinLine({ ref, joinCode, hidden }: { ref: Ref<HTMLDivElement>; joinCode: string; hidden: boolean }) {
   return (
     <div
@@ -427,13 +435,15 @@ function JoinLine({ ref, joinCode, hidden }: { ref: Ref<HTMLDivElement>; joinCod
       data-fit={hidden ? undefined : 'join-line'}
       aria-hidden={hidden || undefined}
       className={cn(
-        'flex min-w-0 shrink-0 items-baseline gap-4 text-tv-body whitespace-nowrap text-paper-2 short:gap-3 short:text-tv-tab',
+        'grid min-w-0 shrink-0 text-tv-body text-paper-2 short:text-tv-tab',
         hidden && 'invisible absolute inset-x-0 bottom-0',
       )}
     >
-      Join with
-      <span className="font-mono text-tv-band font-black tracking-[0.02em] text-paper short:text-tv-field">{joinCode}</span>
-      <span className="min-w-0 truncate">at {host()}</span>
+      <span className="flex items-baseline gap-4 whitespace-nowrap short:gap-3">
+        Join with
+        <span className="font-mono text-tv-band font-black tracking-[0.02em] text-paper short:text-tv-field">{joinCode}</span>
+      </span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">at {host()}</span>
     </div>
   )
 }

@@ -2,6 +2,7 @@
 // scene from stage.ts, so the screen's rules are unit-tested. The core decides
 // when a game's screens show, never what is in them.
 import { boardTier } from '@/components/tv/fit'
+import type { NewsStage } from '@/components/tv/news'
 import { listNames } from '@/lib/recap'
 import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
@@ -34,6 +35,28 @@ export function mainArea(scene: TvScene, hasTvView: (gameType: string) => boolea
     case 'final':
       return { kind: 'stage', game: scene.game, finished: true }
   }
+}
+
+/**
+ * How news.ts routes an announcement for what fills the stage. A game's final
+ * screen shows its own result, so that game's news (its winner's) only plays
+ * its sound there and never lays a strap over the winner's screen. While a
+ * game runs, its own `stageBanners` decide.
+ */
+export function newsStage(area: MainArea, bannersOf: (gameType: string) => 'banner' | 'sound-only'): NewsStage {
+  if (area.kind === 'recap') return { kind: 'recap' }
+  if (area.kind === 'board') return { kind: 'board' }
+  return { kind: 'stage', gameId: area.game.id, banners: area.finished ? 'sound-only' : bannersOf(area.game.game_type) }
+}
+
+/**
+ * The news strap's announcement while `area` shows: none from the game whose
+ * final screen holds the stage, for a strap that went up a moment before its
+ * winner's screen took over (the news and the finish can reach the TV in two
+ * reads). Its sound has played already.
+ */
+export function strapNews<T extends { game_id: string | null }>(item: T | undefined, area: MainArea): T | undefined {
+  return item && area.kind === 'stage' && area.finished && item.game_id === area.game.id ? undefined : item
 }
 
 /**
@@ -106,6 +129,33 @@ export function comingUp(games: readonly SessionGame[]): SessionGame[] {
   return games
     .filter((g) => g.status === 'pending' && g.archived_at === null)
     .sort((a, b) => a.position - b.position || a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
+/**
+ * Lines in the band at most; past that, the newer games share one line. Two
+ * keep the stage its height on a 720p screen with 45 guests; the night's usual
+ * most is Last one standing and one more game.
+ */
+export const BAND_LINES = 2
+
+/** One line of the band: a game's own, the newer games folded into one, or the ticker's news. */
+export type BandRow = { kind: 'game'; game: SessionGame } | { kind: 'also'; games: SessionGame[] } | { kind: 'news' }
+
+/**
+ * The band's lines (docs/identity.md, The TV's frame), for the games in the
+ * background, oldest start first: each its own line up to BAND_LINES, and
+ * past that the oldest keep theirs and the newer ones share "Also running".
+ * News on the ticker from a game with its own line shows in that line; from a
+ * folded game it takes the "Also running" line while the ticker holds it, so
+ * the band never grows past BAND_LINES; from a game with no line it gets one.
+ */
+export function bandRows(games: readonly SessionGame[], ticker?: { game_id: string | null }): BandRow[] {
+  const shown = games.length > BAND_LINES ? games.slice(0, BAND_LINES - 1) : games
+  const folded = games.slice(shown.length)
+  const rows: BandRow[] = shown.map((game) => ({ kind: 'game', game }))
+  if (folded.length > 0) rows.push(ticker && folded.some((g) => g.id === ticker.game_id) ? { kind: 'news' } : { kind: 'also', games: folded })
+  if (ticker && !games.some((g) => g.id === ticker.game_id)) rows.push({ kind: 'news' })
+  return rows
 }
 
 /**

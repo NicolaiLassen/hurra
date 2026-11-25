@@ -1,18 +1,13 @@
 import type { ReactNode } from 'react'
-import { onAirText } from '@/components/tv/news'
+import { onAirText } from '@/lib/onAirText'
 import { BandEvent, BandLine, BandSince, Tab } from '@/components/tv/onAir'
 import { JoinTag } from '@/components/tv/Join'
+import { bandRows } from '@/components/tv/scene'
 import { GameStatus } from '@/components/tv/StatusCard'
 import Ticker from '@/components/tv/Ticker'
+import { accentOf } from '@/games/registry'
 import type { FeedItem, SessionGame } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
-
-/**
- * Lines in the band at most; past that, the newer games share one line. Two
- * keep the stage its height on a 720p screen with 45 guests; the night's usual
- * most is Last one standing and one more game.
- */
-const MAX_LINES = 2
 
 /**
  * The band along the bottom of the TV (docs/identity.md, The TV's frame): one
@@ -22,9 +17,10 @@ const MAX_LINES = 2
  * open. A game draws its own line
  * when its TvStatus lists the `band` variant; any other gets the plain line,
  * its title and "Running since" the time it started, with its latest news.
- * The ticker's line (news from a game in the background) shows there as the
- * line's event; news from a game with no line of its own gets a line for as
- * long as the ticker holds it. More lines, such as a slim line with the
+ * Which lines show is `bandRows` (scene.ts): at most two for the games, the
+ * newer ones folded into "Also running", and the ticker's news (from a game
+ * in the background) in its game's line, in place of "Also running" while it
+ * holds news from a folded game. More lines, such as a slim line with the
  * night's top five, join the list in `lines`.
  */
 export default function Band({
@@ -44,21 +40,25 @@ export default function Band({
 }) {
   const { snapshot } = useLive()
   const feed = snapshot?.feed ?? []
-  const shown = games.length > MAX_LINES ? games.slice(0, MAX_LINES - 1) : games
-  const folded = games.slice(shown.length)
+  const tickerType = snapshot?.games.find((g) => g.id === ticker?.game_id)?.game_type
 
-  const lines: ReactNode[] = shown.map((game) => (
-    <GameStatus
-      key={game.id}
-      game={game}
-      variant="band"
-      fallback={<PlainLine game={game} latest={feed.find((item) => item.game_id === game.id && item.audience === null)} />}
-    />
-  ))
-  if (folded.length > 0) lines.push(<AlsoRunning key="also" games={folded} />)
-  if (ticker && !games.some((game) => game.id === ticker.game_id)) {
-    lines.push(<Ticker key={`news:${ticker.id}`} item={ticker} source={sourceOf(ticker.game_id)} />)
-  }
+  const lines: ReactNode[] = bandRows(games, ticker).map((row) => {
+    switch (row.kind) {
+      case 'game':
+        return (
+          <GameStatus
+            key={row.game.id}
+            game={row.game}
+            variant="band"
+            fallback={<PlainLine game={row.game} latest={feed.find((item) => item.game_id === row.game.id && item.audience === null)} />}
+          />
+        )
+      case 'also':
+        return <AlsoRunning key="also" games={row.games} />
+      case 'news':
+        return ticker && <Ticker key={`news:${ticker.id}`} item={ticker} source={sourceOf(ticker.game_id)} hunt={accentOf(tickerType) === 'hunt'} />
+    }
+  })
   if (lines.length === 0 && !joinCode) return null
 
   return (

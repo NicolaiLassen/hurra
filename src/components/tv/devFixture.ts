@@ -5,7 +5,8 @@
 // for screens only, like the fixtures it builds on; nothing outside dev reads it.
 //
 // ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, pong-over, empty, hunt, hunt-ended,
-//                    quiz-lobby (before the first question), quiz-final (the quiz's podium)
+//                    quiz-lobby (before the first question), quiz-final (the quiz's podium),
+//                    fusion-final (Who is fused?'s podium)
 // &players=8|24|45   the party's size (trimmed, or padded with more guests)
 // &fresh=1           the stage game took the stage just now: its title card shows
 // &later=<seconds>   the clock moved on (a final screen's 3 minutes run out)
@@ -22,7 +23,20 @@ import { FIXTURE_NOW, fixtureRecapDoc, fixtureSnapshot, isFixtureScene, type Fix
 import type { RecapDoc } from '@/lib/recap'
 import type { FeedItem, Player, ScoreRow, SessionGame, Snapshot } from '@/lib/types'
 
-export const TV_SCENES = ['recap', 'standings', 'between', 'pong', 'pong-final', 'pong-over', 'empty', 'hunt', 'hunt-ended', 'quiz-lobby', 'quiz-final'] as const
+export const TV_SCENES = [
+  'recap',
+  'standings',
+  'between',
+  'pong',
+  'pong-final',
+  'pong-over',
+  'empty',
+  'hunt',
+  'hunt-ended',
+  'quiz-lobby',
+  'quiz-final',
+  'fusion-final',
+] as const
 export type TvOnlyScene = (typeof TV_SCENES)[number]
 export const NEWS = ['banner', 'ticker', 'interrupt', 'stage', 'points'] as const
 type News = (typeof NEWS)[number]
@@ -59,6 +73,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
   const news = search.get('news') as News | null
   let snapshot = build(scene as FixtureScene | TvOnlyScene)
   if (size !== null && Number.isInteger(size) && size >= 0 && scene !== 'empty') snapshot = resize(snapshot, size)
+  if (scene === 'final' || scene === 'pong-final') snapshot = withPodiumGains(snapshot)
   if (search.get('fresh') === '1' && snapshot.session) {
     snapshot = { ...snapshot, session: { ...snapshot.session, spotlight_at: snapshot.now - 500 } }
   }
@@ -165,6 +180,21 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
       })
       return { ...s, games, prompts: done ? s.prompts : [], tallies: {} }
     }
+    case 'fusion-final': {
+      // Who is fused? just finished after its reveals (its podium, inside its 3 minutes).
+      const s = fixtureSnapshot('fusion-reveal', 'tv')
+      const games = s.games.map((g): SessionGame => {
+        if (g.game_type !== 'fusion') return g
+        type Picture = { revealed: { both: number; one: number; voters: number } | null }
+        const pub = g.public_state as { top: { playerId: string; points: number }[]; pictures: Picture[] }
+        const best = pub.top[0]?.points ?? 0
+        const winners = pub.top.filter((row) => row.points === best && best > 0).map((row) => row.playerId)
+        // Sample counts: the first picture fooled most voters, so the screen has a best disguise to name.
+        const pictures = pub.pictures.map((p, i) => (i === 0 && p.revealed ? { ...p, revealed: { ...p.revealed, both: 1, one: p.revealed.voters - 1 } } : p))
+        return { ...g, status: 'finished', public_state: { ...pub, pictures, phase: 'done' }, finished_at: FIXTURE_NOW - 20_000, finished_by: 'game', winners }
+      })
+      return { ...s, games, prompts: [], tallies: {} }
+    }
     default:
       return fixtureSnapshot(scene, 'tv')
   }
@@ -230,6 +260,21 @@ function resize(s: Snapshot, size: number): Snapshot {
   return { ...s, players: [...players, ...extra], standings: allStandings, games, tallies }
 }
 
+/**
+ * The finished game's points for the night's top three too, as live data has
+ * them (a winner is usually on the night's podium): the winner's screen then
+ * shows its "+3" chips on the steps, where the fit is tightest.
+ */
+function withPodiumGains(s: Snapshot): Snapshot {
+  const game = s.games.find((g) => g.id === s.session?.spotlight_game_id && g.status === 'finished')
+  if (!game) return s
+  const points = { ...(s.game_points[game.id] ?? {}) }
+  s.standings.slice(0, 3).forEach((row, i) => {
+    points[row.player_id] ??= [3, 2, 1][i]
+  })
+  return { ...s, game_points: { ...s.game_points, [game.id]: points } }
+}
+
 /** The sample quiz with its open question's words replaced (dev fit checks). */
 function withQuestion(s: Snapshot, text: string | null, options: string | null): Snapshot {
   if (!text && !options) return s
@@ -242,7 +287,8 @@ function withQuestion(s: Snapshot, text: string | null, options: string | null):
   return { ...s, games }
 }
 
-let nextId = 900
+// Past every id the scenes hold (pong-final's news is 950), so the news is newer than all of them.
+let nextId = 1000
 function say(id: number, message: string, patch: Partial<FeedItem> = {}): FeedItem {
   return {
     id,

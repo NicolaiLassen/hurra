@@ -11,7 +11,7 @@ import GameSheet from '@/components/phone/GameSheet'
 import MyPlace from '@/components/phone/MyPlace'
 import OnTheTv from '@/components/phone/OnTheTv'
 import { GameCompactCard, GameResult, GameView } from '@/components/phone/PhoneGame'
-import { homeLayout, tvRows, type HomeLayout } from '@/components/phone/running'
+import { homeLayout, mainCardNews, sheetGivesWay, tvRows, type HomeLayout } from '@/components/phone/running'
 import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
 import type { TabTone } from '@/components/phone/Strap'
@@ -21,7 +21,7 @@ import QueryGate from '@/components/QueryGate'
 import SoundToggle from '@/components/SoundToggle'
 import Standings from '@/components/Standings'
 import { Button } from '@/components/ui/button'
-import { getGameModule, knockedOutIds } from '@/games/registry'
+import { accentOf, getGameModule, knockedOutIds } from '@/games/registry'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
 import { PHONE_SOUNDS } from '@/lib/sound'
@@ -102,8 +102,9 @@ function Home({
   const scene = tvScene(snapshot, now)
   const stageId = scene.kind === 'live' ? scene.game.id : null
   // The game the TV shows, live or its final screen: its tab is gold, the colour of what is on air.
+  // The hunt's tab is always its pink (GameModule.accent), as its own section draws it.
   const airId = scene.kind === 'live' || scene.kind === 'final' ? scene.game.id : null
-  const toneOf = (game: SessionGame): TabTone => (game.id === airId ? 'air' : 'plain')
+  const toneOf = (game: SessionGame): TabTone => (accentOf(game.game_type) === 'hunt' ? 'hunt' : game.id === airId ? 'air' : 'plain')
   const { main } = layout
   const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
   const liveMain = main.kind === 'game' ? main.game : null
@@ -151,7 +152,8 @@ function Home({
 
   useRemovedGameToast(snapshot, sheetOpen && sheetGame.id !== mainGame?.id ? sheetGame.id : null)
   useScanToast(scan, target !== null, snapshot.players, player.id)
-  useBringIntoView(mainCard, snapshot, layout, sheetOpen)
+  // A new timed question (a quiz question) takes the page back from a sheet left open, so its seconds aren't missed.
+  useBringIntoView(mainCard, snapshot, layout, sheetOpen, { timed, scanning: scanSheet !== null, close: closeSheet })
 
   const myToken = <Avatar name={player.name} playerId={player.id} className="size-9" />
 
@@ -443,10 +445,19 @@ function useScanToast(
  * When a new game takes the main card, or the main game opens a new question,
  * brings the card into view when it isn't all on screen: for a guest who
  * scrolled down to the standings, and for one at the top of a small phone,
- * where the last answers would sit below the fold. Not while a sheet covers
- * the page.
+ * where the last answers would sit below the fold. A sheet covering the page
+ * gives way only to a new timed question (sheetGivesWay in running.ts), so a
+ * guest who left the hunt's sheet open after a scan still sees the quiz's
+ * question in time.
  */
-function useBringIntoView(card: RefObject<HTMLElement | null>, snapshot: Snapshot, layout: HomeLayout, covered: boolean) {
+function useBringIntoView(
+  card: RefObject<HTMLElement | null>,
+  snapshot: Snapshot,
+  layout: HomeLayout,
+  covered: boolean,
+  /** The sheet covering the page, and whether the main card's question is timed: sheetGivesWay decides whether it closes. */
+  sheet: { timed: boolean; scanning: boolean; close: () => void },
+) {
   const game = layout.main.kind === 'game' ? layout.main.game : null
   let question: PromptState | null = null
   for (const prompt of snapshot.prompts) {
@@ -456,11 +467,21 @@ function useBringIntoView(card: RefObject<HTMLElement | null>, snapshot: Snapsho
   const questionKey = question?.key ?? null
   const seen = useRef<{ gameId: string | null; questionKey: string | null } | null>(null)
 
+  const sheetRef = useRef(sheet)
+  useEffect(() => {
+    sheetRef.current = sheet
+  })
+
   useEffect(() => {
     const before = seen.current
     seen.current = { gameId, questionKey }
-    if (!before || covered) return
-    const news = (gameId !== null && gameId !== before.gameId) || (questionKey !== null && questionKey !== before.questionKey)
+    if (!before) return
+    const news = mainCardNews(before, { gameId, questionKey })
+    if (covered) {
+      const { timed, scanning, close } = sheetRef.current
+      if (!sheetGivesWay({ news, covered, timed, scanning })) return
+      close()
+    }
     const element = card.current
     const box = element?.getBoundingClientRect()
     if (!news || !element || !box || (box.top >= 0 && box.bottom <= window.innerHeight)) return

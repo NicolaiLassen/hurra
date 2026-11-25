@@ -37,7 +37,7 @@ export const fusion = defineGameModule({
     const { detective } = data as FusionProfile
     const badges: ProfileBadge[] = []
     if (typeof detective === 'number' && detective > 0) {
-      badges.push({ icon: DetectiveIcon, label: detective === 1 ? 'Face detective' : `${detective}× face detective`, tone: 'violet' })
+      badges.push({ icon: DetectiveIcon, label: detective === 1 ? 'Face detective' : `${detective}× face detective`, tone: 'gold' })
     }
     return badges
   },

@@ -138,7 +138,12 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   media: { upload: (file: File) => Promise<string>; url: (path: string, size?: 'full' | 'thumb') => string }
 }
 
-/** A badge on a player's profile, shown on phones, the host page and the TV. */
+/**
+ * A badge on a player's profile, shown on phones, the host page and the TV.
+ * Its tone is its icon's job: 'gold' for a win, 'pink' for the hunt's; the
+ * guest colours (teal, violet) are identity only, so the app draws them in
+ * paper.
+ */
 export type ProfileBadge = { icon: Icon; label: string; tone?: 'gold' | 'pink' | 'teal' | 'violet' }
 
 /** A screen made with lazyScreen: `preload()` loads its file now. */
@@ -182,6 +187,14 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   ConfigEditor?: ComponentType<ConfigEditorProps<G>>
   /** The PlayerView takes player codes; camera scans of player QR codes land here. */
   acceptsScans?: boolean
+  /**
+   * The game's own colour where the frame draws its tab (docs/identity.md,
+   * Colour jobs). 'hunt': the hunt's pink with the popper's stripes, on the
+   * news strap for its news, on the programme strap while it holds the stage
+   * (pink words on ink over its winner's colour), and on a phone's tab for it.
+   * Left out: gold while on air, paper otherwise.
+   */
+  accent?: 'hunt'
   /** How this game's announcements show while it is live on the TV stage. 'sound-only' when its TvView shows the moment itself. Default 'banner'. */
   stageBanners?: 'banner' | 'sound-only'
   /** Turns this game's section of a profile into badges. */

@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest'
 import type { TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame } from '@/lib/types'
 import {
+  BAND_LINES,
+  bandRows,
   byOldestStart,
   comingUp,
   freshStage,
   joinPlace,
   mainArea,
+  newsStage,
   resultLine,
   runningFor,
   sceneLine,
+  strapNews,
   TITLE_CARD_FRESH_MS,
   titleCardKey,
   topOfGame,
@@ -75,6 +79,37 @@ describe('mainArea', () => {
     expect(mainArea({ kind: 'standings', lastGame: null }, withView)).toEqual({ kind: 'board', over: false, nowPlaying: null })
     expect(mainArea({ kind: 'over' }, withView)).toEqual({ kind: 'board', over: true, nowPlaying: null })
     expect(mainArea({ kind: 'recap' }, withView)).toEqual({ kind: 'recap' })
+  })
+})
+
+describe('news on the stage', () => {
+  const hunt = game('h', { game_type: 'elimination', title: 'Last one standing' })
+  const bannersOf = (type: string): 'banner' | 'sound-only' => (type === 'quiz' ? 'sound-only' : 'banner')
+
+  it("lets a live game's own stageBanners decide, and keeps the board and the recap as they were", () => {
+    expect(newsStage({ kind: 'stage', game: hunt, finished: false }, bannersOf)).toEqual({ kind: 'stage', gameId: 'h', banners: 'banner' })
+    expect(newsStage({ kind: 'stage', game: game('q'), finished: false }, bannersOf)).toEqual({ kind: 'stage', gameId: 'q', banners: 'sound-only' })
+    expect(newsStage({ kind: 'board', over: false, nowPlaying: null }, bannersOf)).toEqual({ kind: 'board' })
+    expect(newsStage({ kind: 'recap' }, bannersOf)).toEqual({ kind: 'recap' })
+  })
+
+  it("plays only the sound of a game's news on its own final screen, which shows the result itself", () => {
+    expect(newsStage({ kind: 'stage', game: { ...hunt, status: 'finished' }, finished: true }, bannersOf)).toEqual({
+      kind: 'stage',
+      gameId: 'h',
+      banners: 'sound-only',
+    })
+  })
+
+  it("takes down a strap from the game whose winner's screen has just taken the stage, and keeps any other", () => {
+    const winnerNews = { id: 1, game_id: 'h' }
+    const party = { id: 2, game_id: null }
+    const final = { kind: 'stage', game: { ...hunt, status: 'finished' }, finished: true } as const
+    expect(strapNews(winnerNews, final)).toBeUndefined()
+    expect(strapNews(party, final)).toBe(party)
+    expect(strapNews(winnerNews, { kind: 'stage', game: hunt, finished: false })).toBe(winnerNews)
+    expect(strapNews(winnerNews, { kind: 'board', over: false, nowPlaying: null })).toBe(winnerNews)
+    expect(strapNews(undefined, final)).toBeUndefined()
   })
 })
 
@@ -174,6 +209,37 @@ describe('the generic status card', () => {
       ['Ana', 3],
     ])
     expect(topOfGame({}, PLAYERS)).toEqual([])
+  })
+})
+
+describe('the band', () => {
+  const hunt = game('h', { game_type: 'elimination', title: 'Last one standing', started_at: NOW - 90 * MIN })
+  const fusion = game('f', { game_type: 'fusion', title: 'Who is fused?', started_at: NOW - 60 * MIN })
+  const quiz = game('q', { started_at: NOW - 5 * MIN })
+  const kinds = (rows: ReturnType<typeof bandRows>) => rows.map((row) => (row.kind === 'game' ? row.game.id : row.kind))
+
+  it('gives each game its own line, up to two', () => {
+    expect(BAND_LINES).toBe(2)
+    expect(kinds(bandRows([hunt]))).toEqual(['h'])
+    expect(kinds(bandRows([hunt, fusion]))).toEqual(['h', 'f'])
+  })
+
+  it('folds the newer games into one Also running line past two, never a third line', () => {
+    const rows = bandRows([hunt, fusion, quiz])
+    expect(kinds(rows)).toEqual(['h', 'also'])
+    expect(rows[1]).toEqual({ kind: 'also', games: [fusion, quiz] })
+  })
+
+  it("shows a folded game's news in place of Also running while the ticker holds it", () => {
+    expect(kinds(bandRows([hunt, fusion, quiz], { game_id: 'q' }))).toEqual(['h', 'news'])
+    // News from a game with a line of its own shows in that line.
+    expect(kinds(bandRows([hunt, fusion, quiz], { game_id: 'h' }))).toEqual(['h', 'also'])
+    expect(kinds(bandRows([hunt, fusion], { game_id: 'f' }))).toEqual(['h', 'f'])
+  })
+
+  it('gives news from a game with no line a line of its own', () => {
+    expect(kinds(bandRows([hunt], { game_id: 'gone' }))).toEqual(['h', 'news'])
+    expect(kinds(bandRows([], { game_id: null }))).toEqual(['news'])
   })
 })
 

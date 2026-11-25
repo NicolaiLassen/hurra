@@ -1,7 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { onAirText } from '@/components/tv/news'
+import { onAirText } from '@/lib/onAirText'
 import { Stripes, Tab } from '@/components/tv/onAir'
 import type { FeedItem } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 /** The strap's wipe from its left edge (docs/identity.md, Motion), reaching past its edges so the tilted tab keeps its corners. */
 const HIDDEN = 'inset(-2rem 100% -2rem 0rem)'
@@ -9,17 +10,31 @@ const SHOWN = 'inset(-2rem 0% -2rem 0rem)'
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
 /**
+ * Over a winner's colour field (WinnerMoment's `data-tv-field`, found through
+ * the frame's `group/frame`) the strap stands on the field's own colour, not
+ * the ground, so no black bar crosses it. Spelled out so Tailwind finds them.
+ */
+const OVER_FIELD = [
+  'group-has-[[data-tv-field=coral]]/frame:bg-guest-coral',
+  'group-has-[[data-tv-field=teal]]/frame:bg-guest-teal',
+  'group-has-[[data-tv-field=violet]]/frame:bg-guest-violet',
+  'group-has-[[data-tv-field=sky]]/frame:bg-guest-sky',
+  'group-has-[[data-tv-field=lime]]/frame:bg-guest-lime',
+  'group-has-[[data-tv-field=paper]]/frame:bg-guest-paper',
+].join(' ')
+
+/**
  * Big news (news.ts routes it here, with its sound): for 8 seconds a strap
  * takes the whole width of the frame's top row, over the programme strap and
  * the bug, so it never covers the stage (a quiz's answered count included) or
  * the band. The game's title on the tab, pink with the popper's stripes for
- * the hunt's news and gold for anything else on air, then the news on paper
+ * any news from the hunt (`hunt`: its GameModule.accent) and gold for
+ * anything else on air, then the news on paper
  * with its detail after it. It wipes in from its left edge and fades out;
  * with reduced motion it only fades.
  */
-export default function Banner({ item, source }: { item: FeedItem | undefined; source?: string }) {
+export default function Banner({ item, source, hunt = false }: { item: FeedItem | undefined; source?: string; hunt?: boolean }) {
   const reduce = useReducedMotion()
-  const hunt = item?.tone === 'pink'
   return (
     <div data-frame="news" className="pointer-events-none fixed inset-x-[5vw] top-[5vh] z-40" aria-live="polite">
       <AnimatePresence>
@@ -30,8 +45,8 @@ export default function Banner({ item, source }: { item: FeedItem | undefined; s
             animate={reduce ? { opacity: 1 } : { clipPath: SHOWN }}
             exit={{ opacity: 0, transition: { duration: 0.14 } }}
             transition={{ duration: reduce ? 0.2 : 0.22, ease: EASE_OUT }}
-            // The ground reaches 12 px past the row both ways, so the tilted programme tab underneath never peeks out.
-            className="absolute inset-x-0 -top-3 flex h-22 items-center bg-ground short:h-20"
+            // The ground reaches 12 px past the row up, down and left, so the tilted programme tab underneath never peeks out.
+            className={cn('absolute -top-3 right-0 -left-3 flex h-22 items-center bg-ground pl-3 short:h-20', OVER_FIELD)}
           >
             {hunt && <Stripes size="strap" />}
             <Tab tone={hunt ? 'pink' : 'gold'} size="strap" className="max-w-[36rem] shrink-0">

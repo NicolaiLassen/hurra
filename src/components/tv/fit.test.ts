@@ -8,6 +8,7 @@ import {
   LARGE_ROWS,
   LEADER_SPLITS,
   leaderColumn,
+  nightPodium,
   ROW_LAYOUTS,
   rowLayout,
   rowLayoutsFor,
@@ -178,5 +179,32 @@ describe('boardSplit', () => {
     const split = boardSplit({ field: 41, width: 1152, height: 460, join, gap: 24, layouts: rowLayoutsFor('large') })
     expect(split).toMatchObject({ split: LEADER_SPLITS[2], join: 'line', fit: { fits: false } })
     expect(split.fit!.shown).toBeLessThan(41)
+  })
+})
+
+describe('nightPodium', () => {
+  // One line of the promise at 1080p (32 px at 1.3) and on short screens (30 px at 1.3).
+  const LINE = 42
+  const SHORT_LINE = 39
+
+  it('stands the tokens on steps of clearly different heights where there is room (1080p)', () => {
+    const fit = nightPodium(300, LINE)
+    expect(fit).toMatchObject({ podium: true, tokens: true, compact: false })
+    expect(fit.steps[0]).toBeGreaterThan(fit.steps[1])
+    expect(fit.steps[1]).toBeGreaterThan(fit.steps[2])
+  })
+
+  it('goes to one row of steps without the tokens when the room is short (720p with one band line)', () => {
+    expect(nightPodium(120, SHORT_LINE)).toMatchObject({ podium: true, tokens: false, compact: true })
+  })
+
+  it('gives the podium up rather than cut the third hurra at the stage edge (720p with two band lines)', () => {
+    // 60 px left under the field: the promise takes two lines beside the steps, 78 px.
+    expect(nightPodium(60, SHORT_LINE).podium).toBe(false)
+    expect(nightPodium(78, SHORT_LINE).podium).toBe(true)
+  })
+
+  it('shows everything until it is measured', () => {
+    expect(nightPodium(0, 0)).toEqual({ podium: true, tokens: true, compact: false, steps: [216, 168, 119] })
   })
 })

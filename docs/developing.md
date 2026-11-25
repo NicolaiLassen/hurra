@@ -179,7 +179,15 @@ in [src/components](../src/components).
 
 **`index.ts`**: `defineGameModule({ logic, name, description, icon, PlayerView, ... })`,
 with `stageBanners: 'sound-only'` when the `TvView` shows each moment itself,
-and `profileBadges` to show the game's profile data as badges. **`bot.ts`**:
+and `profileBadges` to show the game's profile data as badges (`tone`: gold
+for a win, pink for the hunt). Three more optional hooks reach the core
+without it naming the game:
+
+| Hook | What the core does with it |
+| ---- | -------------------------- |
+| `knockedOut(publicState)` | The players this live game has knocked out: the TV board, the host's player list and the phone's standings mark them Out with the token's stripe (`knockedOutIds` in the registry). |
+| `phoneStrap(publicState)` | The words on the paper strap beside the game's tab on a phone while it holds the main card ("Question 3 of 10"). |
+| `accent: 'hunt'` | The game's tabs are the hunt's pink with the popper's stripes: the TV's news strap and programme strap, its ticker line, and a phone's tab. | **`bot.ts`**:
 the game's rehearsal bot ([src/games/core/bot.ts](../src/games/core/bot.ts)).
 
 **Register** the logic in [src/games/logic.ts](../src/games/logic.ts), the module
