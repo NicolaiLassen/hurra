@@ -106,11 +106,11 @@ flowchart TD
   P0 -- "not a player here" --> JOIN["/join/:code"]:::screen
   P0 -- "player" --> PH["Phone home<br/>avatar, name, badges, sound, points"]:::screen
   PH --> S{"The main card"}:::gate
-  S -- "no game live, none finished lately" --> LOBBY["Lobby: You're in!<br/>faces of the latest joiners"]:::screen
+  S -- "no game live, none finished lately" --> LOBBY["Lobby: You're in.<br/>faces of the latest joiners"]:::screen
   S -- "a game on the TV" --> LIVE["On the TV: the game's own screen"]:::screen
   S -- "a game live off the TV, no result to show" --> LIVE2["Now playing: the newest live game"]:::screen
   S -- "the last game finished, none started since<br/>(background games stay compact cards)" --> RES["Finished: the game's result for me<br/>Waiting for the next game"]:::closed
-  S -- "party archived" --> WRAP["That's a wrap!<br/>Your night once the recap is published"]:::closed
+  S -- "party archived" --> WRAP["That's a wrap.<br/>Your night once the recap is published"]:::closed
   PH --> ALSO["Also running: a compact card per other live game<br/>Open shows the whole game in a sheet"]:::screen
   PH --> LATE["Finished lately: a row per other finished game<br/>tap shows its result in a sheet"]:::screen
   PH --> NIGHT["Your night: rank, points by game, moments<br/>once the recap is published"]:::screen
@@ -160,8 +160,8 @@ flowchart TD
   TAG --> ALIVE
   CATCH --> ALIVE
   ALIVE -- "someone gets me" --> OUT["You're out: who and with which task<br/>N still standing, sad sound"]:::screen
-  ALIVE -- "I'm the last one left" --> WIN["Last one standing!<br/>fanfare"]:::screen
-  WIN -- "the game finishes by itself" --> RESULT["Result card: You're the last one standing!"]:::closed
+  ALIVE -- "I'm the last one left" --> WIN["You're the last one standing.<br/>fanfare"]:::screen
+  WIN -- "the game finishes by itself" --> RESULT["Result card: You're the last one standing."]:::closed
   OUT -- "a winner is decided" --> RESULT2["Result card: You're out, Mads got you. Ana won."]:::closed
   SPEC --> RESULT3["Result card: Ana won"]:::closed
   RESULT -.- C23["G6 closed: the deciding knockout finishes the game,<br/>with no End needed (C23)"]:::closed
@@ -346,7 +346,7 @@ to be paired; the host's own browser skips that with a small Host preview label.
 flowchart TD
   classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
   classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
-  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
+  classDef closed fill:#29241e,stroke:#a59c8c,color:#f2ebde
 
   OPEN(["/tv/:code opened on the TV laptop"]) --> TVL{{"The party loads"}}:::gate
   TVL -- "unknown code" --> PNF["Party not found"]:::closed
@@ -355,34 +355,46 @@ flowchart TD
   PAIR -- "wrong or expired code" --> PAIR
   PAIR -- "the host's code" --> MODE
   TVL -- "paired, or the host's browser" --> MODE{"What to show"}:::gate
-  MODE -- "party archived" --> FINAL["Final standings<br/>no join card"]:::closed
-  MODE -- "the recap is shown" --> RECAP["The recap: numbers, the race,<br/>a slide per chapter, lead changes, the podium"]:::screen
-  MODE -- "a game live on the stage" --> TAKE["Hurra presents: a 3 s title card,<br/>then the game's TV screen"]:::screen
-  MODE -- "a finished game on the stage" --> FIN["Final screen: the winners and this game's top 5<br/>for 3 minutes"]:::closed
-  MODE -- "nothing on the stage" --> POD["Podium and standings<br/>Last game: Mads won X; join card while joining is open"]:::screen
+  MODE -- "party archived" --> FINAL["Final standings<br/>no way in"]:::closed
+  MODE -- "the recap is shown" --> RECAP["The recap: numbers, the race,<br/>a slide per chapter, lead changes, the night's podium"]:::screen
+  MODE -- "a game live on the stage" --> TAKE["Hurra presents: a 3 s title card,<br/>then the game's TV screen in the frame"]:::screen
+  MODE -- "a finished game on the stage" --> FIN["Its final screen for 3 minutes: its own,<br/>or the winner's colour with Hurra for Bo!"]:::closed
+  MODE -- "nothing on the stage" --> POD["The standings: the leader as a hero, the next five,<br/>the field, the join block while joining is open"]:::screen
   TAKE -- "the game finishes" --> FIN
   FIN -- "Back to standings, or 3 minutes" --> POD
-  TAKE --> RAIL["Rail: the day's top 5, Also running cards,<br/>Finished chips"]:::screen
+  TAKE --> BAND["The band: one line per game in the background,<br/>Join with HURRA30 at its right"]:::screen
   MODE -- "host unpairs it" --> PAIR
-  POD -. "announcement" .-> BAN["Banner at the bottom for 8 s, one sound"]:::closed
+  POD -. "announcement" .-> NEWS["The news strap across the top row for 8 s, one sound"]:::closed
 ```
 
-Announcements on the TV and the toasts on phones are one shared callout
-(`src/components/Callout.tsx`) at two sizes: a tone border, the icon in a tinted
-circle, the game's title as a small eyebrow (TV), the title and an optional
-detail line. On the TV it springs up above the corner gutter and a thin bar in
-its tone drains over the 8 seconds it shows; with reduced motion it only fades.
-While a game holds the stage, announcements from games in the background go to
-a quiet ticker in the rail, except a winner, which gets the banner and its
-sound.
+Every TV screen but the recap and the pairing screen stands in one on-air
+frame ([identity.md, The TV's frame](identity.md#the-tvs-frame)) inside the 5
+percent safe area: the programme strap at the top left (a tilted tab with
+what is on, the hunt's in pink, and a paper strap with where it is, "Question
+3 of 10"), the bug at the top right (the party's name, the time of night and
+the logo), the stage at full width, and the band along the bottom with one
+line per game running in the background, at most two (newer ones share "Also
+running"), with "Join with HURRA30" at its right while a game holds the
+stage.
 
-The corner holds the full screen button, the sound toggle and a live dot, in a
-gutter below the board so they never cover it. While the browser still blocks
-audio, the toggle is a small "Click for sound" pill. The plain standings fit
-the same way, composed for the party's size and centred under the header: a big
-podium beside a big join card for 1 to 3 guests, large rows under the podium
-up to 12, columns of rows up to 30, and a smaller podium over compact rows
-after that.
+Big news is a strap across the whole top row for 8 seconds, over the
+programme strap and the bug, so it never covers the stage or the band; a
+game's own news on its final screen only plays its sound. While a game holds
+the stage, news from a game in the background is the band's event line, with
+its time and no sound, except a winner, which gets the strap and its sound.
+Nothing crawls, there is no red, and the TV says a game's news without its
+exclamation marks. Phones show the same news as a toast (the shared callout,
+`src/components/Callout.tsx`): a square icon chip by its job, the title and
+an optional detail line.
+
+The corner, under the band outside the safe area, holds the full screen
+button, the sound toggle ("Click for sound" while the browser blocks audio)
+and the connection as a word, Live or Reconnecting. The standings fit any
+party: the leader's column (the hero, the next five places and a line on how
+the last game moved the places) beside the field of rows, measured in fit.ts,
+with the join block under the field (the QR code on paper, the code and the
+page's own address) or its short form, the code over the address, when the
+rows need the room.
 
 ## 5. Errors, not found and the ways back
 
@@ -390,7 +402,7 @@ after that.
 | --- | --- | --- | --- |
 | Unknown or malformed code or id | Party not found, Join another party (forgets the stored code) | Session not found, Back to your sessions | Party not found |
 | Party deleted while open | Party not found, Join another party | Session not found (or back to the list after deleting it there) | Party not found |
-| Party archived | That's a wrap! with Your night once published; the join link says This party is over | Archived note | Final standings, or the recap if shown |
+| Party archived | That's a wrap., with Your night once published; the join link says This party is over | Archived note | Final standings, or the recap if shown |
 | Joining closed | Joining is closed, opens by itself when the host reopens | Joining is closed card, faded QR | No join card |
 | Player removed | You're no longer in X, Join again | Row gone | Row gone |
 | Player moved to another phone | Your player moved to another phone | Row stays, with its points | Row stays |
@@ -415,7 +427,7 @@ after that.
 | C1 | A wrong or malformed party code was a dead end | Party not found with Join another party |
 | C2 | Joining is closed was a dead end and never updated | Updates live when the host reopens; Join another party |
 | C3 | Continue in session X looped into a deleted party | The stored code is forgotten on Party not found |
-| C4 | Archived party: phones said the next game starts soon; newcomers were told to ask the host to open it | That's a wrap!, This party is over, and Final standings on the TV |
+| C4 | Archived party: phones said the next game starts soon; newcomers were told to ask the host to open it | That's a wrap., This party is over, and Final standings on the TV |
 | C5 | A removed player kept a working phone home | You're no longer in X, Join again |
 | C6 | A deleted game vanished silently | Toast on the phone, back to the lobby |
 | C7 | Random, malformed or deleted ids showed the loader forever (host, TV) | Session not found with a way back |
@@ -519,12 +531,12 @@ sequenceDiagram
 
 | Moment | Host page | TV | Phones that played | Others |
 | --- | --- | --- | --- | --- |
-| The winning move | The card shows the winner | The game's screen shows the winner; banner and one fanfare | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
-| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: a Finished chip in the rail | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished lately row | The generic result card or row |
+| The winning move | The card shows the winner | The game's screen shows the winner and one fanfare; a game in the background gets the news strap | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
+| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: the news strap, and a Finished chip beside the standings later | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished lately row | The generic result card or row |
 | Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | No change: the result stays until the next game | No change |
 | The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main. Whatever the guest had open in the game that had the main card (a vote being picked, a knockout being confirmed) stays on top until they finish | Same |
 | The host restarts the finished game | Live again, a new round | Its screen if it takes the TV | Dealt in again | Dealt in |
-| The host archives the party | Archived note | Final standings, or the recap if shown | That's a wrap!, Your night when published | Same |
+| The host archives the party | Archived note | Final standings, or the recap if shown | That's a wrap., Your night when published | Same |
 
 Why 3 minutes: long enough for the room to cheer, read the top hunters and take
 photos, short enough that a forgotten final screen never hides the standings for

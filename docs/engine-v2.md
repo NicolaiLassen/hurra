@@ -3041,7 +3041,11 @@ and the stage takes the full width; the programme strap and the bug sit at
 the top, and the band along the bottom has one line per game in the
 background (its `TvStatus` `band` variant, or a plain line). The banner is
 the news strap across the top row, the ticker is the band's event line, and
-the corner has no coloured dot. `news.ts` routes as before.
+the corner has no coloured dot. `news.ts` routes as before, except that a
+game's own news on its final screen only plays its sound (`newsStage`). The
+Rail, Banner and Corner bullets above, and the strip, rail, ticker, winner
+glow and live dot bullets under "Changed during build (TV)" below, are
+superseded by it; the rule book has the current frame.
 
 **Timers.** `useWakeSync({ delayMs: 250 })` (5.10, 4.5): the TV's sync for
 each live game at `wake_at + 250 ms`, with the shared rate limit and backoff.
@@ -3082,20 +3086,22 @@ animation, fades only.
 
 **Changed during build (TV):**
 
-- **The strip.** While the standings show, the status cards and Finished
+- **The strip** (superseded by the redesign, 24 Nov). While the standings show, the status cards and Finished
   chips sit in a strip beside the podium, in the band right under the header,
   not in a full-width row: a full-width row left 1440 by 900 too short for 45
   guests. The podium narrows while the strip shows, and cards that don't fit
   become small Live chips.
-- **The rail.** Game cards stack from the top, oldest start first (the
+- **The rail** (superseded by the redesign, 24 Nov). Game cards stack from the top, oldest start first (the
   evening-long game stays on top), as many as fit by measurement; the rest
   become Live chips on the "Also running" line. At most 3 Finished chips sit
   at the rail's bottom.
-- **The ticker** is one line in the bottom gutter under the rail's column,
-  shown without sound for 20 s.
+- **The ticker** (superseded by the redesign, 24 Nov: it is the band's event
+  line) is one line in the bottom gutter under the rail's column, shown
+  without sound for 20 s.
 - **Announcements:** one with no game (`game_id` null) gets the banner even
   while a game holds the stage; during the recap only `interrupt` ones show;
-  the banner's winner glow follows `interrupt`, never the icon.
+  the banner's winner glow followed `interrupt`, never the icon (the
+  redesign, 24 Nov, has no glow).
 - **The recap:** every slide 8 s, the race 12 s (10 s of animation, then it
   holds); the podium's fanfare plays once per published version; the TV reads
   the recap only while its scene is on, and shows the scene underneath while
@@ -3106,7 +3112,8 @@ animation, fades only.
 - **Pairing** with another party's code pairs the browser with that party;
   the TV then says "That code pairs a TV for another party. Get a new code
   from this party's host page."
-- **The live dot** is also grey while the browser itself is offline:
+- **The live dot** (superseded by the redesign, 24 Nov: the corner says Live
+  or Reconnecting in words) is also grey while the browser itself is offline:
   realtime-js took 45 s or more to notice a dropped network.
 - A host's own preview tab also sends the TV's timer syncs: harmless
   duplicates, which the engine skips.

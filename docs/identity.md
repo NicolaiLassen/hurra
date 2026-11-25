@@ -12,10 +12,11 @@ block in [src/index.css](../src/index.css), and the approved
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
-[Who is fused? on the TV](#who-is-fused-on-the-tv) · [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
-[The recap on the TV](#the-recap-on-the-tv) · [The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
-[The host room](#the-host-room) ·
-[The acceptance test](#the-acceptance-test)
+[Who is fused? on the TV](#who-is-fused-on-the-tv) ·
+[The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
+[The recap on the TV](#the-recap-on-the-tv) · [The phone](#the-phone) ·
+[The host room](#the-host-room) · [Old names](#old-names) ·
+[Guards](#guards) · [The acceptance test](#the-acceptance-test)
 
 ## Colour jobs
 
@@ -147,8 +148,9 @@ jobs, with their props and variant names unchanged:
   `destructive` danger, `link` paper with a `paper-3` underline. Host sizes
   use the control radius; `xl` is the phone's 54 px button with the phone
   radius and 18 px text.
-- **Card:** a raised panel with no hairline. Its ring is transparent, so a
-  screen can colour it to mark a state (`ring-gold/40` for the game on the TV).
+- **Card:** a raised panel with no hairline. Its ring stays transparent: a
+  state is a word on a chip (see [The host room](#the-host-room)), never a
+  coloured edge.
 - **Badge:** square chips that carry words. `default` gold (on air, live,
   leading), `secondary`, `outline`, `ghost` (a plain word: Done, Ready),
   `destructive`, and `hunt` (pink: Out).
@@ -497,6 +499,37 @@ the standings card below the fold, and Show my code in the thumb zone.
 - **Results** stand on the raised surface, never on a gold or pink wash. The
   winner's crown and words are gold; Out is pink.
 
+## The host room
+
+The control room is a reskin of the same page: every function and every
+confirmation stays where it was. Its own rules:
+
+- **One gold step per item.** A game's host view has at most one gold button,
+  its next step (the quiz's Reveal now, Show the leaderboard, Next question or
+  Crown the winner). A step that skips ahead (skip the leaderboard, crown
+  early) goes in the menu beside it, behind the same confirmation, never next
+  to it. A program's Start is gold only on the game that is the room's next
+  step, `nextStartId` in
+  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
+  game not started, while a TV is open and shows the standings. Back to
+  standings is gold on a final screen, Pair a TV while no TV is open.
+- **States are words** on chips:
+  [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
+  (Live, Open on the overlay; Done, Not started, Closed as plain words;
+  Archived in a rule outline). The game on the TV wears the gold On the TV
+  chip, since it is on air, with the clock time it started (`started_at`).
+  The connection dot is paper with Live, an empty ring with Catching up.
+- **The player list** marks a knocked-out guest with the token's `out` stripe
+  and the word Out in pink, from `knockedOutIds` (the games' generic
+  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
+  in paper: no medal coins in the room. There is no Away tag: the app holds
+  no presence data for players.
+- **Numbers that change in place** (the TV sound level, the quiz's totals and
+  gains, answered counts) are `tv-num`, so their columns hold still.
+- **Wells:** a settings form or a question is an `overlay` well in a raised
+  panel; cards inside a well stand on `raised`, their fields on `overlay`.
+  Warnings and notes are solid panels with an icon, never a glass callout.
+
 ## Old names
 
 The shadcn slots and the confetti names are aliases that point at the brand:
@@ -535,37 +568,6 @@ screen has moved.
   `cn('text-paper', 'text-tv-question')` keeps only the size. A new size,
   radius, easing or animation in index.css goes into `THEME_SCALES` in
   [src/lib/utils.ts](../src/lib/utils.ts), and the test fails until it does.
-
-## The host room
-
-The control room is a reskin of the same page: every function and every
-confirmation stays where it was. Its own rules:
-
-- **One gold step per item.** A game's host view has at most one gold button,
-  its next step (the quiz's Reveal now, Show the leaderboard, Next question or
-  Crown the winner). A step that skips ahead (skip the leaderboard, crown
-  early) goes in the menu beside it, behind the same confirmation, never next
-  to it. A program's Start is gold only on the game that is the room's next
-  step, `nextStartId` in
-  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
-  game not started, while a TV is open and shows the standings. Back to
-  standings is gold on a final screen, Pair a TV while no TV is open.
-- **States are words** on chips:
-  [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
-  (Live, Open on the overlay; Done, Not started, Closed as plain words;
-  Archived in a rule outline). The game on the TV wears the gold On the TV
-  chip, since it is on air, with the clock time it started (`started_at`).
-  The connection dot is paper with Live, an empty ring with Catching up.
-- **The player list** marks a knocked-out guest with the token's `out` stripe
-  and the word Out in pink, from `knockedOutIds` (the games' generic
-  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
-  in paper: no medal coins in the room. There is no Away tag: the app holds
-  no presence data for players.
-- **Numbers that change in place** (the TV sound level, the quiz's totals and
-  gains, answered counts) are `tv-num`, so their columns hold still.
-- **Wells:** a settings form or a question is an `overlay` well in a raised
-  panel; cards inside a well stand on `raised`, their fields on `overlay`.
-  Warnings and notes are solid panels with an icon, never a glass callout.
 
 ## The acceptance test
 
