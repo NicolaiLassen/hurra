@@ -2889,6 +2889,9 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
    timed question open (a prompt with a `closes_at`), so it covers none of the
    answers on a small phone; a new question also scrolls the main card into
    view when it doesn't fit on screen, not only when its top is above it.
+   Since Lydspor, the bar also steps aside while a guest types into a text
+   field (`useTypingFocus`), and a new question never scrolls the page while
+   one has the focus.
 
 **Behaviour.**
 
@@ -3840,20 +3843,22 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
 - **Badges**: `wins` as "Lydspor champion" (`CassetteTapeIcon`, gold). The
   phone strap says "8 songs", "Song 5 of 8", "Last call", "Locked at 21:24"
   and "Reveal 1 of 8".
-- **Screens** land from their own packages (spec section 18): the TV
-  (`TvView`, `FinalTvView`, `TvStatus`), the phone (`PlayerView`, `PlayerCard`,
-  `ResultView`) and the host room (`HostView`, `ConfigEditor`). Until then each
-  is a plain placeholder.
+- **Screens** (spec sections 4, 9, 10 and 12), merged from their own
+  packages: the TV (`TvView`, `FinalTvView`, `TvStatus`, `tv/`), the phone
+  (`PlayerView`, `PlayerCard`, `ResultView`, `typing.ts`, `phone/`) and the
+  host room (`HostView`, `host/`, `ConfigEditor`, `editor/`).
 - **Fixtures**: `soundtrack-lobby`, `-playing` (song 5 of 8), `-last-call`,
   `-locked`, `-reveal` (reveal 1, a close title accepted), `-standings` and
   `-final`, each played through the real logic on the fixture party
   (`samples.ts`), beside a live Last one standing.
-- **Bot** (`bot.ts`): three invented songs with an extra answer each, two
-  extra photos and a 20 s last call. Guests type the right answer, one with a
-  typo, one 3 letters off or a wrong one, pick photos and swap them; the
-  scripted host plays the songs 3 s apart, calls the last call, reveals 3 s
-  apart, accepts the first close title of each reveal, shows the top 5 and
-  crowns.
+- **Bot** (`bot.ts`): eight invented songs with an extra answer each; its
+  scripted round plays the first three with two extra photos and a 20 s last
+  call, and `botSettings(ids, 8)` gives a rehearsal of the night's length
+  (four extra photos, the top 5 every 4 songs). Guests type the right answer,
+  one with a typo inside a word, one 3 letters off or a wrong one, pick
+  photos and swap them; the scripted host plays the songs 3 s apart, calls
+  the last call, reveals 3 s apart, accepts the first close title of each
+  reveal, shows the top 5 and crowns.
 
 ## 9. Testing plan
 
