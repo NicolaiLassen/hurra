@@ -1,19 +1,23 @@
-import { ImageIcon, PlusIcon, TrashIcon, UploadSimpleIcon, XIcon } from '@phosphor-icons/react'
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { ImageIcon, PlusIcon, TrashIcon, UploadSimpleIcon, WarningIcon, XIcon } from '@phosphor-icons/react'
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { PlayerId } from '@/games/core/Game'
+import type { FusionConfig, FusionGame, FusionPicture } from '@/games/fusion/logic'
 import {
+  DEFAULT_SECONDS,
+  DEFAULT_SHOW_SECONDS,
   defaultLabel,
   MAX_LABEL_LENGTH,
   MAX_PICTURES,
   MAX_POINTS,
-  type FusionConfig,
-  type FusionGame,
-  type FusionPicture,
-} from '@/games/fusion/logic'
+  MAX_SECONDS,
+  MAX_SHOW_SECONDS,
+  MIN_SECONDS,
+  MIN_SHOW_SECONDS,
+} from '@/games/fusion/shapes'
 import type { ConfigEditorProps } from '@/games/types'
 import { toast } from '@/lib/toast'
 import type { Player } from '@/lib/types'
@@ -24,8 +28,8 @@ const NOBODY = 'nobody'
 
 /**
  * Fusion's settings (hosts only): the numbered pictures, each with an optional
- * label, image and the two people in it, and the points. Who is in a picture
- * can also wait until the night (Show who in the live game).
+ * label, image and the two people in it, the timing and the points. Who is in
+ * a picture can also wait until the night (Show who in the live game).
  */
 export default function ConfigEditor({ config, onChange, players, media }: ConfigEditorProps<FusionGame>) {
   const pictures: FusionPicture[] = Array.isArray(config.pictures) ? config.pictures : []
@@ -64,7 +68,7 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
     const valid = Number.isInteger(n) && n >= 1 && n <= MAX_PICTURES
     return (
       <div className="grid gap-3">
-        <Label htmlFor="fusion-count">How many fused pictures hang on the wall?</Label>
+        <Label htmlFor="fusion-count">How many fused pictures are there?</Label>
         <div className="flex gap-2 sm:max-w-80">
           <Input
             id="fusion-count"
@@ -83,11 +87,11 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
             Add pictures
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-paper-2">
           Number the prints 1 to {valid ? n : 'N'}, as they are numbered here. You can add an image and the two people for
           each one next.
         </p>
-        <Points config={config} change={change} />
+        <Rules config={config} change={change} />
       </div>
     )
   }
@@ -125,12 +129,12 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
             />
           ))}
         </ol>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-paper-2">
           The numbers here are the numbers on the prints: removing a picture renumbers the ones after it. Who is in each
           picture is optional now; you can set it on the night with Show who.
         </p>
       </div>
-      <Points config={config} change={change} />
+      <Rules config={config} change={change} />
     </div>
   )
 }
@@ -174,14 +178,14 @@ function PictureRow({
 
   return (
     <li className="grid grid-cols-[auto_1fr] gap-3 rounded-lg bg-raised p-3">
-      <div className="relative size-20 overflow-hidden rounded-lg bg-overlay">
+      <div className="relative h-20 w-16 overflow-hidden rounded-chip bg-overlay">
         {imageUrl ? (
-          <img src={imageUrl} alt={`Picture ${n}`} width={400} height={400} className="size-full object-cover" />
+          <img src={imageUrl} alt={`Picture ${n}`} width={320} height={400} className="size-full object-cover object-[50%_35%]" />
         ) : (
-          <span className="grid size-full place-items-center text-3xl font-black text-muted-foreground tabular-nums">{n}</span>
+          <span className="wide grid size-full place-items-center text-2xl text-paper-2">{n}</span>
         )}
         {uploading && (
-          <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-bold text-paper">Uploading…</span>
+          <span className="absolute inset-0 grid place-items-center bg-overlay text-xs font-bold text-paper">Uploading…</span>
         )}
       </div>
 
@@ -221,10 +225,11 @@ function PictureRow({
               Remove image
             </Button>
           )}
+          {!picture.image && !uploading && <p className="text-xs text-paper-2">No image: the TV shows its label instead.</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Who is in it?</span>
+          <span className="text-sm text-paper-2">Who is in it?</span>
           {([0, 1] as const).map((slot) => (
             <PersonSelect
               key={slot}
@@ -234,7 +239,7 @@ function PictureRow({
               onChange={(id) => setPerson(slot, id)}
             />
           ))}
-          {problem && <p className="w-full text-xs text-destructive">{problem}</p>}
+          {problem && <Problem>{problem}</Problem>}
         </div>
       </div>
     </li>
@@ -282,42 +287,111 @@ function PersonSelect({
   )
 }
 
-function Points({ config, change }: { config: FusionConfig; change: (patch: Partial<FusionConfig>) => void }) {
+/** The timing and the points: how long each picture shows and is guessed, and what a right guess scores. */
+function Rules({ config, change }: { config: FusionConfig; change: (patch: Partial<FusionConfig>) => void }) {
+  const seconds = config.seconds ?? DEFAULT_SECONDS
+  const showSeconds = config.showSeconds ?? DEFAULT_SHOW_SECONDS
+  const perPerson = config.pointsPerPerson ?? 1
+  const bonus = config.bonusForBoth ?? 0
+  const secondsOk = Number.isInteger(seconds) && seconds >= MIN_SECONDS && seconds <= MAX_SECONDS
+  const showOk = Number.isInteger(showSeconds) && showSeconds >= MIN_SHOW_SECONDS && showSeconds <= MAX_SHOW_SECONDS
   return (
-    <div className="grid gap-2">
-      <div className="grid grid-cols-2 gap-3 sm:max-w-96">
-        <div className="grid gap-2">
-          <Label htmlFor="fusion-points-person">Points per right person</Label>
-          <Input
+    <div className="grid gap-5 sm:grid-cols-2">
+      <section className="grid content-start gap-2">
+        <h3 className="text-sm font-extrabold">Timing</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberField
+            id="fusion-seconds"
+            label="Seconds to guess each picture"
+            min={MIN_SECONDS}
+            max={MAX_SECONDS}
+            value={seconds}
+            onChange={(value) => change({ seconds: value })}
+          />
+          <NumberField
+            id="fusion-show-seconds"
+            label="Seconds each picture shows first"
+            min={MIN_SHOW_SECONDS}
+            max={MAX_SHOW_SECONDS}
+            value={showSeconds}
+            onChange={(value) => change({ showSeconds: value })}
+          />
+        </div>
+        {!secondsOk && <Problem>The time to guess must be {MIN_SECONDS} to {MAX_SECONDS} seconds</Problem>}
+        {!showOk && <Problem>The showing must be {MIN_SHOW_SECONDS} to {MAX_SHOW_SECONDS} seconds a picture</Problem>}
+        <p className="text-xs text-paper-2">
+          The TV shows each picture for {showSeconds} s, then all of them. Then you ask them one by one: guests have {seconds} s
+          to pick two and lock in.
+        </p>
+      </section>
+      <section className="grid content-start gap-2">
+        <h3 className="text-sm font-extrabold">Points</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberField
             id="fusion-points-person"
-            type="number"
-            inputMode="numeric"
+            label="Points per right person"
             min={0}
             max={MAX_POINTS}
-            step={1}
-            value={config.pointsPerPerson ?? 1}
-            onChange={(e) => change({ pointsPerPerson: wholePoints(e.target.value) })}
+            value={perPerson}
+            onChange={(value) => change({ pointsPerPerson: Math.min(MAX_POINTS, Math.max(0, value)) })}
           />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="fusion-points-both">Bonus for both</Label>
-          <Input
+          <NumberField
             id="fusion-points-both"
-            type="number"
-            inputMode="numeric"
+            label="Bonus for both"
             min={0}
             max={MAX_POINTS}
-            step={1}
-            value={config.bonusForBoth ?? 0}
-            onChange={(e) => change({ bonusForBoth: wholePoints(e.target.value) })}
+            value={bonus}
+            onChange={(value) => change({ bonusForBoth: Math.min(MAX_POINTS, Math.max(0, value)) })}
           />
         </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        A guest who gets both people of a picture right scores {2 * (config.pointsPerPerson ?? 1) + (config.bonusForBoth ?? 0)}.
-        Nobody scores on a picture they are in.
-      </p>
+        <p className="text-xs text-paper-2">
+          A guest who gets both people of a picture right scores {2 * perPerson + bonus}. Nobody scores on a picture they are
+          in.
+        </p>
+      </section>
     </div>
+  )
+}
+
+function NumberField({
+  id,
+  label,
+  min,
+  max,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  min: number
+  max: number
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="grid content-start gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Math.round(Number(e.target.value) || 0))}
+      />
+    </div>
+  )
+}
+
+/** A setting the game won't start with, as a word and an icon (no red: danger is for destructive steps). */
+function Problem({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex w-full items-center gap-1.5 text-xs font-semibold text-paper">
+      <WarningIcon weight="fill" className="size-4 shrink-0" />
+      {children}
+    </p>
   )
 }
 
@@ -329,4 +403,3 @@ function withPatch(picture: FusionPicture, patch: Partial<FusionPicture>): Fusio
   return next
 }
 
-const wholePoints = (value: string) => Math.min(MAX_POINTS, Math.max(0, Math.round(Number(value) || 0)))
