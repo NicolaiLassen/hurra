@@ -20,6 +20,8 @@ const SHORT_EDGE = 24
 /** The cheer's size at most (text-tv-cheer, 176 px) and at least, px. */
 const CHEER_MAX = 176
 const CHEER_MIN = 64
+/** The share of the text's width the cheer's wider line may take: measured at 100 px, it may round a pixel wider. */
+const WIDTH_SLACK = 0.97
 /** The hero token's side at most, px. */
 const TOKEN_MAX = 360
 /** A tilted square's bounding box against its side: cos 4 degrees plus sin 4 degrees. */
@@ -132,9 +134,10 @@ function OnTheField({
   const shown = winners.slice(0, 3)
   const side = Math.round(Math.min(TOKEN_MAX, room / TILTED) / (shown.length > 1 ? 1.6 : 1))
   // The cheer as big as its two lines fit the text's width and the height the deck leaves.
+  // Rounded down, with a little slack, so "Hurra for" never breaks onto a third line.
   const byHeight = (room - lines.height - 24) / (2 * 0.9)
-  const byWidth = widest.width > 0 ? (text.width / widest.width) * 100 : CHEER_MAX
-  const size = Math.round(Math.max(CHEER_MIN, Math.min(CHEER_MAX, byHeight, byWidth)))
+  const byWidth = widest.width > 0 ? (text.width / widest.width) * 100 * WIDTH_SLACK : CHEER_MAX
+  const size = Math.floor(Math.max(CHEER_MIN, Math.min(CHEER_MAX, byHeight, byWidth)))
   const second = `${cheer(names).slice('Hurra for '.length)}`
 
   return (
