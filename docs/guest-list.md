@@ -675,11 +675,34 @@ fusion/stage applies this list.
   Nothing to change for expected guests.
 - A listed guest who arrives late joins like any late joiner (Last one
   standing: a spectator until the next deal).
-- Rule 6: the quiz keeps per-player totals in its state and has no
+- Rule 6, the quiz: it keeps per-player totals in its state and has no
   `onPlayerLeave`; the rebuilt quiz should drop an id's totals on leave, so a
-  freed and retaken name starts at 0. Last one standing drops the task on
-  leave already; check that a re-joined id with no task shows as a spectator,
-  not as Out.
+  freed and retaken name starts at 0.
+- Rule 6, Last one standing: **must change before the party**. The live run
+  of 26 November confirmed it: the host freed a name during a round, and the
+  guest who took it was marked Out, though nobody knocked them out. No branch
+  changes `src/games/elimination/logic.ts`, so the integration applies this
+  to it. Today `onPlayerLeave` drops the leaver's task but keeps the id in
+  `playerIds`, and returns the state unchanged for someone already out. So:
+  - while the name is free, `publicState.out` still carries the id to every
+    phone and the TV (an id only, never a name);
+  - whoever takes the name is in `out`: the TV board, the host's Players and
+    the phones' standings show them Out, and the TV's band counts them ("4 of
+    5 still in");
+  - their own card says "This round started before you joined" until the
+    game's next save (a move, a timer, a sync), then "You're out. Someone got
+    you.", because `playerView` gives `status: 'out'` with no `by` and no task.
+
+  The change: on leave, take the id out of `playerIds` too, whether or not
+  it holds a task. Then `playerView` treats a re-joined id as a spectator, and
+  `publicState.out` drops it. `winnerOf` and the crown in `onPlayerLeave` read
+  "more than one dealt in" from `playerIds.length`: keep that meaning (for
+  example a count of how many were dealt in, kept at setup), so a round of two
+  where one leaves still crowns the other. Test it with `simulateParty`: deal
+  three, `freeGuest` one, `claimGuest` it, sync; the new guest's view is
+  `spectator` and `out` lacks the id. It matters on the night because Free the
+  name is for mistakes at arrival, and Last one standing can be running by
+  then.
 
 ### 9.5 Branches that build `GameInfo` or `Loaded` literals
 
@@ -787,9 +810,11 @@ reads `freed: true`, and the TV is back to the guests it had.
    for mistakes caught at arrival.
 5. **Freed and retaken during a live round** relies on the games' leave hooks
    (9.1, rule 6). The quiz has none today, so a retaken id keeps the old
-   person's quiz totals if a quiz runs at that moment. The re-join detection
-   needs one save of that game; until then the new person can see the old
-   person's view of it.
+   person's quiz totals if a quiz runs at that moment, and today's Last one
+   standing marks the new person Out (9.4) until its change lands. The new
+   person never sees the old person's private view: freeing deletes it with
+   the row. Until the game's next save they see what a late joiner sees; that
+   save runs the join hooks.
 6. **Impersonation** is as before: anyone with the join code can take any free
    name, as they could type any name. Closing joining and Free the name are the
    host's tools.
