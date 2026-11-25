@@ -29,6 +29,7 @@ export const anonClient = () => createClient(SUPABASE_URL, PUBLISHABLE_KEY, opti
 export type Person = { client: SupabaseClient; token: string; userId: string }
 export type Guest = Person & { playerId: string; name: string }
 export type Party = { id: string; join_code: string }
+export type ListedGuests = { added: { id: string; name: string }[]; skipped: { name: string; reason: string }[] }
 export type Answer = { status: number; body: Record<string, unknown> & { error?: string; code?: string; view?: unknown } }
 
 /** Right after `supabase db reset` the API takes a moment to load the schema: wait for it once. */
@@ -92,6 +93,22 @@ export class World {
     const { data, error } = await person.client.rpc('join_session', { p_join_code: party.join_code, p_name: name })
     if (error) throw error
     return { ...person, playerId: (data as { id: string }).id, name }
+  }
+
+  /** The host adds names to the party's guest list (host_add_guests), as Add guests does. */
+  async listGuests(host: Person, party: Party, names: string[]): Promise<ListedGuests> {
+    const { data, error } = await host.client.rpc('host_add_guests', { p_session_id: party.id, p_names: names })
+    if (error) throw error
+    return data as ListedGuests
+  }
+
+  /** A guest takes a free name on the guest list (claim_guest): a new phone, or `person`. */
+  async claimGuest(party: Party, name: string, person?: Person): Promise<Guest> {
+    const phone = person ?? (await this.user())
+    const { data, error } = await phone.client.rpc('claim_guest', { p_join_code: party.join_code, p_name: name })
+    if (error) throw error
+    const row = data as { id: string; name: string }
+    return { ...phone, playerId: row.id, name: row.name }
   }
 
   async party(host: Person, name = 'Test party'): Promise<Party> {
