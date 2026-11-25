@@ -12,6 +12,7 @@ block in [src/index.css](../src/index.css), and the approved
 [Text](#text) · [Type](#type) · [Radius](#radius) · [Motion](#motion) ·
 [Primitives](#primitives) · [The player token](#the-player-token) ·
 [The TV's frame](#the-tvs-frame) · [The quiz on the TV](#the-quiz-on-the-tv) ·
+[Participant fusion on the TV](#participant-fusion-on-the-tv) ·
 [The standings](#the-standings) · [The winner's screen](#the-winners-screen) ·
 [The phone](#the-phone) · [Old names](#old-names) · [Guards](#guards) ·
 [The host room](#the-host-room) ·
@@ -327,6 +328,52 @@ quiz is ("Question 3 of 10"), so the stage never repeats it.
   question; if it is wanted, it joins the band as one slim line (The TV's
   frame).
 
+## Participant fusion on the TV
+
+Fusion's stage screens ([src/games/fusion/TvView.tsx](../src/games/fusion/TvView.tsx),
+with its parts in [tvParts.tsx](../src/games/fusion/tvParts.tsx) and the wall's
+layout in [wall.ts](../src/games/fusion/wall.ts)) speak the quiz's language
+without importing it. The strap says where the round is ("Showing 3 of 12",
+"4 of 12 revealed", "Picture 4 of 12"), so the stage never repeats it.
+
+- **The lobby:** words only, as the quiz's: "Two guests, one face" in `wide`,
+  "Who is in each picture?", how it scores, and "Getting the pictures ready:
+  8 of 12" at the foot until every picture is in.
+- **The frame and the column** (the showing, a picture asked, its reveal): the
+  picture on the left at the stage's full height, `raised` with
+  `rounded-tile`, the image whole inside it; its shape is the pictures' own,
+  portrait or square, at most half the stage. The column beside it, top
+  aligned, holds the label chip (paper with ink, `wide`, tilted 2 degrees, at
+  the question's size) and the words. One frame through all three phases, so
+  the picture never jumps; between a wall tile and the frame it moves (motion's
+  shared layout), a crossfade with reduced motion.
+- **The showing:** each picture crossfades into the next over 600 ms, never
+  blinking: the one before stays under it until it is covered. "Look closely."
+  and one pip per picture at the column's foot, paper up to the one on show.
+- **A picture asked:** "Who is in it?", the quiz's countdown (`tv-num` at
+  `text-tv-count`, paper, gold for its last 5 seconds, `paper-3` with "Time's
+  up", then "The answer is coming."), and the lock-in pips with "7 of 22 have
+  locked in": counts only, never names. The pips' total is the guests less
+  two, so the room never learns that someone in the picture has left.
+- **The reveal:** "It was", the two as hero tokens landing one after the other
+  (tilted 4 and 3 degrees), then the counts ("3 of 8 got both, 3 got one",
+  "Nobody got both. 6 got one.") and "Sharpest eyes" at the foot, rank 1 in
+  gold, the first thing to go when the column runs out of room. A name stands
+  beside a token only over a photo, or where the slate says less than the name
+  (Anna Holm); two slates stand side by side, a size up.
+- **The wall:** every picture at once, 1 to 40, as big as the stage allows,
+  uniform tiles that never tilt. Each tile has its label chip at
+  `max(28px, min(11cqw, 50px))`, every chip on one wall in the same face
+  (`wide`, or the condensed one for all where any label needs it). A revealed
+  tile carries a solid `ground` band across the picture's foot with the two
+  first names, one per line, at `max(28px, min(13cqw, 44px))`; a tile under
+  132 by 165 px carries the two tokens instead, since a name there would go
+  under the floor (from 17 pictures at 720p; the party's 12 always show names).
+- **Gold** is the strap's tab, the countdown's last 5 seconds and the leader's
+  rank and points. No pink, no wash, no glow: a picture stands on `raised`.
+- **The final** is the winner's screen (below), with "The sharpest eye, with 9
+  points." and the best disguise at the time it was revealed.
+
 ## The standings
 
 The board between games ([src/components/tv/Board.tsx](../src/components/tv/Board.tsx))
@@ -445,6 +492,35 @@ the standings card below the fold, and Show my code in the thumb zone.
   the full view.
 - **Results** stand on the raised surface, never on a gold or pink wash. The
   winner's crown and words are gold; Out is pink.
+
+### Participant fusion on a phone
+
+[PlayerView](../src/games/fusion/PlayerView.tsx), with its words in
+[phoneLines.ts](../src/games/fusion/phoneLines.ts) and its parts in
+[phoneParts.tsx](../src/games/fusion/phoneParts.tsx). The TV is the show:
+phones load thumbnails only, and send eyes to the TV in the lobby and the
+showing ("Now showing #3.").
+
+- **Picking:** the asked picture's thumbnail, its label chip, "Who is in it?"
+  and the seconds left (`tv-num`, gold for the last 5). Everyone but you on
+  `overlay` tiles, four across, each with the token and the first name (a name
+  breaks after its hyphen, Marie- over Louise, and a long one steps down a
+  size rather than end in an ellipsis); a search over 16 guests. A picked tile
+  turns paper with a check.
+- **Lock in** is the screen's one gold step, on a solid bar fixed to the
+  screen's foot where Show my code stands at other times (it steps aside for
+  the timed prompt), so the phone's toasts, which stack from 96 px up, never
+  sit over it. Nothing is gold once locked in: "Locked in: Mads and Ida." with
+  the two tokens, on `raised`.
+- **The two in the picture** see the same picker and the same gold Lock in,
+  under "This one is you. Keep a straight face and pick any two: it won't
+  count.", and reach the same locked card. Their lock never leaves the phone,
+  so a glance from the next seat can't tell and nothing they pick can score.
+- **The reveal:** "You got both." with the points in paper, "You got one of
+  the two.", "Not this time.", "No guess this time." or "That was you.", who it
+  was, your two picks with "Right" and a check or "Not in it" (never colour
+  alone, no red), and your place, named for the round: "You have 4 points,
+  1st of the face detectives so far.", the rank gold only at 1st.
 
 ## Old names
 
