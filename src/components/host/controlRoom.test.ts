@@ -140,7 +140,7 @@ describe('the guest list', () => {
 
   it('has a search from 9 names still expected', async () => {
     const lobby = fixtureSnapshot('lobby', 'host')
-    const more = ['Astrid', 'Bjørn', 'Cecilie', 'Dagny', 'Elias'].map((name, i) => ({ id: `extra-${i}`, name, joined_at: null, created_at: 0 }))
+    const more = ['Astrid', 'Bjørn', 'Cornelia', 'Dagny', 'Elias'].map((name, i) => ({ id: `extra-${i}`, name, joined_at: null, created_at: 0 }))
     expect(await controlRoomOf(lobby, markup)).not.toContain('Find a name on the list')
     const listed = { ...lobby, guests: [...lobby.guests!, ...more] }
     expect(await controlRoomOf(listed, markup)).toContain('placeholder="Find a name on the list"')
@@ -177,7 +177,7 @@ describe('the guest list', () => {
       added: true,
       tooLong: [],
     })
-    const long = 'Signe-Marie Kjærsgaard Østergaard Holmgaard'
+    const long = 'Signe-Lykke Kjærsgaard Østergaard Holmgaard'
     expect(
       addSummary({
         added: Array.from({ length: 12 }, (_, i) => ({ id: String(i), name: `Guest ${i}` })),
@@ -210,7 +210,7 @@ describe('the guest list', () => {
         ['Ana', 'Bo'],
       ).description,
     ).toBe('Already on the list: Ana, Søren and Zelda.')
-    expect(someNames(['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Ida'])).toBe('Ana, Bo, Mads, Sofie, Freja and 2 more')
+    expect(someNames(['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Emil'])).toBe('Ana, Bo, Mads, Sofie, Freja and 2 more')
   })
 
   it('builds the Free the name confirm from what applies', () => {

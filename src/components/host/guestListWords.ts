@@ -16,7 +16,7 @@ export function guestListLine({ here, expected, total }: { here: number; expecte
   return `${here} of ${total} here. ${expected} still expected.`
 }
 
-/** A few names in a line: "Ana, Bo and Mads", or "Ana, Bo, Mads, Ida, Emil and 7 more". */
+/** A few names in a line: "Ana, Bo and Mads", or "Ana, Bo, Mads, Sofie, Freja and 7 more". */
 export function someNames(names: readonly string[], shown = 5): string {
   if (names.length <= 1) return names[0] ?? ''
   if (names.length <= shown) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`

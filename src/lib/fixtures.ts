@@ -48,8 +48,8 @@ const NAMES = ['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Ida', 'Emil', 'Cl
 export const FIXTURE_EXPECTED_NAMES = ['Zelda', 'Quentin', 'Ximena', 'Ulrik']
 /** More invented names, for a guest list as long as the party is built for. */
 const MORE_NAMES = [
-  'Astrid', 'Bjørn', 'Cecilie', 'Dagny', 'Elias', 'Filippa', 'Gorm', 'Halfdan', 'Iben', 'Jens Peter Østergaard',
-  'Kamma', 'Leo', 'Merle', 'Nanna', 'Ole', 'Pil', 'Rasmus', 'Signe-Marie Kjærsgaard', 'Tove', 'Uffe', 'Vibeke', 'Yrsa',
+  'Astrid', 'Bjørn', 'Cornelia', 'Dagny', 'Elias', 'Filippa', 'Gorm', 'Halfdan', 'Iben', 'Jens Viggo Østergaard',
+  'Kamma', 'Leo', 'Merle', 'Nanna', 'Ole', 'Pil', 'Ragnvald', 'Signe-Lykke Kjærsgaard', 'Tove', 'Uffe', 'Vibeke', 'Yrsa',
   'Æbbe', 'Øystein', 'Åse', 'Benedikte', 'Carsten', 'Ditte', 'Eskild',
 ]
 

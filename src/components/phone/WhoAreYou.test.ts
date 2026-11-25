@@ -55,7 +55,7 @@ describe('Who are you?', () => {
   })
 
   it('has a search from 9 names that folds names as the Players search does, and says when nobody matches', async () => {
-    const names = ['Ana', 'Bo', 'Søren', 'Mads', 'Sofie', 'Freja', 'Lars', 'Ida', 'Emil']
+    const names = ['Ana', 'Bo', 'Søren', 'Mads', 'Sofie', 'Freja', 'Lars', 'Clara', 'Emil']
     const html = await list(names, 'soren')
     expect(html).toContain('placeholder="Find your name"')
     expect(html).toContain('aria-label="Find your name"')
