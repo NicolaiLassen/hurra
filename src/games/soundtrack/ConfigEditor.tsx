@@ -155,7 +155,7 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
       <Panel id={`${ids}-extras`} title={`Extra photos (${config.extraPhotos.length} of ${MAX_EXTRA_PHOTOS})`} hint="Photos of the same kind that fit no song, so the last songs aren't a free pick. They join the wall, and their captions show after the last reveal.">
         <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {config.extraPhotos.map((photo, k) => (
-            <li key={k} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
+            <li key={k} className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
               <PhotoPicker
                 url={url(photo.photo)}
                 label={`extra photo ${k + 1}`}
@@ -164,23 +164,15 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
                 onUpload={(file) => void upload(`extra:${k}`, file)}
               />
               <div className="grid grid-cols-1 content-start gap-1.5">
-                <label htmlFor={`${ids}-extra-${k}`} className="text-sm font-medium">
-                  Extra photo {k + 1}: caption, with the year
-                </label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    id={`${ids}-extra-${k}`}
-                    value={photo.caption}
-                    maxLength={MAX_CAPTION}
-                    placeholder="Ski trip, 2017"
-                    aria-label={`Caption of extra photo ${k + 1}, with the year`}
-                    onChange={(e) => setExtras(config.extraPhotos.map((p, j) => (j === k ? { ...p, caption: e.target.value } : p)))}
-                  />
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor={`${ids}-extra-${k}`} className="text-sm font-medium">
+                    Caption and year
+                  </label>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="text-paper-2 hover:text-destructive"
+                    size="icon-sm"
+                    className="-my-1 text-paper-2 hover:text-destructive"
                     aria-label={`Remove extra photo ${k + 1}`}
                     disabled={busy}
                     onClick={() => setExtras(config.extraPhotos.filter((_, j) => j !== k))}
@@ -188,12 +180,20 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
                     <TrashIcon />
                   </Button>
                 </div>
+                <Input
+                  id={`${ids}-extra-${k}`}
+                  value={photo.caption}
+                  maxLength={MAX_CAPTION}
+                  placeholder="Ski trip, 2017"
+                  aria-label={`Caption of extra photo ${k + 1}, with the year`}
+                  onChange={(e) => setExtras(config.extraPhotos.map((p, j) => (j === k ? { ...p, caption: e.target.value } : p)))}
+                />
                 <Issues issues={placed.extras[k] ?? []} />
               </div>
             </li>
           ))}
           {config.extraPhotos.length < MAX_EXTRA_PHOTOS && (
-            <li className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
+            <li className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
               <PhotoPicker
                 url={null}
                 label="an extra photo"
