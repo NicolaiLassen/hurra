@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedItem } from '@/lib/types'
-import { routeNews, takeNews, type NewsStage } from './news'
+import { restage, routeNews, takeNews, type NewsStage } from './news'
 
 let nextId = 1
 function item(patch: Partial<FeedItem> = {}): FeedItem {
@@ -89,5 +89,39 @@ describe('takeNews', () => {
 
   it('ignores sounds it has never heard of', () => {
     expect(takeNews([item({ sound: 'kazoo' })], BANNERS)).toEqual({ banner: expect.anything() })
+  })
+})
+
+describe('restage', () => {
+  it("takes a knockout's strap down when a game takes the stage under it, and puts it on the band's event line", () => {
+    // Routed to the strap while the standings showed, then Lydspor took the stage: there it is a line in the band.
+    const knockout = item({ game_id: 'background', message: 'Bo got Ana', sound: 'slash' })
+    expect(routeNews(knockout, BOARD)).toBe('banner')
+    expect(restage({ banner: knockout }, BOARD)).toEqual({ banner: knockout })
+    expect(restage({ banner: knockout }, SOUND_ONLY)).toEqual({ banner: undefined, ticker: knockout })
+    // An older line in the band gives way to it; a newer one stays.
+    const older = item({ id: knockout.id - 100, game_id: 'background' })
+    expect(restage({ banner: knockout, ticker: older }, BANNERS)).toEqual({ banner: undefined, ticker: knockout })
+    const newer = item({ game_id: 'background' })
+    expect(restage({ banner: knockout, ticker: newer }, BANNERS)).toEqual({ banner: undefined, ticker: newer })
+  })
+
+  it('keeps a strap that is still big news on the new stage: a winner, or news for the whole party', () => {
+    const winner = item({ game_id: 'background', interrupt: true })
+    const party = item({ game_id: null })
+    expect(restage({ banner: winner }, SOUND_ONLY)).toEqual({ banner: winner })
+    expect(restage({ banner: party }, SOUND_ONLY)).toEqual({ banner: party })
+  })
+
+  it("takes down a game's own strap when its final screen takes the stage, which shows that moment itself", () => {
+    const own = item({ game_id: 'stage', interrupt: true })
+    expect(restage({ banner: own }, SOUND_ONLY)).toEqual({ banner: undefined, ticker: undefined })
+    // The recap keeps only a winner.
+    expect(restage({ banner: item({ game_id: null }) }, RECAP)).toEqual({ banner: undefined, ticker: undefined })
+  })
+
+  it('changes nothing without a strap', () => {
+    const line = item({ game_id: 'background' })
+    expect(restage({ ticker: line }, BANNERS)).toEqual({ ticker: line })
   })
 })

@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useMemo, type ReactNode, type Ref } from 'react'
 import Avatar from '@/components/Avatar'
 import AvatarBadge from '@/components/AvatarBadge'
-import { aheadLine, commentary, wonLine, type Said } from '@/components/tv/boardLines'
+import { aheadLine, commentary, hasLeader, wonLine, type Said } from '@/components/tv/boardLines'
 import {
   boardSplit,
   boardTier,
@@ -49,7 +49,10 @@ const crowned = (row: Ranked) => row.rank === 1 && row.points > 0
  * stage. Two columns, measured (fit.ts), so 1 guest and 45 fit any TV:
  * - the leader's column: the leader as a hero (their token, their points in
  *   gold, what they won and their lead), the next five places under it, and
- *   a line on how the last game moved the places;
+ *   a line on how the last game moved the places. Before anyone has scored
+ *   there is no leader: the hero is the party's name and "Nobody has scored
+ *   yet", no guest and no gold, and the places carry no rank (everyone is
+ *   level on 0, in A to Z);
  * - the field: everyone else in rows, in as many columns as they need, with
  *   the join block under them while joining is open (`invite`): the QR code
  *   on paper and the code, or its short form when the rows need the room.
@@ -87,8 +90,10 @@ export default function Board({
   const [blockRef, block] = useElementSize<HTMLDivElement>()
   const [lineRef, line] = useElementSize<HTMLDivElement>()
 
-  const leader = rows[0]
-  const next = rows.slice(1, 1 + NEXT_PLACES)
+  // Nobody leads until someone has points: the first of a board of zeros is only first in A to Z.
+  const scored = hasLeader(rows)
+  const leader = scored ? rows[0] : null
+  const next = rows.slice(scored ? 1 : 0, (scored ? 1 : 0) + NEXT_PLACES)
   const column = leaderColumn({
     height: area.height,
     hero: hero.height,
@@ -99,7 +104,7 @@ export default function Board({
     next: next.length,
   })
   const places = next.slice(0, column.places)
-  const field = rows.slice(1 + places.length)
+  const field = rows.slice((scored ? 1 : 0) + places.length)
   const measured = area.width > 0 && area.height > 0 && (!invite || (block.height > 0 && line.height > 0))
   const split = boardSplit({
     field: field.length,
@@ -119,7 +124,7 @@ export default function Board({
   const joinHeight = joinForm === 'block' ? block.height : joinForm === 'line' ? line.height : 0
   const stripRoom = Math.max(0, area.height - (hasField ? fieldHeight + FIELD_GAP : 0) - (joinForm ? joinHeight + FIELD_GAP : 0))
 
-  if (!leader) return null
+  if (rows.length === 0) return null
 
   return (
     <LayoutGroup>
@@ -130,7 +135,11 @@ export default function Board({
         >
           {/* The leader's column. */}
           <section className={cn('relative flex min-h-0 min-w-0 flex-col *:shrink-0', hasField ? 'justify-start' : 'justify-center')}>
-            <Hero ref={heroRef} row={leader} games={games} out={out.has(leader.player_id)} ahead={aheadLine(rows)} gain={gains[leader.player_id]} />
+            {leader ? (
+              <Hero ref={heroRef} row={leader} games={games} out={out.has(leader.player_id)} ahead={aheadLine(rows)} gain={gains[leader.player_id]} />
+            ) : (
+              <NoLeader ref={heroRef} party={snapshot?.session?.name ?? ''} />
+            )}
             {places.length > 0 && (
               <ol className="mt-6 grid grid-cols-1 gap-1.5">
                 <AnimatePresence initial={false}>
@@ -139,6 +148,7 @@ export default function Board({
                       key={row.player_id}
                       ref={i === 0 ? placeRef : undefined}
                       row={row}
+                      ranked={scored}
                       out={out.has(row.player_id)}
                       moved={moved[row.player_id]}
                       gain={gains[row.player_id]}
@@ -154,7 +164,7 @@ export default function Board({
           {twoColumns && (
             <section className={cn('relative flex min-h-0 min-w-0 flex-col gap-8', hasField ? 'justify-between' : 'justify-center')}>
               {hasField && measured && split.fit && (
-                <Field rows={field} fit={split.fit} width={rightWidth} out={out} gains={gains} />
+                <Field rows={field} fit={split.fit} width={rightWidth} out={out} gains={gains} ranked={scored} />
               )}
               {strip && measured && stripRoom > 0 && <div className="min-h-0">{strip(rightWidth, stripRoom)}</div>}
               {invite && (
@@ -245,16 +255,38 @@ function Hero({
   )
 }
 
+/**
+ * The hero before anyone has scored: the party's name in the on-air voice and
+ * "Nobody has scored yet". No guest stands there as if leading, and nothing is
+ * gold, since gold is the leader's. Measured like the leader's hero (fit.ts),
+ * so the places fill the room under it.
+ */
+function NoLeader({ ref, party }: { ref: Ref<HTMLDivElement>; party: string }) {
+  return (
+    <div ref={ref} data-fit="hero" data-board-hero="nobody" className="flex min-w-0 flex-col gap-4 short:gap-3">
+      {party && (
+        <p className="line-clamp-2 wide text-tv-answer leading-[1.05] text-balance break-words text-paper short:text-tv-score low:text-tv-name">
+          {party}
+        </p>
+      )}
+      <p className="text-tv-name font-semibold text-paper-2 short:text-tv-band">Nobody has scored yet</p>
+    </div>
+  )
+}
+
 /** One of the next places under the hero: large, with how the last game moved it. */
 function Place({
   ref,
   row,
+  ranked,
   out,
   moved,
   gain,
 }: {
   ref?: Ref<HTMLLIElement>
   row: Ranked
+  /** Someone has scored: the rank shows. Before that everyone is level on 0, so no rank. */
+  ranked: boolean
   out: boolean
   moved: number | undefined
   gain?: { amount: number; seq: number }
@@ -272,7 +304,7 @@ function Place({
       className="relative flex h-18 min-w-0 items-center gap-5 short:h-14 short:gap-4"
     >
       <span className={cn('w-14 shrink-0 text-right tv-num text-tv-name short:w-11 short:text-tv-band', lead ? 'text-gold' : 'text-paper-3')}>
-        {row.rank}
+        {ranked ? row.rank : null}
       </span>
       <span className="relative shrink-0">
         <Avatar name={row.name} playerId={row.player_id} out={out} className="size-16 short:size-12" />
@@ -338,12 +370,15 @@ function Field({
   width,
   out,
   gains,
+  ranked,
 }: {
   rows: Ranked[]
   fit: FieldFit
   width: number
   out: ReadonlySet<string>
   gains: Gains
+  /** Someone has scored: the ranks show. */
+  ranked: boolean
 }) {
   const style = FIELD_STYLE[fit.layout.kind]
   const shown = rows.slice(0, fit.shown)
@@ -371,7 +406,7 @@ function Field({
             transition={spring}
             className={cn('relative flex min-w-0 items-center', style.row)}
           >
-            <span className={cn('shrink-0 text-right tv-num text-paper-3', style.rank)}>{row.rank}</span>
+            <span className={cn('shrink-0 text-right tv-num text-paper-3', style.rank)}>{ranked ? row.rank : null}</span>
             <Avatar name={row.name} playerId={row.player_id} out={out.has(row.player_id)} className={style.avatar} />
             <span className="flex min-w-0 flex-1 items-baseline gap-2">
               <span className={cn('min-w-0 truncate tv-num', style.name)}>{row.name}</span>
