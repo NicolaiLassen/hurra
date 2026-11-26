@@ -41,11 +41,11 @@ const PUB: SoundtrackPublicState = {
 const at = (n: number) => Array.from({ length: n }, (_, i) => 1_000 + i)
 
 describe("Lydspor's TV words", () => {
-  it('opens with the intro, else the songs and whose life they are from', () => {
-    expect(lobbyLine(PUB)).toBe('Eight songs from Ida’s life.')
-    expect(lobbyLine({ ...PUB, storyteller: '' })).toBe('Eight songs, eight stories.')
-    expect(lobbyLine({ ...PUB, total: 1, storyteller: '' })).toBe('One song, one story.')
-    expect(lobbyLine({ ...PUB, total: 12 })).toBe('Twelve songs from Ida’s life.')
+  it('opens with the intro, else pairing the songs with their events', () => {
+    expect(lobbyLine(PUB)).toBe('Eight songs, eight events. Pair each song with its event.')
+    expect(lobbyLine({ ...PUB, storyteller: '' })).toBe('Eight songs, eight events. Pair each song with its event.')
+    expect(lobbyLine({ ...PUB, total: 1, storyteller: '' })).toBe('One song, one event. Pair the song with its event.')
+    expect(lobbyLine({ ...PUB, total: 12 })).toBe('Twelve songs, twelve events. Pair each song with its event.')
     expect(lobbyLine({ ...PUB, intro: '  Songs from a summer.  ' })).toBe('Songs from a summer.')
     expect(numberWord(13)).toBe('13')
   })

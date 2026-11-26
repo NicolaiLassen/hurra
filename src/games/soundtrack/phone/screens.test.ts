@@ -66,15 +66,15 @@ function lydsporCard(html: string): string {
 const SCENES = ['lobby', 'playing', 'last-call', 'locked', 'reveal', 'standings', 'final'] as const
 
 describe('Lydspor on the phone', () => {
-  it('lobby: whose songs, where to look, the four rules and the points', async () => {
+  it('lobby: the pairing line, where to look, the three rules and the points', async () => {
     const text = plain(await phoneMarkup('soundtrack-lobby'))
     expect(text).toContain('8 songs')
-    expect(text).toMatch(/Eight songs from \S+’s life\./)
+    expect(text).toContain('Eight songs, eight events. Pair each song with its event.')
     expect(text).toContain('Look at the TV. Song 1 starts soon.')
     expect(text).toContain('A song plays. Type its title and who sings it , then tap its event in the photos.')
     expect(text).toContain('Close spelling counts. Change any song until the last call.')
     expect(text).toContain('Each photo fits one song. Some photos fit none.')
-    expect(text).toContain('No points for speed. No music apps, please.')
+    expect(text).not.toContain('No music apps')
     expect(text).toContain('Event +2 Title +1 Singer +1')
   })
 

@@ -210,7 +210,7 @@ flowchart TD
   classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
   classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
-  START(["The host starts Lydspor on the TV"]) --> LOB["Lobby: the intro, four rules,<br/>Event +2, Title +1, Singer +1"]:::screen
+  START(["The host starts Lydspor on the TV"]) --> LOB["Lobby: the intro, three rules,<br/>Event +2, Title +1, Singer +1"]:::screen
   LOB -- "the host taps Play song n" --> NOW["Now playing: Name song n.<br/>1 Title and 2 Who sings it, typed<br/>3 Event: tap its photo on the wall, A to L"]:::screen
   NOW -- "Next and Done save each field;<br/>a photo saves at once" --> NAMED["Song n is named.<br/>Open your board"]:::screen
   NOW -- "a photo another song has" --> SWAP["Song 2 and song 5 swapped events.<br/>Undo for 8 s"]:::screen
