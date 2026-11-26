@@ -4,6 +4,7 @@ import {
   GameError,
   type GameContext,
   type GameInfo,
+  type GamePlayer,
   type Highlight,
   type PlayerId,
   type RecapRound,
@@ -11,16 +12,21 @@ import {
 } from '../core/Game'
 
 export type EliminationConfig = {
-  /** Dealt one per player; repeated when there are more players than tasks. */
+  /** Shuffled into a deck at the start and dealt one per player, latecomers too; a task repeats only once the deck is used up. */
   tasks: string[]
   pointsPerTag: number
   pointsPerCatch: number
+  /** Dealing in closes by itself this long after the start. 0 keeps it open until the host closes it. */
+  dealInMinutes: number
 }
 
 /** The settings' limits, checked once at start (parseConfig) and shown in the editor. */
 export const MAX_TASKS = 200
 export const MAX_TASK_LENGTH = 200
 export const MAX_POINTS = 100
+export const MAX_DEAL_IN_MINUTES = 600
+/** 18:45 to 20:30 on the night: latecomers are dealt in until dinner is over. */
+export const DEFAULT_DEAL_IN_MINUTES = 105
 
 /**
  * How someone was knocked out:
@@ -50,9 +56,28 @@ export type EliminationState = {
    * this round (docs/guest-list.md, 9.4). Missing in rounds saved before it.
    */
   left?: PlayerId[]
+  /**
+   * The settings' tasks, each text once, shuffled at the start. Cards are
+   * dealt from the top (`dealt` counts them), latecomers included, so nobody
+   * gets a task someone else holds while the deck has cards left. Missing in
+   * rounds saved before it: the first latecomer shuffles one from the settings.
+   */
+  deck?: string[]
+  /** How many cards have been taken: from the top of `deck` while it lasts (deck[dealt] is next), then repeats. */
+  dealt?: number
+  /** Whether a guest who joins now is dealt in: on at the start; the host's switch sets it. Missing (old rounds): on. */
+  dealIn?: boolean
+  /** When dealing in closes by itself (ms), or null: open until the host closes it. */
+  dealInUntil?: number | null
+  /** Who was dealt in after the start, in the order they got their task. */
+  late?: PlayerId[]
 }
 
-export type EliminationAction = { type: Method; target: PlayerId }
+/** A move from a phone: a knockout, or `join`, which a guest's phone sends to be dealt in. */
+export type EliminationAction = { type: Method; target: PlayerId } | { type: 'join' }
+
+/** The host's switch: deal in latecomers, or stop. Naming the state it wants makes a double tap a skip. */
+export type EliminationHostAction = { type: 'dealIn'; open: boolean }
 
 /** A knockout as everyone may see it: the task is hidden while someone else still holds the same one. */
 export type PublicKnockout = Omit<Knockout, 'task'> & { task: string | null }
@@ -69,10 +94,15 @@ export type EliminationPublicState = {
   knockoutCounts: Record<PlayerId, number>
   /** Newest first. */
   feed: PublicKnockout[]
+  /** Whether a guest who joins now gets a task (as of this save). Missing in public states saved before it. */
+  dealIn?: boolean
+  /** When dealing in closes by itself, or null when only the host closes it. */
+  dealInUntil?: number | null
 }
 
 export type EliminationPlayerView =
-  | { status: 'alive'; task: string; knockouts: number }
+  /** `late`: dealt in after the start. */
+  | { status: 'alive'; task: string; knockouts: number; late?: true }
   | { status: 'out'; by: PlayerId; method: Method; task: string; knockouts: number }
   | { status: 'winner'; knockouts: number }
   | { status: 'spectator' }
@@ -129,6 +159,20 @@ export function winnerOf(state: EliminationState, info: Roster): PlayerId | null
 }
 
 /**
+ * Whether a guest who joins at `now` is dealt in: the host's switch is on
+ * (old rounds have none: on) and the time it closes by itself, if any, hasn't
+ * come. A time check, so it closes on the minute even with no save then.
+ */
+export function dealingIn(state: Pick<EliminationState, 'dealIn' | 'dealInUntil'>, now: number): boolean {
+  return state.dealIn !== false && (state.dealInUntil == null || now < state.dealInUntil)
+}
+
+/** The same from the public state, for phones: only a save that says so opens it. */
+export function dealingInNow(publicState: Partial<EliminationPublicState> | null | undefined, now: number): boolean {
+  return publicState?.dealIn === true && (publicState.dealInUntil == null || now < publicState.dealInUntil)
+}
+
+/**
  * Everyone gets a secret task and one life. Knock someone out by getting them
  * to do your task (you take over theirs), or by catching them trying their
  * task on you (you keep yours). Scan their code either way. The last one
@@ -141,11 +185,17 @@ export class EliminationGame extends Game<
   EliminationAction,
   EliminationPublicState,
   EliminationPlayerView,
-  EliminationConfig
+  EliminationConfig,
+  EliminationHostAction
 > {
   readonly type = 'elimination'
   readonly presentation = 'background' as const
-  readonly defaultConfig: EliminationConfig = { tasks: DEFAULT_TASKS, pointsPerTag: 1, pointsPerCatch: 1 }
+  readonly defaultConfig: EliminationConfig = {
+    tasks: DEFAULT_TASKS,
+    pointsPerTag: 1,
+    pointsPerCatch: 1,
+    dealInMinutes: DEFAULT_DEAL_IN_MINUTES,
+  }
 
   parseConfig(input: Record<string, unknown>): EliminationConfig {
     if (!Array.isArray(input.tasks) || input.tasks.some((task) => typeof task !== 'string')) {
@@ -161,6 +211,7 @@ export class EliminationGame extends Game<
       tasks,
       pointsPerTag: wholePoints(input.pointsPerTag, 'Points per tag'),
       pointsPerCatch: wholePoints(input.pointsPerCatch, 'Points per catch'),
+      dealInMinutes: dealInMinutes(input.dealInMinutes),
     }
   }
 
@@ -170,21 +221,32 @@ export class EliminationGame extends Game<
     if (ctx.players.length < 2) throw new GameError('You need at least 2 players to start')
     if (tasks.length === 0) throw new GameError('Add at least one task in the settings')
 
-    const deck = shuffle(tasks, ctx.random)
     ctx.announce('Last one standing has started', {
       detail: `${ctx.players.length} players, one life each`,
       icon: 'megaphone',
       sound: 'gong',
     })
-    return {
-      tasks: Object.fromEntries(ctx.players.map((player, i) => [player.id, deck[i % deck.length]])),
-      playerIds: ctx.players.map((player) => player.id),
+    // A round saved without the setting (direct calls) deals in for the default time.
+    const minutes = ctx.config.dealInMinutes ?? DEFAULT_DEAL_IN_MINUTES
+    let state: EliminationState = {
+      tasks: {},
+      playerIds: [],
       knockouts: [],
+      deck: shuffle(unique(tasks), ctx.random),
+      dealt: 0,
+      dealIn: true,
+      dealInUntil: minutes > 0 ? ctx.now + minutes * 60_000 : null,
     }
+    for (const player of ctx.players) {
+      const card = nextCard(state, tasks, ctx.random)!
+      state = { ...state, ...card.deck, tasks: { ...state.tasks, [player.id]: card.task }, playerIds: [...state.playerIds, player.id] }
+    }
+    return state
   }
 
   parseAction(input: unknown): EliminationAction {
-    const action = input as Partial<EliminationAction> | null
+    const action = input as { type?: unknown; target?: unknown } | null
+    if (action?.type === 'join') return { type: 'join' }
     if (
       (action?.type === 'tag' || action?.type === 'catch') &&
       typeof action.target === 'string' &&
@@ -202,6 +264,10 @@ export class EliminationGame extends Game<
     playerId: PlayerId,
     ctx: GameContext<EliminationConfig>,
   ): EliminationState {
+    // A latecomer's phone asking to be dealt in. Never refused: when it can't
+    // be done (closed, dealt in before, a freed name, over), the state comes
+    // back unchanged and the engine answers it as skipped.
+    if (action.type === 'join') return dealInto(state, playerId, ctx)
     const name = nameIn(ctx)
     const { target, type: method } = action
 
@@ -294,6 +360,34 @@ export class EliminationGame extends Game<
     return next
   }
 
+  parseHostAction(input: unknown): EliminationHostAction {
+    const action = input as { type?: unknown; open?: unknown } | null
+    if (action?.type === 'dealIn' && typeof action.open === 'boolean') return { type: 'dealIn', open: action.open }
+    throw new GameError('Unknown host action')
+  }
+
+  /**
+   * The host's switch for latecomers. Open: on until the host closes it (the
+   * time it would close by itself is gone), and everyone here who was never
+   * dealt in gets a task now. Close: a guest who joins from now on watches.
+   * One that asks for what already is (a double tap) changes nothing.
+   */
+  handleHostAction(state: EliminationState, action: EliminationHostAction, ctx: GameContext<EliminationConfig>): EliminationState {
+    if (!action.open) return dealingIn(state, ctx.now) ? { ...state, dealIn: false, dealInUntil: null } : state
+    if (state.dealIn !== false && state.dealInUntil == null) return state
+    let next: EliminationState = { ...state, dealIn: true, dealInUntil: null }
+    for (const player of ctx.players) next = dealInto(next, player.id, ctx)
+    return next
+  }
+
+  /**
+   * A guest joined the party, also by taking a name from the guest list: while
+   * dealing in is open, they get the next card and one life, like everyone.
+   */
+  onPlayerJoin(state: EliminationState, player: GamePlayer, ctx: GameContext<EliminationConfig>): EliminationState {
+    return dealInto(state, player.id, ctx)
+  }
+
   /**
    * The host removed someone (or they moved away): their task leaves the game
    * with them. If that leaves one standing, they win, as after a knockout.
@@ -368,6 +462,8 @@ export class EliminationGame extends Game<
         .slice(-10)
         .reverse()
         .map((k) => ({ ...k, task: live.has(k.task) ? null : k.task })),
+      dealIn: dealingIn(state, info.now),
+      dealInUntil: state.dealInUntil ?? null,
     }
   }
 
@@ -375,7 +471,10 @@ export class EliminationGame extends Game<
     if (!dealtIn(state, playerId)) return { status: 'spectator' }
     const knockouts = state.knockouts.filter((k) => k.by === playerId).length
     if (winnerOf(state, info) === playerId) return { status: 'winner', knockouts }
-    if (holds(state, playerId)) return { status: 'alive', task: state.tasks[playerId], knockouts }
+    if (holds(state, playerId)) {
+      const late = Array.isArray(state.late) && state.late.includes(playerId)
+      return { status: 'alive', task: state.tasks[playerId], knockouts, ...(late ? { late: true as const } : {}) }
+    }
     const out = state.knockouts.find((k) => k.target === playerId)
     return { status: 'out', by: out?.by ?? '', method: out?.method ?? 'tag', task: out?.task ?? '', knockouts }
   }
@@ -461,6 +560,66 @@ export class EliminationGame extends Game<
   }
 }
 
+/**
+ * Deals the guest in, if they may be: here, never dealt in this round (so a
+ * freed name taken again, or anyone in `left`, watches: docs/guest-list.md,
+ * 9.4), dealing in open, and no winner yet (the winner check, and a crown
+ * already announced in this save, both count on nobody joining after it).
+ * They get the next card and one life; their phone hears it.
+ */
+function dealInto(state: EliminationState, playerId: PlayerId, ctx: GameContext<EliminationConfig>): EliminationState {
+  if (state.playerIds.includes(playerId) || !ctx.players.some((p) => p.id === playerId)) return state
+  if (!dealingIn(state, ctx.now) || winnerOf(state, ctx)) return state
+  const card = nextCard(state, cleanTasks(ctx.config.tasks), ctx.random)
+  if (!card) return state
+  ctx.announce("You're in Last one standing", {
+    detail: 'Your secret task is on your phone',
+    to: [playerId],
+    icon: 'megaphone',
+    sound: 'chime',
+  })
+  return {
+    ...state,
+    ...card.deck,
+    tasks: { ...state.tasks, [playerId]: card.task },
+    playerIds: [...state.playerIds, playerId],
+    late: [...(state.late ?? []), playerId],
+  }
+}
+
+/**
+ * The next card, and the deck after it. The top card while the deck has any
+ * (none of them is held: every held task was dealt from it). Once it is used
+ * up, a task repeats: first one nobody holds that no knockout showed (it left
+ * with a guest), then one nobody holds (a knockout showed it), and only when
+ * every one is held, the one held by the fewest, first in deck order. A round
+ * saved before the deck shuffles one from the settings' tasks with every card
+ * counted as dealt, so a latecomer gets a task nobody holds. Null with no tasks.
+ */
+function nextCard(
+  state: EliminationState,
+  tasks: readonly string[],
+  random: () => number,
+): { task: string; deck: { deck: string[]; dealt: number } } | null {
+  const deck = state.deck ?? shuffle(unique(tasks), random)
+  const dealt = state.deck ? (state.dealt ?? 0) : deck.length
+  if (deck.length === 0) return null
+  if (dealt < deck.length) return { task: deck[dealt], deck: { deck, dealt: dealt + 1 } }
+  const held = new Map<string, number>()
+  for (const task of Object.values(state.tasks)) held.set(task, (held.get(task) ?? 0) + 1)
+  const shown = new Set(state.knockouts.map((k) => k.task))
+  const task =
+    deck.find((t) => !held.has(t) && !shown.has(t)) ??
+    deck.find((t) => !held.has(t)) ??
+    deck.reduce((fewest, t) => ((held.get(t) ?? 0) < (held.get(fewest) ?? 0) ? t : fewest))
+  return { task, deck: { deck, dealt: dealt + 1 } }
+}
+
+/** Each text once, in its first place. */
+function unique(tasks: readonly string[]): string[] {
+  return [...new Set(tasks)]
+}
+
 /** Whether the player was dealt in and then left the party (removed, or their name freed). */
 function hasLeft(state: EliminationState, playerId: PlayerId): boolean {
   return Array.isArray(state.left) && state.left.includes(playerId)
@@ -504,6 +663,15 @@ function profileOf(ctx: GameContext<EliminationConfig>, playerId: PlayerId): Eli
 
 function cleanTasks(tasks: unknown): string[] {
   return Array.isArray(tasks) ? tasks.map((task) => String(task).trim()).filter(Boolean) : []
+}
+
+/** Minutes from 0 to MAX_DEAL_IN_MINUTES; settings saved before it get the default. */
+function dealInMinutes(value: unknown): number {
+  if (value === undefined) return DEFAULT_DEAL_IN_MINUTES
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > MAX_DEAL_IN_MINUTES) {
+    throw new GameError(`Dealing in must be a whole number of minutes from 0 to ${MAX_DEAL_IN_MINUTES}`)
+  }
+  return value
 }
 
 function wholePoints(value: unknown, label: string): number {

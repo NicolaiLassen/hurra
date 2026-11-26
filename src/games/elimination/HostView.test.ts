@@ -13,12 +13,13 @@ import { DEFAULT_TASKS, EliminationGame, type EliminationConfig, type Eliminatio
 import type { Player } from '@/lib/types'
 
 const game = new EliminationGame()
-const config: EliminationConfig = { tasks: DEFAULT_TASKS, pointsPerTag: 1, pointsPerCatch: 1 }
+const config: EliminationConfig = { tasks: DEFAULT_TASKS, pointsPerTag: 1, pointsPerCatch: 1, dealInMinutes: 105 }
 const whistle = 'Get someone to whistle'
+const NOW = Date.UTC(2026, 10, 28, 19, 0)
 
 async function html(state: EliminationState, players: Player[]): Promise<string> {
   const errors: unknown[] = []
-  const view = createElement(HostView as ComponentType<never>, { players, state } as never)
+  const view = createElement(HostView as ComponentType<never>, { players, state, serverNow: () => NOW, act: async () => undefined } as never)
   const { prelude } = await prerender(view, { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
   // React marks the seams between adjacent text parts with empty comments.

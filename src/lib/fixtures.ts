@@ -59,6 +59,8 @@ export const FIXTURE_SCENES = [
   ...SOUNDTRACK_SCENES.map((scene) => `soundtrack-${scene}` as const),
   'final',
   'background',
+  // Last one standing in the background, with Sofie dealt in late (she joined after the start).
+  'latecomer',
   'removed',
   'archived',
 ] as const
@@ -141,10 +143,11 @@ const EXPECTED_GUESTS: ListedGuest[] = FIXTURE_EXPECTED_NAMES.map((name, i) => (
   created_at: FIXTURE_NOW - (170 - i) * MIN,
 }))
 
-const GUESTS: ListedGuest[] = [
-  ...PLAYERS.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })),
-  ...EXPECTED_GUESTS,
-].sort((a, b) => a.name.localeCompare(b.name))
+/** The guest list of a scene with these players: them as joined, and the four still expected. */
+const guestsOf = (players: Player[]): ListedGuest[] =>
+  [...players.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })), ...EXPECTED_GUESTS].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )
 
 const BASE_SESSION: Session = {
   id: FIXTURE_SESSION_ID,
@@ -207,15 +210,28 @@ const TASKS = [
   'Get someone to snap their fingers',
 ]
 
+/** The rest of the shuffled deck, never dealt yet: a latecomer gets the next one. */
+const MORE_TASKS = [
+  'Get someone to play air guitar',
+  'Get someone to name three vegetables',
+  'Get someone to freeze like a statue',
+  'Get someone to recommend you a book',
+]
+
 type Knockout = { by: string; target: string; method: 'tag' | 'catch'; task: string; at: number }
 
 /**
  * A round played through the given knockouts ([by, target, method] as player
  * numbers), spread evenly from `startedAt` to the last one at `lastAt`, with
- * what each audience sees.
+ * what each audience sees. `late` are dealt in after the start, at the end of
+ * the deal order, with the next cards of the deck. Dealing in closes by itself
+ * 105 minutes after the start.
  */
-function eliminationRound(moves: [number, number, 'tag' | 'catch'][], startedAt: number, lastAt: number) {
+function eliminationRound(moves: [number, number, 'tag' | 'catch'][], startedAt: number, lastAt: number, late: string[] = []) {
   const tasks: Record<string, string> = Object.fromEntries(ids.map((id, i) => [id, TASKS[i]]))
+  const playerIds = [...ids.filter((id) => !late.includes(id)), ...late]
+  const deck = [...playerIds.map((id) => tasks[id]), ...MORE_TASKS]
+  const dealInUntil = startedAt + 105 * MIN
   const knockouts: Knockout[] = []
   moves.forEach(([by, target, method], k) => {
     const byId = ids[by]
@@ -241,6 +257,8 @@ function eliminationRound(moves: [number, number, 'tag' | 'catch'][], startedAt:
     outBy: Object.fromEntries(knockouts.map((k) => [k.target, { by: k.by, method: k.method }])),
     knockoutCounts: counts,
     feed: [...knockouts].reverse().map((k) => ({ ...k, task: held.has(k.task) ? null : k.task })),
+    dealIn: FIXTURE_NOW < dealInUntil,
+    dealInUntil,
   }
   const views: Record<string, unknown> = {}
   for (const id of ids) {
@@ -250,11 +268,20 @@ function eliminationRound(moves: [number, number, 'tag' | 'catch'][], startedAt:
         ? { status: 'winner', knockouts: counts[id] ?? 0 }
         : knockout
           ? { status: 'out', by: knockout.by, method: knockout.method, task: knockout.task, knockouts: counts[id] ?? 0 }
-          : { status: 'alive', task: tasks[id], knockouts: counts[id] ?? 0 }
+          : { status: 'alive', task: tasks[id], knockouts: counts[id] ?? 0, ...(late.includes(id) ? { late: true } : {}) }
   }
   return {
-    state: { tasks, playerIds: [...ids], knockouts },
-    config: { tasks: TASKS, pointsPerTag: 1, pointsPerCatch: 1 },
+    state: {
+      tasks,
+      playerIds,
+      knockouts,
+      deck,
+      dealt: playerIds.length,
+      dealIn: true,
+      dealInUntil,
+      ...(late.length > 0 ? { late } : {}),
+    },
+    config: { tasks: [...TASKS, ...MORE_TASKS], pointsPerTag: 1, pointsPerCatch: 1, dealInMinutes: 105 },
     publicState,
     views,
     points: counts,
@@ -263,8 +290,8 @@ function eliminationRound(moves: [number, number, 'tag' | 'catch'][], startedAt:
 }
 
 const ELIMINATION_STARTED = FIXTURE_NOW - 50 * MIN
-/** Still running: 4 out, 8 standing. */
-const eliminationLive = () =>
+/** Still running: 4 out, 8 standing. With `late`, those guests were dealt in after the start. */
+const eliminationLive = (late: string[] = []) =>
   eliminationRound(
     [
       [1, 5, 'tag'],
@@ -274,7 +301,10 @@ const eliminationLive = () =>
     ],
     ELIMINATION_STARTED,
     FIXTURE_NOW - 4 * MIN,
+    late,
   )
+/** When Sofie joined and was dealt in, in the latecomer scene. */
+const SOFIE_JOINED = FIXTURE_NOW - 12 * MIN
 /** Played to the end: Bo is the last one standing. Sofie was tagged by Bo. */
 const eliminationDone = (startedAt: number, finishedAt: number) =>
   eliminationRound(
@@ -606,6 +636,8 @@ type World = {
   states?: Record<string, { state: unknown; config: unknown; round: number; members: string[] }>
   feed?: FeedItem[]
   recapAt?: number
+  /** The players, when the scene changes when someone joined. */
+  players?: Player[]
 }
 
 const AWARDS = { [CLARA]: 3, [BO]: 2 }
@@ -1156,6 +1188,43 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         ].sort((a, b) => a.created_at - b.created_at),
       }
     }
+    case 'latecomer': {
+      // Nothing on the stage: the TV shows the standings with Last one standing in
+      // the band, its count with Sofie in it. She joined after the start and got
+      // the next card from the deck, so her phone says "You're in." over her task.
+      const elimination = eliminationLive([SOFIE])
+      const [firstOut] = elimination.knockouts
+      const latest = elimination.knockouts[elimination.knockouts.length - 1]
+      return {
+        players: PLAYERS.map((p) => (p.id === SOFIE ? { ...p, created_at: SOFIE_JOINED, joined_at: SOFIE_JOINED } : p)),
+        games: [
+          game(ELIMINATION, 'elimination', 'Last one standing', 0, {
+            status: 'active',
+            public_state: elimination.publicState,
+            started_at: ELIMINATION_STARTED,
+          }),
+          game(QUIZ, 'quiz', 'Quiz', 1),
+          game(FUSION, 'fusion', 'Who is fused?', 2),
+          pong(FIXTURE_NOW - 75 * MIN),
+        ],
+        points: { [ELIMINATION]: elimination.points, [PONG]: PONG_POINTS },
+        awards: AWARDS,
+        views: { [ELIMINATION]: elimination.views },
+        states: { [ELIMINATION]: { state: elimination.state, config: elimination.config, round: 1, members } },
+        feed: [
+          say('Last one standing has started', ELIMINATION_STARTED, { game_id: ELIMINATION, detail: '11 players, one life each', icon: 'megaphone', sound: 'gong' }),
+          say(`${nameOfPlayer(firstOut.by)} got ${nameOfPlayer(firstOut.target)}`, firstOut.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
+          say("You're in Last one standing", SOFIE_JOINED, {
+            game_id: ELIMINATION,
+            detail: 'Your secret task is on your phone',
+            audience: [SOFIE],
+            icon: 'megaphone',
+            sound: 'chime',
+          }),
+          say(`${nameOfPlayer(latest.by)} got ${nameOfPlayer(latest.target)}`, latest.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
+        ].sort((a, b) => a.created_at - b.created_at),
+      }
+    }
     case 'soundtrack-lobby':
     case 'soundtrack-playing':
     case 'soundtrack-last-call':
@@ -1298,14 +1367,14 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
     prompts: (w.prompts ?? []).filter((p) => active.has(p.game_id)),
     tallies: w.tallies ?? {},
     game_points: gamePoints,
-    players: PLAYERS,
+    players: w.players ?? PLAYERS,
     standings,
     feed,
     me: phone ? { player_id: FIXTURE_PLAYER_ID, views, answers } : null,
     states: screen === 'host' ? states : null,
     screens: screen === 'host' ? 1 : null,
     recap: w.recapAt ? { published_at: w.recapAt } : null,
-    guests: screen === 'host' ? GUESTS : null,
+    guests: screen === 'host' ? guestsOf(w.players ?? PLAYERS) : null,
   }
 }
 

@@ -3,7 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  DEFAULT_DEAL_IN_MINUTES,
   DEFAULT_TASKS,
+  MAX_DEAL_IN_MINUTES,
   MAX_POINTS,
   MAX_TASK_LENGTH,
   MAX_TASKS,
@@ -44,14 +46,30 @@ export default function ConfigEditor({ config, onChange }: ConfigEditorProps<Eli
           placeholder="Get someone to …"
         />
         <p className="text-xs text-muted-foreground">
-          Every player is dealt one. Phrase them as “Get someone to …”; you can paste several lines at once. Up to{' '}
-          {MAX_TASKS} tasks of up to {MAX_TASK_LENGTH} characters.
+          Every guest is dealt one, latecomers too, and a task repeats only once all {count} have been dealt, so keep more
+          tasks than guests. Phrase them as “Get someone to …”; you can paste several lines at once. Up to {MAX_TASKS} tasks of up to{' '}
+          {MAX_TASK_LENGTH} characters.
         </p>
         {problems.map((problem) => (
           <p key={problem} role="alert" className="text-xs font-medium text-destructive">
             {problem}
           </p>
         ))}
+      </div>
+      <div className="grid gap-2 sm:max-w-80">
+        <Label htmlFor="elimination-deal-in">Deal in latecomers for (minutes)</Label>
+        <Input
+          id="elimination-deal-in"
+          type="number"
+          min={0}
+          max={MAX_DEAL_IN_MINUTES}
+          step={5}
+          value={config.dealInMinutes ?? DEFAULT_DEAL_IN_MINUTES}
+          onChange={(e) => onChange({ ...config, dealInMinutes: wholeMinutes(e.target.value) })}
+        />
+        <p className="text-xs text-muted-foreground">
+          A guest who joins after the start gets a task until then. 0 keeps it open until you close it on the night.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:max-w-80">
         <div className="grid gap-2">
@@ -85,3 +103,5 @@ export default function ConfigEditor({ config, onChange }: ConfigEditorProps<Eli
 
 /** A whole number from 0 to MAX_POINTS, whatever was typed. */
 const wholePoints = (value: string) => Math.min(MAX_POINTS, Math.max(0, Math.round(Number(value) || 0)))
+/** Whole minutes from 0 to MAX_DEAL_IN_MINUTES, whatever was typed. */
+const wholeMinutes = (value: string) => Math.min(MAX_DEAL_IN_MINUTES, Math.max(0, Math.round(Number(value) || 0)))
