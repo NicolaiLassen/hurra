@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { FixtureMode } from '@/components/phone/calls'
 import PhoneHome from '@/components/phone/PhoneHome'
 import PlayerView from '@/games/soundtrack/PlayerView'
+import { SwapToast } from '@/games/soundtrack/phone/PhotoSheet'
 import ResultView from '@/games/soundtrack/ResultView'
 import { FIXTURE_PLAYER_ID, FIXTURE_SESSION_ID, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import type { SessionGame } from '@/lib/types'
@@ -163,6 +164,15 @@ describe('Lydspor on the phone', () => {
       const card = lydsporCard(html)
       expect(card, scene).not.toMatch(/[!\u2013\u2014]/)
     }
+  })
+
+  it('stands the swap note with Undo on the bar as tall as it is, so a task turned over on the bar pushes it up', async () => {
+    const notice = { id: 1, title: 'Song 2 and song 5 swapped events.', detail: 'Tap Undo to put them back.', undo: [] }
+    const html = await markupOf(createElement(SwapToast, { notice, onUndo: () => {}, busy: false }))
+    expect(html).toContain('Undo')
+    // The bar's live height (ShowMyCode keeps --phone-bar-height current), never a fixed height over the bar at rest.
+    expect(html).toContain('bottom-[calc(var(--phone-bar-height,')
+    expect(html).not.toContain('4.75rem')
   })
 })
 

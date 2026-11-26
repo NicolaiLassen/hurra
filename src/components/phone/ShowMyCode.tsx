@@ -1,5 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SHOW_MS } from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
 import type { PhoneSecret } from '@/games/types'
@@ -23,6 +23,11 @@ import { cn } from '@/lib/utils'
  * `hidden` steps the bar aside (while a timed question is open, so it covers
  * no answer, and while the guest types, for the browsers that lift a fixed
  * bar above the keyboard); a QR code already open stays open.
+ *
+ * While it shows, the bar's height is `--phone-bar-height` on the root
+ * element, kept current as the secret turns over and grows the bar with its
+ * words, so a note a game floats above the bar (BAR_NOTE_BOTTOM) stands on
+ * it instead of under the task.
  */
 export default function ShowMyCode({
   player,
@@ -36,6 +41,21 @@ export default function ShowMyCode({
   const [open, setOpen] = useState(false)
   const [turned, setTurned] = useState({ up: false, times: 0 })
   const up = secret !== null && turned.up
+  const bar = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const element = bar.current
+    if (!element) return
+    const root = document.documentElement
+    const publish = () => root.style.setProperty(BAR_HEIGHT, `${element.offsetHeight}px`)
+    publish()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
+    observer?.observe(element)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(BAR_HEIGHT)
+    }
+  }, [hidden])
 
   useEffect(() => {
     if (!open) return
@@ -56,7 +76,7 @@ export default function ShowMyCode({
   return (
     <>
       {!hidden && (
-        <div data-code-bar="" className="fixed inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
+        <div ref={bar} data-code-bar="" className="fixed inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
           <div className="mx-auto flex max-w-md items-end gap-2 px-4">
             {secret && (
               <BarSecret
@@ -95,6 +115,16 @@ export default function ShowMyCode({
     </>
   )
 }
+
+/** The CSS variable with the bar's height while it shows. */
+const BAR_HEIGHT = '--phone-bar-height'
+
+/**
+ * The bottom edge for a note a game floats just above the bar (a swap note
+ * with Undo): 10 px over the bar's top as it is now, its secret face up or
+ * down, and over the bar at rest where no bar has said its height.
+ */
+export const BAR_NOTE_BOTTOM = 'bottom-[calc(var(--phone-bar-height,calc(max(env(safe-area-inset-bottom),1.25rem)+4.125rem))+0.625rem)]'
 
 /**
  * The secret on the bar: face down, a quiet card as tall as the gold step

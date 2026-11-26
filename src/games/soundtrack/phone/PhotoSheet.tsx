@@ -1,6 +1,8 @@
 import { ArrowCounterClockwiseIcon, XIcon } from '@phosphor-icons/react'
+import { BAR_NOTE_BOTTOM } from '@/components/phone/ShowMyCode'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
 import type { Band } from './model'
 import type { SwapNotice } from './useAnswers'
 import { Wall } from './Wall'
@@ -83,11 +85,13 @@ export function PhotoSheet({
 /**
  * The swap toast with Undo (spec 4.7), above the Show my code bar, on Now
  * playing and the board alike: "Song 2 and song 5 swapped events." It lasts
- * until the next change or 8 seconds.
+ * until the next change or 8 seconds. It stands on the bar as tall as it is
+ * now (BAR_NOTE_BOTTOM), so a task turned over on the bar pushes it up
+ * instead of covering it.
  */
 export function SwapToast({ notice, onUndo, busy }: { notice: SwapNotice; onUndo: () => void; busy: boolean }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(env(safe-area-inset-bottom),1.25rem)+4.75rem)] z-40">
+    <div className={cn('pointer-events-none fixed inset-x-0 z-40', BAR_NOTE_BOTTOM)}>
       <div className="mx-auto max-w-md px-4">
         <div
           role="status"

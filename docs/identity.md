@@ -553,7 +553,12 @@ logic's `presentation` and its status, never a game's name.
   card does. Gold stays Show my code's alone, and the code beside it steps
   aside where it doesn't fit (the QR code shows it). The bar has room for
   one secret: the oldest running game's. It steps aside with the bar while a
-  timer or a text field needs the screen, then comes back.
+  timer or a text field needs the screen, then comes back. Turned over, a
+  long task makes the bar taller, so the bar keeps its height in
+  `--phone-bar-height` on the root while it shows, and a note a game floats
+  above the bar stands on it (`BAR_NOTE_BOTTOM` in
+  [ShowMyCode.tsx](../src/components/phone/ShowMyCode.tsx)): Lydspor's swap
+  note with Undo rises with the task instead of sitting under it.
 - **Captures:** `.design/phone-takeover`, before and after at 390 by 844 and
   375 by 667. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
   and [running.test.ts](../src/components/phone/running.test.ts) check which
