@@ -6,6 +6,7 @@
 import { GameControllerIcon, type Icon } from '@phosphor-icons/react'
 import { createContext, useCallback, useContext } from 'react'
 import { getGameModule } from '@/games/registry'
+import type { PhoneSecret } from '@/games/types'
 import { callGame, submitAnswer } from '@/lib/queries'
 import type { AnswerPayload, SessionGame, SubmitResult } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
@@ -74,6 +75,20 @@ export const isBackgroundGame = (gameType: string) => getGameModule(gameType)?.l
 export function phoneStrapOf(game: SessionGame): string | null {
   try {
     return getGameModule(game.game_type)?.phoneStrap?.(game.public_state) ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * This player's secret in a live game (GameModule.phoneSecret: Last one
+ * standing's task), from their own view. Null when it has none, or can't
+ * read the view.
+ */
+export function phoneSecretOf(game: SessionGame, view: unknown): PhoneSecret | null {
+  try {
+    const secret = getGameModule(game.game_type)?.phoneSecret?.(view)
+    return secret && typeof secret.text === 'string' && secret.text.trim() !== '' ? secret : null
   } catch {
     return null
   }

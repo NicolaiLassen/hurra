@@ -97,6 +97,14 @@
   --animate-tab-land: tab-land 180ms var(--ease-tab) both;
   @keyframes strap-in { from { clip-path: inset(0 100% 0 0); } }
   @keyframes tab-land { from { rotate: 6deg; scale: 1.08; opacity: 0; } }
+  /* A secret on the phone's bottom bar turning over (its face lands), and the
+     peek (the home as a sheet over the takeover) coming up. Both fill only
+     backwards, so nothing keeps a transform once they end: the peek holds
+     full-screen layers of its own (a game's scan sheet). */
+  --animate-card-turn: card-turn 320ms var(--ease-out) backwards;
+  --animate-peek-in: peek-in 240ms var(--ease-out) backwards;
+  @keyframes card-turn { from { transform: rotateY(-90deg); opacity: 0.4; } }
+  @keyframes peek-in { from { translate: 0 2.5rem; opacity: 0; } }
 }
 
 @custom-variant dark (&:is(.dark *));

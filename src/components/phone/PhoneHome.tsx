@@ -1,17 +1,17 @@
-import { CaretRightIcon, CrownIcon, FlagCheckeredIcon, HourglassMediumIcon } from '@phosphor-icons/react'
-import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Link, Navigate } from 'react-router'
+import { CaretDownIcon, CaretRightIcon, CrownIcon, FlagCheckeredIcon, HourglassMediumIcon, RankingIcon } from '@phosphor-icons/react'
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Link, Navigate, useLocation } from 'react-router'
 import Avatar from '@/components/Avatar'
 import { Notice, Screen } from '@/components/layout'
 import Logo from '@/components/Logo'
-import { FixtureMode, isBackgroundGame, phoneStrapOf } from '@/components/phone/calls'
+import { FixtureMode, isBackgroundGame, phoneSecretOf, phoneStrapOf } from '@/components/phone/calls'
 import { useFeedToasts } from '@/components/phone/feed'
 import GameCard from '@/components/phone/GameCard'
 import GameSheet from '@/components/phone/GameSheet'
 import MyPlace from '@/components/phone/MyPlace'
 import OnTheTv from '@/components/phone/OnTheTv'
 import { GameCompactCard, GameResult, GameView } from '@/components/phone/PhoneGame'
-import { homeLayout, mainCardNews, sheetGivesWay, tvRows, type HomeLayout } from '@/components/phone/running'
+import { barSecret, homeLayout, mainCardNews, peekOpen, phoneFocus, sheetGivesWay, tvRows } from '@/components/phone/running'
 import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
 import type { TabTone } from '@/components/phone/Strap'
@@ -30,6 +30,7 @@ import { scanTarget, tvScene } from '@/lib/stage'
 import { rememberJoinCode } from '@/lib/storage'
 import { toast } from '@/lib/toast'
 import type { Player, PromptState, PublicSession, Session, SessionGame, Snapshot } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { useLive, useServerNow } from '@/lib/useLive'
 import type { FreedState } from '@/pages/joinScreen'
 import { PartyNotFound } from '@/pages/NotFound'
@@ -41,6 +42,12 @@ import { PartyNotFound } from '@/pages/NotFound'
 // "Your night", the standings, and the Show my code bar, the home's one gold
 // step. Everything comes from the nearest LiveSessionProvider; game screens
 // come through the registry.
+//
+// The takeover (phoneFocus in running.ts): while a stage game holds the TV,
+// live or on its final screen, the phone shows only that game under a slim
+// header with Standings, which opens the rest of the home as the peek. The
+// bar stays, with a background game's secret (the hunt's task) beside Show my
+// code. When the TV moves on, the home comes back as it was.
 
 const acceptsScans = (gameType: string) => getGameModule(gameType)?.acceptsScans === true
 
@@ -99,28 +106,47 @@ function Home({
   fixtureRecap: RecapDoc | null
 }) {
   const fixture = useContext(FixtureMode)
-  const now = useServerNow(30_000)
+  const location = useLocation()
+  const tick = useServerNow(30_000)
+  // A finished game's final screen ends on the database clock: the phone goes home with the TV, not up to 30 s later.
+  const ticked = tvScene(snapshot, tick)
+  const now = useNowPast(ticked.kind === 'final' ? ticked.until : null, tick)
   const layout = homeLayout(snapshot, now, isBackgroundGame)
   const scene = tvScene(snapshot, now)
+  // The takeover: a stage game on the TV fills the phone, alone, until the TV moves on.
+  const focus = phoneFocus(snapshot, now, isBackgroundGame)
+  const takeover = focus.kind === 'takeover' ? focus : null
   const stageId = scene.kind === 'live' ? scene.game.id : null
   // The game the TV shows, live or its final screen: its tab is gold, the colour of what is on air.
   // The hunt's tab is always its pink (GameModule.accent), as its own section draws it.
   const airId = scene.kind === 'live' || scene.kind === 'final' ? scene.game.id : null
   const toneOf = (game: SessionGame): TabTone => (accentOf(game.game_type) === 'hunt' ? 'hunt' : game.id === airId ? 'air' : 'plain')
   const { main } = layout
-  const mainGame = main.kind === 'game' || main.kind === 'result' ? main.game : null
-  const liveMain = main.kind === 'game' ? main.game : null
+  // The main card: the takeover's game (live, or its result while the TV shows its final screen), else the home's.
+  const liveMain = takeover ? (takeover.finished ? null : takeover.game) : main.kind === 'game' ? main.game : null
+  const resultMain = takeover ? (takeover.finished ? takeover.game : null) : main.kind === 'result' ? main.game : null
+  const mainGame = liveMain ?? resultMain
   const held = useHeldGame(snapshot, mainGame)
-  const over = main.kind === 'over'
+  const over = !takeover && main.kind === 'over'
   // A timed question is open on the main card (a quiz question): the Show my
   // code bar steps aside for it, so it covers none of the answers.
-  const timed =
-    main.kind === 'game' && snapshot.prompts.some((p) => p.game_id === main.game.id && p.closes_at !== null && p.closed_at === null)
+  const timed = liveMain !== null && snapshot.prompts.some((p) => p.game_id === liveMain.id && p.closes_at !== null && p.closed_at === null)
   // A guest typing into a game's text field: the bar steps aside too, for the
   // browsers that lift a fixed bar above the keyboard.
   const typing = useTypingFocus()
   const out = useMemo(() => knockedOutIds(snapshot.games), [snapshot.games])
   const rows = tvRows(snapshot, now, player.id, mainGame?.id ?? null, phoneStrapOf)
+  // In the takeover, a background game's secret (the hunt's task) stays one tap away on the bar.
+  const secret = takeover ? barSecret(layout.alsoRunning, takeover.game.id, (g) => phoneSecretOf(g, snapshot.me?.views[g.id])) : null
+
+  // The peek: the home as a sheet over the takeover, from Standings in the header. Fixture mode
+  // only: `&peek=1` opens it on the first render, for the captures and the tests.
+  const [peeked, setPeeked] = useState<string | null>(() =>
+    fixture && takeover && new URLSearchParams(location.search).get('peek') === '1' ? takeover.game.id : null,
+  )
+  const peeking = peekOpen(focus, peeked)
+  const peekControl = useRef<HTMLButtonElement>(null)
+  const closePeek = useCallback(() => setPeeked(null), [])
 
   // "Your night", once the host publishes the recap: nothing for a guest who joined after it was made.
   const revision = fixture ? 0 : (snapshot.recap?.published_at ?? 0)
@@ -129,7 +155,7 @@ function Home({
   const recap = published?.players[player.id] ? published : null
 
   useFeedToasts(snapshot.feed, player.id, snapshot.now)
-  useRemovedGameToast(snapshot, mainGame?.id ?? null, main.kind === 'lobby' ? 'Back to the lobby until the next game.' : undefined)
+  useRemovedGameToast(snapshot, mainGame?.id ?? null, !takeover && main.kind === 'lobby' ? 'Back to the lobby until the next game.' : undefined)
   const mainCard = useRef<HTMLElement>(null)
 
   // Stored again on every fresh read, so a "not found" that was wrong (say, a
@@ -157,92 +183,116 @@ function Home({
 
   useRemovedGameToast(snapshot, sheetOpen && sheetGame.id !== mainGame?.id ? sheetGame.id : null)
   useScanToast(scan, target !== null, snapshot.players, player.id)
-  // A new timed question (a quiz question) takes the page back from a sheet left open, so its seconds aren't missed.
-  useBringIntoView(mainCard, snapshot, layout, sheetOpen, { timed, scanning: scanSheet !== null, close: closeSheet })
+  // A new timed question (a quiz question) takes the page back from a sheet or the peek left open, so its seconds aren't missed.
+  useBringIntoView(mainCard, snapshot, liveMain, sheetOpen, { timed, scanning: scanSheet !== null, close: closeSheet, peeking, closePeek })
+  usePeekKeys(peeking, sheetOpen, closePeek, peekControl)
 
   const myToken = <Avatar name={player.name} playerId={player.id} className="size-9" />
+  const standings = snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />
+  // In the peek the bar is the peek's own, so a game's layer opened there (the hunt's scan sheet) covers it as on the home.
+  const codeBar = !over && <ShowMyCode player={player} hidden={timed || typing} secret={secret?.secret ?? null} />
 
   return (
     // Bottom padding keeps the last section clear of the Show my code bar.
-    <Screen className={over ? undefined : 'pb-36'}>
-      <PhoneHeader session={session} />
+    // The takeover's header sits higher: the game gets the room.
+    <Screen className={cn(!over && 'pb-36', takeover && 'pt-5')}>
+      {/* While the peek is open over the takeover, the game under it is out of reach. */}
+      <div inert={peeking}>
+        <PhoneHeader
+          session={session}
+          peek={takeover ? { open: peeking, onOpen: () => setPeeked(takeover.game.id) } : null}
+          peekRef={peekControl}
+        />
 
-      {/* One keyed list: a live game that loses the main card (to another
-          game, a result card, or its own section) keeps its view, out of
-          sight, so a full-screen layer it has open (such as the scan sheet or
-          a knockout dialog) stays on top until the guest is done.
-          Game layers are position: fixed (see GameSheet), so the hidden
-          wrapper doesn't clip them. */}
-      {[liveMain, held].map(
-        (game) =>
-          game && (
-            <div key={roundKey(game)} className={game === liveMain ? 'mt-7' : 'invisible h-0 overflow-hidden [&_.fixed]:visible'}>
-              <GameCard
-                ref={game === liveMain ? mainCard : undefined}
-                title={game.title}
-                tone={toneOf(game)}
-                line={strapLine(game, game.id === stageId)}
-                aside={myToken}
+        {/* One keyed list: a live game that loses the main card (to another
+            game, a result card, or its own section) keeps its view, out of
+            sight, so a full-screen layer it has open (such as the scan sheet or
+            a knockout dialog) stays on top until the guest is done.
+            Game layers are position: fixed (see GameSheet), so the hidden
+            wrapper doesn't clip them. */}
+        {[liveMain, held].map(
+          (game) =>
+            game && (
+              <div
+                key={roundKey(game)}
+                data-out-of-sight={game === liveMain ? undefined : ''}
+                className={game === liveMain ? 'mt-7' : 'invisible h-0 overflow-hidden [&_.fixed]:visible'}
               >
-                <GameView
-                  snapshot={snapshot}
-                  session={session}
-                  game={game}
-                  player={player}
-                  onStage={game.id === stageId}
-                  scannedCode={game === liveMain && scanInMain ? (scan.code ?? undefined) : undefined}
-                  onScanHandled={scan.done}
-                />
-              </GameCard>
-            </div>
-          ),
-      )}
-      {main.kind === 'result' && (
-        <div className="mt-7">
-          <GameCard ref={mainCard} title={main.game.title} tone={toneOf(main.game)} line={strapLine(main.game, false)} aside={myToken}>
-            <GameResult snapshot={snapshot} session={session} game={main.game} player={player} />
-            <p className="flex items-center gap-2 text-sm text-paper-2">
-              <HourglassMediumIcon weight="duotone" className="size-5 shrink-0" />
-              Waiting for the next game
-            </p>
-          </GameCard>
-        </div>
-      )}
-      {main.kind === 'lobby' && <Lobby players={snapshot.players} />}
-      {main.kind === 'over' && <PartyOver session={session} recap={recap !== null} />}
-
-      <div className="mt-7">
-        <MyPlace session={session} player={player} standings={snapshot.standings} />
+                <GameCard
+                  ref={game === liveMain ? mainCard : undefined}
+                  title={game.title}
+                  tone={toneOf(game)}
+                  line={strapLine(game, game.id === stageId)}
+                  aside={myToken}
+                >
+                  <GameView
+                    snapshot={snapshot}
+                    session={session}
+                    game={game}
+                    player={player}
+                    onStage={game.id === stageId}
+                    scannedCode={game === liveMain && scanInMain ? (scan.code ?? undefined) : undefined}
+                    onScanHandled={scan.done}
+                  />
+                </GameCard>
+              </div>
+            ),
+        )}
+        {resultMain && (
+          <div className="mt-7">
+            <GameCard ref={mainCard} title={resultMain.title} tone={toneOf(resultMain)} line={strapLine(resultMain, false)} aside={myToken}>
+              <GameResult snapshot={snapshot} session={session} game={resultMain} player={player} />
+              <p className="flex items-center gap-2 text-sm text-paper-2">
+                <HourglassMediumIcon weight="duotone" className="size-5 shrink-0" />
+                Waiting for the next game
+              </p>
+            </GameCard>
+          </div>
+        )}
+        {!takeover && main.kind === 'lobby' && <Lobby players={snapshot.players} />}
+        {over && <PartyOver session={session} recap={recap !== null} />}
       </div>
 
-      {rows.length > 0 && (
-        <div className="mt-8">
-          <OnTheTv rows={rows} />
+      {/* The rest of the home. In the takeover it stays mounted out of sight
+          (what a guest had open in a game's section, such as the hunt's scan,
+          stays on top), and Standings opens it as the peek. */}
+      <HomeSections mode={takeover ? (peeking ? 'peek' : 'hidden') : 'flow'} session={session} onClose={closePeek} foot={codeBar}>
+        <div className="mt-7">
+          <MyPlace session={session} player={player} standings={snapshot.standings} />
         </div>
-      )}
 
-      {layout.alsoRunning.map((game) => (
-        <div key={roundKey(game)} className="mt-8">
-          <GameCompactCard
-            snapshot={snapshot}
-            session={session}
-            game={game}
-            player={player}
-            onStage={game.id === stageId}
-            open={() => openSheet(game.id)}
-          />
-        </div>
-      ))}
+        {/* Opened from Standings, the peek has them right under your place. */}
+        {peeking && standings}
 
-      {layout.finishedLately.length > 0 && (
-        <FinishedLately games={layout.finishedLately} players={snapshot.players} meId={player.id} onOpen={openSheet} />
-      )}
+        {rows.length > 0 && (
+          <div className="mt-8">
+            <OnTheTv rows={rows} />
+          </div>
+        )}
 
-      {recap && <YourNight doc={recap} playerId={player.id} className="mt-8" />}
+        {layout.alsoRunning.map((game) => (
+          <div key={roundKey(game)} className="mt-8">
+            <GameCompactCard
+              snapshot={snapshot}
+              session={session}
+              game={game}
+              player={player}
+              onStage={game.id === stageId}
+              open={() => openSheet(game.id)}
+            />
+          </div>
+        ))}
 
-      {snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />}
+        {layout.finishedLately.length > 0 && (
+          <FinishedLately games={layout.finishedLately} players={snapshot.players} meId={player.id} onOpen={openSheet} />
+        )}
 
-      {!over && <ShowMyCode player={player} hidden={timed || typing} />}
+        {recap && <YourNight doc={recap} playerId={player.id} className="mt-8" />}
+
+        {!peeking && standings}
+      </HomeSections>
+
+      {!peeking && codeBar}
 
       <GameSheet
         open={sheetOpen}
@@ -273,15 +323,137 @@ function Home({
   )
 }
 
-/** The logo, the party's name and this phone's sound. */
-function PhoneHeader({ session }: { session: Session }) {
+/**
+ * The logo, the party's name and this phone's sound. In the takeover, also
+ * Standings: a quiet way to the home (the peek), never a second gold step.
+ */
+function PhoneHeader({
+  session,
+  peek,
+  peekRef,
+}: {
+  session: Session
+  peek: { open: boolean; onOpen: () => void } | null
+  peekRef: RefObject<HTMLButtonElement | null>
+}) {
   return (
     <header className="flex items-center gap-2.5">
       <Logo className="size-[1.625rem]" />
       <p className="min-w-0 flex-1 truncate text-[0.9375rem] font-bold text-paper-2">{session.name}</p>
+      {peek && (
+        <Button
+          ref={peekRef}
+          variant="secondary"
+          size="lg"
+          aria-haspopup="dialog"
+          aria-expanded={peek.open}
+          data-peek-control=""
+          onClick={peek.onOpen}
+          className="shrink-0 rounded-full px-3.5 text-[0.9375rem]"
+        >
+          <RankingIcon className="size-[1.125rem]" />
+          Standings
+        </Button>
+      )}
       <SoundToggle preload={PHONE_SOUNDS} className="-mr-2 shrink-0" />
     </header>
   )
+}
+
+/**
+ * The home's sections under the main card: your place, On the TV, the games
+ * running underneath, what finished lately, Your night and the standings.
+ * One element in every mode, so nothing inside remounts: 'flow' on the home;
+ * 'hidden' in the takeover, mounted out of sight (a full-screen layer a
+ * game's section has open, such as the hunt's scan sheet, stays on top, as
+ * the held game's do); 'peek', the same sections as a sheet over the
+ * takeover, with the party's name and Back to the game, and the bar at its
+ * foot. Nothing in the peek's frame keeps a transform: a game's layer inside
+ * must stay fixed to the screen.
+ */
+function HomeSections({
+  mode,
+  session,
+  onClose,
+  foot,
+  children,
+}: {
+  mode: 'flow' | 'hidden' | 'peek'
+  session: Session
+  onClose: () => void
+  /** The Show my code bar, drawn inside the peek while it is open. */
+  foot: ReactNode
+  children: ReactNode
+}) {
+  const titleId = useId()
+  const peek = mode === 'peek'
+  return (
+    <div
+      data-peek={peek ? '' : undefined}
+      data-out-of-sight={mode === 'hidden' ? '' : undefined}
+      role={peek ? 'dialog' : undefined}
+      aria-labelledby={peek ? titleId : undefined}
+      className={cn(
+        mode === 'hidden' && 'invisible h-0 overflow-hidden [&_.fixed]:visible',
+        peek && 'fixed inset-0 z-40 animate-peek-in overflow-y-auto overscroll-contain bg-ground motion-reduce:animate-none',
+      )}
+    >
+      {peek && (
+        <header className="sticky top-0 z-10 bg-raised px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
+          <div className="mx-auto flex w-full max-w-md items-center gap-2.5">
+            <Logo className="size-[1.625rem]" />
+            <h2 id={titleId} className="min-w-0 flex-1 truncate text-[0.9375rem] font-bold text-paper-2">
+              {session.name}
+            </h2>
+            <Button autoFocus variant="secondary" size="lg" onClick={onClose} className="-mr-1 shrink-0 rounded-full px-3.5 text-[0.9375rem]">
+              <CaretDownIcon className="size-[1.125rem]" />
+              Back to the game
+            </Button>
+          </div>
+        </header>
+      )}
+      <div className={cn(peek && 'mx-auto w-full max-w-md px-4 pt-1 pb-36')}>{children}</div>
+      {peek && foot}
+    </div>
+  )
+}
+
+/**
+ * While the peek is open, Escape closes it (not while a game's sheet is open
+ * over it: that one closes first). Once it closes, the focus goes back to
+ * Standings.
+ */
+function usePeekKeys(open: boolean, covered: boolean, close: () => void, control: RefObject<HTMLButtonElement | null>) {
+  const wasOpen = useRef(open)
+  useEffect(() => {
+    if (wasOpen.current && !open) control.current?.focus({ preventScroll: true })
+    wasOpen.current = open
+  }, [open, control])
+  useEffect(() => {
+    if (!open || covered) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, covered, close])
+}
+
+/**
+ * Now by the database clock for the home's layout: `tick`, and also `at` the
+ * moment it passes (the end of a finished game's final screen on the TV), so
+ * the phone leaves that game's takeover with the TV rather than at its next
+ * 30 s tick.
+ */
+function useNowPast(at: number | null, tick: number): number {
+  const { serverNow } = useLive()
+  const [passed, setPassed] = useState<number | null>(null)
+  useEffect(() => {
+    if (at === null) return
+    const timer = setTimeout(() => setPassed(at), Math.max(0, at - serverNow()))
+    return () => clearTimeout(timer)
+  }, [at, serverNow])
+  return at !== null && passed === at ? Math.max(tick, at) : tick
 }
 
 /** No game yet: you're in, and who else is. */
@@ -458,17 +630,17 @@ function useScanToast(
  * where the last answers would sit below the fold. A sheet covering the page
  * gives way only to a new timed question (sheetGivesWay in running.ts), so a
  * guest who left the hunt's sheet open after a scan still sees the quiz's
- * question in time.
+ * question in time. The peek over the takeover gives way to it the same way.
  */
 function useBringIntoView(
   card: RefObject<HTMLElement | null>,
   snapshot: Snapshot,
-  layout: HomeLayout,
+  /** The live game on the main card. */
+  game: SessionGame | null,
   covered: boolean,
-  /** The sheet covering the page, and whether the main card's question is timed: sheetGivesWay decides whether it closes. */
-  sheet: { timed: boolean; scanning: boolean; close: () => void },
+  /** The sheet covering the page, the peek, and whether the main card's question is timed: sheetGivesWay decides whether they close. */
+  sheet: { timed: boolean; scanning: boolean; close: () => void; peeking: boolean; closePeek: () => void },
 ) {
-  const game = layout.main.kind === 'game' ? layout.main.game : null
   let question: PromptState | null = null
   for (const prompt of snapshot.prompts) {
     if (prompt.game_id === game?.id && prompt.closed_at === null && (!question || prompt.opened_at > question.opened_at)) question = prompt
@@ -487,8 +659,12 @@ function useBringIntoView(
     seen.current = { gameId, questionKey }
     if (!before) return
     const news = mainCardNews(before, { gameId, questionKey })
+    const { timed, scanning, close, peeking, closePeek } = sheetRef.current
+    if (peeking) {
+      if (!sheetGivesWay({ news, covered: peeking, timed, scanning: false })) return
+      closePeek()
+    }
     if (covered) {
-      const { timed, scanning, close } = sheetRef.current
       if (!sheetGivesWay({ news, covered, timed, scanning })) return
       close()
     }

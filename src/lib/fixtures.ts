@@ -68,6 +68,13 @@ export const FIXTURE_SCENES = [
   'background',
   // Last one standing in the background, with Sofie dealt in late (she joined after the start).
   'latecomer',
+  // The quiz between two questions (the reveal), with the same games beside it.
+  'background-reveal',
+  // A round of darts played in person on the TV, with Last one standing beside it.
+  'in-person',
+  // Between games: the quiz finished minutes ago and the TV is back on the
+  // standings, Last one standing runs on, and Participant fusion is next.
+  'between',
   'removed',
   'archived',
 ] as const
@@ -724,6 +731,8 @@ type World = {
 
 const AWARDS = { [CLARA]: 3, [BO]: 2 }
 const PONG_POINTS = { [FREJA]: 7, [NOAH]: 4, [IDA]: 3 }
+/** The in-person scene's darts so far: the host scanned three guests. */
+const DARTS_POINTS = { [EMIL]: 3, [ANA]: 2, [SOFIE]: 1 }
 
 let feedId = 100
 function say(
@@ -1248,10 +1257,12 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         ],
       }
     }
-    case 'background': {
+    case 'background':
+    case 'background-reveal': {
       // The quiz on the TV, with Last one standing and a round of darts live beside it.
-      // Sofie has answered the open question here: the phone shows "Locked in".
-      const quiz = quizRound('question', 2, true)
+      // Sofie has answered the open question here: the phone shows "Locked in";
+      // in background-reveal the question is revealed.
+      const quiz = quizRound(scene === 'background' ? 'question' : 'reveal', 2, true)
       const elimination = eliminationLive()
       const [firstOut] = elimination.knockouts
       const latest = elimination.knockouts[elimination.knockouts.length - 1]
@@ -1267,7 +1278,7 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
           game(DARTS, 'in-person', 'Darts', 2, { status: 'active', public_state: {}, started_at: DARTS_STARTED }),
         ],
         prompts: quiz.prompts,
-        tallies: { [QUIZ]: quiz.tallies },
+        tallies: Object.keys(quiz.tallies).length > 0 ? { [QUIZ]: quiz.tallies } : {},
         points: { [ELIMINATION]: elimination.points, [QUIZ]: quiz.points },
         awards: AWARDS,
         views: { [ELIMINATION]: elimination.views, [QUIZ]: quiz.views },
@@ -1334,6 +1345,70 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
           }),
           say(`${nameOfPlayer(latest.by)} got ${nameOfPlayer(latest.target)}`, latest.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
         ].sort((a, b) => a.created_at - b.created_at),
+      }
+    }
+    case 'in-person': {
+      // Darts on the TV, scored by the host scanning codes, with Last one standing beside it.
+      const elimination = eliminationLive()
+      const latest = elimination.knockouts[elimination.knockouts.length - 1]
+      return {
+        session: { spotlight_game_id: DARTS, spotlight_at: DARTS_STARTED },
+        games: [
+          game(ELIMINATION, 'elimination', 'Last one standing', 0, {
+            status: 'active',
+            public_state: elimination.publicState,
+            started_at: ELIMINATION_STARTED,
+          }),
+          game(QUIZ, 'quiz', 'Quiz', 1),
+          game(DARTS, 'in-person', 'Darts', 2, { status: 'active', public_state: {}, started_at: DARTS_STARTED }),
+          game(FUSION, 'fusion', 'Who is fused?', 3),
+        ],
+        points: { [ELIMINATION]: elimination.points, [DARTS]: DARTS_POINTS },
+        awards: AWARDS,
+        views: { [ELIMINATION]: elimination.views, [DARTS]: Object.fromEntries(ids.map((id) => [id, {}])) },
+        states: {
+          [ELIMINATION]: { state: elimination.state, config: elimination.config, round: 1, members },
+          [DARTS]: { state: {}, config: {}, round: 1, members },
+        },
+        feed: [
+          say('Last one standing has started', ELIMINATION_STARTED, { game_id: ELIMINATION, detail: '12 players, one life each', icon: 'megaphone', sound: 'gong' }),
+          say(`${nameOfPlayer(latest.by)} got ${nameOfPlayer(latest.target)}`, latest.at, { game_id: ELIMINATION, icon: 'sword', tone: 'pink', sound: 'slash' }),
+        ],
+      }
+    }
+    case 'between': {
+      // The quiz finished 5 minutes ago (its 3 minutes on the TV are over), Last
+      // one standing runs on in the background, and Participant fusion is next.
+      const elimination = eliminationLive()
+      const quiz = quizRound('leaderboard', 2)
+      const finishedAt = FIXTURE_NOW - 5 * MIN
+      return {
+        session: { spotlight_game_id: QUIZ, spotlight_at: QUIZ_STARTED - 10 * MIN },
+        games: [
+          game(ELIMINATION, 'elimination', 'Last one standing', 0, {
+            status: 'active',
+            public_state: elimination.publicState,
+            started_at: ELIMINATION_STARTED,
+          }),
+          game(QUIZ, 'quiz', 'Quiz', 1, {
+            status: 'finished',
+            public_state: { ...quiz.publicState, phase: 'done' },
+            started_at: QUIZ_STARTED - 10 * MIN,
+            finished_at: finishedAt,
+            finished_by: 'host',
+            winners: topOf(quiz.state.quizPoints),
+          }),
+          game(FUSION, 'fusion', 'Who is fused?', 2),
+          pong(FIXTURE_NOW - 75 * MIN),
+        ],
+        points: { [ELIMINATION]: elimination.points, [QUIZ]: quiz.points, [PONG]: PONG_POINTS },
+        awards: AWARDS,
+        views: { [ELIMINATION]: elimination.views, [QUIZ]: quiz.views },
+        states: { [ELIMINATION]: { state: elimination.state, config: elimination.config, round: 1, members } },
+        feed: [
+          say('Last one standing has started', ELIMINATION_STARTED, { game_id: ELIMINATION, detail: '12 players, one life each', icon: 'megaphone', sound: 'gong' }),
+          say(`${topOf(quiz.state.quizPoints).map(nameOfPlayer).join(' and ')} won the quiz`, finishedAt, { game_id: QUIZ, icon: 'crown', sound: 'fanfare', interrupt: true }),
+        ],
       }
     }
     case 'soundtrack-lobby':

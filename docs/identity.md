@@ -512,17 +512,67 @@ running underneath in its own section (oldest start first, so Last one
 standing stays near the top all evening), what finished lately, Your night,
 the standings card below the fold, and Show my code in the thumb zone.
 
+**The takeover** (26 Nov). While a game made for the stage holds the TV, from
+its start to the end of its final screen, the phone shows only that game, so
+a guest's eyes have one thing to follow: a slim header (the logo, the party,
+Standings and the sound), the game's strap and its own screen, and the bar at
+the foot. No On the TV, no place, no standings, no other game's section. The
+core decides it from the SDK alone (`phoneFocus` in
+[running.ts](../src/components/phone/running.ts)): the game the TV shows, its
+logic's `presentation` and its status, never a game's name.
+
+- **Which games take over:** the quiz, Participant fusion, Lydspor and an
+  in-person round on the TV. A background game the host puts on the TV (Last
+  one standing's board) stays a section on the home, since it runs all
+  evening. The TV back on the standings, the recap or the party over: the
+  home, as it always was.
+- **The end:** when the game finishes, the phone shows its result card
+  ("Waiting for the next game") while the TV shows the final screen, then
+  goes home with the TV, on the database clock (Back to standings, or the 3
+  minutes), with the same card on top of the home until the next game starts.
+- **Joining mid-game** lands straight in the takeover: it reads the TV, not
+  the phone.
+- **The peek:** Standings in the header (a `secondary` pill, never gold)
+  opens the rest of the home as a full-screen sheet over the game: the party's
+  name and "Back to the game" on `raised` at its top, then your place, the
+  standings right under it, On the TV, the games running underneath, what
+  finished lately and Your night, with the bar at its foot. The game under it
+  is `inert`; Escape or Back to the game closes it and the focus goes back to
+  Standings. A new timed question takes the phone back from it, as from any
+  sheet, and the next game on the TV opens on the game, not the peek.
+- **Still in reach:** the home's sections stay mounted out of sight during
+  the takeover, so a layer a guest has open in one (the hunt's scan sheet,
+  its "What happened?") stays on top. The bar's Show my code and the toasts
+  (you're out, you got someone) work as on the home, and a camera scan still
+  opens the hunt's sheet over the game.
+- **The task one tap away:** a background game with a secret for this guest
+  (`GameModule.phoneSecret`: the hunt's task while they stand) puts a quiet
+  face-down card beside Show my code on the bar: `overlay` with the popper's
+  stripes on its left edge, "My task". Tapped, it turns over across the whole
+  bar ("Your task", the words), and back by itself after 8 s, as the secret
+  card does. Gold stays Show my code's alone, and the code beside it steps
+  aside where it doesn't fit (the QR code shows it). The bar has room for
+  one secret: the oldest running game's. It steps aside with the bar while a
+  timer or a text field needs the screen, then comes back.
+- **Captures:** `.design/phone-takeover`, before and after at 390 by 844 and
+  375 by 667. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
+  and [running.test.ts](../src/components/phone/running.test.ts) check which
+  screen shows for every combination of the stage game, the games beside it,
+  a finish, a guest joining mid-game and the peek.
+
 - **A sheet never hides a timed question.** A game's full view opens in a
   sheet over the home, and Last one standing's stays open after a camera
   scan. When a timed question (a quiz question) opens on the main card, an
   open sheet gives way so its seconds aren't missed, unless it is still
   handling a scanned code (`sheetGivesWay` in
   [running.ts](../src/components/phone/running.ts)). The sheet's game keeps
-  its state, and its section opens it again.
+  its state, and its section opens it again. The peek gives way the same way.
 - **One gold step.** Show my code is the home's one gold bar (the default
   Button). A game's section carries no gold button and no gold Live chip:
   its actions are `outline` Buttons (Scan, Vote, Answer now), and a row on
-  the overlay surface opens its full view. A section's tab is gold only while
+  the overlay surface opens its full view. In the takeover, Standings is a
+  `secondary` pill and My task an `overlay` card, so the bar's gold stays
+  the one. A section's tab is gold only while
   the TV shows its game (on air), pink for the hunt, paper otherwise. While a
   timed question holds the main card, or while a guest types into a game's
   text field (Lydspor's title and singer), the bar steps aside, so that

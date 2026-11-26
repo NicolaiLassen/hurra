@@ -95,7 +95,7 @@ public `game-media` bucket (hosts upload; JPEG only).
 | ------------------- | ------ | --------------------------------------------------------------------- |
 | `/`                 | Anyone | Start page: type a party code, continue, or use a code from the host  |
 | `/join/:code`       | Guest  | Join QR target: Who are you? from the guest list, or a typed name     |
-| `/play/:code`       | Guest  | Points, the games (main card, Also running), Your night, their QR     |
+| `/play/:code`       | Guest  | A stage game on the TV alone (the takeover), else points, the games, Your night, their QR |
 | `/p/:playerCode`    | Anyone | Player QR target: the award page for hosts, into the game for guests  |
 | `/tv/:code`         | TV     | The TV: pairs with a code; `?mirror=1` is the host's own TV tab, `?picture=bright` the Brighter picture |
 | `/host`             | Host   | Sessions                                                              |
@@ -196,7 +196,7 @@ in [src/components](../src/components).
 **`index.ts`**: `defineGameModule({ logic, name, description, icon, PlayerView, ... })`,
 with `stageBanners: 'sound-only'` when the `TvView` shows each moment itself,
 and `profileBadges` to show the game's profile data as badges (`tone`: gold
-for a win, pink for the hunt). Four more optional hooks reach the core
+for a win, pink for the hunt). Five more optional hooks reach the core
 without it naming the game:
 
 | Hook | What the core does with it |
@@ -205,6 +205,7 @@ without it naming the game:
 | `phoneStrap(publicState)` | The words on the paper strap beside the game's tab on a phone while it holds the main card ("Question 3 of 10"). |
 | `accent: 'hunt'` | The game's tabs are the hunt's pink with the popper's stripes: the TV's news strap and programme strap, its ticker line, and a phone's tab. |
 | `setupStatus(config, guests)` | Whether the game's settings are ready to play, as `{ ready, line }`: the line under its name in the host's Games panel ("8 pictures, all with their people", "6 of 8 songs ready: 2 need a photo"). `config` is the saved settings over `defaultConfig`, `guests` the whole guest list. Build it from the game's own check (`parseConfig`, a `check...` function) so the row and the start agree; the words in [src/games/core/setup.ts](../src/games/core/setup.ts) (`readyLine`, `need`) count what is left. Not ready makes Set up the row's next step in place of Start; a warning never makes a game not ready. Without it the row shows no line and its Start as always; a game without a `ConfigEditor` is always ready. |
+| `phoneSecret(view)` | This player's secret, read from their own view (`{ label: 'task', text }`): while a stage game takes over the phone and this game runs in the background, the bottom bar keeps it one tap away as a face-down "My task" beside Show my code ([identity.md](identity.md#the-phone)). |
 
 **`bot.ts`**:
 the game's rehearsal bot ([src/games/core/bot.ts](../src/games/core/bot.ts)).

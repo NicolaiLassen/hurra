@@ -13,7 +13,7 @@ export const THEME_SCALES = {
   ],
   radius: ['token', 'chip', 'tile', 'control', 'phone'],
   ease: ['tab'],
-  animate: ['strap-in', 'tab-land', 'count-pop'],
+  animate: ['strap-in', 'tab-land', 'count-pop', 'card-turn', 'peek-in'],
 }
 
 export const cn = createCn({ extend: { theme: THEME_SCALES } })

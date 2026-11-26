@@ -39,6 +39,46 @@ export function homeLayout(s: Snapshot, now: number, isBackground: (gameType: st
   return { main: { kind: 'none' }, alsoRunning: liveGames(s).sort(byOldestStart), finishedLately: layout.finishedLately }
 }
 
+/**
+ * What fills the phone: its home, or the takeover, the game on the TV stage
+ * alone, from its start to the end of its final screen. `finished`: the TV
+ * shows the game's final screen, and the phone its result, until `until`
+ * (the database clock), when the TV moves on and the phone goes home.
+ */
+export type PhoneFocus = { kind: 'home' } | { kind: 'takeover'; game: SessionGame; finished: boolean; until: number | null }
+
+/**
+ * The takeover (docs/identity.md, The phone): while a game made for the
+ * stage (its logic's presentation) holds the TV, live or on its final
+ * screen, the phone shows only that game. A background game the host puts
+ * on the TV (Last one standing's board) stays a card on the home, since it
+ * runs all evening. The TV back on the standings, the recap, the party over:
+ * the home. Nothing here depends on this phone, so a guest who joins
+ * mid-game lands in the takeover too.
+ */
+export function phoneFocus(s: Snapshot, now: number, isBackground: (gameType: string) => boolean): PhoneFocus {
+  const scene = tvScene(s, now)
+  if (scene.kind !== 'live' && scene.kind !== 'final') return { kind: 'home' }
+  if (isBackground(scene.game.game_type)) return { kind: 'home' }
+  return scene.kind === 'live'
+    ? { kind: 'takeover', game: scene.game, finished: false, until: null }
+    : { kind: 'takeover', game: scene.game, finished: true, until: scene.until }
+}
+
+/**
+ * The one secret the takeover's bottom bar keeps in reach (GameModule.phoneSecret):
+ * the first live game off the stage, oldest start first, that has one for
+ * this player. The bar has room for one.
+ */
+export function barSecret<T>(games: readonly SessionGame[], stageId: string | null, secretOf: (game: SessionGame) => T | null): { game: SessionGame; secret: T } | null {
+  for (const game of games) {
+    if (game.id === stageId || game.status !== 'active' || game.archived_at !== null) continue
+    const secret = secretOf(game)
+    if (secret !== null) return { game, secret }
+  }
+  return null
+}
+
 /** One line of On the TV: Now, Next or Later, the title, and a quiet line under it. */
 export type TvRow = { when: 'Now' | 'Next' | 'Later'; what: string; detail: string | null }
 
@@ -119,4 +159,14 @@ export function mainCardNews(before: MainQuestion, now: MainQuestion): boolean {
  */
 export function sheetGivesWay({ news, covered, timed, scanning }: { news: boolean; covered: boolean; timed: boolean; scanning: boolean }): boolean {
   return news && covered && timed && !scanning
+}
+
+/**
+ * Whether the peek (the home opened as a sheet over the takeover, from
+ * Standings) is open: only during the takeover of the game it was opened
+ * over, so the next game on the TV takes the phone back from it. Null when
+ * the guest hasn't opened it, or closed it.
+ */
+export function peekOpen(focus: PhoneFocus, peekedGameId: string | null): boolean {
+  return focus.kind === 'takeover' && peekedGameId === focus.game.id
 }

@@ -1,8 +1,11 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
+import { SHOW_MS } from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
+import type { PhoneSecret } from '@/games/types'
 import type { Player } from '@/lib/types'
 import { playerUrl } from '@/lib/urls'
+import { cn } from '@/lib/utils'
 
 /**
  * The "Show my code" bar, in the thumb zone at the bottom of the phone home
@@ -11,12 +14,28 @@ import { playerUrl } from '@/lib/urls'
  * the full-screen QR code: white, so it scans in a dark room. Tap anywhere to
  * close.
  *
+ * While a stage game takes over the phone, the bar also keeps a background
+ * game's `secret` one tap away (GameModule.phoneSecret: Last one standing's
+ * task): a quiet face-down card, "My task", at the bar's left. Tapped, it
+ * turns over across the whole bar to show the words and turns back by itself,
+ * as the secret card on the home does.
+ *
  * `hidden` steps the bar aside (while a timed question is open, so it covers
  * no answer, and while the guest types, for the browsers that lift a fixed
  * bar above the keyboard); a QR code already open stays open.
  */
-export default function ShowMyCode({ player, hidden = false }: { player: Pick<Player, 'name' | 'code'>; hidden?: boolean }) {
+export default function ShowMyCode({
+  player,
+  hidden = false,
+  secret = null,
+}: {
+  player: Pick<Player, 'name' | 'code'>
+  hidden?: boolean
+  secret?: PhoneSecret | null
+}) {
   const [open, setOpen] = useState(false)
+  const [turned, setTurned] = useState({ up: false, times: 0 })
+  const up = secret !== null && turned.up
 
   useEffect(() => {
     if (!open) return
@@ -27,15 +46,33 @@ export default function ShowMyCode({ player, hidden = false }: { player: Pick<Pl
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
+  // Face up for a few seconds, then face down again by itself, so nobody reads it over a shoulder.
+  useEffect(() => {
+    if (!turned.up) return
+    const timer = setTimeout(() => setTurned((t) => ({ up: false, times: t.times + 1 })), SHOW_MS)
+    return () => clearTimeout(timer)
+  }, [turned])
+
   return (
     <>
       {!hidden && (
-        <div className="fixed inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
-          <div className="mx-auto max-w-md px-4">
-            <Button size="xl" className="w-full justify-between px-[18px]" onClick={() => setOpen(true)}>
-              <span className="text-phone-action font-extrabold">Show my code</span>
-              <span className="text-[25px] leading-none tracking-[0.08em] tv-num">{player.code}</span>
-            </Button>
+        <div data-code-bar="" className="fixed inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
+          <div className="mx-auto flex max-w-md items-end gap-2 px-4">
+            {secret && (
+              <BarSecret
+                secret={secret}
+                up={up}
+                turns={turned.times}
+                onTurn={() => setTurned((t) => ({ up: !t.up, times: t.times + 1 }))}
+              />
+            )}
+            {!up && (
+              <Button size="xl" className="@container min-w-0 flex-1 justify-between px-[18px]" onClick={() => setOpen(true)}>
+                <span className="text-phone-action font-extrabold">Show my code</span>
+                {/* Where it doesn't fit (beside a secret on most phones) the code steps aside: the QR code shows it. */}
+                <span className="text-[25px] leading-none tracking-[0.08em] tv-num @max-[13.5rem]:hidden">{player.code}</span>
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -56,5 +93,45 @@ export default function ShowMyCode({ player, hidden = false }: { player: Pick<Pl
         </button>
       )}
     </>
+  )
+}
+
+/**
+ * The secret on the bar: face down, a quiet card as tall as the gold step
+ * with the popper's stripes on its left edge (the secret card's look, never
+ * gold); face up, the whole bar with the words. One button throughout, so the
+ * focus stays on it as it turns.
+ */
+function BarSecret({ secret, up, turns, onTurn }: { secret: PhoneSecret; up: boolean; turns: number; onTurn: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onTurn}
+      aria-pressed={up}
+      data-bar-secret=""
+      className={cn(
+        'relative min-h-13.5 overflow-hidden rounded-phone bg-overlay text-left perspective-[900px] focus-visible:ring-3 focus-visible:ring-gold/50 focus-visible:outline-none',
+        "before:absolute before:inset-y-0 before:left-0 before:w-3.5 before:stripes before:content-['']",
+        up ? 'min-w-0 flex-1' : 'shrink-0',
+      )}
+    >
+      {/* Keyed by each turn, so the face that lands turns in; the first face down just shows. */}
+      <span
+        key={turns}
+        className={cn(
+          'flex min-h-13.5 flex-col justify-center py-2.5 pr-3.5 pl-[1.625rem]',
+          turns > 0 && 'animate-card-turn motion-reduce:animate-none',
+        )}
+      >
+        {up ? (
+          <>
+            <span className="block text-sm font-semibold text-paper-2">Your {secret.label}</span>
+            <span className="block text-lg leading-snug font-bold">{secret.text}</span>
+          </>
+        ) : (
+          <span className="text-phone-action font-extrabold whitespace-nowrap">My {secret.label}</span>
+        )}
+      </span>
+    </button>
   )
 }

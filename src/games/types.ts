@@ -237,9 +237,21 @@ export type GameModule<G extends AnyGame = AnyGame> = {
    * no line and its Start as always.
    */
   setupStatus?: (config: Parts<G>['config'], guests: readonly GameGuest[]) => SetupStatus
+  /**
+   * This player's secret in the game, read from their own view (Last one
+   * standing's task), for a game that runs in the background. While another
+   * game takes over the phone, the bottom bar keeps it one tap away beside
+   * Show my code: face down as "My task", it turns over to show the words and
+   * back by itself. Null or left out: nothing to keep in reach (out, not
+   * dealt in).
+   */
+  phoneSecret?: (view: Parts<G>['playerView'] | null | undefined) => PhoneSecret | null
 }
 
 export type { SetupStatus } from '@/games/core/setup'
+
+/** A player's secret on the phone's bottom bar: what it is ("task", as in "My task") and its words. */
+export type PhoneSecret = { label: string; text: string }
 
 /** Type-checks a module against its own game, then widens it for the registry. */
 export function defineGameModule<G extends AnyGame>(module: GameModule<G>): GameModule {
