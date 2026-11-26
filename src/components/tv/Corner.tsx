@@ -1,5 +1,6 @@
-import { CornersInIcon, CornersOutIcon, SpeakerHighIcon, SpeakerSlashIcon } from '@phosphor-icons/react'
+import { CornersInIcon, CornersOutIcon, SpeakerHighIcon, SpeakerSlashIcon, SunDimIcon, SunIcon } from '@phosphor-icons/react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { togglePicture, usePicture } from '@/components/tv/picture'
 import { isAudioUnlocked, playSound, subscribeAudio, unlockAudio, useSoundSetting } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
@@ -18,9 +19,9 @@ const CONTROL = 'inline-flex h-8 shrink-0 items-center gap-2 rounded-chip px-2 t
 /**
  * The bottom-left corner: the laptop's controls, not the programme. Full
  * screen, sound (with "Click for sound" until the browser lets the TV play
- * any) and the connection, quiet in paper-3 in the gutter under the band, so
- * it never covers the band or the stage. A host's own browser says "Host
- * preview".
+ * any), the picture (Standard or Brighter) and the connection, quiet in
+ * paper-3 in the gutter under the band, so it never covers the band or the
+ * stage. A host's own browser says "Host preview".
  */
 export default function Corner({ live, hostPreview }: { live: boolean; hostPreview: boolean }) {
   // The browser knows at once when the network drops; the realtime socket can take
@@ -30,6 +31,7 @@ export default function Corner({ live, hostPreview }: { live: boolean; hostPrevi
     <div data-frame="corner" data-safe-skip className="absolute bottom-0 left-0 z-20 flex h-[5vh] items-center gap-1 px-3">
       <FullscreenButton />
       <SoundButton />
+      <PictureButton />
       <Connection live={live && online} />
       {hostPreview && <span className="ml-2 text-sm font-semibold text-paper-3">Host preview</span>}
     </div>
@@ -64,6 +66,28 @@ function SoundButton() {
     >
       {on ? <SpeakerHighIcon className="size-4" /> : <SpeakerSlashIcon className="size-4" />}
       {locked && 'Click for sound'}
+    </button>
+  )
+}
+
+/**
+ * Brighter picture, for a TV that shows dark tones as black: the same look
+ * with its dark end raised (picture.ts). Pressed while it is on; each TV
+ * remembers its own.
+ */
+export function PictureButton() {
+  const bright = usePicture() === 'bright'
+  return (
+    <button
+      type="button"
+      data-picture-toggle
+      onClick={togglePicture}
+      aria-label="Brighter picture"
+      aria-pressed={bright}
+      title={bright ? 'Brighter picture is on. Click for the standard picture' : 'Brighter picture, for a TV that shows dark tones as black'}
+      className={cn(CONTROL, 'opacity-60 hover:opacity-100')}
+    >
+      {bright ? <SunIcon weight="fill" className="size-4" /> : <SunDimIcon className="size-4" />}
     </button>
   )
 }

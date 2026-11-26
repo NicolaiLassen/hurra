@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { PICTURE_ATTRIBUTE } from '@/components/tv/picture'
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
 const THIS_FILE = 'lib/tokens.test.ts'
@@ -169,6 +170,74 @@ describe('the old shadcn names', () => {
       expect(value, name).toMatch(/^var\(--color-[\w-]+\)$/)
       expect([...tokens], name).toContain(value.slice('var('.length, -1))
     }
+  })
+})
+
+/** WCAG relative luminance of a #rrggbb colour. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** WCAG contrast between two #rrggbb colours, 1 to 21. */
+function contrast(a: string, b: string): number {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (light + 0.05) / (dark + 0.05)
+}
+
+/** The six-digit hex colours a CSS block sets, by name. */
+const colours = (block: string) =>
+  Object.fromEntries(Array.from(block.matchAll(/^\s*--color-([\w-]+):\s*(#[0-9a-f]{6});/gim), ([, name, value]) => [name, value.toLowerCase()]))
+
+describe('the brighter picture', () => {
+  // docs/identity.md, The TV's frame: for a TV that crushes dark tones, the
+  // same look with its dark end raised, over the tokens and nothing else.
+  const css = readFileSync(join(SRC, 'index.css'), 'utf8')
+  const standard = colours(css.match(/^@theme \{([\s\S]*?)^\}/m)?.[1] ?? '')
+  const selector = `:root[${PICTURE_ATTRIBUTE}='bright']`
+  const block = css.match(new RegExp(`^${selector.replace(/[[\]()]/g, '\\$&')} \\{([^}]*)\\}`, 'm'))?.[1]
+  const bright = { ...standard, ...colours(block ?? '') }
+  const SURFACES = ['ground', 'raised', 'overlay', 'rule']
+
+  it("is scoped to the attribute the TV page sets on the document's root", () => {
+    expect(block, selector).toBeDefined()
+    expect(standard.ground).toBe('#14110e')
+  })
+
+  it('lifts only the dark end: gold, pink, the key, the guest colours, paper and ink stay as they are', () => {
+    const lifted = Object.keys(colours(block ?? ''))
+    expect(lifted.sort()).toEqual([...SURFACES, 'paper-2', 'paper-3'].sort())
+    for (const name of lifted) expect(Object.keys(standard), name).toContain(name)
+    // Every declaration in the block is one of those colours: no other token, no alias.
+    expect(Array.from((block ?? '').matchAll(/--[\w-]+:/g)).length).toBe(lifted.length)
+  })
+
+  it('raises every surface, keeps it warm, and sets each a bigger step from the ground than the standard picture does', () => {
+    for (const [i, name] of SURFACES.entries()) {
+      expect(luminance(bright[name]), name).toBeGreaterThan(luminance(standard[name]))
+      // Warm like the studio black it lifts (red over green over blue), never a grey or a cool wash.
+      const [r, g, b] = [1, 3, 5].map((at) => parseInt(bright[name].slice(at, at + 2), 16))
+      expect(r > g && g > b, `${name} ${bright[name]}`).toBe(true)
+      if (i === 0) continue
+      expect(luminance(bright[name]), name).toBeGreaterThan(luminance(bright[SURFACES[i - 1]]))
+      expect(contrast(bright[name], bright.ground), name).toBeGreaterThan(contrast(standard[name], standard.ground) * 1.25)
+    }
+    // The line colour shows on the ground and on a panel.
+    expect(contrast(bright.rule, bright.ground)).toBeGreaterThanOrEqual(2.5)
+    expect(contrast(bright.rule, bright.raised)).toBeGreaterThanOrEqual(1.75)
+  })
+
+  it('reads secondary text at 7 to 1 or more on its ground, and keeps paper, paper-2 and paper-3 in that order', () => {
+    expect(contrast(bright['paper-2'], bright.ground)).toBeGreaterThanOrEqual(7)
+    expect(contrast(bright['paper-3'], bright.ground)).toBeGreaterThanOrEqual(7)
+    expect(luminance(bright.paper)).toBeGreaterThan(luminance(bright['paper-2']))
+    expect(luminance(bright['paper-2'])).toBeGreaterThan(luminance(bright['paper-3']))
+    // Ranks and the quiz's stepped-back tiles stay readable on a panel.
+    expect(contrast(bright['paper-3'], bright.raised)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(bright['paper-3'], bright.rule)).toBeGreaterThanOrEqual(3)
   })
 })
 
