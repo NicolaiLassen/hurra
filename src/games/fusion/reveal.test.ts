@@ -3,7 +3,6 @@ import { ARRIVE_LATEST_MS, ARRIVE_MS, arriveIn, LEADERS_FROM_PX, revealOriginals
 import type { FusionPublicPicture, FusionPublicState, FusionReveal } from './shapes'
 
 const REVEAL: FusionReveal = {
-  people: ['ana', 'bo'],
   names: ['Ana', 'Bo'],
   both: 1,
   one: 0,
@@ -13,21 +12,26 @@ const REVEAL: FusionReveal = {
   step: 1,
   at: 1,
 }
-const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicPicture => ({ n, key: `p${n}`, label: `#${n}`, image: null, revealed })
+const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicPicture => ({
+  n,
+  key: `p${n}`,
+  label: `#${n}`,
+  asked: revealed !== null,
+  image: null,
+  revealed,
+})
 const state = (patch: Partial<FusionPublicState>): FusionPublicState => ({
   phase: 'wall',
   pictures: [picture(1, REVEAL), picture(2)],
-  rules: { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 },
-  showing: null,
+  rules: { seconds: 30, perPerson: 1, bothBonus: 1 },
   current: null,
   top: [],
-  expected: [],
   ...patch,
 })
 
 describe('the reveal on the TV', () => {
   it("hands over the two people's own photos only while their picture is revealed", () => {
-    const current = { n: 1, step: 1, key: 'p1', openedAt: 0, endsAt: 30_000, revealedAt: 31_250 }
+    const current = { n: 1, step: 1, key: 'p1', openedAt: 0, startsAt: 2_800, endsAt: 32_800, revealedAt: 34_050 }
     expect(revealOriginals(state({ phase: 'reveal', current }))).toEqual(['s/g/ana.jpg', null])
     // On the wall afterwards, or while another picture is asked, none are loaded: the reveal's are dropped.
     expect(revealOriginals(state({ phase: 'wall' }))).toBeNull()

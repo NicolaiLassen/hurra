@@ -1,44 +1,26 @@
 // Participant fusion's pictures on the TV (spec 8.2): what to decode when, and
-// the pictures' shape. The TV warms every image from the moment its view
-// mounts (usePictures.ts), so the showing never waits and never blinks; it
-// decodes full images only where they show soon, so 40 decoded portraits never
-// sit in memory at once. Pure, so it is tested (preload.test.ts).
-import { showingIndex, type FusionPublicState } from '@/games/fusion/shapes'
+// the pictures' shape. A picture's image reaches the TV only once it is asked
+// (its path is in the public state from then on), so the TV loads it at that
+// moment, at high priority, while the suspense runs (usePictures.ts); a
+// placeholder stands in until it is in. Full images are decoded only where
+// they show, so 40 decoded portraits never sit in memory at once. Pure, so it
+// is tested (preload.test.ts).
+import type { FusionPublicState } from '@/games/fusion/shapes'
 import { DEFAULT_ASPECT } from '@/games/fusion/wall'
 
 /** How many thumbnails load at once, then how many full images. */
 export const THUMBS_AT_ONCE = 4
 export const FULLS_AT_ONCE = 2
-/** The showing decodes the picture on show and this many after it. */
-export const DECODE_AHEAD = 2
 
 /**
- * The pictures (by number) whose full image should be decoded now: in the
- * showing, the one on show and the next two; while a picture is asked or
- * revealed, that one; on the wall, the lowest picture not yet revealed (the
- * host's next Ask, so it grows into the frame sharp); in the lobby, the first
- * two (the showing opens on them). Only pictures with an image.
+ * The pictures (by number) whose full image should be decoded now: the one
+ * asked or revealed, and nothing else. On the wall, the next picture is a
+ * placeholder whose image nobody has yet. Only pictures with an image.
  */
-export function decodeSet(pub: FusionPublicState, now: number): number[] {
-  const withImage = pub.pictures.filter((p) => p.image !== null)
-  const numbers = (list: typeof withImage) => list.map((p) => p.n)
-  switch (pub.phase) {
-    case 'lobby':
-      return numbers(pub.pictures.slice(0, DECODE_AHEAD).filter((p) => p.image !== null))
-    case 'showing': {
-      const index = showingIndex(pub, now) ?? 0
-      return numbers(pub.pictures.slice(index, index + 1 + DECODE_AHEAD).filter((p) => p.image !== null))
-    }
-    case 'wall': {
-      const next = withImage.find((p) => p.revealed === null)
-      return next ? [next.n] : []
-    }
-    case 'asking':
-    case 'reveal':
-      return pub.current && withImage.some((p) => p.n === pub.current!.n) ? [pub.current.n] : []
-    case 'done':
-      return []
-  }
+export function decodeSet(pub: FusionPublicState): number[] {
+  if ((pub.phase !== 'asking' && pub.phase !== 'reveal') || !pub.current) return []
+  const n = pub.current.n
+  return pub.pictures.some((p) => p.n === n && p.image !== null) ? [n] : []
 }
 
 /** The middle value (the mean of the two middle ones for an even count), or null for none. */
@@ -57,7 +39,7 @@ export function wallAspect(aspects: readonly number[]): number {
   return middle === null ? DEFAULT_ASPECT : clamp(middle, 0.6, 1.5)
 }
 
-/** The frame's shape in the showing, asking and the reveal: the wall's, portrait or square only (0.6 to 1.0). */
+/** The frame's shape while a picture is asked and at its reveal: the wall's, portrait or square only (0.6 to 1.0). */
 export function frameAspect(aspects: readonly number[]): number {
   return clamp(wallAspect(aspects), 0.6, 1)
 }

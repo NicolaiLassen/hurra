@@ -6,7 +6,8 @@ import type { FusionGame } from '@/games/fusion/logic'
 import { askingCase, cardLine, outcomeFor, outcomePoints } from '@/games/fusion/phoneLines'
 import { SecondsLeft } from '@/games/fusion/phoneParts'
 import { readPublic, readView } from '@/games/fusion/shapes'
-import { choiceOf, nameOf, shortNames } from '@/games/fusion/view'
+import { sameName } from '@/games/core/names'
+import { choiceOf, shortName, shortNames } from '@/games/fusion/view'
 import type { PlayerCardProps } from '@/games/types'
 import { useServerTime } from '@/lib/gameClock'
 
@@ -25,16 +26,15 @@ export default function PlayerCard({ game, players, player, publicState, view: r
   const current = pub?.current ? pub.pictures.find((p) => p.n === pub.current!.n) : undefined
   const asking = pub?.phase === 'asking' && pub.current ? pub.current : null
   const mine = pub?.current ? choiceOf(myAnswers[pub.current.key]) : null
-  // The two in the picture see the same row and Guess as everyone else: their sheet holds the same picker.
   const now = useServerTime(serverNow, 1000, asking !== null && mine === null)
   const closed = asking ? (prompts.find((p) => p.key === asking.key)?.closed_at ?? null) !== null : true
   const askCase = asking ? askingCase({ lockedIn: mine !== null, sending: false, over: closed || now >= asking.endsAt }) : null
 
   let reveal = null
   if (pub?.phase === 'reveal' && current?.revealed) {
-    const outcome = outcomeFor(current, player.id, view, mine)
-    const short = shortNames(players)
-    const names = current.revealed.people.map((who, i) => (who === player.id ? 'you' : (short.get(who) ?? nameOf(players, who, current.revealed!.names[i]))))
+    const outcome = outcomeFor(current, player.name, view, mine)
+    const short = shortNames([...players.map((p) => p.name), ...current.revealed.names])
+    const names = current.revealed.names.map((name) => (sameName(name, player.name) ? 'you' : shortName(short, name)))
     reveal = { names, outcome, points: outcomePoints(outcome, pub.rules) }
   }
 
@@ -50,7 +50,7 @@ export default function PlayerCard({ game, players, player, publicState, view: r
         <span className="sr-only">Open</span>
         <CaretRightIcon className="size-5 shrink-0 text-paper-2" />
       </button>
-      {askCase === 'picking' && asking && (
+      {askCase === 'picking' && asking && now >= asking.startsAt && (
         <Button size="xl" variant="outline" className="w-full justify-between" onClick={open}>
           Guess
           <SecondsLeft endsAt={asking.endsAt} serverNow={serverNow} />

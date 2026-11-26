@@ -1,5 +1,6 @@
 // Participant fusion's words on a guest's phone (spec 6.3), phase by phase and
-// case by case: a voter, a lock, the two in the picture, time's up, a late
+// case by case: the wait while the TV shows which picture it is, a voter, a
+// lock, the two in the picture (who guess like anyone), time's up, a late
 // joiner with no view yet, and each reveal outcome. Then the section card and
 // the result card, rendered from the fixture scenes as Sofie's phone gets them.
 import { createElement, type ComponentType } from 'react'
@@ -11,7 +12,6 @@ import {
   barNames,
   cardLine,
   doneWords,
-  IN_PICTURE_LINE,
   lobbyWords,
   lockedWords,
   outcomeFor,
@@ -21,10 +21,10 @@ import {
   pickLine,
   placeParts,
   resultWords,
-  showingWords,
   TILE_NAME_CHARS,
   tileNameLines,
   timeUpWords,
+  waitWords,
   wallWords,
   type Outcome,
   type Part,
@@ -33,16 +33,16 @@ import ResultView from '@/games/fusion/ResultView'
 import { readPublic, readView, type FusionPlayerView, type FusionPublicState, type FusionRules } from '@/games/fusion/shapes'
 import { FIXTURE_NOW, FIXTURE_PLAYER_ID, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 
-const RULES: FusionRules = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
-const view = (over: Partial<FusionPlayerView> = {}): FusionPlayerView => ({ points: 0, rank: null, hits: {}, inPicture: false, ...over })
+const RULES: FusionRules = { seconds: 30, perPerson: 1, bothBonus: 1 }
+const view = (over: Partial<FusionPlayerView> = {}): FusionPlayerView => ({ points: 0, rank: null, hits: {}, ...over })
 const text = (parts: Part[] | null) => parts?.map((part) => part.text).join('') ?? null
 
-describe('the lobby and the showing send eyes to the TV', () => {
+describe('the lobby and the suspense send eyes to the TV', () => {
   it('the lobby: what the round is, how it scores, and where it starts', () => {
     expect(lobbyWords(true, RULES)).toEqual({
       head: 'Two guests, one face.',
       line: 'Watch the TV.',
-      body: 'Each picture shows on the TV first. Then you guess them one by one here: pick the two guests in it and lock in. 1 point for each right person, plus 1 for both.',
+      body: 'The pictures come up on the TV one at a time. For each one, pick the two names in it here and lock in. 1 point for each right person, plus 1 for both.',
     })
     expect(lobbyWords(false, { ...RULES, bothBonus: 0 })).toMatchObject({
       line: 'It starts on the TV soon.',
@@ -50,13 +50,9 @@ describe('the lobby and the showing send eyes to the TV', () => {
     })
   })
 
-  it('the showing: look at the TV, and which picture is on', () => {
-    expect(showingWords('#3')).toEqual({
-      head: 'Look at the TV.',
-      line: 'Now showing #3.',
-      body: 'Look closely. You guess them one by one after the showing.',
-    })
-    expect(showingWords(null).line).toBeNull()
+  it('a picture asked, while the TV shows which one it is: look at the TV, the picker comes next', () => {
+    expect(waitWords(true)).toEqual({ head: 'Look at the TV.', line: 'The next picture is on its way. Then pick the two in it.' })
+    expect(waitWords(false).head).toBe('The next picture is coming.')
   })
 })
 
@@ -87,7 +83,7 @@ describe('the wall', () => {
 
 describe('a picture being guessed', () => {
   it('a voter: how picking works, the picks so far, the lock on its way', () => {
-    expect(pickLine([], { kind: 'none' })).toBe('Pick two guests, then lock in. Only your first lock counts.')
+    expect(pickLine([], { kind: 'none' })).toBe('Pick two names, then lock in. Only your first lock counts.')
     expect(pickLine(['Mads'], { kind: 'none' })).toBe('Mads and one more.')
     expect(pickLine(['Mads', 'Ida'], { kind: 'none' })).toBe("Mads and Ida. Lock in when you're sure.")
     expect(pickLine(['Mads', 'Ida'], { kind: 'sending', pick: ['m', 'i'] })).toBe('Locking in Mads and Ida…')
@@ -115,14 +111,11 @@ describe('a picture being guessed', () => {
     expect(lockedWords(['Bo', 'Maja'], false).line).toBe('The answer comes up soon.')
   })
 
-  it('in the picture: the same picker, told to keep a straight face and that it won\'t count', () => {
-    expect(pickLine([], { kind: 'none' }, true)).toBe(IN_PICTURE_LINE)
-    expect(IN_PICTURE_LINE).toBe("This one is you. Keep a straight face and pick any two: it won't count.")
-    expect(pickLine(['Mads'], { kind: 'none' }, true)).toBe("Mads and one more. It won't count.")
-    expect(pickLine(['Mads', 'Ida'], { kind: 'none' }, true)).toBe("Mads and Ida. It won't count.")
-    // Locked in on the phone, it reads as everyone's lock.
-    expect(pickLine(['Mads', 'Ida'], { kind: 'locked', pick: ['m', 'i'] }, true)).toBe('Locking in Mads and Ida…')
-    expect(timeUpWords(null, true)).toEqual({ head: "Time's up.", line: 'You sat this one out.' })
+  it('in the picture: the same picker and the same words as everyone, their lock sent like anyone’s', () => {
+    // Nothing says "this one is you" any more: the two in it guess and score like anyone (their own name isn't offered).
+    expect(pickLine([], { kind: 'none' })).toBe('Pick two names, then lock in. Only your first lock counts.')
+    expect(pickLine(['Mads', 'Ida'], { kind: 'locked', pick: ['Mads', 'Ida'] })).toBe('Locking in Mads and Ida…')
+    expect(timeUpWords()).toEqual({ head: "Time's up.", line: 'No guess from you this time.' })
   })
 
   it("time's up without a lock, with the database's words when a lock came too late", () => {
@@ -138,33 +131,34 @@ describe('a picture being guessed', () => {
 })
 
 describe('the reveal', () => {
-  const picture = { n: 4, revealed: { people: ['bo', 'maja'] } }
+  const picture = { n: 4, revealed: { names: ['Bo', 'Maja'] as [string, string] } }
 
-  it('each outcome, from the view’s hits', () => {
-    expect(outcomeFor(picture, 'me', view({ hits: { 4: 2 } }), null)).toBe('both')
-    expect(outcomeFor(picture, 'me', view({ hits: { 4: 1 } }), null)).toBe('one')
-    expect(outcomeFor(picture, 'me', view({ hits: { 4: 0 } }), null)).toBe('none')
-    expect(outcomeFor(picture, 'me', view(), null)).toBe('noGuess')
-    expect(outcomeFor(picture, 'bo', view({ inPicture: true }), null)).toBe('you')
+  it('each outcome, from the view’s hits, the two in it like anyone', () => {
+    expect(outcomeFor(picture, 'Sofie', view({ hits: { 4: 2 } }), null)).toBe('both')
+    expect(outcomeFor(picture, 'Sofie', view({ hits: { 4: 1 } }), null)).toBe('one')
+    expect(outcomeFor(picture, 'Sofie', view({ hits: { 4: 0 } }), null)).toBe('none')
+    expect(outcomeFor(picture, 'Sofie', view(), null)).toBe('noGuess')
+    expect(outcomeFor(picture, 'Bo', view({ hits: { 4: 1 } }), null)).toBe('one')
   })
 
-  it('from your own lock when the view has not caught up, and no guess for a late joiner', () => {
-    expect(outcomeFor(picture, 'me', null, ['bo', 'maja'])).toBe('both')
-    expect(outcomeFor(picture, 'me', view(), ['bo', 'ida'])).toBe('one')
-    expect(outcomeFor(picture, 'me', null, ['ana', 'ida'])).toBe('none')
-    expect(outcomeFor(picture, 'me', null, null)).toBe('noGuess')
-    // The two in it score nothing, even with a lock.
-    expect(outcomeFor(picture, 'maja', null, ['bo', 'ida'])).toBe('you')
+  it('from your own lock when the view has not caught up, names folded, and no guess for a late joiner', () => {
+    expect(outcomeFor(picture, 'Sofie', null, ['bo', 'MAJA'])).toBe('both')
+    expect(outcomeFor(picture, 'Sofie', view(), ['Bo', 'Ida'])).toBe('one')
+    expect(outcomeFor(picture, 'Sofie', null, ['Ana', 'Ida'])).toBe('none')
+    expect(outcomeFor(picture, 'Sofie', null, null)).toBe('noGuess')
+    // In it: their own name never counts, the other one does.
+    expect(outcomeFor(picture, 'Maja', null, ['Bo', 'Ida'])).toBe('one')
+    expect(outcomeFor(picture, 'Maja', null, ['Maja', 'Ida'])).toBe('none')
   })
 
   it('heads, points and the one-line outcome', () => {
-    const heads = (['both', 'one', 'none', 'noGuess', 'you'] as Outcome[]).map(outcomeHead)
-    expect(heads).toEqual(['You got both.', 'You got one of the two.', 'Not this time.', 'No guess this time.', 'That was you.'])
-    expect((['both', 'one', 'none', 'noGuess', 'you'] as Outcome[]).map((o) => outcomePoints(o, RULES))).toEqual([3, 1, 0, 0, 0])
+    const heads = (['both', 'one', 'none', 'noGuess'] as Outcome[]).map(outcomeHead)
+    expect(heads).toEqual(['You got both.', 'You got one of the two.', 'Not this time.', 'No guess this time.'])
+    expect((['both', 'one', 'none', 'noGuess'] as Outcome[]).map((o) => outcomePoints(o, RULES))).toEqual([3, 1, 0, 0])
     expect(outcomeLine('both', 3)).toBe('You got both (+3).')
     expect(outcomeLine('one', 1)).toBe('You got one of the two (+1).')
     expect(outcomeLine('none', 0)).toBe('Not this time.')
-    expect(outcomeLine('you', 0)).toBe('That was you.')
+    expect(outcomeLine('noGuess', 0)).toBe('No guess this time.')
   })
 
   it('once over, while still live', () => {
@@ -182,7 +176,7 @@ describe('the section card, while another game holds the main card', () => {
   it('says where the round is, phase by phase', () => {
     expect(cardLine(null, null, null, null)).toBe('Getting the pictures ready…')
     expect(cardLine(pubOf('fusion-lobby'), null, null, null)).toBe('Starts on the TV soon')
-    expect(cardLine(pubOf('fusion-showing'), null, null, null)).toBe('Showing on the TV')
+    expect(cardLine(pubOf('fusion-start'), null, null, null)).toBe('12 pictures. The guessing starts soon.')
     expect(cardLine({ ...pubOf('fusion-wall'), pictures: pubOf('fusion-lobby').pictures }, null, null, null)).toBe(
       '12 pictures. The guessing starts soon.',
     )
@@ -194,7 +188,7 @@ describe('the section card, while another game holds the main card', () => {
     expect(cardLine(pubOf('fusion-asking-you'), null, 'picking', null)).toBe('Guess #6 now')
     const reveal = pubOf('fusion-reveal')
     expect(cardLine(reveal, null, null, { names: ['Bo', 'Maja'], outcome: 'both', points: 3 })).toBe('#4 was Bo and Maja. You got both (+3).')
-    expect(cardLine(reveal, null, null, { names: ['you', 'Maja'], outcome: 'you', points: 0 })).toBe('#4 was you and Maja.')
+    expect(cardLine(reveal, null, null, { names: ['you', 'Maja'], outcome: 'one', points: 1 })).toBe('#4 was you and Maja. You got one of the two (+1).')
   })
 
   it('renders over a picture being asked: the row and an outlined Guess with the seconds left', async () => {
@@ -203,7 +197,7 @@ describe('the section card, while another game holds the main card', () => {
     expect(html).toMatch(/data-variant="outline"[^>]*>Guess/)
     expect(html).not.toMatch(/data-variant="default"/)
     expect(plain(await renderCard('fusion-asking-locked'))).toContain('Locked in on #4')
-    // The two in the picture get the same row and Guess: a glance can't tell.
+    // The two in the picture get the same row and Guess, and guess like anyone.
     const you = await renderCard('fusion-asking-you')
     expect(plain(you)).toContain('Guess #6 now')
     expect(you).toMatch(/data-variant="outline"[^>]*>Guess/)
@@ -269,7 +263,8 @@ describe('the result card', () => {
     }
     const html = await render(ResultView as ComponentType<never>, props)
     expect(plain(html)).toContain('Emil had the sharpest eye')
-    expect(plain(html)).toContain("You scored 13 points Both people right on 3 of 12 pictures. You're 2nd of the face detectives.")
+    // 14: one of the two in #6, the picture she is in, scores like any guess.
+    expect(plain(html)).toContain("You scored 14 points Both people right on 3 of 12 pictures. You're 2nd of the face detectives.")
   })
 })
 
@@ -295,16 +290,14 @@ describe('the words', () => {
   it('have no exclamation marks and no dashes', () => {
     const all = [
       ...Object.values(lobbyWords(true, RULES)),
-      ...Object.values(showingWords('#3')),
+      ...Object.values(waitWords(true)),
+      ...Object.values(waitWords(false)),
       ...Object.values(wallWords(12, 12, true)),
       pickLine([], { kind: 'none' }),
       pickLine(['A', 'B'], { kind: 'none' }),
       ...Object.values(lockedWords(['A', 'B'], true)),
-      IN_PICTURE_LINE,
-      pickLine(['A', 'B'], { kind: 'none' }, true),
       ...Object.values(timeUpWords()),
-      ...Object.values(timeUpWords(null, true)),
-      ...(['both', 'one', 'none', 'noGuess', 'you'] as Outcome[]).map((o) => outcomeLine(o, 2)),
+      ...(['both', 'one', 'none', 'noGuess'] as Outcome[]).map((o) => outcomeLine(o, 2)),
     ].filter((line): line is string => typeof line === 'string')
     for (const line of all) {
       expect(line).not.toMatch(/[!\u2013\u2014]/)

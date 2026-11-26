@@ -1,19 +1,19 @@
 // Participant fusion's parts for a guest's phone only (spec 6.3; docs/identity.md,
 // Participant fusion on a phone): the asked picture's header with the seconds
-// left, the guest picker and its lock bar, the card that says where you are
-// with the picture (locked in, in it, time's up), a guess row and your place.
-// The parts every screen shares (the picture, its label chip, a pair) are in
-// parts.tsx.
+// left, the name picker and its lock bar, the card that says where you are
+// with the picture (locked in, time's up), a guess row and your place. While
+// a guest picks, names only: no photos and no tokens, which would make it
+// easier (the owner's call, 26 Nov). The parts every screen shares (the
+// picture, its label chip, a pair) are in parts.tsx.
 import { CheckIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
-import { useId, useRef, useState, type ReactNode } from 'react'
-import Avatar from '@/components/Avatar'
+import { useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { PlayerId } from '@/games/core/Game'
+import { sameName } from '@/games/core/names'
 import { LabelChip, PictureArt } from '@/games/fusion/parts'
 import { barNames, TILE_NAME_CHARS, tileNameLines, type Part } from '@/games/fusion/phoneLines'
 import type { FusionPublicPicture } from '@/games/fusion/shapes'
-import { candidatesFor, type Pickable } from '@/games/fusion/view'
+import { namesFor, shortName } from '@/games/fusion/view'
 import { useServerTime } from '@/lib/gameClock'
 import { cn } from '@/lib/utils'
 
@@ -22,7 +22,7 @@ type MediaUrl = (path: string, size?: 'full' | 'thumb') => string
 /** The seconds turn gold for their last five, as the TV's countdown does. */
 const URGENT_MS = 5000
 
-/** Over this many guests to pick from, a search field stands above them. */
+/** Over this many names to pick from, a search field stands above them. */
 export const SEARCH_FROM = 16
 
 /**
@@ -86,52 +86,43 @@ export function AskHeader({
 }
 
 /**
- * Everyone but you, to pick two of: a token (with the guest's photo when they
- * have one) and a first name on each tile, by name; over SEARCH_FROM guests, a
- * search above them. Guests on the list who haven't joined come after the
- * guests here, under "Not here yet", since a picture may be of one of them
- * (docs/guest-list.md, 9.2); the search finds them too. A tap picks, a picked
- * tile turns paper with a check, and a third tap replaces the oldest pick.
- * Picking from a search clears it for the next name; Enter picks the first
- * match. While the lock is on its way, the tiles not picked fade and nothing
- * takes a tap.
+ * The names to pick two of: everyone who has joined and every name in the
+ * pictures, never your own, A to Z, as plain tiles with the name and nothing
+ * else (no photo, no token: names only make it harder); over SEARCH_FROM
+ * names, a search above them. A tap picks, a picked tile turns paper with a
+ * check, and a third tap replaces the oldest pick. Picking from a search
+ * clears it for the next name; Enter picks the first match. While the lock is
+ * on its way, the tiles not picked fade and nothing takes a tap.
  */
-export function GuestPicker({
-  players,
-  expected = [],
-  meId,
+export function NamePicker({
   names,
+  short,
   pick,
   busy,
   onToggle,
 }: {
-  players: readonly Pickable[]
-  /** Guests on the list who haven't joined, none of them in `players`. */
-  expected?: readonly Pickable[]
-  meId: PlayerId
-  /** What each guest is called on the tiles (shortNames). */
-  names: ReadonlyMap<PlayerId, string>
-  pick: readonly PlayerId[]
+  /** The names offered, your own left out, in the order to show (guessOptions). */
+  names: readonly string[]
+  /** What each name is called on its tile (shortNames). */
+  short: ReadonlyMap<string, string>
+  pick: readonly string[]
   /** The lock is on its way (or can't be sent any more): no taps. */
   busy: boolean
-  onToggle: (id: PlayerId) => void
+  onToggle: (name: string) => void
 }) {
   const [query, setQuery] = useState('')
   const field = useRef<HTMLInputElement>(null)
-  const id = useId()
-  const others = players.filter((p) => p.id !== meId).length + expected.filter((p) => p.id !== meId).length
-  const searching = others > SEARCH_FROM
-  const here = candidatesFor(players, meId, searching ? query : '')
-  const notHere = candidatesFor(expected, meId, searching ? query : '')
-  const shown = [...here, ...notHere]
+  const searching = names.length > SEARCH_FROM
+  const shown = namesFor(names, searching ? query : '')
+  const picked = (name: string) => pick.some((p) => sameName(p, name))
 
-  function choose(id: PlayerId) {
+  function choose(name: string) {
     if (busy) return
-    onToggle(id)
+    onToggle(name)
     if (searching && query !== '') {
       setQuery('')
       // Ready for the second name; with two picked, the keyboard goes so Lock in shows.
-      const willHave = pick.includes(id) ? pick.length - 1 : Math.min(2, pick.length + 1)
+      const willHave = picked(name) ? pick.length - 1 : Math.min(2, pick.length + 1)
       if (willHave < 2) field.current?.focus()
       else field.current?.blur()
     }
@@ -150,11 +141,11 @@ export function GuestPicker({
             onKeyDown={(event) => {
               if (event.key === 'Enter' && query.trim() !== '' && shown[0]) {
                 event.preventDefault()
-                choose(shown[0].id)
+                choose(shown[0])
               }
             }}
-            placeholder="Find a guest"
-            aria-label="Find a guest"
+            placeholder="Find a name"
+            aria-label="Find a name"
             enterKeyHint="search"
             autoComplete="off"
             autoCorrect="off"
@@ -164,91 +155,58 @@ export function GuestPicker({
           />
         </div>
       )}
-      {(here.length > 0 || notHere.length === 0) && (
-        <ul aria-label="Guests" className={TILES}>
-          {here.map((p) => (
-            <li key={p.id}>
-              <GuestTile guest={p} name={names.get(p.id) ?? p.name} picked={pick.includes(p.id)} busy={busy} onPick={() => choose(p.id)} />
-            </li>
-          ))}
-          {shown.length === 0 && (
-            <li className="col-span-full py-6 text-center text-paper-2">
-              {query ? `Nobody called “${query.trim()}”.` : 'Nobody else has joined yet.'}
-            </li>
-          )}
-        </ul>
-      )}
-      {notHere.length > 0 && (
-        <>
-          <p id={`${id}-later`} className="pt-1 text-sm font-bold text-paper-2">
-            Not here yet
-          </p>
-          <ul aria-labelledby={`${id}-later`} className={TILES}>
-            {notHere.map((p) => (
-              <li key={p.id}>
-                <GuestTile guest={p} name={names.get(p.id) ?? p.name} picked={pick.includes(p.id)} busy={busy} onPick={() => choose(p.id)} />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <ul aria-label="Names" className={TILES}>
+        {shown.map((name) => (
+          <li key={name}>
+            <NameTile name={shortName(short, name)} full={name} picked={picked(name)} busy={busy} onPick={() => choose(name)} />
+          </li>
+        ))}
+        {shown.length === 0 && (
+          <li className="col-span-full py-6 text-center text-paper-2">{query ? `Nobody called “${query.trim()}”.` : 'Nobody else has joined yet.'}</li>
+        )}
+      </ul>
     </div>
   )
 }
 
-/** The picker's tiles: three across, four from 360 px. */
-const TILES = 'grid grid-cols-3 gap-2 min-[360px]:grid-cols-4'
+/** The picker's tiles: two across, three from 360 px. */
+const TILES = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3'
 
-/** One guest to pick: their token and first name; paper with a check once picked. */
-function GuestTile({
-  guest,
-  name,
-  picked,
-  busy,
-  onPick,
-}: {
-  guest: Pickable
-  name: string
-  picked: boolean
-  busy: boolean
-  onPick: () => void
-}) {
+/** One name to pick, and nothing else; paper with a check once picked. */
+function NameTile({ name, full, picked, busy, onPick }: { name: string; full: string; picked: boolean; busy: boolean; onPick: () => void }) {
   return (
     <button
       type="button"
-      data-guest-tile=""
+      data-name-tile=""
       aria-pressed={picked}
+      aria-label={full}
       aria-disabled={busy || undefined}
       onClick={onPick}
       className={cn(
         // No transition onto the pick: it shows on the very next frame.
-        'relative flex h-full w-full flex-col items-center gap-1.5 rounded-phone bg-overlay px-0.5 pt-2.5 pb-2 text-paper outline-none select-none focus-visible:ring-3 focus-visible:ring-gold/50',
+        'relative flex h-full min-h-14 w-full items-center justify-center rounded-phone bg-overlay px-2 py-2.5 text-paper outline-none select-none focus-visible:ring-3 focus-visible:ring-gold/50',
         'transition-opacity duration-150 motion-reduce:transition-none',
         !busy && !picked && 'active:bg-rule',
         picked && 'bg-paper text-ink',
         busy && !picked && 'opacity-35',
       )}
     >
-      <span className="relative">
-        {/* Ink round a picked token, so a paper guest's token stays a token on the paper tile. */}
-        <Avatar name={guest.name} playerId={guest.id} className={cn('size-11', picked && 'ring-2 ring-ink')} />
-        {picked && (
-          <span aria-hidden className="absolute -right-1.5 -bottom-1.5 grid size-5 place-items-center rounded-chip bg-ink text-paper">
-            <CheckIcon weight="bold" className="size-3.5" />
-          </span>
-        )}
-      </span>
       <TileName name={name} />
+      {picked && (
+        <span aria-hidden className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-chip bg-ink text-paper">
+          <CheckIcon weight="bold" className="size-3.5" />
+        </span>
+      )}
     </button>
   )
 }
 
-/** A guest's name on a picker tile (tileNameLines): a line over TILE_NAME_CHARS characters steps down from 15 to 13 px. */
+/** A name on a picker tile (tileNameLines): a line over TILE_NAME_CHARS characters steps down from 17 to 15 px. */
 function TileName({ name }: { name: string }) {
   const lines = tileNameLines(name)
   const long = lines.some((line) => line.length > TILE_NAME_CHARS)
   return (
-    <span className={cn('grid w-full text-center leading-tight font-semibold', long ? 'text-[0.8125rem]' : 'text-[0.9375rem]')}>
+    <span className={cn('grid w-full text-center leading-tight font-bold', long ? 'text-[0.9375rem]' : 'text-[1.0625rem]')}>
       {lines.map((line, i) => (
         <span key={i} className="truncate">
           {line}
@@ -260,50 +218,24 @@ function TileName({ name }: { name: string }) {
 
 /**
  * The lock bar, at the bottom of the screen while the picker is up, on the
- * ground (solid, no blur): the two picks as tokens (or empty rule squares),
- * their names, and the gold Lock in, the screen's one next step, until two
- * are picked. Sending: the button says so and takes no tap.
+ * ground (solid, no blur): the two picks' names and the gold Lock in, the
+ * screen's one next step, until two are picked. Sending: the button says so
+ * and takes no tap. Names only, as the picker.
  *
  * Fixed to the screen's foot, where Show my code stands at other times (it
  * steps aside for the timed prompt), and never mid-screen on a short picker:
  * the phone's toasts stack from 96 px up, and an open one there could take the
- * Lock in tap. A spacer keeps the last row of guests above it. Fixed through
+ * Lock in tap. A spacer keeps the last row of names above it. Fixed through
  * `[position:fixed]`, not the `fixed` class, which PhoneHome shows even while
  * the game's view is held out of sight (that is for layers a guest opened).
  */
-export function LockBar({
-  pick,
-  players,
-  names,
-  sending,
-  canLock,
-  onLock,
-}: {
-  pick: readonly PlayerId[]
-  /** Everyone who may be picked: the guests here and those on the list who aren't. */
-  players: readonly Pickable[]
-  names: readonly string[]
-  sending: boolean
-  canLock: boolean
-  onLock: () => void
-}) {
+export function LockBar({ names, sending, canLock, onLock }: { names: readonly string[]; sending: boolean; canLock: boolean; onLock: () => void }) {
   return (
     <>
       <div aria-hidden className="h-20" />
       <div data-lock-bar="" className="inset-x-0 bottom-0 z-40 bg-ground pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] [position:fixed]">
         <div className="mx-auto flex max-w-md items-center gap-3 px-4">
-          <span aria-hidden className="flex shrink-0 gap-1.5">
-            {[0, 1].map((slot) => {
-              const id = pick[slot]
-              const player = id ? players.find((p) => p.id === id) : undefined
-              return player ? (
-                <Avatar key={player.id} name={player.name} playerId={player.id} className="size-10" />
-              ) : (
-                <span key={`empty-${slot}`} className="size-10 rounded-token border-2 border-rule" />
-              )
-            })}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-[1.0625rem] font-semibold">{barNames(names)}</span>
+          <span className={cn('min-w-0 flex-1 truncate text-[1.0625rem] font-semibold', names.length === 0 && 'text-paper-2')}>{barNames(names)}</span>
           <Button size="xl" className="shrink-0 px-6" disabled={!canLock} isPending={sending} onClick={onLock}>
             {sending ? 'Sending…' : 'Lock in'}
           </Button>
@@ -316,7 +248,7 @@ export function LockBar({
 /**
  * Where you are with the picture being asked, once there is nothing to pick:
  * locked in, or time's up. One size and weight for both, on the raised
- * surface with no gold. The two in the picture reach the same cards.
+ * surface with no gold.
  */
 export function MomentCard({ head, line, children }: { head: string; line: string | null; children?: ReactNode }) {
   return (
@@ -330,14 +262,13 @@ export function MomentCard({ head, line, children }: { head: string; line: strin
   )
 }
 
-/** Two guests side by side, 64 px tokens and their names: a lock, or who it was. */
-export function TwoTokens({ people, players, names }: { people: readonly PlayerId[]; players: readonly Pickable[]; names: readonly string[] }) {
+/** A lock's two names side by side on overlay tiles, as the picker showed them: names only until the reveal. */
+export function TwoNames({ names }: { names: readonly string[] }) {
   return (
     <ul className="grid grid-cols-2 gap-3">
-      {people.map((id, i) => (
-        <li key={id} className="flex min-w-0 items-center gap-3">
-          <Avatar name={players.find((p) => p.id === id)?.name ?? names[i]} playerId={id} className="size-16 shrink-0" />
-          <span className="min-w-0 truncate text-lg font-bold">{names[i]}</span>
+      {names.map((name, i) => (
+        <li key={`${i}:${name}`} className="flex min-h-14 min-w-0 items-center justify-center rounded-phone bg-overlay px-3 py-2">
+          <span className="min-w-0 truncate text-lg font-bold">{name}</span>
         </li>
       ))}
     </ul>

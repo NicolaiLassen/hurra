@@ -1,8 +1,6 @@
 // Participant fusion's look on the TV (docs/identity.md, Participant fusion on
 // the TV): the house easing, the countdown's gold seconds, the sounds' moments
 // and the names. Plain values, shared by the TV's views and parts.
-import type { PlayerId } from '@/games/core/Game'
-import type { Player } from '@/lib/types'
 
 /** The house easing (docs/identity.md, Motion). */
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const
@@ -16,8 +14,8 @@ export const FRESH_MS = 15_000
 export const momentId = (game: { id: string; started_at: number | null }, key: string, moment: string) =>
   `hurra:fusion:${game.id}:${game.started_at ?? 0}:${key}:${moment}`
 
-/** A guest's name now, else the one the reveal kept, else a placeholder. */
-export const nameOf = (players: readonly Player[], id: PlayerId, kept?: string) => players.find((p) => p.id === id)?.name ?? kept ?? 'A guest'
+/** A guest's name, else a placeholder. */
+export const nameOf = (players: readonly { id: string; name: string }[], id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
 
 /** "Marie-Louise" for Marie-Louise Christensen. */
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name

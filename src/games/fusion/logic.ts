@@ -1,30 +1,29 @@
 // Participant fusion (docs/engine-v2.md, 8.4). Before the party an image model
 // fuses two guests' faces into one portrait per print. On the night the game
-// takes the TV like the quiz: each picture shows large one at a time (the
-// showing), then all of them at once (the wall), then the host asks them one
-// by one. Each phone picks the two guests in the picture and locks in before
-// the countdown ends, and the reveal shows who it was.
+// takes the TV like the quiz: the host asks the pictures one by one, and the
+// TV shows which comes next with a little suspense (the pictures still to come
+// stand as placeholders until they are asked). Each phone picks the two names
+// in the picture and locks in before the countdown ends, and the reveal shows
+// who it was, with their own photos.
 //
 // Guesses are prompts, never actions: one prompt per picture (p1 to pN),
 // opened when the host asks it, `final` (the first lock counts), with the
 // countdown's end plus a grace second as its deadline. The reveal (the host's
 // Reveal now, or the timer) gets every lock at once in ctx.answers.
 //
-// Who is in each picture (the key) is the secret, and so are the two people's
-// own photos (the originals). Both live in the host-only settings and the
-// state, and reach publicState only once that picture is revealed. Relative
-// imports only: the Netlify function bundles this file.
-//
-// A picture may be of a guest on the host's guest list who hasn't joined, or
-// never comes (docs/guest-list.md, 9.2): the settings and Show who take anyone
-// on the list, the key keeps their name, and a guess may name them. Only the
-// guests who joined guess and score.
+// Who is in each picture (the key) is two typed names, not tied to the guest
+// list: the list only helps the host spell them the way the guests join. A
+// guess is two names, right when one folds to a name in the picture (nameKey).
+// The key, the two people's own photos (the originals) and each picture's
+// image are secret: the key and the originals reach publicState only once
+// that picture is revealed, and its image once it is asked. Everyone here
+// guesses every picture and scores on it, the two in it too. Relative imports
+// only: the Netlify function bundles this file.
 import {
   Game,
   GameError,
   type Answer,
   type GameContext,
-  type GameGuest,
   type GameInfo,
   type GamePlayer,
   type Highlight,
@@ -32,9 +31,10 @@ import {
   type RecapRound,
   type Scores,
 } from '../core/Game'
+import { cleanName, MAX_NAME_LENGTH, nameFromSetting, nameKey, sameName, uniqueNames } from '../core/names'
 import {
+  countHits,
   DEFAULT_SECONDS,
-  DEFAULT_SHOW_SECONDS,
   defaultLabel,
   GRACE_MS,
   isLegacyState,
@@ -44,17 +44,15 @@ import {
   MAX_PICTURES,
   MAX_POINTS,
   MAX_SECONDS,
-  MAX_SHOW_SECONDS,
   MIN_SECONDS,
-  MIN_SHOW_SECONDS,
   pictureKey,
   plural,
   pointsFor,
   REVEAL_HOLD_MS,
+  SUSPENSE_MS,
   TOP_SIZE,
-  VOTE_SPEC,
+  voteSpec,
   WAKE_MARGIN_MS,
-  type FusionGuest,
   type FusionHostAction,
   type FusionPhase as Phase,
   type FusionPlayerView as PlayerViewShape,
@@ -69,15 +67,21 @@ export type { FusionHostAction }
 export type FusionPicture = {
   /** What the print says, e.g. "#3". Blank in the settings means "#n". */
   label: string
-  /** A game-media path (the full image; its thumbnail sits beside it). */
+  /** A game-media path (the full image; its thumbnail sits beside it). Secret until the picture is asked. */
   image?: string
-  /** Who is fused in it. Optional: the host can also set it on the night (setKey). */
-  people?: [PlayerId, PlayerId]
+  /**
+   * Who is fused in it: two typed names, as the guests will join with them
+   * (the editor suggests the guest list's spellings). Optional: the host can
+   * also set it on the night (setKey). Settings saved before names hold two
+   * guests' ids, read as those guests' names at the start.
+   */
+  people?: [string, string]
   /**
    * The two people's own photos, in the order of `people` (the first is the
    * first person's): a game-media path, or null for none. Optional, and
    * secret like `people`: the TV shows them beside the picture at its reveal,
-   * and a person without one gets their profile photo, else their token.
+   * and a person without one gets the profile photo of the guest with that
+   * name, else a token.
    */
   originals?: [string | null, string | null]
 }
@@ -90,11 +94,9 @@ export type FusionConfig = {
   bonusForBoth: number
   /** Seconds to guess each picture: 10 to 90. */
   seconds: number
-  /** Seconds each picture shows in the showing: 3 to 20. */
-  showSeconds: number
 }
 
-/** One revealed picture's locks. Only voters who aren't in the picture count. */
+/** One revealed picture's locks: every guest here who locked in. */
 export type FusionResult = {
   both: number
   one: number
@@ -108,24 +110,15 @@ export type FusionResult = {
 
 export type FusionState = {
   phase: Phase
-  /**
-   * Who is in each picture, by picture number: anyone on the guest list, joined
-   * or not. Secret until that picture is revealed.
-   */
-  key: Record<string, [PlayerId, PlayerId]>
-  /**
-   * The names of the people in the key, from the guest list: for a guest who
-   * never joins, and anyone who leaves before their picture is revealed.
-   */
-  names: Record<PlayerId, string>
+  /** Who is in each picture, by picture number: two names. Secret until that picture is revealed. */
+  key: Record<string, [string, string]>
   /** Picture numbers, in the order they were asked and revealed. */
   revealed: number[]
   results: Record<string, FusionResult>
   totals: Record<PlayerId, number>
-  /** When the showing started (database clock); null before it, and again once a picture is asked. */
-  showStartedAt: number | null
   /** The picture asked now (asking) or revealed last (reveal); null in other phases. */
   current: number | null
+  /** When it was asked (the TV's suspense starts), and when its countdown ends. */
   openedAt: number | null
   endsAt: number | null
   revealedAt: number | null
@@ -137,10 +130,13 @@ export type FusionProfile = { detective?: number }
 /** A game-media path as uploads make them: `<session>/<game>/<uuid>.jpg`, nothing that climbs or points elsewhere. */
 const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
 
+/** Danish order for the names a guess offers (Æ, Ø and Å after Z), whatever order the key and the players came in. */
+const collator = new Intl.Collator('da', { sensitivity: 'base' })
+
 /**
- * The stage round: the host starts the showing, the wall follows, then the
- * host asks the pictures one by one (each its own countdown, revealed by the
- * timer or by Reveal now), and crowns the face detective at the end.
+ * The stage round: the host asks the pictures one by one (each its own
+ * countdown, after the TV's suspense, revealed by the timer or by Reveal
+ * now), and crowns the face detective at the end.
  */
 export class FusionGame extends Game<FusionState, never, PublicState, PlayerViewShape, FusionConfig, FusionHostAction> {
   readonly type = 'fusion'
@@ -150,24 +146,18 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     pointsPerPerson: 1,
     bonusForBoth: 0,
     seconds: DEFAULT_SECONDS,
-    showSeconds: DEFAULT_SHOW_SECONDS,
   }
 
   parseConfig(input: Record<string, unknown>): FusionConfig {
     const raw = input.pictures
     if (!Array.isArray(raw) || raw.length === 0) throw new GameError('Add the pictures in the settings first')
     if (raw.length > MAX_PICTURES) throw new GameError(`Participant fusion takes at most ${MAX_PICTURES} pictures`)
+    // showSeconds, from settings saved while the round opened with a showing, is no longer read.
     return {
       pictures: raw.map((item, i) => parsePicture(item, i + 1)),
       pointsPerPerson: wholePoints(input.pointsPerPerson, 'Points per right person'),
       bonusForBoth: wholePoints(input.bonusForBoth, 'The bonus for both'),
       seconds: wholeIn(input.seconds, MIN_SECONDS, MAX_SECONDS, `The time to guess must be ${MIN_SECONDS} to ${MAX_SECONDS} seconds`),
-      showSeconds: wholeIn(
-        input.showSeconds,
-        MIN_SHOW_SECONDS,
-        MAX_SHOW_SECONDS,
-        `The showing must be ${MIN_SHOW_SECONDS} to ${MAX_SHOW_SECONDS} seconds a picture`,
-      ),
     }
   }
 
@@ -175,22 +165,21 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const key: FusionState['key'] = {}
     ctx.config.pictures.forEach((picture, i) => {
       if (!picture.people) return
-      // Settings can name guests who haven't joined yet (the guest list), and be
-      // made before the night; someone in them may have left the list since.
-      if (!picture.people.every((id) => onList(ctx, id))) {
-        throw new GameError(`${picture.label} names someone who isn't on the guest list any more. Pick again in the settings.`)
+      // The first place the guest list is known: settings saved with guests' ids become their names here.
+      const names = picture.people.map((value) => nameFromSetting(value, ctx.guests, ctx.players))
+      if (names[0] === null || names[1] === null) {
+        throw new GameError(`${picture.label} names someone who isn't on the guest list any more. Type their name in the settings.`)
       }
-      key[i + 1] = [picture.people[0], picture.people[1]]
+      if (sameName(names[0], names[1])) throw new GameError(`${picture.label}: type two different names`)
+      key[i + 1] = [names[0], names[1]]
     })
     // No prompt and no announcement yet: the TV's "Hurra presents" card opens the game.
     return {
       phase: 'lobby',
       key,
-      names: namesOf(key, ctx, {}),
       revealed: [],
       results: {},
       totals: {},
-      showStartedAt: null,
       current: null,
       openedAt: null,
       endsAt: null,
@@ -211,12 +200,10 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new GameError('Unknown host action')
     const action = input as Record<string, unknown>
     switch (action.type) {
-      case 'show':
-        return { type: 'show' }
       case 'finish':
         return { type: 'finish' }
       case 'wall':
-        if (action.from === 'lobby' || action.from === 'showing') return { type: 'wall', from: action.from }
+        if (action.from === 'lobby') return { type: 'wall', from: 'lobby' }
         if (action.from === 'reveal') return { type: 'wall', from: 'reveal', n: pictureNumber(action.n) }
         break
       case 'ask':
@@ -225,9 +212,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
         return { type: 'reveal', n: pictureNumber(action.n) }
       case 'setKey': {
         const people = action.people
-        if (!Array.isArray(people) || people.length !== 2 || !people.every(isPlayerId)) {
-          throw new GameError('Pick the two people in the picture')
-        }
+        if (!Array.isArray(people) || people.length !== 2 || !people.every(isTyped)) throw new GameError('Type the two names in the picture')
         return { type: 'setKey', n: pictureNumber(action.n), people: [people[0], people[1]] }
       }
     }
@@ -242,9 +227,6 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (isLegacyState(state)) throw new GameError(LEGACY_MESSAGE)
     const s = readState(state)
     switch (action.type) {
-      case 'show':
-        if (s.phase !== 'lobby') return state
-        return { ...s, phase: 'showing', showStartedAt: ctx.now }
       case 'wall':
         if (action.from === 'reveal') return s.phase === 'reveal' && s.current === action.n ? toWall(s) : state
         return s.phase === action.from ? toWall(s) : state
@@ -261,27 +243,25 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     }
   }
 
-  wakeAt(state: FusionState, info: GameInfo<FusionConfig>): number | null {
+  wakeAt(state: FusionState): number | null {
     if (isLegacyState(state)) return null
     const s = readState(state)
     switch (s.phase) {
-      case 'showing':
-        return s.showStartedAt === null ? null : s.showStartedAt + showingMs(info.config)
       case 'asking':
         return s.endsAt === null ? null : s.endsAt + GRACE_MS + WAKE_MARGIN_MS
       case 'reveal':
         return s.revealedAt === null ? null : s.revealedAt + REVEAL_HOLD_MS
+      // A save from the showing (before 26 November) reads as the wall, which waits for the host.
       default:
         return null
     }
   }
 
-  /** The showing ends on the wall; time's up reveals the picture; a reveal goes back to the wall. */
+  /** Time's up reveals the picture; a reveal goes back to the wall. */
   onWake(state: FusionState, ctx: GameContext<FusionConfig>): FusionState {
     if (isLegacyState(state)) return state
     const s = readState(state)
     switch (s.phase) {
-      case 'showing':
       case 'reveal':
         return toWall(s)
       case 'asking': {
@@ -302,8 +282,8 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
    * Someone left the party: removed, or the host freed their name, which
    * someone else may take next under the same id (docs/guest-list.md, 9.1).
    * Their points and how they did on each picture go with them. The counts
-   * stay as the room saw them, and the key and its names stay: they name the
-   * guest in the picture, not the phone that had the name.
+   * stay as the room saw them, and the key stays: it names the people in the
+   * picture, not a phone.
    */
   onPlayerLeave(state: FusionState, playerId: PlayerId): FusionState {
     if (isLegacyState(state)) return state
@@ -338,7 +318,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const s = readState(state)
     if (by === 'host') {
       const top = leaders(s, ctx)
-      const names = top.map((id) => nameIn(ctx.players, s.names, id))
+      const names = top.map((id) => playerName(ctx.players, id))
       ctx.announce('Participant fusion is over', {
         detail:
           top.length > 0
@@ -350,7 +330,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
       })
     }
     // A picture asked when the host ended it stays unscored and secret.
-    return { ...s, phase: 'done', showStartedAt: null, current: null, openedAt: null, endsAt: null, revealedAt: null }
+    return { ...s, phase: 'done', current: null, openedAt: null, endsAt: null, revealedAt: null }
   }
 
   scores(state: FusionState): Scores {
@@ -361,42 +341,40 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const s = readState(state)
     const legacy = isLegacyState(state)
     const rules = rulesOf(info.config)
+    const asking = !legacy && (s.phase === 'asking' || s.phase === 'reveal') && s.current !== null
     const pictures = info.config.pictures.map((picture, i): PublicPicture => {
       const n = i + 1
+      const asked = s.revealed.includes(n) || (asking && s.current === n)
       return {
         n,
         key: pictureKey(n),
         label: picture.label,
-        image: picture.image ?? null,
+        asked,
+        // What it looks like only once it is asked: until then the TV shows a placeholder.
+        image: asked ? (picture.image ?? null) : null,
         // Who is in it, and their own photos, only once it is revealed: never a key before that.
-        revealed: revealedOf(s, n, info, picture),
+        revealed: revealedOf(s, n, picture),
       }
     })
-    const asking = s.phase === 'asking' || s.phase === 'reveal'
     const current = s.current
     return {
       // The background version's voting and locked read as a lobby that never starts.
       phase: legacy ? 'lobby' : s.phase,
       pictures,
       rules,
-      showing:
-        !legacy && s.phase === 'showing' && s.showStartedAt !== null
-          ? { startedAt: s.showStartedAt, endsAt: s.showStartedAt + showingMs(info.config) }
-          : null,
       current:
-        !legacy && asking && current !== null && s.openedAt !== null && s.endsAt !== null
+        asking && current !== null && s.openedAt !== null && s.endsAt !== null
           ? {
               n: current,
               step: s.phase === 'asking' ? s.revealed.length + 1 : s.revealed.indexOf(current) + 1,
               key: pictureKey(current),
               openedAt: s.openedAt,
+              startsAt: countdownStart(s.openedAt, s.endsAt, rules),
               endsAt: s.endsAt,
               revealedAt: s.phase === 'reveal' ? s.revealedAt : null,
             }
           : null,
       top: ranked(s, info).slice(0, TOP_SIZE),
-      // Everyone still expected, the same whatever the pictures are, so phones can name them in a guess.
-      expected: expectedOf(info),
     }
   }
 
@@ -407,12 +385,10 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
       const result = s.results[n]
       if (result && Object.hasOwn(result.hits, playerId)) hits[n] = result.hits[playerId]
     }
-    const asking = !isLegacyState(state) && (s.phase === 'asking' || s.phase === 'reveal') && s.current !== null
     return {
       points: s.totals[playerId] ?? 0,
       rank: ranked(s, info).find((row) => row.playerId === playerId)?.rank ?? null,
       hits,
-      inPicture: asking && (s.key[s.current!]?.includes(playerId) ?? false),
     }
   }
 
@@ -421,7 +397,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (!round.finished || !round.state) return []
     const { config } = round
     const state = readState(round.state)
-    const nameOf = (id: PlayerId) => round.players.find((p) => p.id === id)?.name ?? state.names[id] ?? 'A guest'
+    const nameOf = (id: PlayerId) => round.players.find((p) => p.id === id)?.name ?? 'A guest'
     const labelOf = (n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
     const revealedAt = (n: number) =>
       round.log.find((row) => row.kind === 'game.record' && row.data.type === 'revealed' && row.data.n === n)?.at
@@ -449,12 +425,12 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const people = disguise && state.key[disguise.n]
     if (disguise && people && disguise.result.both / disguise.result.voters < 0.5) {
       const { both, voters } = disguise.result
-      const who = `${nameOf(people[0])} and ${nameOf(people[1])}`
+      const who = `${people[0]} and ${people[1]}`
       highlights.push({
         title: `Best disguise: ${labelOf(disguise.n)} fooled the room`,
         detail: both === 0 ? `Nobody saw ${who}` : `Only ${both} of ${voters} saw ${who}`,
-        // A guest who never came is named in the words only: the recap's people are the guests who came.
-        players: people.filter((id) => round.players.some((p) => p.id === id)),
+        // The recap's people are the guests who came: those named in it, matched by name.
+        players: namedPlayers(round.players, people),
         at: revealedAt(disguise.n),
         icon: 'detective',
         tone: 'violet',
@@ -462,18 +438,21 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
       })
     }
 
-    // A perfect eye: both people right on every revealed picture they could score on (at least two).
-    const perfect = round.players
-      .map((p) => p.id)
-      .filter((id) => {
-        const scorable = state.revealed.filter((n) => !state.key[n]?.includes(id))
-        return scorable.length >= 2 && scorable.every((n) => state.results[n]?.hits[id] === 2)
+    // A perfect eye: on every revealed picture (at least two), everyone in it they could name. Their own
+    // name is never offered, so on a picture they are in, the other one is everything.
+    const perfect = round.players.filter((p) => {
+      if (state.revealed.length < 2) return false
+      return state.revealed.every((n) => {
+        const key = state.key[n]
+        const most = key ? key.filter((name) => !sameName(name, p.name)).length : 2
+        return state.results[n]?.hits[p.id] === most
       })
+    })
     if (perfect.length > 0) {
       highlights.push({
-        title: `Perfect eye: ${listNames(perfect.map(nameOf))}`,
-        detail: 'Both people right on every revealed picture',
-        players: perfect,
+        title: `Perfect eye: ${listNames(perfect.map((p) => p.name))}`,
+        detail: 'Every face right on every revealed picture',
+        players: perfect.map((p) => p.id),
         icon: 'star',
         tone: 'violet',
         weight: 'highlight',
@@ -484,7 +463,11 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
 
   // Host actions -------------------------------------------------------------
 
-  /** Opens picture n's guess: its countdown starts now. From the lobby, the showing, the wall or a reveal. */
+  /**
+   * Opens picture n's guess, from the lobby, the wall or a reveal. The TV
+   * shows which picture it is first (SUSPENSE_MS), so its countdown starts
+   * after that: nobody loses guessing time to it.
+   */
   private ask(state: FusionState, s: FusionState, n: number, ctx: GameContext<FusionConfig>): FusionState {
     const picture = ctx.config.pictures[n - 1]
     if (!picture) throw new GameError(`There is no picture ${defaultLabel(n)}`)
@@ -493,9 +476,9 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (s.phase === 'asking') throw new GameError(`Reveal ${labelOf(ctx.config, s.current!)} first`)
     if (s.phase === 'done') return state
     if (!s.key[n]) throw new GameError(`Set who is in ${picture.label} first`)
-    const endsAt = ctx.now + rulesOf(ctx.config).seconds * 1000
-    ctx.openPrompt(pictureKey(n), VOTE_SPEC, { closesAt: endsAt + GRACE_MS })
-    return { ...s, phase: 'asking', current: n, openedAt: ctx.now, endsAt, revealedAt: null, showStartedAt: null }
+    const endsAt = ctx.now + SUSPENSE_MS + rulesOf(ctx.config).seconds * 1000
+    ctx.openPrompt(pictureKey(n), voteSpec(guessNames(s, ctx)), { closesAt: endsAt + GRACE_MS })
+    return { ...s, phase: 'asking', current: n, openedAt: ctx.now, endsAt, revealedAt: null }
   }
 
   /** Scores the picture being asked from its final locks and reveals it (Reveal now, or time's up). */
@@ -508,11 +491,8 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const people = s.key[n]
     if (!people) throw new GameError(`Set who is in ${label} first`)
 
-    // Only guests here guess and score: a lock from anyone else (gone since) counts for nothing.
-    const result = scoreVotes(
-      votes.filter((vote) => ctx.players.some((p) => p.id === vote.playerId)),
-      people,
-    )
+    // Every guest here guesses and scores, the two in it too: a lock from anyone gone since counts for nothing.
+    const result = scoreVotes(votes, people, ctx.players)
     const rules = rulesOf(ctx.config)
     const totals = { ...s.totals }
     for (const [id, hits] of Object.entries(result.hits)) {
@@ -522,11 +502,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     ctx.revealPrompt(key)
     // No announcement: the TV and every phone show the reveal themselves. The log keeps it for the recap.
     const { both, one, none, voters } = result
-    ctx.record(
-      'revealed',
-      { n, label, people: [...people], both, one, none, voters },
-      { about: people.filter((id) => ctx.players.some((p) => p.id === id)) },
-    )
+    ctx.record('revealed', { n, label, people: [...people], both, one, none, voters }, { about: namedPlayers(ctx.players, people) })
     return {
       ...s,
       phase: 'reveal',
@@ -537,40 +513,38 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     }
   }
 
-  private setKey(
-    state: FusionState,
-    s: FusionState,
-    n: number,
-    people: [PlayerId, PlayerId],
-    ctx: GameContext<FusionConfig>,
-  ): FusionState {
+  private setKey(state: FusionState, s: FusionState, n: number, people: [string, string], ctx: GameContext<FusionConfig>): FusionState {
     const picture = ctx.config.pictures[n - 1]
     if (!picture) throw new GameError(`There is no picture ${defaultLabel(n)}`)
     if (s.phase === 'done') return state
     if (s.revealed.includes(n)) throw new GameError(`${picture.label} is already revealed`)
-    const [a, b] = people
-    if (a === b) throw new GameError('Pick two different people')
-    // Anyone on the guest list, joined or not: a picture may be of a guest who never comes.
-    if (!onList(ctx, a) || !onList(ctx, b)) throw new GameError('Pick two people on the guest list')
+    // Typed names; a host page from before names sends the guests' ids, which become their names.
+    const [a, b] = people.map((value) => nameFromSetting(value, ctx.guests, ctx.players))
+    if (a === null || b === null || a === '' || b === '') throw new GameError('Type the two names in the picture')
+    if (Array.from(a).length > MAX_NAME_LENGTH || Array.from(b).length > MAX_NAME_LENGTH) {
+      throw new GameError(`Names are at most ${MAX_NAME_LENGTH} characters`)
+    }
+    if (sameName(a, b)) throw new GameError('Type two different names')
     const current = s.key[n]
-    // The same two again change nothing, in either order; with their own photos the order says whose photo is whose.
+    // The same two again change nothing, in either order; with their own photos the order says whose is whose.
+    // A new spelling is a change: the room sees the names as typed.
     const ordered = originalsOf(picture).some((path) => path !== null)
-    if (current && (ordered ? current[0] === a && current[1] === b : current.includes(a) && current.includes(b))) return state
-    const key = { ...s.key, [n]: [a, b] as [PlayerId, PlayerId] }
-    return { ...s, key, names: namesOf(key, ctx, s.names) }
+    const same = current && ((current[0] === a && current[1] === b) || (!ordered && current[0] === b && current[1] === a))
+    if (same) return state
+    return { ...s, key: { ...s.key, [n]: [a, b] } }
   }
 
   private finish(state: FusionState, s: FusionState, ctx: GameContext<FusionConfig>): FusionState {
     if (s.phase === 'asking') throw new GameError(`Reveal ${labelOf(ctx.config, s.current!)} first`)
     if (s.phase === 'done') return state
-    const done: FusionState = { ...s, phase: 'done', showStartedAt: null, current: null, openedAt: null, endsAt: null, revealedAt: null }
+    const done: FusionState = { ...s, phase: 'done', current: null, openedAt: null, endsAt: null, revealedAt: null }
     const top = leaders(s, ctx)
     if (top.length === 0) {
       ctx.announce('Participant fusion is over', { detail: 'Nobody scored this time', icon: 'trophy', tone: 'violet' })
       return done
     }
     const points = s.totals[top[0]]
-    const names = top.map((id) => nameIn(ctx.players, s.names, id))
+    const names = top.map((id) => playerName(ctx.players, id))
     const shared = top.length > 1
     ctx.announce(`${listNames(names)} ${shared ? 'have the sharpest eyes' : 'has the sharpest eye'}`, {
       detail: plural(points, 'point'),
@@ -600,20 +574,30 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
 /**
  * A saved state with every field, whatever version saved it: the background
  * version's saves lack the stage round's fields (null here) and keep their
- * phase, which isLegacyState tells apart. Never changes a full state.
+ * phase, which isLegacyState tells apart. A save from before names kept the
+ * key as guests' ids beside their names (`names`): it reads as those names.
+ * A save from the showing reads as the wall. Never changes a full state.
  */
 export function readState(raw: FusionState): FusionState {
-  const s = (raw ?? {}) as Partial<FusionState>
+  const s = (raw ?? {}) as Partial<FusionState> & { names?: Record<string, string>; showStartedAt?: unknown }
   const time = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  const kept = s.names && typeof s.names === 'object' ? s.names : {}
+  const named = (value: string) => (Object.hasOwn(kept, value) && typeof kept[value] === 'string' ? kept[value] : value)
+  const key: FusionState['key'] = {}
+  for (const [n, people] of Object.entries(s.key ?? {})) {
+    if (Array.isArray(people) && people.length === 2) key[n] = [named(String(people[0])), named(String(people[1]))]
+  }
+  // Only the stage round's own fields: a save from before carries names and showStartedAt, which nothing reads now.
+  const { names: _names, showStartedAt: _shown, ...rest } = s
+  void _names
+  void _shown
   return {
-    ...s,
-    phase: s.phase ?? 'lobby',
-    key: s.key ?? {},
-    names: s.names ?? {},
+    ...rest,
+    phase: (s.phase as string) === 'showing' ? 'wall' : (s.phase ?? 'lobby'),
+    key,
     revealed: Array.isArray(s.revealed) ? s.revealed : [],
     results: s.results ?? {},
     totals: s.totals ?? {},
-    showStartedAt: time(s.showStartedAt),
     current: time(s.current),
     openedAt: time(s.openedAt),
     endsAt: time(s.endsAt),
@@ -621,7 +605,7 @@ export function readState(raw: FusionState): FusionState {
   }
 }
 
-/** The wall: no picture on. When the showing started stays until a picture is asked, so the wall knows when it came. */
+/** The wall: no picture on. */
 function toWall(s: FusionState): FusionState {
   return { ...s, phase: 'wall', current: null, openedAt: null, endsAt: null, revealedAt: null }
 }
@@ -631,38 +615,48 @@ export function rulesOf(config: Partial<FusionConfig>): FusionRules {
   const number = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
   return {
     seconds: number(config.seconds, DEFAULT_SECONDS),
-    showSeconds: number(config.showSeconds, DEFAULT_SHOW_SECONDS),
     perPerson: number(config.pointsPerPerson, 1),
     bothBonus: number(config.bonusForBoth, 0),
   }
 }
 
-/** How long the whole showing takes: every picture its seconds. */
-const showingMs = (config: FusionConfig) => (Array.isArray(config.pictures) ? config.pictures.length : 0) * rulesOf(config).showSeconds * 1000
+/**
+ * When a picture's countdown starts: its seconds before it ends, so after the
+ * TV's suspense for a picture asked now, and at the ask for one asked before
+ * the suspense existed. Never before the ask.
+ */
+export function countdownStart(openedAt: number, endsAt: number, rules: Pick<FusionRules, 'seconds'>): number {
+  return Math.max(openedAt, endsAt - rules.seconds * 1000)
+}
 
 const labelOf = (config: FusionConfig, n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
 
+/**
+ * The names a guess offers: everyone who has joined (as they typed their
+ * own name) and every name in the pictures, each once by nameKey, in Danish
+ * order. The same list whichever picture is asked, so it says nothing about
+ * the answer; the phone leaves out the guest's own name.
+ */
+export function guessNames(s: Pick<FusionState, 'key'>, info: Pick<GameInfo<FusionConfig>, 'players'>): string[] {
+  const inPictures = Object.keys(s.key)
+    .sort((a, b) => Number(a) - Number(b))
+    .flatMap((n) => s.key[n])
+  return uniqueNames([...info.players.map((p) => p.name), ...inPictures]).sort((a, b) => collator.compare(a, b))
+}
+
 /** A revealed picture as the room sees it, or null before its reveal. */
-function revealedOf(
-  s: FusionState,
-  n: number,
-  info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>,
-  picture: FusionPicture,
-): PublicPicture['revealed'] {
+function revealedOf(s: FusionState, n: number, picture: FusionPicture): PublicPicture['revealed'] {
   const index = s.revealed.indexOf(n)
   const result = index >= 0 ? s.results[n] : undefined
   const people = s.key[n]
   if (!result || !people) return null
-  // A guest here by their name now, one on the list by theirs, else the name the key kept.
-  const named = (id: PlayerId) => nameIn(info.players, s.names, id, info.guests)
   return {
-    people: [people[0], people[1]],
-    names: [named(people[0]), named(people[1])],
+    names: [people[0], people[1]],
     both: result.both,
     one: result.one,
     none: result.none,
     voters: result.voters,
-    // Each photo belongs to its place in the pair: the host sets the person beside their photo.
+    // Each photo belongs to its place in the pair: the host types each name beside their photo.
     originals: originalsOf(picture),
     step: index + 1,
     at: typeof result.at === 'number' ? result.at : null,
@@ -693,15 +687,19 @@ function parsePicture(item: unknown, n: number): FusionPicture {
   }
 
   if (people !== undefined && people !== null) {
-    if (!Array.isArray(people) || people.length > 2 || !people.every((id) => typeof id === 'string')) {
-      throw new GameError(`${label}: pick two people, or nobody`)
+    if (!Array.isArray(people) || people.length > 2 || !people.every((name) => typeof name === 'string')) {
+      throw new GameError(`${label}: type two names, or none`)
     }
-    const chosen = (people as string[]).filter((id) => id !== '')
-    if (chosen.length === 1) throw new GameError(`${label}: pick the second person, or clear the first`)
-    if (chosen.length === 2) {
-      if (!chosen.every(isPlayerId)) throw new GameError(`${label}: pick two people, or nobody`)
-      if (chosen[0] === chosen[1]) throw new GameError(`${label}: pick two different people`)
-      picture.people = [chosen[0], chosen[1]]
+    // Typed names, or guests' ids in settings saved before names: setup reads those as names.
+    const chosen = (people as string[]).map(cleanName)
+    const given = chosen.filter((name) => name !== '')
+    if (given.length === 1) throw new GameError(`${label}: type the second name, or clear the first`)
+    if (given.length === 2) {
+      if (given.some((name) => Array.from(name).length > MAX_NAME_LENGTH)) {
+        throw new GameError(`${label}: names are at most ${MAX_NAME_LENGTH} characters`)
+      }
+      if (nameKey(given[0]) === nameKey(given[1])) throw new GameError(`${label}: type two different names`)
+      picture.people = [given[0], given[1]]
     }
   }
 
@@ -742,22 +740,23 @@ function pictureNumber(value: unknown): number {
   return value
 }
 
-const isPlayerId = (value: unknown): value is PlayerId =>
-  typeof value === 'string' && value.length > 0 && value.length <= 64
+/** A name (or an id from an older host page) as a host action carries it: text, not too long to check. */
+const isTyped = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= 300
 
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
 
 /**
- * Scores one picture's locks. The people in the picture know who they are:
- * they don't score on it, so a lock from them (a crafted one) counts for
- * nothing. The first lock is the only one (the prompt is final).
+ * Scores one picture's locks: every guest here who locked in, the two in it
+ * too. A pick of the voter's own name counts for nothing (their phone never
+ * offers it). The first lock is the only one (the prompt is final).
  */
-function scoreVotes(votes: readonly Answer[], people: readonly PlayerId[]): Omit<FusionResult, 'at'> {
+function scoreVotes(votes: readonly Answer[], people: readonly [string, string], players: readonly GamePlayer[]): Omit<FusionResult, 'at'> {
   const result: Omit<FusionResult, 'at'> = { both: 0, one: 0, none: 0, voters: 0, hits: {} }
   for (const vote of votes) {
-    if (people.includes(vote.playerId) || Object.hasOwn(result.hits, vote.playerId)) continue
-    const choice = 'choice' in vote.answer ? new Set(vote.answer.choice) : new Set<string>()
-    const hits = Math.min(2, people.filter((id) => choice.has(id)).length)
+    const voter = players.find((p) => p.id === vote.playerId)
+    if (!voter || Object.hasOwn(result.hits, vote.playerId)) continue
+    const picks = 'choice' in vote.answer ? vote.answer.choice : []
+    const hits = countHits(picks, people, voter.name)
     result.hits[vote.playerId] = hits
     result.voters++
     if (hits === 2) result.both++
@@ -765,6 +764,11 @@ function scoreVotes(votes: readonly Answer[], people: readonly PlayerId[]): Omit
     else result.none++
   }
   return result
+}
+
+/** The players whose name is one of `names`: the people in a picture who joined. */
+function namedPlayers(players: readonly Pick<GamePlayer, 'id' | 'name'>[], names: readonly string[]): PlayerId[] {
+  return players.filter((p) => names.some((name) => sameName(name, p.name))).map((p) => p.id)
 }
 
 /**
@@ -789,45 +793,9 @@ function leaders(s: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>):
     .map((row) => row.playerId)
 }
 
-/** A player's name now, else a listed guest's, else the one kept with the key, else a placeholder. */
-function nameIn(
-  players: readonly GamePlayer[],
-  kept: Readonly<Record<PlayerId, string>>,
-  id: PlayerId,
-  guests: readonly GameGuest[] = [],
-): string {
-  return players.find((p) => p.id === id)?.name ?? guests.find((g) => g.id === id)?.name ?? kept[id] ?? 'a guest who left'
-}
-
-/**
- * The names of everyone in the key: their name on the guest list (joined or
- * not), or the one kept from before they left it.
- */
-function namesOf(
-  key: FusionState['key'],
-  info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>,
-  kept: Readonly<Record<PlayerId, string>>,
-): Record<PlayerId, string> {
-  const names: Record<PlayerId, string> = {}
-  for (const people of Object.values(key)) {
-    for (const id of people) {
-      const name = info.players.find((p) => p.id === id)?.name ?? info.guests.find((g) => g.id === id)?.name ?? kept[id]
-      if (name !== undefined) names[id] = name
-    }
-  }
-  return names
-}
-
-/** Whether an id is on the guest list: a guest here, or one listed who hasn't joined. */
-function onList(info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>, id: PlayerId): boolean {
-  return info.guests.some((g) => g.id === id) || info.players.some((p) => p.id === id)
-}
-
-/** The guests on the list who haven't joined, in the list's order: ids and names only. */
-function expectedOf(info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>): FusionGuest[] {
-  return info.guests
-    .filter((g) => !g.joined && !info.players.some((p) => p.id === g.id))
-    .map((g) => ({ id: g.id, name: g.name }))
+/** A player's name, else a placeholder. */
+function playerName(players: readonly GamePlayer[], id: PlayerId): string {
+  return players.find((p) => p.id === id)?.name ?? 'a guest who left'
 }
 
 /** A record without one id's entry. */

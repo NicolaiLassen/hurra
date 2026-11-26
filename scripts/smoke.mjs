@@ -463,11 +463,12 @@ try {
   })
 
   // Fusion ------------------------------------------------------------------------------------------
-  await step('fusion on the stage: ask a picture, locks, Reveal now, crown', async () => {
+  await step('fusion on the stage: ask a picture, locks by name, Reveal now, crown', async () => {
     await data(
       host.client.from('game_settings').insert({
         game_id: games.fusion,
-        config: { pictures: [{ label: '#1', people: [guests.Bo.player.id, guests.Cy.player.id] }], pointsPerPerson: 1, bonusForBoth: 1, seconds: 30, showSeconds: 3 },
+        // Who is in it is two typed names (here as the two guests joined), never their ids.
+        config: { pictures: [{ label: '#1', people: ['Bo', 'cy'] }], pointsPerPerson: 1, bonusForBoth: 1, seconds: 30 },
       }),
       'fusion settings',
     )
@@ -479,24 +480,25 @@ try {
     await engine(host, { type: 'host-action', gameId: games.fusion, action: { type: 'ask', n: 1 } })
     row = await game(games.fusion)
     check(row.public_state.phase === 'asking' && row.public_state.current?.n === 1, 'the host asks picture #1')
-    check(!JSON.stringify(row.public_state).includes(guests.Bo.player.id), 'who is in the picture stays secret before its reveal')
+    const pub = JSON.stringify(row.public_state)
+    check(!pub.includes('"Bo"') && !pub.includes('"cy"'), 'who is in the picture stays secret before its reveal')
+    check(row.public_state.current.startsAt > row.public_state.current.openedAt, 'the countdown starts after the TV shows which picture it is')
     const lock = (who, choice) =>
       who.client.rpc('submit_answer', { p_game_id: games.fusion, p_key: 'p1', p_payload: { choice }, p_request_id: crypto.randomUUID() })
-    const locked = await data(lock(guests.Ana, [guests.Bo.player.id, guests.Cy.player.id]), 'Ana locks in')
-    check(locked.accepted === true, 'a lock goes straight to the database')
-    // With three guests Ana has one possible pair, so a changed lock can't be tried here (the unit tests refuse it):
-    // the same lock sent again counts once.
-    const again = await data(lock(guests.Ana, [guests.Cy.player.id, guests.Bo.player.id]), 'Ana sends her lock again')
+    const locked = await data(lock(guests.Ana, ['Bo', 'Cy']), 'Ana locks in')
+    check(locked.accepted === true, 'a lock of two names goes straight to the database')
+    const again = await data(lock(guests.Ana, ['Cy', 'Bo']), 'Ana sends her lock again')
     check(again.accepted === true && again.replayed === true, 'the same lock sent again counts once')
-    const invalid = await refusal(lock(guests.Ana, [guests.Ana.player.id, guests.Bo.player.id]))
-    check(invalid !== null, 'a lock on yourself is refused')
-    await data(lock(guests.Bo, [guests.Ana.player.id, guests.Cy.player.id]), 'Bo, who is in it, locks in')
+    const invalid = await refusal(lock(guests.Cy, ['Bo', 'Nobody here']))
+    check(invalid !== null, 'a name the guess does not offer is refused')
+    await data(lock(guests.Bo, ['Ana', 'Cy']), 'Bo, who is in it, locks in too')
     await engine(host, { type: 'host-action', gameId: games.fusion, action: { type: 'reveal', n: 1 }, close: ['p1'] })
     row = await game(games.fusion)
     const picture = row.public_state.pictures[0]
-    check(picture.revealed?.both === 1 && picture.revealed?.voters === 1, 'Reveal now scores Ana, who got both; Bo, in it, counts for nothing')
+    check(picture.revealed?.both === 1 && picture.revealed?.one === 1 && picture.revealed?.voters === 2, 'Reveal now scores Ana, who got both, and Bo, in it, who got Cy')
     const scores = await data(admin.from('game_scores').select('player_id, points').eq('game_id', games.fusion), 'fusion scores')
-    check(scores.length === 1 && scores[0].player_id === guests.Ana.player.id && scores[0].points === 3, 'Ana has 3 points: both, plus the bonus')
+    const pointsOf = (who) => scores.find((r) => r.player_id === who.player.id)?.points
+    check(pointsOf(guests.Ana) === 3 && pointsOf(guests.Bo) === 1, 'Ana has 3 points (both, plus the bonus), Bo 1')
     await engine(host, { type: 'host-action', gameId: games.fusion, action: { type: 'finish' } })
     row = await game(games.fusion)
     check(row.status === 'finished' && row.winners[0] === guests.Ana.player.id, 'fusion finishes with Ana as the face detective')

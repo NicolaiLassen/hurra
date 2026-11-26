@@ -2,62 +2,44 @@ import { describe, expect, it } from 'vitest'
 import { decodeSet, frameAspect, median, runQueue, wallAspect } from './preload'
 import type { FusionPublicPicture, FusionPublicState, FusionReveal } from './shapes'
 
-const RULES = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
-const REVEAL: FusionReveal = { people: ['ana', 'bo'], names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1, originals: [null, null], step: 1, at: 1 }
+const RULES = { seconds: 30, perPerson: 1, bothBonus: 1 }
+const REVEAL: FusionReveal = { names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1, originals: [null, null], step: 1, at: 1 }
 
-const picture = (n: number, patch: Partial<FusionPublicPicture> = {}): FusionPublicPicture => ({
-  n,
-  key: `p${n}`,
-  label: `#${n}`,
-  image: `s/g/${n}.jpg`,
-  revealed: null,
-  ...patch,
-})
+/** A picture as the room sees it: asked (or revealed) pictures carry their image, the rest are placeholders with none. */
+const picture = (n: number, patch: Partial<FusionPublicPicture> = {}): FusionPublicPicture => {
+  const asked = patch.asked ?? patch.revealed != null
+  return { n, key: `p${n}`, label: `#${n}`, asked, image: asked ? `s/g/${n}.jpg` : null, revealed: null, ...patch }
+}
 
 const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({
   phase: 'lobby',
   pictures: Array.from({ length: 12 }, (_, i) => picture(i + 1)),
   rules: RULES,
-  showing: null,
   current: null,
   top: [],
-  expected: [],
   ...patch,
 })
 
-const current = (n: number) => ({ n, step: 1, key: `p${n}`, openedAt: 0, endsAt: 30_000, revealedAt: null })
+const current = (n: number) => ({ n, step: 1, key: `p${n}`, openedAt: 0, startsAt: 2_800, endsAt: 32_800, revealedAt: null })
 
 describe('decodeSet', () => {
-  it('decodes the first two in the lobby, where the showing opens', () => {
-    expect(decodeSet(state(), 0)).toEqual([1, 2])
-  })
-
-  it('decodes the picture on show and the next two in the showing, by the clock', () => {
-    const pub = state({ phase: 'showing', showing: { startedAt: 10_000, endsAt: 10_000 + 12 * 6000 } })
-    expect(decodeSet(pub, 10_000)).toEqual([1, 2, 3])
-    expect(decodeSet(pub, 10_000 + 6000 * 2 + 5999)).toEqual([3, 4, 5])
-    expect(decodeSet(pub, 10_000 + 6000 * 10)).toEqual([11, 12])
-    // Past the end, the last picture stays until the wall comes.
-    expect(decodeSet(pub, 10_000 + 6000 * 40)).toEqual([12])
-  })
-
-  it('decodes the asked or revealed picture, and only that one', () => {
-    expect(decodeSet(state({ phase: 'asking', current: current(6) }), 0)).toEqual([6])
-    expect(decodeSet(state({ phase: 'reveal', current: { ...current(6), revealedAt: 31_000 } }), 0)).toEqual([6])
-  })
-
-  it("decodes the wall's lowest picture not yet revealed: the host's next Ask", () => {
+  it('decodes nothing in the lobby or on the wall: the pictures to come are placeholders, their images unknown', () => {
+    expect(decodeSet(state())).toEqual([])
     const pictures = Array.from({ length: 12 }, (_, i) => picture(i + 1, { revealed: i < 3 ? { ...REVEAL, step: i + 1 } : null }))
-    expect(decodeSet(state({ phase: 'wall', pictures }), 0)).toEqual([4])
-    expect(decodeSet(state({ phase: 'wall', pictures: pictures.map((p) => ({ ...p, revealed: REVEAL })) }), 0)).toEqual([])
+    expect(decodeSet(state({ phase: 'wall', pictures }))).toEqual([])
+  })
+
+  it('decodes the asked or revealed picture, and only that one, from the moment it is asked', () => {
+    const asked = (n: number) => state({ pictures: Array.from({ length: 12 }, (_, i) => picture(i + 1, { asked: i + 1 === n })) })
+    expect(decodeSet({ ...asked(6), phase: 'asking', current: current(6) })).toEqual([6])
+    expect(decodeSet({ ...asked(6), phase: 'reveal', current: { ...current(6), revealedAt: 31_000 } })).toEqual([6])
   })
 
   it('decodes nothing once done, and never a picture without an image', () => {
-    expect(decodeSet(state({ phase: 'done' }), 0)).toEqual([])
-    const pictures = [picture(1, { image: null }), picture(2), picture(3, { image: null }), picture(4)]
-    expect(decodeSet(state({ pictures }), 0)).toEqual([2])
-    expect(decodeSet(state({ phase: 'asking', pictures, current: current(3) }), 0)).toEqual([])
-    expect(decodeSet(state({ phase: 'wall', pictures }), 0)).toEqual([2])
+    expect(decodeSet(state({ phase: 'done' }))).toEqual([])
+    const pictures = [picture(1, { asked: true, image: null }), picture(2), picture(3, { asked: true, image: null }), picture(4)]
+    expect(decodeSet(state({ phase: 'asking', pictures, current: current(3) }))).toEqual([])
+    expect(decodeSet(state({ phase: 'asking', pictures, current: current(1) }))).toEqual([])
   })
 })
 

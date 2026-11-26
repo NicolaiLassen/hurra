@@ -1,13 +1,14 @@
 // Participant fusion's parts every screen shares (the TV, the phones, the host
 // room), in the Running Order look (docs/identity.md): a picture on the raised
 // surface (lazily as a thumbnail, or sharp with the full image over the
-// thumbnail), its label as a tilted paper chip, two people as tokens, and a
-// guest's name on a paper chip. No motion here, so phones can draw them.
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+// thumbnail), the placeholder of a picture not asked yet, its label as a
+// tilted paper chip, two people as tokens, and a name on a paper chip. No
+// motion here, so phones can draw them.
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
-import type { PlayerId } from '@/games/core/Game'
 import type { FusionPublicPicture } from '@/games/fusion/shapes'
-import { nameOf, type Pickable } from '@/games/fusion/view'
+import { playerNamed } from '@/games/fusion/view'
+import type { Player } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -79,43 +80,40 @@ export function LabelChip({ label, className }: { label: string; className?: str
 }
 
 /**
- * Two people: their tokens side by side and "Mads and Anna", or one per row
- * when `stacked`. A token carries the guest's photo by their id, or `photos`
- * (a revealed picture's own photos of them) where given; someone who has left
- * keeps the name the round kept for them.
+ * Two people by name: their tokens side by side and "Mads and Anna", or one
+ * per row when `stacked`. A name that is a guest's here wears that guest's
+ * token (and photo, or `photos`, a revealed picture's own photos of them,
+ * where given); a name nobody joined with gets a token of its own.
  */
 export function Pair({
-  people,
+  names,
   players,
-  kept,
   photos,
-  meId,
+  me,
   stacked = false,
   className,
   avatarClassName = 'size-7',
 }: {
-  people: readonly PlayerId[]
-  players: readonly Pickable[]
-  /** Names a reveal kept, for anyone who has left since. */
-  kept?: readonly string[]
+  names: readonly string[]
+  players: readonly Pick<Player, 'id' | 'name'>[]
   /** A photo URL for each person in its place, over their profile photo; null keeps theirs. */
   photos?: readonly (string | null)[]
-  /** Shown as "You". */
-  meId?: PlayerId
+  /** This phone's guest's name: shown as "You". */
+  me?: string
   stacked?: boolean
   className?: string
   avatarClassName?: string
 }) {
-  const names = people.map((id, i) => nameOf(players, id, kept?.[i]))
+  const ids = names.map((name) => playerNamed(players, name)?.id)
   // undefined lets Avatar find the guest's own photo; a URL shows that photo instead.
-  const srcOf = (i: number) => photos?.[i] ?? undefined
-  const shown = people.map((id, i) => (id === meId ? 'You' : names[i]))
+  const srcOf = (i: number) => photos?.[i] ?? (ids[i] === undefined ? null : undefined)
+  const shown = names.map((name, i) => (me !== undefined && ids[i] !== undefined && playerNamed(players, me)?.id === ids[i] ? 'You' : name))
   if (stacked) {
     return (
       <ul className={cn('grid gap-1.5', className)}>
-        {people.map((id, i) => (
-          <li key={id} className="flex min-w-0 items-center gap-2">
-            <Avatar name={names[i]} playerId={id} src={srcOf(i)} className={cn('shrink-0', avatarClassName)} />
+        {names.map((name, i) => (
+          <li key={`${i}:${name}`} className="flex min-w-0 items-center gap-2">
+            <Avatar name={name} playerId={ids[i]} src={srcOf(i)} className={cn('shrink-0', avatarClassName)} />
             <span className="min-w-0 truncate font-semibold">{shown[i]}</span>
           </li>
         ))}
@@ -125,12 +123,59 @@ export function Pair({
   return (
     <span className={cn('flex min-w-0 items-center gap-2', className)}>
       <span className="flex shrink-0 gap-1">
-        {people.map((id, i) => (
-          <Avatar key={id} name={names[i]} playerId={id} src={srcOf(i)} className={avatarClassName} />
+        {names.map((name, i) => (
+          <Avatar key={`${i}:${name}`} name={name} playerId={ids[i]} src={srcOf(i)} className={avatarClassName} />
         ))}
       </span>
       <span className="min-w-0 truncate font-semibold">{shown.join(' and ')}</span>
     </span>
+  )
+}
+
+/**
+ * A picture not asked yet: nobody knows what it looks like. A drawn head and
+ * shoulders, flat, in `rule` on the raised surface, with a big "?" over it in
+ * the on-air voice. `lit` while the TV's highlight is on it: paper, the
+ * figure in `paper-2` and the "?" in ink. No glow, no gradient. Its label
+ * chip is the caller's, as on any picture.
+ */
+export function Placeholder({
+  label,
+  lit = false,
+  className,
+  mark,
+}: {
+  label: string
+  lit?: boolean
+  className?: string
+  /** Wraps the "?" (the TV's frame pulses it). */
+  mark?: (mark: ReactNode) => ReactNode
+}) {
+  const sign = (
+    <span data-placeholder-mark="" className="wide inline-block text-[46cqw] leading-none">
+      ?
+    </span>
+  )
+  return (
+    <div
+      role="img"
+      aria-label={`Picture ${label}, not shown yet`}
+      data-placeholder={lit ? 'lit' : ''}
+      className={cn('@container relative overflow-hidden', lit ? 'bg-paper' : 'bg-raised', className)}
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 100 125"
+        preserveAspectRatio="xMidYMax meet"
+        className={cn('absolute inset-x-0 bottom-0 h-[86%] w-full', lit ? 'text-paper-2' : 'text-rule')}
+      >
+        <circle cx="50" cy="47" r="21" fill="currentColor" />
+        <path d="M8 125 C8 93 26 76 50 76 C74 76 92 93 92 125 Z" fill="currentColor" />
+      </svg>
+      <span aria-hidden className={cn('absolute inset-x-0 top-[12%] flex justify-center', lit ? 'text-ink' : 'text-paper')}>
+        {mark ? mark(sign) : sign}
+      </span>
+    </div>
   )
 }
 

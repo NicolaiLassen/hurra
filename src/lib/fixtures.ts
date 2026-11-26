@@ -16,17 +16,28 @@ import type { Screen } from './live'
 import type { RecapDoc } from './recap'
 import type { AnswerPayload, FeedItem, ListedGuest, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
 
-/** Participant fusion on the stage (8.4), each with 12 pictures, and some with 2 or 40 as well (`-2`, `-40`). */
+/**
+ * Participant fusion on the stage (8.4), each with 12 pictures, and some with
+ * 2, 8 or 40 as well (`-2`, `-8`, `-40`): the lobby; the first wall, every
+ * picture still a placeholder (`start`); the wall after three reveals; the
+ * suspense of the next picture asked (`hop`: it starts 3 s after the scene's
+ * clock does, so a TV opened on it plays it); a picture asked, its countdown
+ * running; and the reveals, the crown and the final.
+ */
 export const FUSION_STAGE_SCENES = [
   'fusion-lobby',
   'fusion-lobby-2',
   'fusion-lobby-40',
-  'fusion-showing',
-  'fusion-showing-2',
-  'fusion-showing-40',
+  'fusion-start',
+  'fusion-start-2',
+  'fusion-start-8',
   'fusion-wall',
   'fusion-wall-2',
+  'fusion-wall-8',
   'fusion-wall-40',
+  'fusion-hop',
+  'fusion-hop-2',
+  'fusion-hop-8',
   'fusion-asking',
   'fusion-asking-2',
   'fusion-asking-40',
@@ -648,23 +659,33 @@ const pong = (finishedAt: number) =>
 // The round as the engine saves it, phase by phase: the full state and the
 // settings (host page only), the public state, every guest's view, the
 // prompts and their counts, and Sofie's own locks. Fusion holds the TV, and
-// Last one standing runs in the background.
+// Last one standing runs in the background. Who is in a picture is two names;
+// #3 is of Zelda, on the guest list but not here, and #7 of Tilde, whom
+// nobody joined as. A picture's image is in the public state only once it is
+// asked.
 
-const STAGE_RULES = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
+const STAGE_RULES = { seconds: 30, perPerson: 1, bothBonus: 1 }
 const STAGE_GRACE_MS = 1000
 const STAGE_WAKE_MARGIN_MS = 250
 const STAGE_REVEAL_HOLD_MS = 10_000
-/** From one picture's reveal to the next one's: 10 s of reveal, a few on the wall, 30 s to guess. */
-const STAGE_STEP_MS = 45_000
-/** The 12 prints of the party: #4 is Bo and Maja, Sofie is in #6. */
-const STAGE_KEY: [number, number][] = [
+/** From the ask to the countdown: the TV's suspense (the logic's SUSPENSE_MS). */
+const STAGE_SUSPENSE_MS = 2800
+/** In the hop scenes, the ask comes this long after the scene's clock starts: a TV opened on it plays the suspense. */
+const STAGE_HOP_IN_MS = 3000
+/** From one picture's reveal to the next one's: 10 s of reveal, a few on the wall, the suspense, 30 s to guess. */
+const STAGE_STEP_MS = 48_000
+/** Names in the pictures that nobody joined with: one on the guest list, one not. */
+const ZELDA = FIXTURE_EXPECTED_NAMES[0]
+const TILDE = 'Tilde'
+/** The 12 prints of the party, by player number, or a name nobody joined with: #4 is Bo and Maja, Sofie is in #6. */
+const STAGE_KEY: [number | string, number | string][] = [
   [2, 6],
   [4, 11],
-  [0, 9],
+  [0, ZELDA],
   [1, 10],
   [5, 8],
   [7, 3],
-  [0, 5],
+  [TILDE, 5],
   [2, 8],
   [1, 9],
   [4, 6],
@@ -672,21 +693,29 @@ const STAGE_KEY: [number, number][] = [
   [10, 0],
 ]
 const SOFIE_AT = ids.indexOf(SOFIE)
+const personName = (who: number | string) => (typeof who === 'number' ? NAMES[who] : who)
 
-/** Who is in picture n: the party's 12, then pairs of the 12 players cycling for more. */
+/** Who is in picture n, by name: the party's 12, then pairs of the 12 players cycling for more. */
 function stagePair(n: number): [string, string] {
   if (n <= STAGE_KEY.length) {
     const [a, b] = STAGE_KEY[n - 1]
-    return [ids[a], ids[b]]
+    return [personName(a), personName(b)]
   }
   const k = n - STAGE_KEY.length - 1
-  const a = (k * 5 + 1) % ids.length
-  return [ids[a], ids[(a + 1 + (k % 5)) % ids.length]]
+  const a = (k * 5 + 1) % NAMES.length
+  return [NAMES[a], NAMES[(a + 1 + (k % 5)) % NAMES.length]]
 }
 
-/** Two other guests for a guess, in a fixed order from `start`, leaving out `skip`. */
+/** The names a guess offers: everyone here and every name in the pictures, each once, A to Z. */
+function stageOptions(count: number): string[] {
+  const names = new Set<string>(NAMES)
+  for (let n = 1; n <= count; n++) for (const name of stagePair(n)) names.add(name)
+  return [...names].sort((a, b) => a.localeCompare(b, 'da'))
+}
+
+/** Two other names for a guess, in a fixed order from `start`, leaving out `skip` and the voter's own. */
 function othersFor(start: number, skip: readonly string[]): string[] {
-  return Array.from({ length: ids.length }, (_, i) => ids[(start + i) % ids.length]).filter((id) => !skip.includes(id))
+  return Array.from({ length: NAMES.length }, (_, i) => NAMES[(start + i) % NAMES.length]).filter((name) => !skip.includes(name))
 }
 
 /** How Sofie's lock on the picture being asked or revealed went: both, one or none of the two, or no lock. */
@@ -699,17 +728,20 @@ type SofieGuess = 0 | 1 | 2 | null
 type RoomGuess = 'pattern' | 'one' | 'nobody'
 
 /**
- * Player v's locked guess on picture n, sorted as the database stores choices,
- * or null for no lock. Sofie got both on #1, one on #2, none on #3, and both on
- * the picture of the asking and reveal scenes (`sofie` for the reveal's other
- * outcomes); the others follow a pattern, on the picture asked or revealed
- * unless `room` says otherwise.
+ * Player v's locked guess on picture n, two names sorted as the database
+ * stores choices, or null for no lock. Everyone guesses every picture, the
+ * two in it too: one of them knows themselves and names the other (their own
+ * name is never offered), plus someone else. Sofie got both on #1, one on #2,
+ * none on #3, and both on the picture of the asking and reveal scenes
+ * (`sofie` for the reveal's other outcomes; one on #6, which she is in); the
+ * others follow a pattern, on the picture asked or revealed unless `room`
+ * says otherwise.
  */
 function stageGuess(v: number, n: number, current: number | null, sofie: SofieGuess = 0, room: RoomGuess = 'pattern'): [string, string] | null {
   const people = stagePair(n)
-  const me = ids[v]
-  if (people.includes(me)) return null
+  const me = NAMES[v]
   if (n === current && room === 'nobody') return null
+  const inIt = people.includes(me)
   const pattern =
     v === SOFIE_AT
       ? n === current
@@ -724,17 +756,25 @@ function stageGuess(v: number, n: number, current: number | null, sofie: SofieGu
       : (v + n) % 5 === 0
         ? null
         : (v + 2 * n) % 3
-  const kind = pattern !== null && n === current && room === 'one' ? 1 : pattern
+  let kind = pattern !== null && n === current && room === 'one' ? 1 : pattern
   if (kind === null) return null
+  // In the picture: they can't name themselves, so the most they get is the other one.
+  if (inIt && kind === 0) kind = 1
   const others = othersFor(v + n, [...people, me])
-  const pair: [string, string] = kind === 0 ? [people[0], people[1]] : kind === 1 ? [people[0], others[0]] : [others[0], others[1]]
-  return sortedPair(...pair)
+  const other = people[0] === me ? people[1] : people[0]
+  const pair: [string, string] = kind === 0 ? [people[0], people[1]] : kind === 1 ? [inIt ? other : people[0], others[0]] : [others[0], others[1]]
+  return pair[0] < pair[1] ? pair : [pair[1], pair[0]]
 }
+
+/** How many of a picture's two a guess names, its voter's own name aside (the logic's countHits). */
+const stageHits = (guess: readonly string[], people: readonly string[], me: string) =>
+  people.filter((name) => name !== me && guess.includes(name)).length
 
 type StageKind =
   | 'lobby'
-  | 'showing'
+  | 'start'
   | 'wall'
+  | 'hop'
   | 'asking'
   | 'asking-locked'
   | 'asking-you'
@@ -751,7 +791,7 @@ type StageKind =
 
 /** fusion-asking-40 as its kind and its number of pictures. */
 function stageOf(scene: FusionStageScene): { kind: StageKind; count: number } {
-  const match = /^fusion-(.+?)(?:-(2|40))?$/.exec(scene)!
+  const match = /^fusion-(.+?)(?:-(2|8|40))?$/.exec(scene)!
   return { kind: match[1] as StageKind, count: match[2] ? Number(match[2]) : 12 }
 }
 
@@ -763,19 +803,19 @@ function fusionStage(scene: FusionStageScene) {
   // In the lobby of the party's 12, the last two prints still wait for their people (Show who).
   const keyed = (n: number) => !(kind === 'lobby' && count === 12 && n > 10)
   // The first picture asked, in the scene where nobody guessed it: nobody has a point yet, so the TV shows no sharpest eyes.
-  const before = kind === 'reveal-no-guesses' ? 0 : count === 2 ? 1 : count === 40 ? 15 : 3
-  const phase: 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done' =
-    kind === 'asking-locked' || kind === 'asking-you'
+  const before = kind === 'reveal-no-guesses' || kind === 'start' ? 0 : count === 2 ? 1 : count === 40 ? 15 : 3
+  const phase: 'lobby' | 'wall' | 'asking' | 'reveal' | 'done' =
+    kind === 'asking-locked' || kind === 'asking-you' || kind === 'hop'
       ? 'asking'
       : kind.startsWith('reveal')
         ? 'reveal'
-        : kind === 'crown'
+        : kind === 'crown' || kind === 'start'
           ? 'wall'
           : kind === 'final'
             ? 'done'
-            : (kind as 'lobby' | 'showing' | 'wall' | 'asking')
+            : (kind as 'lobby' | 'wall' | 'asking')
   const current = phase === 'asking' || phase === 'reveal' ? (kind === 'asking-you' || kind === 'reveal-you' ? 6 : before + 1) : null
-  // The reveal's other outcomes on Sofie's phone: one of the two, none, or no lock (#6 she is in herself).
+  // The reveal's other outcomes on Sofie's phone: one of the two, none, or no lock.
   const sofie: SofieGuess =
     kind === 'reveal-one' || kind === 'reveal-nobody-both' ? 1 : kind === 'reveal-none' ? 2 : kind === 'reveal-missed' || kind === 'reveal-no-guesses' ? null : 0
   // The room's counts on the TV: "Nobody got both. 6 got one.", and "Nobody guessed this one."
@@ -789,14 +829,20 @@ function fusionStage(scene: FusionStageScene) {
           ? [...numbers.slice(0, before), current!]
           : []
 
-  // The clock: the current picture now, the ones before it a step apart.
+  // The clock: the current picture now, the ones before it a step apart. A hop scene asks its picture a moment from now.
   const finishedAt = FIXTURE_NOW - MIN
-  const asked = current !== null ? FIXTURE_NOW - (phase === 'asking' ? 12_000 : 1500 + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS + STAGE_RULES.seconds * 1000) : null
+  const asked =
+    current === null
+      ? null
+      : kind === 'hop'
+        ? FIXTURE_NOW + STAGE_HOP_IN_MS
+        : FIXTURE_NOW -
+          (phase === 'asking' ? 12_000 + STAGE_SUSPENSE_MS : 1500 + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS + STAGE_RULES.seconds * 1000 + STAGE_SUSPENSE_MS)
   const lastReveal =
     phase === 'reveal'
       ? FIXTURE_NOW - 1500
       : asked !== null
-        ? asked - 13_000
+        ? Math.min(asked, FIXTURE_NOW) - 13_000
         : kind === 'final'
           ? finishedAt - 12_000
           : FIXTURE_NOW - 20_000
@@ -804,13 +850,11 @@ function fusionStage(scene: FusionStageScene) {
   const timesOf = (i: number) => {
     const at = revealedAt(i)
     const endsAt = at - STAGE_GRACE_MS - STAGE_WAKE_MARGIN_MS
-    return { openedAt: endsAt - STAGE_RULES.seconds * 1000, endsAt, at }
+    const startsAt = endsAt - STAGE_RULES.seconds * 1000
+    return { openedAt: startsAt - STAGE_SUSPENSE_MS, startsAt, endsAt, at }
   }
-  const showStartedAt =
-    kind === 'showing' ? FIXTURE_NOW - (count === 2 ? 1.5 : 2.5) * STAGE_RULES.showSeconds * 1000 : null
-  const firstAt = revealed.length > 0 ? timesOf(0).openedAt : (asked ?? FIXTURE_NOW)
-  const startedAt =
-    kind === 'lobby' ? FIXTURE_NOW - MIN : kind === 'showing' ? FIXTURE_NOW - 2 * MIN : Math.min(FIXTURE_NOW - 20 * MIN, firstAt - 2 * MIN)
+  const firstAt = revealed.length > 0 ? timesOf(0).openedAt : Math.min(asked ?? FIXTURE_NOW, FIXTURE_NOW)
+  const startedAt = kind === 'lobby' ? FIXTURE_NOW - MIN : kind === 'start' ? FIXTURE_NOW - 2 * MIN : Math.min(FIXTURE_NOW - 20 * MIN, firstAt - 2 * MIN)
 
   // The guesses and the points, picture by picture.
   type Result = { both: number; one: number; none: number; voters: number; hits: Record<string, number>; at: number }
@@ -822,7 +866,7 @@ function fusionStage(scene: FusionStageScene) {
     ids.forEach((id, v) => {
       const guess = stageGuess(v, n, current, sofie, room)
       if (!guess) return
-      const hit = guess.filter((g) => people.includes(g)).length
+      const hit = stageHits(guess, people, NAMES[v])
       result.hits[id] = hit
       result.voters++
       if (hit === 2) result.both++
@@ -836,13 +880,8 @@ function fusionStage(scene: FusionStageScene) {
   const scorers = ids.filter((id) => (totals[id] ?? 0) > 0).sort((a, b) => totals[b] - totals[a] || ids.indexOf(a) - ids.indexOf(b))
   const rankOfScorer = (id: string) => 1 + scorers.filter((other) => totals[other] > totals[id]).length
 
-  const names: Record<string, string> = {}
   const key: Record<string, [string, string]> = {}
-  for (const n of numbers) {
-    if (!keyed(n)) continue
-    key[n] = stagePair(n)
-    for (const id of key[n]) names[id] = nameOfPlayer(id)
-  }
+  for (const n of numbers) if (keyed(n)) key[n] = stagePair(n)
   const label = (n: number) => (n === 9 ? 'The viking' : `#${n}`)
   // The two people's own photos, drawn in each one's half of the fused sample: both for every picture but #6 (only
   // the first person's, so the second shows their profile photo or token), and none at all in fusion-reveal-plain.
@@ -858,7 +897,6 @@ function fusionStage(scene: FusionStageScene) {
     pointsPerPerson: STAGE_RULES.perPerson,
     bonusForBoth: STAGE_RULES.bothBonus,
     seconds: STAGE_RULES.seconds,
-    showSeconds: STAGE_RULES.showSeconds,
   }
 
   const currentTimes =
@@ -866,7 +904,8 @@ function fusionStage(scene: FusionStageScene) {
       ? null
       : phase === 'reveal'
         ? timesOf(revealed.length - 1)
-        : { openedAt: asked!, endsAt: asked! + STAGE_RULES.seconds * 1000, at: null }
+        : { openedAt: asked!, startsAt: asked! + STAGE_SUSPENSE_MS, endsAt: asked! + STAGE_SUSPENSE_MS + STAGE_RULES.seconds * 1000, at: null }
+  const isAsked = (n: number) => revealed.includes(n) || n === current
   const publicState = {
     phase,
     pictures: numbers.map((n) => {
@@ -877,12 +916,13 @@ function fusionStage(scene: FusionStageScene) {
         n,
         key: `p${n}`,
         label: label(n),
-        image: `fixture/fusion-${n}.jpg`,
+        asked: isAsked(n),
+        // What it looks like only once it is asked, as the logic's publicState keeps it.
+        image: isAsked(n) ? `fixture/fusion-${n}.jpg` : null,
         revealed:
           i >= 0
             ? {
-                people,
-                names: [nameOfPlayer(people[0]), nameOfPlayer(people[1])],
+                names: people,
                 both: r.both,
                 one: r.one,
                 none: r.none,
@@ -896,7 +936,6 @@ function fusionStage(scene: FusionStageScene) {
       }
     }),
     rules: STAGE_RULES,
-    showing: showStartedAt !== null ? { startedAt: showStartedAt, endsAt: showStartedAt + count * STAGE_RULES.showSeconds * 1000 } : null,
     current:
       current !== null && currentTimes
         ? {
@@ -904,38 +943,34 @@ function fusionStage(scene: FusionStageScene) {
             step: phase === 'asking' ? revealed.length + 1 : revealed.length,
             key: `p${current}`,
             openedAt: currentTimes.openedAt,
+            startsAt: currentTimes.startsAt,
             endsAt: currentTimes.endsAt,
             revealedAt: phase === 'reveal' ? currentTimes.at : null,
           }
         : null,
     top: scorers.slice(0, 5).map((id) => ({ playerId: id, points: totals[id], rank: rankOfScorer(id) })),
-    // The four on the guest list who haven't joined: the phone's picker lists them under "Not here yet".
-    expected: EXPECTED_GUESTS.map((g) => ({ id: g.id, name: g.name })),
   }
 
-  const inPicture = (id: string) => current !== null && stagePair(current).includes(id)
   const views: Record<string, unknown> = {}
   for (const id of ids) {
     const hits: Record<string, number> = {}
     for (const n of revealed) if (results[n].hits[id] !== undefined) hits[n] = results[n].hits[id]
-    views[id] = { points: totals[id] ?? 0, rank: (totals[id] ?? 0) > 0 ? rankOfScorer(id) : null, hits, inPicture: inPicture(id) }
+    views[id] = { points: totals[id] ?? 0, rank: (totals[id] ?? 0) > 0 ? rankOfScorer(id) : null, hits }
   }
 
   const state = {
     phase,
     key,
-    names,
     revealed,
     results,
     totals,
-    showStartedAt,
     current,
     openedAt: currentTimes?.openedAt ?? null,
     endsAt: currentTimes?.endsAt ?? null,
     revealedAt: phase === 'reveal' ? currentTimes!.at : null,
   }
 
-  const spec = { kind: 'choice' as const, options: 'guests' as const, min: 2, max: 2, exclude_self: true, final: true }
+  const spec = { kind: 'choice' as const, options: stageOptions(count), min: 2, max: 2, final: true }
   const promptsAsked = phase === 'asking' ? [...revealed, current!] : revealed
   const prompts: PromptState[] = promptsAsked.map((n) => {
     const i = revealed.indexOf(n)
@@ -950,8 +985,8 @@ function fusionStage(scene: FusionStageScene) {
       revealed_at: i >= 0 ? t.at : null,
     }
   })
-  // Counts only for the picture being guessed: 7 have locked in, and Sofie too once she has.
-  const tallies: Record<string, number> = phase === 'asking' ? { [`p${current}`]: kind === 'asking-locked' ? 8 : 7 } : {}
+  // Counts only for the picture being guessed: 7 have locked in, and Sofie too once she has; none yet in the suspense.
+  const tallies: Record<string, number> = phase === 'asking' && kind !== 'hop' ? { [`p${current}`]: kind === 'asking-locked' ? 8 : 7 } : {}
   const answers: Record<string, Record<string, AnswerPayload>> = {}
   ids.forEach((id, v) => {
     for (const n of revealed) {
@@ -959,16 +994,17 @@ function fusionStage(scene: FusionStageScene) {
       if (guess) answers[id] = { ...answers[id], [`p${n}`]: { choice: guess } }
     }
   })
-  if (kind === 'asking-locked') answers[SOFIE] = { ...answers[SOFIE], [`p${current}`]: { choice: sortedPair(BO, MAJA) } }
+  if (kind === 'asking-locked') {
+    const [a, b] = stagePair(current!)
+    answers[SOFIE] = { ...answers[SOFIE], [`p${current}`]: { choice: a < b ? [a, b] : [b, a] } }
+  }
 
   const wakeAt =
-    phase === 'showing'
-      ? publicState.showing!.endsAt
-      : phase === 'asking'
-        ? currentTimes!.endsAt + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS
-        : phase === 'reveal'
-          ? currentTimes!.at! + STAGE_REVEAL_HOLD_MS
-          : null
+    phase === 'asking'
+      ? currentTimes!.endsAt + STAGE_GRACE_MS + STAGE_WAKE_MARGIN_MS
+      : phase === 'reveal'
+        ? currentTimes!.at! + STAGE_REVEAL_HOLD_MS
+        : null
   return { kind, state, config, publicState, views, points: totals, prompts, tallies, answers, wakeAt, startedAt, finishedAt, winners: scorers.filter((id) => rankOfScorer(id) === 1) }
 }
 

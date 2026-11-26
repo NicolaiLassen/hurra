@@ -142,8 +142,10 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   players: Player[]
   /**
    * Everyone on the guest list, joined or still expected: settings may name
-   * guests before they come, e.g. who is in a picture. Store their ids; mark
-   * the expected ones ("not here yet"). docs/guest-list.md, section 9.
+   * guests before they come. Store their ids and mark the expected ones ("not
+   * here yet"), or, as Participant fusion and Lydspor do, take typed names
+   * and use the list only to suggest their spelling. docs/guest-list.md,
+   * section 9.
    */
   guests: readonly GameGuest[]
   /** Re-encodes and uploads to the public game-media bucket (hosts only, 5.8). */

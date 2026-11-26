@@ -64,9 +64,10 @@ describe('the TV scene for each fixture', () => {
     ['fixture=quiz-reveal', 'Quiz | Question 3 of 10'],
     ['fixture=quiz-leaderboard', 'Quiz | After question 3 of 10'],
     ['fixture=fusion-lobby', 'Who is fused? | 12 pictures, starting soon'],
-    ['fixture=fusion-showing', 'Who is fused? | Showing 3 of 12'],
-    ['fixture=fusion-showing-2', 'Who is fused? | Showing 2 of 2'],
+    ['fixture=fusion-start', 'Who is fused? | 12 pictures'],
+    ['fixture=fusion-start-2', 'Who is fused? | 2 pictures'],
     ['fixture=fusion-wall', 'Who is fused? | 3 of 12 revealed'],
+    ['fixture=fusion-hop', 'Who is fused? | Picture 4 of 12'],
     ['fixture=fusion-wall-40', 'Who is fused? | 15 of 40 revealed'],
     ['fixture=fusion-asking', 'Who is fused? | Picture 4 of 12'],
     ['fixture=fusion-asking-you', 'Who is fused? | Picture 4 of 12'],
@@ -216,8 +217,9 @@ describe('the TV scene for each fixture', () => {
   it("shows Participant fusion's phases on the stage, and an old round from before the update safely as its lobby", async () => {
     for (const [scene, phase] of [
       ['fusion-lobby', 'lobby'],
-      ['fusion-showing', 'showing'],
+      ['fusion-start', 'wall'],
       ['fusion-wall', 'wall'],
+      ['fusion-hop', 'asking'],
       ['fusion-asking', 'asking'],
       ['fusion-reveal', 'reveal'],
       ['fusion-crown', 'wall'],
@@ -254,7 +256,7 @@ describe('the TV scene for each fixture', () => {
   })
 
   it("speaks Participant fusion in the frame's language: no exclamation marks, no violet or glow, nothing under the floor", async () => {
-    for (const search of ['fixture=fusion-showing', 'fixture=fusion-wall', 'fixture=fusion-asking', 'fixture=fusion-reveal']) {
+    for (const search of ['fixture=fusion-start', 'fixture=fusion-wall', 'fixture=fusion-hop', 'fixture=fusion-asking', 'fixture=fusion-reveal']) {
       const page = await html(search)
       const stage = page.slice(page.indexOf('data-frame="stage"'), page.indexOf('data-frame="band"'))
       expect(stage, search).toContain('data-frame="stage"')

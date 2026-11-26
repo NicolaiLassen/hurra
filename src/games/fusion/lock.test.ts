@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isLockedIn, lockedPick, NO_LOCK, refusalOf, sendLock, type LockState } from '@/games/fusion/lock'
 import { askingCase } from '@/games/fusion/phoneLines'
-import { VOTE_SPEC } from '@/games/fusion/shapes'
+import { voteSpec } from '@/games/fusion/shapes'
 import type { SubmitResult } from '@/lib/types'
 
 const accepted = (choice: [string, string]): SubmitResult => ({ accepted: true, answer: { choice }, at: 1, ms: 1 })
@@ -74,8 +74,8 @@ describe('Lock in', () => {
     expect(lockedPick({ choice: ['bo'] }, NO_LOCK)).toBeNull()
   })
 
-  it('takes the first lock only: fusion opens each picture as a final prompt', () => {
-    expect(VOTE_SPEC).toMatchObject({ kind: 'choice', min: 2, max: 2, exclude_self: true, final: true })
+  it('takes the first lock only: fusion opens each picture as a final prompt of two names', () => {
+    expect(voteSpec(['Bo', 'Maja', 'Sofie'])).toMatchObject({ kind: 'choice', options: ['Bo', 'Maja', 'Sofie'], min: 2, max: 2, final: true })
   })
 })
 

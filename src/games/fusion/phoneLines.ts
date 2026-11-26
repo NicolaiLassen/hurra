@@ -3,9 +3,9 @@
 // functions: the screens only lay them out, and phoneLines.test.ts reads them.
 // No exclamation marks, no dashes, and only times the database holds.
 import { ordinal } from '@/components/phone/text'
-import type { PlayerId } from '@/games/core/Game'
 import type { LockState } from '@/games/fusion/lock'
 import {
+  countHits,
   listNames,
   plural,
   pointsFor,
@@ -24,16 +24,15 @@ export function lobbyWords(onStage: boolean, rules: FusionRules): Words {
   return {
     head: 'Two guests, one face.',
     line: onStage ? 'Watch the TV.' : 'It starts on the TV soon.',
-    body: `Each picture shows on the TV first. Then you guess them one by one here: pick the two guests in it and lock in. ${scoringLine(rules)}`,
+    body: `The pictures come up on the TV one at a time. For each one, pick the two names in it here and lock in. ${scoringLine(rules)}`,
   }
 }
 
-/** The showing: every picture on the TV, one at a time. `label` is the one on show now. */
-export function showingWords(label: string | null): Words {
+/** A picture asked, while the TV shows which one it is: the picker comes once it is in. */
+export function waitWords(onStage: boolean): Words {
   return {
-    head: 'Look at the TV.',
-    line: label === null ? null : `Now showing ${label}.`,
-    body: 'Look closely. You guess them one by one after the showing.',
+    head: onStage ? 'Look at the TV.' : 'The next picture is coming.',
+    line: 'The next picture is on its way. Then pick the two in it.',
   }
 }
 
@@ -64,22 +63,21 @@ export function placeParts(view: FusionPlayerView | null, anyRevealed: boolean):
 }
 
 /** How a revealed picture went for this guest. */
-export type Outcome = 'both' | 'one' | 'none' | 'noGuess' | 'you'
+export type Outcome = 'both' | 'one' | 'none' | 'noGuess'
 
 /**
- * A revealed picture's outcome for this guest: theirs when they are in it;
- * else from their view's hits (the logic's count), or, without them (a view
- * not caught up, a late joiner), from their own lock against the two.
+ * A revealed picture's outcome for this guest, whether they are in it or not:
+ * from their view's hits (the logic's count), or, without them (a view not
+ * caught up, a late joiner), from their own lock against the two names.
  */
 export function outcomeFor(
-  picture: Pick<FusionPublicPicture, 'n'> & { revealed: { people: readonly PlayerId[] } | null },
-  meId: PlayerId,
+  picture: Pick<FusionPublicPicture, 'n'> & { revealed: { names: readonly [string, string] } | null },
+  me: string,
   view: FusionPlayerView | null,
-  mine: readonly PlayerId[] | null,
+  mine: readonly string[] | null,
 ): Outcome {
-  const people = picture.revealed?.people ?? []
-  if (people.includes(meId)) return 'you'
-  const hits = view?.hits[picture.n] ?? (mine ? mine.filter((id) => people.includes(id)).length : undefined)
+  const names = picture.revealed?.names
+  const hits = view?.hits[picture.n] ?? (mine && names ? countHits(mine, names, me) : undefined)
   if (hits === undefined) return 'noGuess'
   return hits >= 2 ? 'both' : hits === 1 ? 'one' : 'none'
 }
@@ -89,7 +87,6 @@ const HEADS: Record<Outcome, string> = {
   one: 'You got one of the two.',
   none: 'Not this time.',
   noGuess: 'No guess this time.',
-  you: 'That was you.',
 }
 
 /** The reveal's head on this phone. */
@@ -100,7 +97,7 @@ const hitsOf = (outcome: Outcome) => (outcome === 'both' ? 2 : outcome === 'one'
 
 /** The points an outcome gave, by the round's rules. */
 export const outcomePoints = (outcome: Outcome, rules: Pick<FusionRules, 'perPerson' | 'bothBonus'>) =>
-  outcome === 'you' || outcome === 'noGuess' ? 0 : pointsFor(hitsOf(outcome), rules)
+  outcome === 'noGuess' ? 0 : pointsFor(hitsOf(outcome), rules)
 
 /** The outcome in one line, with the points when it scored: "You got both (+3).", "Not this time." */
 export function outcomeLine(outcome: Outcome, points: number): string {
@@ -112,23 +109,15 @@ export function outcomeLine(outcome: Outcome, points: number): string {
 const picked = (names: readonly string[]) => (names.length >= 2 ? `${names[0]} and ${names[1]}` : `${names[0]} and one more`)
 
 /**
- * A guest in the picture being guessed knows who is in it, so nothing they
- * lock counts. Their phone still shows the picker and Lock in, as every other
- * phone does, so a glance from the next seat can't tell: they pick any two,
- * and the lock stays on their phone.
- */
-export const IN_PICTURE_LINE = "This one is you. Keep a straight face and pick any two: it won't count."
-
-/**
  * The status line while a guest picks: how picking works, the picks so far,
  * the lock on its way, or why the database refused it (with "Try again." when
- * another lock can work). For the two in the picture, that it won't count.
+ * another lock can work). Everyone picks the same way, the two in the
+ * picture too: their own name is never offered.
  */
-export function pickLine(names: readonly string[], lock: LockState, inPicture = false): string {
+export function pickLine(names: readonly string[], lock: LockState): string {
   if (lock.kind === 'refused') return lock.message
   if (lock.kind === 'sending' || lock.kind === 'locked') return `Locking in ${picked(names)}…`
-  if (inPicture) return names.length === 0 ? IN_PICTURE_LINE : `${picked(names)}. It won't count.`
-  if (names.length === 0) return 'Pick two guests, then lock in. Only your first lock counts.'
+  if (names.length === 0) return 'Pick two names, then lock in. Only your first lock counts.'
   if (names.length === 1) return `${picked(names)}.`
   return `${picked(names)}. Lock in when you're sure.`
 }
@@ -146,11 +135,9 @@ export function lockedWords(names: readonly string[], onStage: boolean): Words {
 
 /**
  * The countdown ran out before this guest locked in; `refusal`, the
- * database's words when it was a lock that came too late. One of the two in
- * the picture sat it out.
+ * database's words when it was a lock that came too late.
  */
-export function timeUpWords(refusal: string | null = null, inPicture = false): Words {
-  if (inPicture) return { head: "Time's up.", line: 'You sat this one out.' }
+export function timeUpWords(refusal: string | null = null): Words {
   return { head: "Time's up.", line: refusal ? `${refusal} No guess from you this time.` : 'No guess from you this time.' }
 }
 
@@ -159,9 +146,8 @@ export type AskingCase = 'locked' | 'timeUp' | 'picking'
 
 /**
  * Which of the asking screens this phone shows: a lock in (or on its way)
- * shows as locked; time's up without one; else the picker. The two in the
- * picture get the same screens, their lock kept on the phone; a late joiner
- * (no view yet) is a voter.
+ * shows as locked; time's up without one; else the picker. A late joiner (no
+ * view yet) picks like anyone.
  */
 export function askingCase({ lockedIn, sending, over }: { lockedIn: boolean; sending: boolean; over: boolean }): AskingCase {
   if (lockedIn) return 'locked'
@@ -190,8 +176,6 @@ export function cardLine(
   switch (pub.phase) {
     case 'lobby':
       return 'Starts on the TV soon'
-    case 'showing':
-      return 'Showing on the TV'
     case 'wall':
       return revealed === 0 ? `${plural(total, 'picture')}. The guessing starts soon.` : `${revealed} of ${total} revealed. You have ${points}.`
     case 'asking':
@@ -200,7 +184,6 @@ export function cardLine(
       return `Guess ${label} now`
     case 'reveal':
       if (!reveal) return `${label} is revealed`
-      if (reveal.outcome === 'you') return `${label} was ${listNames(reveal.names)}.`
       return `${label} was ${listNames(reveal.names)}. ${outcomeLine(reveal.outcome, reveal.points)}`
     case 'done':
       return `Over. You have ${points}.`
