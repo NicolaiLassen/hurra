@@ -340,7 +340,7 @@ function JoinForm({
           if (!joining && name.trim()) void submit()
         }}
       >
-        <Label htmlFor="name">What should we call you?</Label>
+        <Label htmlFor="name">Type in your name</Label>
         <div className="flex items-center gap-3">
           {/* The token the guest is about to take: the listed name's when the gold button offers it. */}
           <NamePreview name={offer ?? name} />

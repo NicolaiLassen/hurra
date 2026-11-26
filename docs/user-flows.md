@@ -81,7 +81,7 @@ flowchart TD
   J0 -- "joining closed" --> CL1["Joining is closed<br/>lets you in as soon as the host reopens"]:::closed
   CL1 -. "host opens joining" .-> LIST
   J0 -- "joining open" --> LIST{{"Free names on the guest list?"}}:::gate
-  LIST -- "none, an error, or a party without a list" --> FORM["What should we call you?"]:::screen
+  LIST -- "none, an error, or a party without a list" --> FORM["Type in your name"]:::screen
   LIST -- "the host listed names" --> WHO["Who are you?<br/>the free names, a search from 9,<br/>I'm not on the list"]:::closed
   WHO -- "tap a name" --> CONF["You're Ana?<br/>Yes, I'm Ana or No, go back"]:::screen
   CONF -- "No, go back" --> WHO
