@@ -150,7 +150,7 @@ describe('fusion settings editor', () => {
     // The pickers fill their menus in a browser only, so the names listed can't be read from static HTML.
     for (const players of [host.players, []]) {
       const html = await render(component(fusion.ConfigEditor), { ...props([ana.id, zelda.id]), players })
-      expect(html).toContain('Who is in it?')
+      expect(html).toContain('Who is in it, each with their own photo?')
       expect(html).toContain('aria-label="First person in picture 1"')
       expect(html).not.toContain('Pick two different people')
       expect(html).not.toContain('Pick the second person')
