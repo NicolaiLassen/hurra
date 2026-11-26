@@ -864,7 +864,7 @@ describe('guests leaving and joining late', () => {
 })
 
 describe('a guest who leaves after the lock', () => {
-  it('keeps their locked answers in the state but drops them from the counts, the top 5 and the payout', () => {
+  it('drops their locked answers, and with them the counts, the top 5 and the payout', () => {
     const { p, ids } = lockedParty((p, ids) => {
       answer(p, 1, ids[0], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
       answer(p, 1, ids[1], 'Paper Lanterns', null, null)
@@ -873,12 +873,147 @@ describe('a guest who leaves after the lock', () => {
     expect(pub(p).reveal).toMatchObject({ counts: { event: 1, title: 2, singer: 1 }, scoring: 2 })
     p.removePlayer(ids[0])
     p.sync(GAME)
-    expect(Object.keys(stateOf(p).picks!).sort()).toEqual([ids[0], ids[1]].sort())
+    // Gone with them, so whoever takes a freed name next starts with nothing (docs/guest-list.md, 9.3).
+    expect(Object.keys(stateOf(p).picks!)).toEqual([ids[1]])
     expect(pub(p).reveal).toMatchObject({ counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
     expect(pub(p).top.map((row) => row.playerId)).toEqual([ids[1]])
     hostAct(p, { type: 'crown' })
     expect(p.game(GAME).winners).toEqual([ids[1]])
     expect(Object.keys(p.game(GAME).scores)).toEqual([ids[1]])
+  })
+})
+
+// The guest list (docs/guest-list.md, 9.3): "Doesn't play this game" and who is
+// in a photo may name guests the host listed who haven't joined. Only the
+// guests here answer and score; a name freed and taken again starts with nothing.
+
+describe('guests on the list who are not here', () => {
+  /** A party of `players` with Zelda, Ulrik, Quentin and Ximena listed and not joined, Lydspor set up from `make`. */
+  function listedParty(players: number, make: (listed: Record<'zelda' | 'ulrik' | 'quentin' | 'ximena', PlayerId>, ids: PlayerId[]) => Record<string, unknown>) {
+    const p = simulateParty({ games: [new SoundtrackGame()], players })
+    const ids = p.players.map((pl) => pl.id)
+    const listed = {
+      zelda: p.listGuest('Zelda').id,
+      ulrik: p.listGuest('Ulrik').id,
+      quentin: p.listGuest('Quentin').id,
+      ximena: p.listGuest('Ximena').id,
+    }
+    p.addGame(GAME, 'soundtrack', 'Lydspor', make(listed, ids))
+    expect(p.send(p.hostUser, { type: 'start', gameId: GAME }).kind).toBe('commit')
+    return { p, ids, listed }
+  }
+
+  it('sits a listed guest out from the moment they join, puts one in a photo once they join, and lets the ones who never come change nothing', () => {
+    const { p, ids, listed } = listedParty(4, (g, ids) =>
+      settings({ sitOut: [g.ulrik, g.ximena] }, [{ inPhoto: [g.zelda] }, { inPhoto: [g.quentin, ids[0]] }]),
+    )
+    expect(stateOf(p).sitOut).toEqual([listed.ulrik, listed.ximena])
+    expect(stateOf(p).inPhoto).toEqual([[listed.zelda], [listed.quentin, ids[0]], []])
+    // Only the guests here count: nobody listed is in the room's numbers.
+    expect(pub(p).playing).toBe(4)
+    playAll(p, 2)
+    p.claimGuest(listed.zelda) // in song 1's photo
+    p.claimGuest(listed.ximena) // sits out
+    p.sync(GAME)
+    expect(pub(p).playing).toBe(5)
+    expect(viewOf(p, listed.ximena)).toMatchObject({ sittingOut: true, songs: [] })
+    expect(viewOf(p, listed.zelda)).toMatchObject({ sittingOut: false, mine: null })
+    answer(p, 1, listed.zelda, 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1)) // her own photo: scores nothing on it
+    answer(p, 2, listed.zelda, 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
+    answer(p, 1, listed.ximena, 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1)) // sits out: scores nothing
+    answer(p, 1, ids[1], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
+    answer(p, 2, ids[1], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
+    answer(p, 2, ids[0], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2)) // in song 2's photo
+    lockNow(p)
+    reveal(p, 0)
+    expect(pub(p).reveal).toMatchObject({ n: 1, counts: { event: 1, title: 1, singer: 1 }, scoring: 2 })
+    expect(viewOf(p, listed.zelda).songs[0]).toMatchObject({ inPhoto: true, points: 0 })
+    reveal(p, 1)
+    // Quentin never came; Ana (ids[0]) is in song 2's photo with him: the song still counts as hers.
+    expect(pub(p).reveal).toMatchObject({ n: 2, counts: { event: 2, title: 2, singer: 2 }, scoring: 2 })
+    expect(viewOf(p, ids[0]).songs[1]).toMatchObject({ inPhoto: true, points: 0 })
+    hostAct(p, { type: 'crown' })
+    const scores = p.game(GAME).scores
+    expect(Object.keys(scores).sort()).toEqual([ids[1], listed.zelda].sort())
+    for (const id of [listed.ulrik, listed.quentin, listed.ximena]) expect(scores).not.toHaveProperty(id)
+    // Nothing about a listed guest reaches the room: not in the public state, not a view of their own.
+    const room = JSON.stringify(pub(p))
+    for (const id of [listed.ulrik, listed.quentin]) {
+      expect(room).not.toContain(id)
+      expect(p.game(GAME).views).not.toHaveProperty(id)
+    }
+  })
+
+  it('gives a freed name taken again nothing from the round: no picks, no review rows, no points', () => {
+    const p = simulateParty({ games: [new SoundtrackGame()], players: 4 })
+    const ids = p.players.map((pl) => pl.id)
+    const zelda = p.listGuest('Zelda')
+    p.claimGuest(zelda.id)
+    p.addGame(GAME, 'soundtrack', 'Lydspor', settings({ sitOut: [] }, [{ inPhoto: [zelda.id] }]))
+    p.send(p.hostUser, { type: 'start', gameId: GAME })
+    playAll(p)
+    answer(p, 2, zelda.id, 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
+    answer(p, 3, zelda.id, 'Old Oak', 'The Lanterns', rightPhoto(p, 3))
+    answer(p, 2, ids[0], 'Seven Ferries', null, null)
+    expect(lockNow(p).kind).toBe('commit')
+    expect(Object.keys(stateOf(p).picks!).sort()).toEqual([ids[0], zelda.id].sort())
+    p.tick(1000)
+    p.freeGuest(zelda.id) // the wrong phone had her name
+    p.sync(GAME)
+    expect(stateOf(p).picks).not.toHaveProperty(zelda.id)
+    p.tick(1000)
+    p.claimGuest(zelda.id) // the real Zelda takes it
+    p.sync(GAME)
+    const review = stateOf(p).review!
+    expect(review.flatMap((song) => [...song.title, ...song.singer]).flatMap((row) => row.players)).not.toContain(zelda.id)
+    // A row only she typed went with her: Coldwave, and all of song 3.
+    expect(review[1].singer).toEqual([])
+    expect(review[2]).toEqual({ title: [], singer: [] })
+    // The listed guest is still in song 1's photo: the id names her, not the phone.
+    expect(stateOf(p).inPhoto[0]).toEqual([zelda.id])
+    reveal(p, 0)
+    reveal(p, 1)
+    expect(pub(p).reveal).toMatchObject({ n: 2, counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
+    expect(viewOf(p, zelda.id)).toMatchObject({ sittingOut: false, mine: null, points: 0 })
+    reveal(p, 2)
+    hostAct(p, { type: 'crown' })
+    expect(Object.keys(p.game(GAME).scores)).toEqual([ids[0]])
+    expect(p.game(GAME).winners).toEqual([ids[0]])
+  })
+
+  it("drops a leaver's picks, review rows, top 5 points and own average, and keeps who sits out and who is in a photo", () => {
+    const { p, ids } = lockedParty(
+      (p, ids) => {
+        // In song 2's photo, so her own average comes at the crown.
+        hostAct(p, { type: 'setInPhoto', index: 1, playerIds: [ids[0]] })
+        answer(p, 1, ids[0], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
+        answer(p, 1, ids[1], 'Paper Lantern', 'Mira', rightPhoto(p, 1))
+        answer(p, 2, ids[1], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
+      },
+      { overrides: { sitOut: [] } },
+    )
+    reveal(p, 0)
+    hostAct(p, { type: 'standings', after: 1 })
+    reveal(p, 1)
+    reveal(p, 2)
+    hostAct(p, { type: 'crown' })
+    const done = stateOf(p)
+    expect(done.shownTop).toHaveProperty(ids[0])
+    expect(done.credits).toHaveProperty(ids[0])
+    const sat = { ...done, sitOut: [ids[0]] }
+    const left = game.onPlayerLeave(sat, ids[0])
+    expect(left.picks).not.toHaveProperty(ids[0])
+    expect(left.shownTop).not.toHaveProperty(ids[0])
+    expect(left.credits).not.toHaveProperty(ids[0])
+    const rows = left.review!.flatMap((song) => [...song.title, ...song.singer])
+    expect(rows.flatMap((row) => row.players)).not.toContain(ids[0])
+    expect(rows.every((row) => row.players.length > 0)).toBe(true)
+    // "Paper Lanterns" and "Mira Holm" were only hers; "Paper Lantern" and "Mira" stay with Bo.
+    expect(left.review![0].title.map((row) => row.text)).toEqual(['Paper Lantern'])
+    expect(left.sitOut).toEqual([ids[0]])
+    expect(left.inPhoto).toEqual(done.inPhoto)
+    // Someone with nothing in the round changes nothing.
+    expect(game.onPlayerLeave(done, 'never-here')).toBe(done)
   })
 })
 

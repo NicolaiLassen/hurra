@@ -322,13 +322,16 @@ flowchart TD
 The Guest list card sits under Players (on a phone, before the join card).
 Before the party the host adds every guest's name; a guest who joins taps
 theirs under Who are you?, and game settings, such as fusion's "Who is in
-it?", can name guests who haven't joined yet, marked "(not here yet)". The
+it?" and Lydspor's "Who's in this photo" and "Doesn't play this game", can
+name guests who haven't joined yet, marked "(not here yet)". The
 card lists only the guests still expected: joined guests are in Players. Free
 the name is for a guest who tapped the wrong name, from Players' menu or the
 award page; for another spelling (Ulle for Ulrik), Free and take off the list
 on Ulle. Remove also takes a guest off the list, and its confirm offers Free
 the name for a listed name. Remove everyone still expected undoes a paste that
-went wrong. A name on the list that never joins appears nowhere else. The words of each screen are in
+went wrong. A name on the list that never joins appears nowhere else but in
+Participant fusion, where a picture may be of them: phones can name them in a
+guess (under "Not here yet") and the reveal shows their name. The words of each screen are in
 [guest-list.md](guest-list.md), section 7.
 
 Each live game has its own card, so its controls sit with its title and its End

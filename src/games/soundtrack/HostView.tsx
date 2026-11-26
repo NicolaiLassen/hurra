@@ -67,13 +67,14 @@ const PHASE_WORD: Record<SoundtrackPhase, string> = {
  * Reveal song n, Show the top 5, Crown Lydspor), the steps that skip ahead in
  * the menu beside it behind a confirmation, and at each reveal the close
  * answers to accept while the story is told. Who sits out and who is in each
- * photo open from the menu, out of sight. Every action names its step, and
+ * photo open from the menu, out of sight, and pick from the whole guest list. Every action names its step, and
  * each button stays busy until the game has moved, so a double tap is a skip.
  */
 export default function HostView({
   session,
   game,
   players,
+  guests,
   publicState,
   state,
   config,
@@ -263,7 +264,7 @@ export default function HostView({
       <SitOutDialog
         open={dialog === 'sitOut'}
         onOpenChange={(open) => setDialog(open ? 'sitOut' : null)}
-        players={players}
+        guests={guests}
         current={Array.isArray(state.sitOut) ? state.sitOut : []}
         onSave={(playerIds: PlayerId[]) => act({ type: 'sitOut', playerIds })}
       />
@@ -271,7 +272,7 @@ export default function HostView({
         <InPhotoDialog
           open={dialog === 'inPhoto'}
           onOpenChange={(open) => setDialog(open ? 'inPhoto' : null)}
-          players={players}
+          guests={guests}
           songs={settings.songs}
           current={Array.isArray(state.inPhoto) ? state.inPhoto : []}
           mediaUrl={mediaUrl}

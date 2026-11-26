@@ -50,7 +50,7 @@ function shuffled<T>(items: readonly T[]): T[] {
  * in game_settings (hosts only), so no title reaches a phone before its
  * reveal.
  */
-export default function ConfigEditor({ config: raw, onChange, game, players, media }: ConfigEditorProps<SoundtrackGame>) {
+export default function ConfigEditor({ config: raw, onChange, game, guests, media }: ConfigEditorProps<SoundtrackGame>) {
   const config = readSettings(raw)
   const { problems, warnings } = checkConfig(config)
   const placed = placeIssues(problems, warnings, config.songs, config.extraPhotos.length)
@@ -175,7 +175,7 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
                 n={i + 1}
                 song={song}
                 count={config.songs.length}
-                players={players}
+                guests={guests}
                 photoUrl={url(song.photo)}
                 uploading={(uploading[`song:${i}`] ?? 0) > 0}
                 busy={busy}
@@ -380,7 +380,7 @@ export default function ConfigEditor({ config: raw, onChange, game, players, med
         </div>
         <div className="grid grid-cols-1 gap-1.5">
           <p className="text-sm font-medium">Doesn't play this game</p>
-          <PeopleField label="Doesn't play Lydspor" players={players} value={config.sitOut} empty="Everyone plays" onChange={(sitOut) => change({ sitOut })} />
+          <PeopleField label="Doesn't play Lydspor" guests={guests} value={config.sitOut} empty="Everyone plays" onChange={(sitOut) => change({ sitOut })} />
           <p className="text-sm text-paper-2">Usually the storyteller and whoever runs Spotify. You can change it on the night too.</p>
         </div>
       </Panel>

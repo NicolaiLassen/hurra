@@ -2,8 +2,7 @@ import { ImageIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import type { PlayerId } from '@/games/core/Game'
-import type { Player } from '@/lib/types'
+import type { GameGuest, PlayerId } from '@/games/core/Game'
 import { MAX_IN_PHOTO } from '../logic'
 import type { SoundtrackSong } from '../types'
 import PeopleField from './PeopleField'
@@ -18,13 +17,13 @@ const sameIds = (a: readonly PlayerId[], b: readonly PlayerId[]) => a.length ===
 export function SitOutDialog({
   open,
   onOpenChange,
-  players,
+  guests,
   current,
   onSave,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  players: readonly Player[]
+  guests: readonly GameGuest[]
   current: readonly PlayerId[]
   /** Sends the list; resolves once saved, rejects on a refusal (the host page shows it). */
   onSave: (ids: PlayerId[]) => Promise<void>
@@ -33,19 +32,19 @@ export function SitOutDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         {/* Mounted only while open, so it starts from the saved list each time. */}
-        <SitOutForm players={players} current={current} onSave={onSave} onDone={() => onOpenChange(false)} />
+        <SitOutForm guests={guests} current={current} onSave={onSave} onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   )
 }
 
 function SitOutForm({
-  players,
+  guests,
   current,
   onSave,
   onDone,
 }: {
-  players: readonly Player[]
+  guests: readonly GameGuest[]
   current: readonly PlayerId[]
   onSave: (ids: PlayerId[]) => Promise<void>
   onDone: () => void
@@ -74,7 +73,7 @@ function SitOutForm({
           the room's numbers.
         </DialogDescription>
       </DialogHeader>
-      <PeopleField label="Doesn't play Lydspor" players={players} value={draft} onChange={setDraft} empty="Everyone plays" disabled={saving} />
+      <PeopleField label="Doesn't play Lydspor" guests={guests} value={draft} onChange={setDraft} empty="Everyone plays" disabled={saving} />
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" size="lg" disabled={saving} onClick={onDone}>
           Cancel
@@ -95,7 +94,7 @@ function SitOutForm({
 export function InPhotoDialog({
   open,
   onOpenChange,
-  players,
+  guests,
   songs,
   current,
   mediaUrl,
@@ -103,7 +102,7 @@ export function InPhotoDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  players: readonly Player[]
+  guests: readonly GameGuest[]
   songs: readonly Pick<SoundtrackSong, 'photo' | 'caption'>[]
   /** Per song, as the game holds it now. */
   current: readonly (readonly PlayerId[])[]
@@ -126,7 +125,7 @@ export function InPhotoDialog({
               key={i}
               n={i + 1}
               song={song}
-              players={players}
+              guests={guests}
               current={current[i] ?? []}
               mediaUrl={mediaUrl}
               onSave={(ids) => onSave(i, ids)}
@@ -141,14 +140,14 @@ export function InPhotoDialog({
 function InPhotoRow({
   n,
   song,
-  players,
+  guests,
   current,
   mediaUrl,
   onSave,
 }: {
   n: number
   song: Pick<SoundtrackSong, 'photo' | 'caption'>
-  players: readonly Player[]
+  guests: readonly GameGuest[]
   current: readonly PlayerId[]
   mediaUrl: (path: string, size?: 'full' | 'thumb') => string
   onSave: (ids: PlayerId[]) => Promise<void>
@@ -180,7 +179,7 @@ function InPhotoRow({
         </p>
         <PeopleField
           label={`Who's in song ${n}'s photo`}
-          players={players}
+          guests={guests}
           value={value}
           onChange={setDraft}
           max={MAX_IN_PHOTO}

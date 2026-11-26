@@ -6,7 +6,8 @@ import { prerender } from 'react-dom/static'
 import { describe, expect, it } from 'vitest'
 import ConfigEditor from '@/games/soundtrack/ConfigEditor'
 import { sampleSettings } from '@/games/soundtrack/samples'
-import { fixtureSnapshot } from '@/lib/fixtures'
+import { FIXTURE_EXPECTED_NAMES, fixtureSnapshot } from '@/lib/fixtures'
+import { guestsOf } from '@/lib/guestList'
 
 async function render(view: ComponentType<never>, props: Record<string, unknown>): Promise<string> {
   const errors: unknown[] = []
@@ -33,6 +34,7 @@ describe("Lydspor's settings editor", () => {
       session: host.session,
       game: host.games[0],
       players: host.players,
+      guests: guestsOf(host),
       media: { upload: async () => 'a/b/c.jpg', url: (path: string) => `/media/${path}` },
     }
   }
@@ -60,5 +62,25 @@ describe("Lydspor's settings editor", () => {
     expect(html).toContain('value="0:48"')
     // Save settings is the gold step of the settings: the editor itself has none.
     expect(gold(html)).toBe(0)
+  })
+
+  it('names guests on the list who have not joined in a photo and among those who sit out, marked not here yet', async () => {
+    const host = fixtureSnapshot('lobby', 'host')
+    const guests = guestsOf(host)
+    const zelda = guests.find((g) => g.name === FIXTURE_EXPECTED_NAMES[0])!
+    const ulrik = guests.find((g) => g.name === FIXTURE_EXPECTED_NAMES[3])!
+    const ana = guests.find((g) => g.name === 'Ana')!
+    expect([zelda.joined, ulrik.joined, ana.joined]).toEqual([false, false, true])
+    const settings = sampleSettings({ players: host.players })
+    settings.songs[0] = { ...settings.songs[0], inPhoto: [ana.id, zelda.id] }
+    settings.sitOut = [ulrik.id]
+    const shown = text(await render(ConfigEditor as ComponentType<never>, editorProps(settings)))
+    // Each chip: the token (which names its guest too), the name and the mark; Ana joined, so none on hers.
+    expect(shown).toContain("Who's in this photo Ana Ana Zelda Zelda (not here yet) Add someone")
+    expect(shown).toContain("Doesn't play this game Ulrik Ulrik (not here yet) Add someone")
+    expect(shown).not.toContain('A guest who left')
+    // With nobody on the list yet, the pickers say how to get names in.
+    const empty = text(await render(ConfigEditor as ComponentType<never>, { ...editorProps(settings), guests: [] }))
+    expect(empty).toContain('Add guests to the guest list, or wait for them to join.')
   })
 })

@@ -135,4 +135,26 @@ describe('Lydspor through the real handler', () => {
     expect(await viewOf(gameId, ana)).toMatchObject({ final: { points: 4, place: 1, paid: 7 } })
     expect(await hostAct(gameId, accept)).toMatchObject({ status: 409, body: { code: 'not_running' } })
   }, 60_000)
+
+  it('starts with guests on the list who have not joined in a photo and sitting out, and counts only the guests here', async () => {
+    const [ana, bo] = guests
+    // On the guest list, not joined (docs/guest-list.md, 9.3).
+    const [zelda, ulrik] = (await world.listGuests(host, party, ['Zelda', 'Ulrik'])).added
+    const gameId = await world.game(host, party, 'soundtrack', 'Lydspor again', {
+      ...SETTINGS,
+      songs: SETTINGS.songs.map((song, i) => (i === 0 ? { ...song, inPhoto: [zelda.id, ana.playerId] } : song)),
+      sitOut: [ulrik.id, bo.playerId],
+    })
+    expect((await call(host, { type: 'start', gameId })).status).toBe(200)
+    const state = await stateOf(gameId)
+    expect(state.sitOut).toEqual([ulrik.id, bo.playerId])
+    expect(state.inPhoto[0]).toEqual([zelda.id, ana.playerId])
+    // The room counts the guests here who play: Ana and Cy, not Bo (sitting out) and nobody listed.
+    const room = await pubOf(gameId)
+    expect(room.playing).toBe(2)
+    expect(JSON.stringify(room)).not.toContain(zelda.id)
+    expect(JSON.stringify(room)).not.toContain(ulrik.id)
+    expect(await viewOf(gameId, bo)).toMatchObject({ sittingOut: true })
+    expect((await call(host, { type: 'end', gameId })).status).toBe(200)
+  }, 30_000)
 })

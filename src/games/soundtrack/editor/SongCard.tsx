@@ -1,7 +1,7 @@
 import { ArrowDownIcon, ArrowUpIcon, TrashIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { Player } from '@/lib/types'
+import type { GameGuest } from '@/games/core/Game'
 import { MAX_CAPTION, MAX_IN_PHOTO, MAX_NOTE } from '../logic'
 import { MAX_TYPED, type SoundtrackSong } from '../types'
 import PeopleField from '../host/PeopleField'
@@ -18,7 +18,7 @@ export default function SongCard({
   n,
   song,
   count,
-  players,
+  guests,
   photoUrl,
   uploading,
   busy,
@@ -33,7 +33,7 @@ export default function SongCard({
   song: SoundtrackSong
   /** Songs in the list, for Move down. */
   count: number
-  players: readonly Player[]
+  guests: readonly GameGuest[]
   photoUrl: string | null
   uploading: boolean
   /** An upload is running somewhere: the list keeps its order until it lands. */
@@ -134,7 +134,7 @@ export default function SongCard({
             <p className="text-sm font-medium">Who's in this photo</p>
             <PeopleField
               label={`Who's in song ${n}'s photo`}
-              players={players}
+              guests={guests}
               value={song.inPhoto}
               max={MAX_IN_PHOTO}
               empty="Nobody marked"

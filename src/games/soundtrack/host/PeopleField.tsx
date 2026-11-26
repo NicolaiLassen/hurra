@@ -3,9 +3,9 @@ import { useState } from 'react'
 import Avatar from '@/components/Avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { PlayerId } from '@/games/core/Game'
+import type { GameGuest, PlayerId } from '@/games/core/Game'
 import { foldName } from '@/lib/format'
-import type { Player } from '@/lib/types'
+import { sortNames } from '@/lib/guestList'
 import { cn } from '@/lib/utils'
 
 /** How many matches the search lists at once. */
@@ -14,13 +14,16 @@ const SHOWN = 8
 /**
  * A list of guests, for "Doesn't play this game" and "Who's in this photo"
  * (party-night 3.7): the picked guests as chips with their token and a
- * remove button, and Add someone, which searches the party by name (accents
- * and Danish letters folded, so "soren" finds Søren). Someone picked who has
- * left the party shows as "A guest who left", still removable.
+ * remove button, and Add someone, which searches the guest list by name
+ * (accents and Danish letters folded, so "soren" finds Søren). It lists the
+ * whole guest list, so the host can set it up before the party: a guest who
+ * hasn't joined is marked "(not here yet)", in the list and on their chip
+ * (docs/guest-list.md, 9.3). Someone picked who has left the list shows as
+ * "A guest who left", still removable.
  */
 export default function PeopleField({
   label,
-  players,
+  guests,
   value,
   onChange,
   max,
@@ -28,7 +31,8 @@ export default function PeopleField({
   disabled = false,
 }: {
   label: string
-  players: readonly Player[]
+  /** Everyone on the guest list, joined or not. */
+  guests: readonly GameGuest[]
   value: readonly PlayerId[]
   onChange: (ids: PlayerId[]) => void
   /** At most this many. */
@@ -42,10 +46,8 @@ export default function PeopleField({
   const full = max !== undefined && value.length >= max
   const picked = new Set(value)
   const folded = foldName(query)
-  const matches = [...players]
-    .filter((p) => !picked.has(p.id) && (folded === '' || foldName(p.name).includes(folded)))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const nameOf = (id: PlayerId) => players.find((p) => p.id === id)?.name ?? null
+  const matches = sortNames(guests.filter((g) => !picked.has(g.id) && (folded === '' || foldName(g.name).includes(folded))))
+  const guestOf = (id: PlayerId) => guests.find((g) => g.id === id) ?? null
 
   function add(id: PlayerId) {
     onChange([...value, id])
@@ -58,11 +60,15 @@ export default function PeopleField({
       <ul className="flex flex-wrap items-center gap-1.5">
         {value.length === 0 && <li className="text-sm text-paper-2">{empty}</li>}
         {value.map((id) => {
-          const name = nameOf(id)
+          const guest = guestOf(id)
+          const name = guest?.name ?? null
           return (
             <li key={id} className="flex h-8 items-center gap-1.5 rounded-control bg-overlay pr-0.5 pl-1">
               {name ? <Avatar name={name} playerId={id} className="size-6" /> : null}
-              <span className={cn('max-w-40 truncate text-sm font-bold', !name && 'pl-1.5 text-paper-2')}>{name ?? 'A guest who left'}</span>
+              <span className={cn('max-w-56 truncate text-sm font-bold', !name && 'pl-1.5 text-paper-2')}>
+                {name ?? 'A guest who left'}
+                {guest && !guest.joined && <NotHereYet />}
+              </span>
               <Button
                 type="button"
                 variant="ghost"
@@ -82,7 +88,7 @@ export default function PeopleField({
               type="button"
               variant="outline"
               size="sm"
-              disabled={disabled || full || players.length === 0}
+              disabled={disabled || full || guests.length === 0}
               onClick={() => setAdding(true)}
             >
               <PlusIcon />
@@ -91,7 +97,7 @@ export default function PeopleField({
           </li>
         )}
       </ul>
-      {players.length === 0 && <p className="text-sm text-paper-2">Guests show up here once they join.</p>}
+      {guests.length === 0 && <p className="text-sm text-paper-2">Add guests to the guest list, or wait for them to join.</p>}
       {adding && (
         <div className="grid grid-cols-1 gap-1.5">
           <div className="flex items-center gap-2">
@@ -140,7 +146,10 @@ export default function PeopleField({
                   onClick={() => add(p.id)}
                 >
                   <Avatar name={p.name} playerId={p.id} className="size-6" />
-                  <span className="min-w-0 truncate">{p.name}</span>
+                  <span className="min-w-0 truncate">
+                    {p.name}
+                    {!p.joined && <NotHereYet />}
+                  </span>
                 </button>
               </li>
             ))}
@@ -152,5 +161,15 @@ export default function PeopleField({
         </div>
       )}
     </div>
+  )
+}
+
+/** The mark of a guest on the list who hasn't joined yet. */
+function NotHereYet() {
+  return (
+    <>
+      {' '}
+      <span className="font-medium text-paper-3">(not here yet)</span>
+    </>
   )
 }

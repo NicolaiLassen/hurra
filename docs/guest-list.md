@@ -6,7 +6,10 @@ you?" instead of typing it. Game settings can name guests who have not joined
 yet, so the host sets up fusion's pictures (and the photo and song game's
 photos and "Doesn't play this game") at home. Everywhere guests play, only
 guests who have joined count: a name on the list that never joined never
-appears on the TV, on a phone, in a game, in the standings or in the recap.
+appears on the TV, on a phone, in a game, in the standings or in the recap,
+with one exception by design: Participant fusion, where a picture may be of
+them, so phones can name them in a guess and the reveal shows their name
+(9.2).
 
 Why, in the owner's words about Participant fusion's "Who is in it?" picker,
 which listed only guests who had joined: "I need to add my guests beforehand,
@@ -767,6 +770,19 @@ and `fusion.integration.test.ts`. The plan it followed:
   scores lack the id and the picture still names the guest.
 
 ### 9.3 The photo and song game (lydspor/game)
+
+**Applied on `party/integration` (26 Nov).** Lydspor's logic never checked
+`sitOut` or `inPhoto` against the players, so it starts with expected guests
+in either as it is. Its people pickers (`PeopleField`, in the settings and in
+the host's Who sits out and Who's in each photo) list `guests`, sorted the
+Danish way, an expected guest marked "(not here yet)" in the list and on the
+chip. No reveal, TV screen or phone names anyone in a photo, so no name from
+the list reaches the room. `onPlayerLeave` drops the id from `picks`, every
+`review` row (dropping a row left with nobody), `shownTop` and `credits`; one
+existing test changed with it, as intended: a guest removed after the lock no
+longer keeps their picks in the state. Tests: `soundtrack/logic.test.ts`
+("guests on the list who are not here"), `editor/ConfigEditor.test.ts` and
+`soundtrack.integration.test.ts`. The plan it followed:
 
 - **"Doesn't play this game"** (`sitOut`) may name expected guests. One who
   joins later sits out from the moment they join; one who never comes changes

@@ -4090,7 +4090,13 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   numbers 0 to 5, default event 2, title 1, singer 1); `lastCallSeconds` (20
   to 180, default 60); `standingsEvery` (default 4); `hints` (captions under
   the photos while songs play, default off); `boardMax` (1 to 25, default 20);
-  `intro`, `storyteller` and `sitOut`. `checkConfig(input)` returns the cleaned
+  `intro`, `storyteller` and `sitOut`. **Changed for the guest list (26
+  Nov):** `sitOut` and each song's `inPhoto` may name anyone on the host's
+  guest list, joined or not; the editor and the host's dialogs list the whole
+  list, an expected guest marked "(not here yet)". They name the listed guest:
+  one who joins later sits out or is in the photo from then on, and one who
+  never comes changes nothing ([guest-list.md, 9.3](guest-list.md#93-the-photo-and-song-game-lydsporgame)).
+  `checkConfig(input)` returns the cleaned
   settings with every problem, in the order a host fixes them, and every
   warning (fewer than 4 extra photos, a long caption, a shared singer, a short
   title or singer, two near titles, an extra answer that counts already, a
@@ -4185,11 +4191,19 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   count each own average, as `credit`, so it ranks as the crown will), and
   the final rows after the crown. Never a title,
   singer or caption before its reveal, never a typed answer, never who is in
-  a photo. **playerView**: sitting out, the guest's own locked answers from the
+  a photo, and nothing about a guest on the list who hasn't joined (no reveal
+  names anyone in a photo, so none needs a name from the list). **playerView**: sitting out, the guest's own locked answers from the
   lock on, how each revealed song went (`exact`, `typo`, `accepted`, `close`,
   `wrong` or `none` per typed part; `right`, `wrong`, `doubled` or `none` for
   the event), their points and place (with the own average once every song
   played is revealed, as `credit`), and their final row.
+- **Guests leaving** (`onPlayerLeave`, 26 Nov): a guest removed, or whose
+  name the host frees, takes their answers with them: their `picks`, their
+  place in every `review` row (a row left with nobody goes), their points at
+  the last top 5 (`shownTop`) and their own average (`credits`), so whoever
+  takes a freed name next starts with nothing. `sitOut` and `inPhoto` keep the
+  id: it names the listed guest, not the phone. Before the lock their answers
+  are prompt answers, which the database deletes with them.
 - **recap** (finished rounds, revealed songs only): "Lydspor champion:
   {names}", the best known song and the hardest, with how many placed the
   photo and typed the title and the singer. Never a typed answer.
@@ -4227,7 +4241,7 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
 | GAME-inperson | The contract; `recap`; the default winners after End (the top of the awards, nobody without awards). |
 | GAME-quiz | `parseConfig` refusals; neither the public state nor a prompt spec holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; a duplicated Next opens one question; Reveal now racing the timer scores once with no error; a stale Show the leaderboard is skipped; 45 answers through `simulateParty`; finish and winners (nobody when nobody scored); the recap of an early-ended quiz names no unasked question; the contract; the bot playing a full quiz through `simulateParty`. |
 | GAME-fusion | `shapes.test.ts`: the readers (new states, the background version's saves), the strap's words, the showing's clock, the counts line, the lock-in total. `logic.test.ts`: settings and their ranges; setup opens no prompt; the showing and its timer; the wall from each phase, stale steps skipped; asking (the spec, the deadline, any order, a double tap, another while asking, a missing key); the reveal by Reveal now and by the timer alike; people in a picture never score, even with a crafted lock; the timer without locks closes the guess and changes nothing; every race of 8.4 through `simulateParty`; no key in any public state or other guest's view before its reveal; finish and End; the background version's saves; the recap; the contract; the bot. `host.test.ts`: the host's steps per phase. `fusion.integration.test.ts`: one picture through the real engine, revealed by the TV's sync. |
-| GAME-soundtrack (Lydspor, 25 Nov) | `match.test.ts`: the spec's example table of 70 invented rows, row for row, plus the distance, the allowance and the grouping key. `logic.test.ts`: every settings refusal and warning; the deal and the prompts (text with `max_length` 60, the photo with `none`, none final, no answer in a spec); Play in order and its double tap; the last call, More time and the lock in two timer steps (and a list still missing); Lock now and its races with the timer; the review (grouping, the most common spelling, the order); reveals in order; Accept and Undo with the rescore of counts, points, top 5 and payout, every refusal, refused after the crown; the guard, a take, a shared singer, the own average, the scaled payout, the top 5's gains; sit out; guests leaving before and after the lock and joining late; no secret in public or in another guest's view before its reveal; the recap; the contract over an example and over the bot's round; a party of 24 played by the bot to the crown. `samples.test.ts`: the seven fixture scenes and their secrets. |
+| GAME-soundtrack (Lydspor, 25 Nov) | `match.test.ts`: the spec's example table of 70 invented rows, row for row, plus the distance, the allowance and the grouping key. `logic.test.ts`: every settings refusal and warning; the deal and the prompts (text with `max_length` 60, the photo with `none`, none final, no answer in a spec); Play in order and its double tap; the last call, More time and the lock in two timer steps (and a list still missing); Lock now and its races with the timer; the review (grouping, the most common spelling, the order); reveals in order; Accept and Undo with the rescore of counts, points, top 5 and payout, every refusal, refused after the crown; the guard, a take, a shared singer, the own average, the scaled payout, the top 5's gains; sit out; guests leaving before and after the lock and joining late; guests on the list who haven't joined sitting out and in a photo, and a freed name taken again after the lock (26 Nov); no secret in public or in another guest's view before its reveal; the recap; the contract over an example and over the bot's round; a party of 24 played by the bot to the crown. `samples.test.ts`: the seven fixture scenes and their secrets. |
 | PHONE, TV, HOST | Unit tests for any pure helper they add. Screens are checked against the fixtures (5.11) and then on the local stack; TV also runs the fit checks in 10.4. |
 
 **Changed after the switch-over (15 Nov):** the TV's sound effects volume has

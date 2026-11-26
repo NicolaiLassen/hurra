@@ -19,6 +19,12 @@
 // start), the titles and singers in the host-only settings, and every typed
 // answer: a song reaches publicState only at its reveal, and a typed answer
 // never does. Relative imports only: the Netlify function bundles this file.
+//
+// "Doesn't play this game" and who is in each photo may name guests on the
+// host's guest list who haven't joined (docs/guest-list.md, 9.3): they name
+// the listed guest, so one who joins later sits out or is in the photo from
+// then on, and one who never comes changes nothing. Only the guests here
+// answer and score. No reveal names anyone in a photo.
 import { shuffle } from '../core/context'
 import {
   Game,
@@ -787,6 +793,34 @@ export class SoundtrackGame extends Game<
     return { ...state, closingAt: ctx.now }
   }
 
+  /**
+   * Someone left the party: removed, or the host freed their name, which
+   * someone else may take next under the same id (docs/guest-list.md, 9.3).
+   * Their answers go: their picks, their place in every review row (a row left
+   * with nobody goes), their points at the last top 5 and their own average.
+   * `sitOut` and `inPhoto` keep the id: they name the listed guest, not the
+   * phone. Before the lock their answers are prompt answers, which the
+   * database deletes with them.
+   */
+  onPlayerLeave(state: SoundtrackState, playerId: PlayerId): SoundtrackState {
+    const picked = state.picks !== null && Object.hasOwn(state.picks, playerId)
+    const reviewed = (state.review ?? []).some((song) => [...song.title, ...song.singer].some((row) => row.players.includes(playerId)))
+    const shown = Object.hasOwn(state.shownTop, playerId)
+    const credited = state.credits !== null && Object.hasOwn(state.credits, playerId)
+    if (!picked && !reviewed && !shown && !credited) return state
+    const rows = (list: ReviewRow[]) =>
+      list
+        .map((row) => (row.players.includes(playerId) ? { ...row, players: row.players.filter((id) => id !== playerId) } : row))
+        .filter((row) => row.players.length > 0)
+    return {
+      ...state,
+      picks: state.picks === null ? null : without(state.picks, playerId),
+      review: state.review === null ? null : state.review.map((song) => ({ title: rows(song.title), singer: rows(song.singer) })),
+      shownTop: without(state.shownTop, playerId),
+      credits: state.credits === null ? null : without(state.credits, playerId),
+    }
+  }
+
   isFinished(state: SoundtrackState): boolean {
     return state.phase === 'done'
   }
@@ -1097,6 +1131,11 @@ function pointsNow(state: SoundtrackState, info: Pick<GameInfo<SoundtrackConfig>
     if (earned !== 0) points[id] = earned
   }
   return points
+}
+
+/** A record without one id's entry. */
+function without<T>(record: Readonly<Record<PlayerId, T>>, id: PlayerId): Record<PlayerId, T> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => key !== id))
 }
 
 /** The same ids, whatever their order. */
