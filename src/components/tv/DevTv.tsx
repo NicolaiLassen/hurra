@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router'
 import NotFound from '@/pages/NotFound'
 import { devTv, NEWS, TV_SCENES } from '@/components/tv/devFixture'
 import PairingScreen from '@/components/tv/PairingScreen'
+import { PICTURE_PARAM } from '@/components/tv/picture'
 import TvScreen from '@/components/tv/TvScreen'
 import { FIXTURE_SCENES, FIXTURE_SESSION_ID } from '@/lib/fixtures'
 import { LiveSessionProvider } from '@/lib/useLive'
@@ -17,10 +18,15 @@ const SAMPLE_CODE = 'TV2026'
  */
 export default function DevTv() {
   const [search] = useSearchParams()
-  return <Fixture key={search.toString()} search={search} />
+  // The picture is the TV page's (picture.ts): taking ?picture= off the address never restarts the scene.
+  const params = new URLSearchParams(search)
+  params.delete(PICTURE_PARAM)
+  const scene = params.toString()
+  return <Fixture key={scene} scene={scene} />
 }
 
-function Fixture({ search }: { search: URLSearchParams }) {
+function Fixture({ scene }: { scene: string }) {
+  const search = useMemo(() => new URLSearchParams(scene), [scene])
   const setup = useMemo(() => devTv(search), [search])
   const [now, setNow] = useState<'first' | 'later' | 'paired'>('first')
 

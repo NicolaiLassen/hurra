@@ -279,10 +279,22 @@ edges never cuts anything off. Games play inside it and get it for free.
   spotlight, no wash.
 - **The corner** (bottom left, in the gutter under the band) is the laptop's,
   not the programme's: full screen, sound ("Click for sound" until the
-  browser lets the TV play any) and the connection as a word ("Live",
-  "Reconnecting"), never a coloured dot. It is quiet in `paper-3` at a small
-  size and sits outside the safe area: the one place on the TV under the
-  28 px floor, because nobody watches it from the sofa.
+  browser lets the TV play any), the picture (a sun, "Brighter picture" to a
+  screen reader, pressed while it is on) and the connection as a word
+  ("Live", "Reconnecting"), never a coloured dot. It is quiet in `paper-3` at
+  a small size and sits outside the safe area: the one place on the TV under
+  the 28 px floor, because nobody watches it from the sofa.
+- **Brighter picture**, for a TV that crushes dark tones into black: the same
+  look with its dark end raised, Standard by default. The TV page sets
+  `data-tv-picture="bright"` on the document's root
+  ([picture.ts](../src/components/tv/picture.ts)) and src/index.css lifts
+  six tokens under it, so no screen knows: `ground` `#2a2520`, `raised`
+  `#443d35`, `overlay` `#5c5247`, `rule` `#706455`, `paper-2` `#dfd4c3`
+  (10.4 to 1) and `paper-3` `#c6bba7` (8.0 to 1). Panels stand 1.4, 2.0 and
+  2.6 to 1 off the ground (standard: 1.1, 1.2 and 1.5). Gold, pink, the key,
+  the guest colours, paper, ink and photos stay as they are. Each TV, Show
+  the TV here's tab included, remembers its picture (localStorage,
+  `hurra:tv:picture`), and `?picture=bright` on its address sets it.
 
 ## The quiz on the TV
 
@@ -677,7 +689,10 @@ screen has moved.
   part strength mixes the token instead:
   `color-mix(in_oklab,var(--color-gold)_60%,transparent)`. Its short allow
   lists give each exception's reason (a canvas fill, a chart's palette, the
-  dev builds' drawn faces). A new colour is a new token in index.css.
+  dev builds' drawn faces). A new colour is a new token in index.css. It
+  also holds the Brighter picture to its job: only the six dark tokens, each
+  surface lighter, warm and a bigger step off the ground than in Standard,
+  and `paper-2` and `paper-3` at 7 to 1 or more on its ground.
 - **[src/lib/utils.test.ts](../src/lib/utils.test.ts):** `cn` merges classes
   by tailwind-merge's rules, which know only Tailwind's own scales. Untaught,
   `cn('text-paper', 'text-tv-question')` keeps only the size. A new size,

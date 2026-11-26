@@ -497,13 +497,18 @@ exclamation marks. Phones show the same news as a toast (the shared callout,
 an optional detail line.
 
 The corner, under the band outside the safe area, holds the full screen
-button, the sound toggle ("Click for sound" while the browser blocks audio)
-and the connection as a word, Live or Reconnecting. The standings fit any
-party: the leader's column (the hero, the next five places and a line on how
-the last game moved the places) beside the field of rows, measured in fit.ts,
-with the join block under the field (the QR code on paper, the code and the
-page's own address) or its short form, the code over the address, when the
-rows need the room.
+button, the sound toggle ("Click for sound" while the browser blocks audio),
+the picture toggle and the connection as a word, Live or Reconnecting. The
+picture is Standard until someone picks Brighter picture there, for a TV
+that shows the dark ground, its panels and the secondary text as black; the
+TV then remembers it. The host can set it from the link too:
+`/tv/HURRA30?picture=bright` on the TV laptop, or on Show the TV here's tab.
+
+The standings fit any party: the leader's column (the hero, the next five
+places and a line on how the last game moved the places) beside the field of
+rows, measured in fit.ts, with the join block under the field (the QR code on
+paper, the code and the page's own address) or its short form, the code over
+the address, when the rows need the room.
 
 Lydspor on the TV is silent from Play song 1 to the crown: while a song plays
 it shows the wall of photos A to L and how many have typed a title, a singer

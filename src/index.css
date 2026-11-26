@@ -175,6 +175,24 @@
   --confetti-pink: var(--color-pink); --confetti-teal: var(--color-guest-teal); --confetti-violet: var(--color-guest-violet);
 }
 
+/* Brighter picture (docs/identity.md, The TV's frame): for a TV that crushes
+   dark tones, where the ground, the panels on it and the secondary text sink
+   into one black. The TV page sets data-tv-picture="bright" on the document's
+   root while it is open (src/components/tv/picture.ts), so the aliases above
+   follow and no component knows. The same look with its dark end raised:
+   a lighter ground, panels and rules a bigger step apart than in the
+   standard picture, and secondary text 7 to 1 or more on the ground. Gold, pink, the key, the guest
+   colours, paper and ink stay as they are; src/lib/tokens.test.ts holds it to
+   that and to its contrast. */
+:root[data-tv-picture='bright'] {
+  --color-ground: #2a2520;
+  --color-raised: #443d35;
+  --color-overlay: #5c5247;
+  --color-rule: #706455;
+  --color-paper-2: #dfd4c3;  /* 10.4 to 1 on its ground */
+  --color-paper-3: #c6bba7;  /* 8.0 to 1 on its ground */
+}
+
 /* Type styles as utilities. Each sets its own weight, so don't pair them with font-bold and the like. */
 @utility tv-num { font-family: var(--font-display); font-stretch: 62%; font-weight: 800; font-variant-numeric: tabular-nums; }
 @utility on-air { font-family: var(--font-display); font-stretch: 125%; font-weight: 900; text-transform: uppercase; }

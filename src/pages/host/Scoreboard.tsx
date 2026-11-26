@@ -4,6 +4,7 @@ import { Loading } from '@/components/layout'
 import QueryGate from '@/components/QueryGate'
 import PairingScreen from '@/components/tv/PairingScreen'
 import { OTHER_PARTY } from '@/components/tv/pairing'
+import { useTvPicture } from '@/components/tv/picture'
 import TvScreen from '@/components/tv/TvScreen'
 import { preloadTvScreens } from '@/games/registry'
 import { ensureSignedIn, isHost } from '@/lib/auth'
@@ -27,11 +28,13 @@ const DevTv = import.meta.env.DEV ? lazy(() => import('@/components/tv/DevTv')) 
  * host pairs it, it shows the pairing screen; a host's own browser skips
  * pairing and says "Host preview", except with ?mirror=1: the host page's "Show
  * the TV here" for when no second device can be paired, a tab the host casts or
- * moves to the TV.
+ * moves to the TV. Every TV, that tab included, shows its own picture,
+ * Standard or Brighter (picture.ts), set in the corner or with ?picture=bright.
  */
 export default function Scoreboard() {
   const joinCode = (useParams().joinCode ?? '').trim().toUpperCase()
   const [search] = useSearchParams()
+  useTvPicture()
   if (DevTv && search.has('fixture')) {
     return (
       <Suspense fallback={<Loading />}>

@@ -97,7 +97,7 @@ public `game-media` bucket (hosts upload; JPEG only).
 | `/join/:code`       | Guest  | Join QR target: Who are you? from the guest list, or a typed name     |
 | `/play/:code`       | Guest  | Points, the games (main card, Also running), Your night, their QR     |
 | `/p/:playerCode`    | Anyone | Player QR target: the award page for hosts, into the game for guests  |
-| `/tv/:code`         | TV     | The TV: pairs with a code; `?mirror=1` is the host's own TV tab       |
+| `/tv/:code`         | TV     | The TV: pairs with a code; `?mirror=1` is the host's own TV tab, `?picture=bright` the Brighter picture |
 | `/host`             | Host   | Sessions                                                              |
 | `/host/s/:id`       | Host   | Control room: on the TV now, live games, the program, players, the guest list, join |
 | `/host/s/:id/recap` | Host   | The recap of the night: preview, publish, show on the TV, download    |
