@@ -516,11 +516,11 @@ export async function freeGuest(sessionId: string, playerId: string): Promise<vo
 
 /**
  * Removes a name nobody has taken from the guest list. Never a guest who
- * joined meanwhile: Players' Remove is for them.
+ * joined meanwhile: the Remove on their row (Here) is for them.
  */
 export async function removeGuest(playerId: string): Promise<void> {
   const result = await supabase.from('players').delete().eq('id', playerId).is('joined_at', null).select('id')
-  expectRow(result, "That name isn't waiting on the list any more. If they just joined, they're in Players.")
+  expectRow(result, "That name isn't waiting on the list any more. If they just joined, it's marked Here now.")
 }
 
 /**

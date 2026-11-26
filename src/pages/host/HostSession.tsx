@@ -3,13 +3,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import GameSettings from '@/components/host/GameSettings'
 import GamesPanel from '@/components/host/GamesPanel'
-import GuestListPanel from '@/components/host/GuestListPanel'
+import GuestsPanel from '@/components/host/GuestsPanel'
 import { useHostCall } from '@/components/host/hostCalls'
 import JoinCard from '@/components/host/JoinCard'
 import LiveDot from '@/components/host/LiveDot'
 import LiveGameCard from '@/components/host/LiveGameCard'
 import PairTvButton from '@/components/host/PairTvButton'
-import PlayersPanel from '@/components/host/PlayersPanel'
 import { ProgramSettingsProvider, type SettingsSource } from '@/components/host/programSettings'
 import { arrangeGames, partyLine } from '@/components/host/scene'
 import StagePanel from '@/components/host/StagePanel'
@@ -30,8 +29,8 @@ import { SessionNotFound } from '@/pages/NotFound'
 
 /**
  * The host control room (docs/engine-v2.md, 7.3): what is on the TV, every
- * live game with its own controls, the night's program, the guests, the
- * guest list and the join card, live from the party's snapshot. A game's
+ * live game with its own controls, the night's program, the guests (here
+ * and not yet, in one list) and the join card, live from the party's snapshot. A game's
  * settings open as a page of their own over it (`?settings=<game id>`). In dev
  * builds `?fixture=<scene>` shows a sample party instead (5.11), with the
  * scene's own settings.
@@ -231,10 +230,9 @@ function ControlRoom({ snapshot, live }: { snapshot: Snapshot; live: boolean }) 
             <GamesPanel snapshot={snapshot} program={program} archived={archived} onOpenSettings={settings.open} />
           </div>
           <div className="grid min-w-0 grid-cols-1 gap-6">
-            {/* First beside the games on a laptop; last on a phone, under the guests and the guest list. */}
+            {/* First beside the games on a laptop; last on a phone, under the guests. */}
             <JoinCard session={session} className="order-last lg:order-first" />
-            <PlayersPanel snapshot={snapshot} />
-            <GuestListPanel snapshot={snapshot} />
+            <GuestsPanel snapshot={snapshot} />
           </div>
         </div>
       </Screen>

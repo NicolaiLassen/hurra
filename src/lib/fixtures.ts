@@ -146,8 +146,17 @@ const EXPECTED_GUESTS: ListedGuest[] = FIXTURE_EXPECTED_NAMES.map((name, i) => (
   created_at: FIXTURE_NOW - (170 - i) * MIN,
 }))
 
+/** The guest who joined by typing their name: not on the list the host made. */
+const TYPED_NAME = 'Oscar'
+
 const GUESTS: ListedGuest[] = [
-  ...PLAYERS.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })),
+  // Listed a week before the party, then taken as each joined; Oscar typed his name, so his row was made as he joined.
+  ...PLAYERS.map((p) => ({
+    id: p.id,
+    name: p.name,
+    joined_at: p.joined_at!,
+    created_at: p.name === TYPED_NAME ? p.joined_at! : FIXTURE_NOW - 7 * 24 * 60 * MIN,
+  })),
   ...EXPECTED_GUESTS,
 ].sort((a, b) => a.name.localeCompare(b.name))
 

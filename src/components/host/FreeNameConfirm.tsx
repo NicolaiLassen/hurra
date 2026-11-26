@@ -9,8 +9,8 @@ import type { Snapshot } from '@/lib/types'
 export type FreeingPlayer = { id: string; name: string; points: number }
 
 /**
- * Free the name (docs/guest-list.md, 7.5), from Players' menu and the award
- * page: the name goes back on the guest list as still expected, and the phone
+ * Free the name (docs/guest-list.md, 7.5), from a guest's menu in the list and
+ * the award page: the name goes back on the guest list as not here yet, and the phone
  * that has it asks Who are you? again. A name the guest typed (never listed)
  * also gets "Free and take off the list", for another spelling of a listed
  * name (Mads H for Mads Holm), so the stray spelling never shows on phones.

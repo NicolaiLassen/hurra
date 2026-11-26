@@ -4,7 +4,7 @@ import { inPerson } from '@/games/in-person'
 import { quiz } from '@/games/quiz'
 import { soundtrack } from '@/games/soundtrack'
 import type { GameGuest } from '@/games/core/Game'
-import type { GameModule, SetupStatus } from '@/games/types'
+import type { GameModule, ProfileBadge, SetupStatus } from '@/games/types'
 import type { SessionGame } from '@/lib/types'
 
 // Every game's screens. Register new games here, their logic in logic.ts and
@@ -47,6 +47,14 @@ export function knockedOutIds(games: readonly SessionGame[], modules: readonly G
     }
   }
   return out
+}
+
+/** The badges every game has put on a player's profile (GameModule.profileBadges), in the registry's order. */
+export function profileBadgesOf(profile: Readonly<Record<string, unknown>> | undefined, modules: readonly GameModule[] = gameModules): ProfileBadge[] {
+  return modules.flatMap((m) => {
+    const data = profile?.[m.logic.type]
+    return data && m.profileBadges ? m.profileBadges(data as Record<string, unknown>) : []
+  })
 }
 
 /** A game's settings as its round would start with them: the saved ones over its defaults, as the engine merges them. */

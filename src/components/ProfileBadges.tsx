@@ -1,4 +1,4 @@
-import { gameModules } from '@/games/registry'
+import { profileBadgesOf } from '@/games/registry'
 import type { GameData } from '@/lib/types'
 import type { ProfileBadge } from '@/games/types'
 import { cn } from '@/lib/utils'
@@ -26,10 +26,7 @@ export default function ProfileBadges({
   size?: 'sm' | 'lg'
   className?: string
 }) {
-  const badges = gameModules.flatMap((m) => {
-    const data = profile?.[m.logic.type]
-    return data && m.profileBadges ? m.profileBadges(data) : []
-  })
+  const badges = profileBadgesOf(profile)
   if (badges.length === 0) return null
 
   return (
