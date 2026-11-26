@@ -35,24 +35,33 @@ export default function ConfigEditor({ config, onChange, guests, players, media 
   const suggestions = useMemo(() => suggestedNames(guests, players), [guests, players])
 
   // An upload takes a while: when it lands, it patches the settings as they are
-  // then, so a label typed meanwhile isn't lost.
+  // then, so a label typed meanwhile isn't lost. Every change is built on the
+  // last one made, rendered or not: two uploads landing together (an image and
+  // its two own photos), or a key typed as one lands, keep both.
   const latest = useRef({ config, onChange })
   useEffect(() => {
     latest.current = { config, onChange }
   }, [config, onChange])
 
-  const change = (patch: Partial<FusionConfig>) => onChange({ ...config, pictures, ...patch })
+  function edit(make: (now: FusionConfig, list: FusionPicture[]) => FusionConfig) {
+    const now = latest.current.config
+    const next = make(now, Array.isArray(now.pictures) ? now.pictures : [])
+    latest.current = { ...latest.current, config: next }
+    latest.current.onChange(next)
+  }
+  const change = (patch: Partial<FusionConfig>) => edit((now, list) => ({ ...now, pictures: list, ...patch }))
   const update = (index: number, patch: Partial<FusionPicture>) =>
-    change({ pictures: pictures.map((p, i) => (i === index ? withPatch(p, patch) : p)) })
+    edit((now, list) => ({ ...now, pictures: list.map((p, i) => (i === index ? withPatch(p, patch) : p)) }))
 
   async function upload(index: number, slot: Slot, file: File) {
     const id = `${index}:${slot}`
     setUploading((u) => ({ ...u, [id]: true }))
     try {
       const path = await media.upload(file)
-      const { config: now, onChange: save } = latest.current
-      const list = Array.isArray(now.pictures) ? now.pictures : []
-      save({ ...now, pictures: list.map((p, i) => (i === index ? withPatch(p, slot === 'image' ? { image: path } : withOriginal(p, slot, path)) : p)) })
+      edit((now, list) => ({
+        ...now,
+        pictures: list.map((p, i) => (i === index ? withPatch(p, slot === 'image' ? { image: path } : withOriginal(p, slot, path)) : p)),
+      }))
     } catch (error) {
       toast.error((error as Error).message || "That image couldn't be uploaded")
     } finally {

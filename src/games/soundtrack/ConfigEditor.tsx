@@ -62,11 +62,16 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
   const ids = `lydspor-${game.id}`
 
   // An upload takes a while: when it lands, it patches the settings as they
-  // are then, so a title typed meanwhile isn't lost.
+  // are then, so a title typed meanwhile isn't lost. What it saves is the
+  // latest at once, so two uploads landing together keep both photos.
   const latest = useRef({ raw, onChange })
   useEffect(() => {
     latest.current = { raw, onChange }
   }, [raw, onChange])
+  function saveLatest(next: SoundtrackConfig) {
+    latest.current = { ...latest.current, raw: next }
+    latest.current.onChange(next)
+  }
 
   const change = (patch: Partial<SoundtrackConfig>) => onChange({ ...config, ...patch })
   const setSongs = (songs: SoundtrackSong[]) => change({ songs })
@@ -84,15 +89,14 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
     setUploading((u) => ({ ...u, [target]: (u[target] ?? 0) + 1 }))
     try {
       const path = await media.upload(file)
-      const { raw: now, onChange: save } = latest.current
-      const current = readSettings(now)
+      const current = readSettings(latest.current.raw)
       if (target === 'extra:new') {
-        save({ ...current, extraPhotos: [...current.extraPhotos, { photo: path, caption: '' }].slice(0, MAX_EXTRA_PHOTOS) })
+        saveLatest({ ...current, extraPhotos: [...current.extraPhotos, { photo: path, caption: '' }].slice(0, MAX_EXTRA_PHOTOS) })
       } else {
         const [kind, at] = target.split(':')
         const index = Number(at)
-        if (kind === 'song') save({ ...current, songs: current.songs.map((s, i) => (i === index ? { ...s, photo: path } : s)) })
-        else save({ ...current, extraPhotos: current.extraPhotos.map((p, i) => (i === index ? { ...p, photo: path } : p)) })
+        if (kind === 'song') saveLatest({ ...current, songs: current.songs.map((s, i) => (i === index ? { ...s, photo: path } : s)) })
+        else saveLatest({ ...current, extraPhotos: current.extraPhotos.map((p, i) => (i === index ? { ...p, photo: path } : p)) })
       }
     } catch (error) {
       toast.error((error as Error).message || "That photo couldn't be uploaded")
@@ -128,9 +132,8 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
       toast.error((error as Error).message || "The photos couldn't be mixed. Try again.")
     } finally {
       if (moved.size > 0) {
-        const { raw: now, onChange: save } = latest.current
-        const latestConfig = readSettings(now)
-        save({
+        const latestConfig = readSettings(latest.current.raw)
+        saveLatest({
           ...latestConfig,
           songs: latestConfig.songs.map((s) => ({ ...s, photo: moved.get(s.photo) ?? s.photo })),
           extraPhotos: latestConfig.extraPhotos.map((p) => ({ ...p, photo: moved.get(p.photo) ?? p.photo })),
