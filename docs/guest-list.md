@@ -448,7 +448,7 @@ after a typed join.
 
 ### 6.4 The name form
 
-The name form as before ("What should we call you?", the live token preview,
+The name form as before ("Type in your name", the live token preview,
 "Let's go", "Got a code from the host?"), plus **"Back to the list"** above
 it when the guest came from 6.2, and the freed note when it applies. For
 `name_taken` the database's "Someone already joined as "Mads Holm". Try

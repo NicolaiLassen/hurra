@@ -25,11 +25,11 @@ describe('the lobby', () => {
     expect(songsWord(13)).toBe('13 songs')
   })
 
-  it('opens with the intro, else whose life the songs are from, else one story each', () => {
-    expect(introLine('  Songs from the road. ', 8, 'Mira')).toBe('Songs from the road.')
-    expect(introLine('', 8, 'Mira')).toBe('Eight songs from Mira’s life.')
-    expect(introLine('', 8, '')).toBe('Eight songs, eight stories.')
-    expect(introLine('', 1, '')).toBe('One song, one story.')
+  it('opens with the intro, else pairing the songs with their events', () => {
+    expect(introLine('  Songs from the road. ', 8)).toBe('Songs from the road.')
+    expect(introLine('', 8)).toBe('Eight songs, eight events. Pair each song with its event.')
+    expect(introLine('', 8)).toBe('Eight songs, eight events. Pair each song with its event.')
+    expect(introLine('', 1)).toBe('One song, one event. Pair the song with its event.')
   })
 
   it('says who reveals the songs', () => {

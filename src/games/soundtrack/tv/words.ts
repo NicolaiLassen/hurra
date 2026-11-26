@@ -15,17 +15,13 @@ export function numberWord(n: number): string {
 
 export const plural = (n: number, word: string, words = `${word}s`) => `${n} ${n === 1 ? word : words}`
 
-/** "Ida’s", from the storyteller setting, with the curly apostrophe the phones use. */
-const possessive = (name: string) => `${name}’s`
-
-/** The lobby's first line: the host's intro, else "Eight songs from Ida’s life." or "Eight songs, eight stories." */
+/** The lobby's first line: the host's intro, else "Eight songs, eight events. Pair each song with its event." */
 export function lobbyLine(pub: Pick<SoundtrackPublicState, 'intro' | 'storyteller' | 'total'>): string {
   const intro = pub.intro.trim()
   if (intro) return intro
-  const songs = pub.total === 1 ? 'One song' : `${numberWord(pub.total)} songs`
-  const storyteller = pub.storyteller.trim()
-  if (storyteller) return `${songs} from ${possessive(storyteller)} life.`
-  return pub.total === 1 ? 'One song, one story.' : `${songs}, ${numberWord(pub.total).toLowerCase()} stories.`
+  if (pub.total === 1) return 'One song, one event. Pair the song with its event.'
+  const n = numberWord(pub.total)
+  return `${n} songs, ${n.toLowerCase()} events. Pair each song with its event.`
 }
 
 /** The lobby's rules, in the phone's order (spec 4.1), short enough for the TV. */
@@ -33,7 +29,6 @@ export const RULES = [
   'A song plays. Type its title and who sings it, then tap its photo.',
   'Close spelling counts. Any song can change until the last call.',
   'Each photo fits one song. Some photos fit none.',
-  'No points for speed. No music apps, please.',
 ] as const
 
 /** The points a song gives, as the lobby's chips: Event +2, Title +1, Singer +1. */

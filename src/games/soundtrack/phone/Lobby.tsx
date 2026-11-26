@@ -12,7 +12,6 @@ const RULES: ReactNode[] = [
   </>,
   'Close spelling counts. Change any song until the last call.',
   'Each photo fits one song. Some photos fit none.',
-  'No points for speed. No music apps, please.',
 ]
 
 export function Lobby({
@@ -43,7 +42,7 @@ export function Lobby({
 
   return (
     <div className="grid grid-cols-1">
-      <p className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em] text-balance">{introLine(pub.intro, pub.total, pub.storyteller)}</p>
+      <p className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em] text-balance">{introLine(pub.intro, pub.total)}</p>
       <p className="mt-1.5 text-base leading-snug text-paper-2">{onStage ? 'Look at the TV. Song 1 starts soon.' : 'Song 1 starts soon.'}</p>
       <ol className="mt-3.5 border-t border-rule">
         {RULES.map((rule, i) => (

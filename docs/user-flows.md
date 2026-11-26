@@ -81,7 +81,7 @@ flowchart TD
   J0 -- "joining closed" --> CL1["Joining is closed<br/>lets you in as soon as the host reopens"]:::closed
   CL1 -. "host opens joining" .-> LIST
   J0 -- "joining open" --> LIST{{"Free names on the guest list?"}}:::gate
-  LIST -- "none, an error, or a party without a list" --> FORM["What should we call you?"]:::screen
+  LIST -- "none, an error, or a party without a list" --> FORM["Type in your name"]:::screen
   LIST -- "the host listed names" --> WHO["Who are you?<br/>the free names, a search from 9,<br/>I'm not on the list"]:::closed
   WHO -- "tap a name" --> CONF["You're Ana?<br/>Yes, I'm Ana or No, go back"]:::screen
   CONF -- "No, go back" --> WHO
@@ -210,7 +210,7 @@ flowchart TD
   classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
   classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
-  START(["The host starts Lydspor on the TV"]) --> LOB["Lobby: the intro, four rules,<br/>Event +2, Title +1, Singer +1"]:::screen
+  START(["The host starts Lydspor on the TV"]) --> LOB["Lobby: the intro, three rules,<br/>Event +2, Title +1, Singer +1"]:::screen
   LOB -- "the host taps Play song n" --> NOW["Now playing: Name song n.<br/>1 Title and 2 Who sings it, typed<br/>3 Event: tap its photo on the wall, A to L"]:::screen
   NOW -- "Next and Done save each field;<br/>a photo saves at once" --> NAMED["Song n is named.<br/>Open your board"]:::screen
   NOW -- "a photo another song has" --> SWAP["Song 2 and song 5 swapped events.<br/>Undo for 8 s"]:::screen

@@ -12,13 +12,13 @@ export function songsWord(count: number): string {
   return `${number} ${count === 1 ? 'song' : 'songs'}`
 }
 
-/** The lobby's first line: the host's intro, else "Eight songs from Mira's life.", else "Eight songs, eight stories." */
-export function introLine(intro: string, total: number, storyteller: string): string {
+/** The lobby's first line: the host's intro, else "Eight songs, eight events. Pair each song with its event." */
+export function introLine(intro: string, total: number): string {
   const own = intro.trim()
   if (own !== '') return own
-  if (storyteller.trim() !== '') return `${songsWord(total)} from ${storyteller.trim()}’s life.`
-  const stories = `${(NUMBER_WORDS[total] ?? String(total)).toLowerCase()} ${total === 1 ? 'story' : 'stories'}`
-  return `${songsWord(total)}, ${stories}.`
+  if (total === 1) return 'One song, one event. Pair the song with its event.'
+  const events = `${(NUMBER_WORDS[total] ?? String(total)).toLowerCase()} events`
+  return `${songsWord(total)}, ${events}. Pair each song with its event.`
 }
 
 /** The lobby's last line: who reveals the songs, and where the points go. */

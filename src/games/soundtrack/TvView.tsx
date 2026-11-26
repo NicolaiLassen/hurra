@@ -87,7 +87,7 @@ const LOBBY_HEAD = [
 ] as const
 
 /**
- * Before song 1: the host's intro (or "Eight songs from Ida's life."), the
+ * Before song 1: the host's intro (or "Eight songs, eight events. Pair each song with its event."), the
  * rules in the phone's words, what a song gives and who tells the stories,
  * beside the wall the phones show, so tables can start looking.
  */

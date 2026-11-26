@@ -17,7 +17,7 @@ import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 export const soundtrack = defineGameModule({
   logic: new SoundtrackGame(),
   name: 'Lydspor',
-  description: 'Songs from someone’s life. Type each song’s title and singer, then tap the photo it belongs to.',
+  description: 'Pair each song with the event it belongs to. Type its title and singer, then tap the event’s photo.',
   icon: CassetteTapeIcon,
   PlayerView,
   PlayerCard,
