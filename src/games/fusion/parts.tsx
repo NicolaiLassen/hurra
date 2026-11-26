@@ -55,7 +55,7 @@ export function PictureArt({
   }
   return (
     <div role="img" aria-label={`Picture ${picture.label}`} className={cn('@container grid place-items-center bg-raised', className)}>
-      <span className={cn('wide max-w-full truncate px-[6cqw] leading-none text-paper text-[28cqw]', labelClassName ?? numberClassName)}>
+      <span className={cn('wide max-w-full truncate px-[6cqw] py-[0.12em] leading-none text-paper text-[28cqw]', labelClassName ?? numberClassName)}>
         {picture.label}
       </span>
     </div>

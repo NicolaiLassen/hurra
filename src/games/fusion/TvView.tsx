@@ -440,7 +440,9 @@ function RevealStage({
   } as CSSProperties
 
   return (
-    <div className="absolute inset-0 flex flex-col gap-6 short:gap-5 low:gap-4">
+    // The pictures take the room the words leave (flex-1, min-h-0, sized by the row's own height): the words never
+    // give up height. The foot's padding keeps the last line's descenders inside the stage's clip.
+    <div className="absolute inset-0 flex flex-col gap-6 pb-2 short:gap-5 short:pb-1.5 low:gap-4 low:pb-1">
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <ol aria-label={`${picture.label} was ${names[0]} and ${names[1]}`} className="absolute inset-0 flex items-center justify-center gap-(--g)" style={sizes}>
           <Person slot={0} id={reveal.people[0]} name={names[0]} path={reveal.originals[0]} status={originals[0]} arrived={arrived[0]} mediaUrl={mediaUrl} />
@@ -561,9 +563,9 @@ function Person({
 /** How far a person slides in from their side. */
 const SLIDE_PX = 120
 
-/** How the room did: "9 of 21 got both, 6 got one", or the words for nobody. */
+/** How the room did: "9 of 21 got both, 6 got one", or the words for nobody. A line tall enough for g and y at every size. */
 function Counts({ reveal }: { reveal: FusionReveal }) {
-  const words = 'text-tv-body font-medium text-paper-2 short:text-tv-tab low:text-tv-floor'
+  const words = 'text-tv-body leading-[1.3] font-medium text-paper-2 short:text-tv-tab short:leading-[1.3] low:text-tv-floor low:leading-[1.3]'
   const { both, one, voters } = reveal
   if (voters === 0) return <p className={words}>Nobody guessed this one.</p>
   if (both === 0) return <p className={words}>{one > 0 ? `Nobody got both. ${one} got one.` : 'Nobody got either of them.'}</p>

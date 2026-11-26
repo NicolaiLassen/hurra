@@ -53,7 +53,8 @@ export function PictureImage({
     <div role="img" aria-label={alt ?? `Picture ${picture.label}`} className={cn('@container relative overflow-hidden bg-raised', className)}>
       {!showThumb && !showFull ? (
         <span className="absolute inset-0 grid place-items-center">
-          <span className={cn('wide max-w-full truncate px-[6cqw] leading-none text-paper', labelClassName ?? 'text-[28cqw]')}>{picture.label}</span>
+          {/* Padded so a label's descenders ("The viking") stay inside truncate's clip. */}
+          <span className={cn('wide max-w-full truncate px-[6cqw] py-[0.12em] leading-none text-paper', labelClassName ?? 'text-[28cqw]')}>{picture.label}</span>
         </span>
       ) : (
         <>
@@ -195,7 +196,10 @@ export function Leaders({ top, players, delay }: { top: readonly FusionTopRow[];
       transition={{ duration: 0.3, ease: EASE_OUT, delay }}
       className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5"
     >
-      <p className="shrink-0 text-tv-body font-medium text-paper-2 short:text-tv-tab low:text-tv-floor">Sharpest eyes</p>
+      {/* Lines tall enough for g, j and y at every size: the row may stand at the foot of the stage's clip. */}
+      <p className="shrink-0 text-tv-body leading-[1.3] font-medium text-paper-2 short:text-tv-tab short:leading-[1.3] low:text-tv-floor low:leading-[1.3]">
+        Sharpest eyes
+      </p>
       <ol className="flex min-w-0 items-center gap-8 short:gap-6 low:gap-5">
         {top.slice(0, 3).map((row, i) => {
           const name = nameOf(players, row.playerId)
@@ -208,7 +212,7 @@ export function Leaders({ top, players, delay }: { top: readonly FusionTopRow[];
               className="flex min-w-0 items-center gap-3"
             >
               <Avatar name={name} playerId={row.playerId} className="size-12 short:size-10 low:size-8" />
-              <span className="max-w-[12rem] min-w-0 truncate text-tv-body font-bold text-paper short:max-w-[10rem] short:text-tv-tab low:text-tv-floor">
+              <span className="max-w-[12rem] min-w-0 truncate text-tv-body leading-[1.3] font-bold text-paper short:max-w-[10rem] short:text-tv-tab short:leading-[1.3] low:text-tv-floor low:leading-[1.3]">
                 {firstName(name)}
               </span>
               <span className={cn('shrink-0 tv-num text-tv-body short:text-tv-tab low:text-tv-floor', row.rank === 1 ? 'text-gold' : 'text-paper-2')}>

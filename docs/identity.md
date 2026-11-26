@@ -381,9 +381,18 @@ without importing it. The strap says where the round is ("Showing 3 of 12",
   load from the reveal's own state (thumbnail and full image, at high
   priority) while the picture moves; a person whose photo isn't in by their
   beat comes in at 2 s at the latest, the photo fading in where it stands.
-  It fits 1920 by 1080, 1440 by 900 and 1280 by 720 with zero, one and two
-  band lines: the three are sized from the row's own room by a size
-  container (`--fh`, `--side` in `RevealStage`), never wider than the stage.
+  It fits 1920 by 1080, 1440 by 900, 1512 by 800 (a laptop's browser
+  window) and 1280 by 720 with zero, one and two band lines: the three are
+  sized from the row's own room by a size container (`--fh`, `--side` in
+  `RevealStage`), never wider than the stage, so the pictures give up height
+  and the words never do. The counts and the sharpest eyes set their lines at
+  a line height of 1.3 at every size and the column keeps a little padding at
+  its foot, so the last line's g and y stay inside the stage's clip when it
+  stands at the foot (no sharpest eyes yet, as on the first picture).
+  `.design/party/tv-reveal/shoot.cjs` checks every text line against the
+  clip at those sizes, with one and two band lines and with both, one and no
+  voters (the `fusion-reveal`, `fusion-reveal-nobody-both` and
+  `fusion-reveal-no-guesses` scenes).
 - **The wall:** every picture at once, 1 to 40, as big as the stage allows,
   uniform tiles that never tilt. Each tile has its label chip at
   `max(28px, min(11cqw, 50px))`, every chip on one wall in the same face
