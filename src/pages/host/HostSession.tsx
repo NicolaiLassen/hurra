@@ -2,6 +2,7 @@ import { ArchiveIcon, FilmStripIcon, LockIcon, LockOpenIcon } from '@phosphor-ic
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import GamesPanel from '@/components/host/GamesPanel'
+import GuestListPanel from '@/components/host/GuestListPanel'
 import { useHostCall } from '@/components/host/hostCalls'
 import JoinCard from '@/components/host/JoinCard'
 import LiveDot from '@/components/host/LiveDot'
@@ -25,8 +26,8 @@ import { SessionNotFound } from '@/pages/NotFound'
 
 /**
  * The host control room (docs/engine-v2.md, 7.3): what is on the TV, every
- * live game with its own controls, the night's program, the guests and the
- * join card, live from the party's snapshot. In dev builds `?fixture=<scene>`
+ * live game with its own controls, the night's program, the guests, the
+ * guest list and the join card, live from the party's snapshot. In dev builds `?fixture=<scene>`
  * shows a sample party instead (5.11).
  */
 export default function HostSession() {
@@ -136,9 +137,10 @@ function ControlRoom({ snapshot, live }: { snapshot: Snapshot; live: boolean }) 
           <GamesPanel snapshot={snapshot} program={program} archived={archived} />
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-6">
-          {/* First beside the games on a laptop; last on a phone, under the guests. */}
+          {/* First beside the games on a laptop; last on a phone, under the guests and the guest list. */}
           <JoinCard session={session} className="order-last lg:order-first" />
           <PlayersPanel snapshot={snapshot} />
+          <GuestListPanel snapshot={snapshot} />
         </div>
       </div>
     </Screen>

@@ -5,7 +5,7 @@
 // Everything else comes through props.
 import type { Icon } from '@phosphor-icons/react'
 import type { ComponentType } from 'react'
-import type { AnswerPayload, AnyGame, Game, PlayerId } from '@/games/core/Game'
+import type { AnswerPayload, AnyGame, Game, GameGuest, PlayerId } from '@/games/core/Game'
 import type { FeedItem, Player, PromptState, ScoreRow, Session, SessionGame, SubmitResult } from '@/lib/types'
 
 /** The types a game declares. */
@@ -67,6 +67,12 @@ export type ResultViewProps<G extends AnyGame = AnyGame> = {
 }
 
 export type HostViewProps<G extends AnyGame = AnyGame> = GameScreenProps<G> & {
+  /**
+   * Everyone on the guest list, joined or still expected (hosts only), for
+   * controls that name guests on the night, such as who is in a picture.
+   * `players` is the ones who joined. docs/guest-list.md, section 9.
+   */
+  guests: readonly GameGuest[]
   /** The full state (hosts only): undefined while loading, null before the first start. */
   state: Parts<G>['state'] | null | undefined
   /** The settings this round started with (hosts only), e.g. the quiz's right answers. */
@@ -132,8 +138,14 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   onChange: (config: Parts<G>['config']) => void
   session: Session
   game: SessionGame
-  /** The party's players, e.g. to pick who is in a picture. */
+  /** The party's players: the guests who joined. */
   players: Player[]
+  /**
+   * Everyone on the guest list, joined or still expected: settings may name
+   * guests before they come, e.g. who is in a picture. Store their ids; mark
+   * the expected ones ("not here yet"). docs/guest-list.md, section 9.
+   */
+  guests: readonly GameGuest[]
   /** Re-encodes and uploads to the public game-media bucket (hosts only, 5.8). */
   media: { upload: (file: File) => Promise<string>; url: (path: string, size?: 'full' | 'thumb') => string }
 }

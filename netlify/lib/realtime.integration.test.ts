@@ -182,6 +182,29 @@ describe('what a save sends', () => {
     expect((await hear(own, (h) => h.event === 'moved')).payload).toMatchObject({ player: cy.playerId })
   })
 
+  it('pings only the stage when the host changes the guest list: phones never show guests still expected', async () => {
+    reset(room, stage)
+    expect((await host.client.rpc('host_add_guests', { p_session_id: party.id, p_names: ['Fay', 'Gil'] })).error).toBeNull()
+    expect((await hear(stage, (h) => h.event === 'changed')).payload).toMatchObject({ session: party.id })
+    await sleep(500)
+    expect(stage.heard.filter((h) => h.event === 'changed')).toHaveLength(1)
+    expect(room.heard).toEqual([])
+  })
+
+  it('pings the room when the host frees a name, and the phone that had it hears that on its open room channel', async () => {
+    const fay = await world.claimGuest(party, 'Fay')
+    const fayRoom = await listen(fay, `room:${party.id}`)
+    expect(fayRoom.status).toBe('SUBSCRIBED')
+    reset(fayRoom, room)
+    expect((await host.client.rpc('host_free_guest', { p_player_id: fay.playerId })).error).toBeNull()
+    expect((await hear(fayRoom, (h) => h.event === 'changed')).payload).toMatchObject({ session: party.id })
+    await hear(room, (h) => h.event === 'changed')
+    const { data } = await fay.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'phone' })
+    expect(data).toMatchObject({ member: false, freed: true, moved: false })
+    await sleep(500)
+    expect(fayRoom.heard.filter((h) => h.event === 'changed')).toHaveLength(1)
+  })
+
   it('pings and moves published_at on every recap Publish and Update', async () => {
     reset(room)
     await host.client.from('session_recaps').upsert({ session_id: party.id, data: { v: 1 }, published_at: new Date().toISOString() })

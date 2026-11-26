@@ -271,6 +271,11 @@ export function buildRecapDoc(raw: RawRecap, logic: ReadonlyMap<string, AnyGame>
     } else if (e.kind === 'player.removed' && e.player_id) {
       // Their points leave the scoreboard with them.
       if (totals.delete(e.player_id)) scored = true
+    } else if (e.kind === 'player.freed' && e.player_id) {
+      // The host gave the name back to the guest list (docs/guest-list.md): the
+      // points the taker earned go, and whoever takes the name next starts at 0.
+      for (const byGame of [...gameScores.values(), ...gamePoints.values()]) byGame.delete(e.player_id)
+      if (totals.delete(e.player_id)) scored = true
     }
     if (!scored) continue
     anchor = anchor === null ? e.at : Math.min(anchor, e.at)

@@ -9,7 +9,8 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { gameModules } from '@/games/registry'
 import type { GameModule } from '@/games/types'
-import { FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SCENES, fixtureSnapshot } from '@/lib/fixtures'
+import { FIXTURE_EXPECTED_NAMES, FIXTURE_NOW, FIXTURE_PLAYER_ID, FIXTURE_SCENES, fixtureSnapshot } from '@/lib/fixtures'
+import { guestsOf } from '@/lib/guestList'
 import type { SessionGame, Snapshot } from '@/lib/types'
 
 // TV views size their tiles from the root font size while they render.
@@ -100,6 +101,8 @@ describe.each(FIXTURE_SCENES.filter((scene) => scene !== 'removed'))('the %s fix
           config: held?.config ?? null,
           tallies: host.tallies[game.id] ?? {},
           gamePoints: host.game_points[game.id] ?? {},
+          // The whole guest list, with the four still expected.
+          guests: guestsOf(host),
           act: async () => {},
         }
         await expect(render(component(module.HostView), props)).resolves.toBeTypeOf('string')
@@ -118,8 +121,39 @@ describe.each(gameModules.map((m) => [m.logic.type, m] as const))('%s settings e
       session: host.session,
       game,
       players: host.players,
+      guests: guestsOf(host),
       media: { upload: async () => 'media/x.jpg', url: (path: string) => path },
     }
     await expect(render(component(module.ConfigEditor), props)).resolves.toBeTypeOf('string')
+  })
+})
+
+describe('fusion settings editor', () => {
+  const host = fixtureSnapshot('lobby', 'host')
+  const fusion = gameModules.find((m) => m.logic.type === 'fusion')!
+  const game = host.games.find((g) => g.game_type === 'fusion')!
+  const guests = guestsOf(host)
+  const zelda = guests.find((g) => g.name === FIXTURE_EXPECTED_NAMES[0])!
+  const ana = guests.find((g) => g.name === 'Ana')!
+  const props = (people: [string, string]) => ({
+    config: { ...(fusion.logic.defaultConfig as Record<string, unknown>), pictures: [{ label: '', people }] },
+    onChange: () => {},
+    session: host.session,
+    game,
+    players: host.players,
+    guests,
+    media: { upload: async () => 'media/x.jpg', url: (path: string) => path },
+  })
+
+  it('renders pictures that name a guest still expected, before anyone joined', async () => {
+    expect(zelda.joined).toBe(false)
+    // The pickers fill their menus in a browser only, so the names listed can't be read from static HTML.
+    for (const players of [host.players, []]) {
+      const html = await render(component(fusion.ConfigEditor), { ...props([ana.id, zelda.id]), players })
+      expect(html).toContain('Who is in it?')
+      expect(html).toContain('aria-label="First person in picture 1"')
+      expect(html).not.toContain('Pick two different people')
+      expect(html).not.toContain('Pick the second person')
+    }
   })
 })

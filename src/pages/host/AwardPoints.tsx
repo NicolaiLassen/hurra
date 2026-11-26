@@ -1,7 +1,8 @@
-import { ArrowCounterClockwiseIcon, ArrowLeftIcon, ArrowsLeftRightIcon, ScanIcon } from '@phosphor-icons/react'
+import { ArrowCounterClockwiseIcon, ArrowLeftIcon, ArrowsLeftRightIcon, ArrowUUpLeftIcon, ScanIcon } from '@phosphor-icons/react'
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import Avatar from '@/components/Avatar'
+import FreeNameConfirm, { type FreeingPlayer } from '@/components/host/FreeNameConfirm'
 import { errorMessage } from '@/components/host/hostCalls'
 import MovePlayerDialog, { type MovingPlayer } from '@/components/host/MovePlayerDialog'
 import { defaultAwardGame } from '@/components/host/scene'
@@ -27,7 +28,8 @@ const NO_GAME = 'none'
 
 /**
  * The award page (docs/engine-v2.md, 7.3): give or take points from one guest,
- * with their history and Undo, and Move to a new phone. It mounts its own live
+ * with their history and Undo, Move to a new phone, and Free the name for a
+ * phone that took a listed name by mistake (docs/guest-list.md, 7.5). It mounts its own live
  * session on the host's screen, so it works wherever the player QR page (/p/:code)
  * renders it. `?game=<id>` (from a game's Scan a player) picks the game the
  * points go to.
@@ -90,6 +92,10 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
   const [custom, setCustom] = useState('')
   const [busy, setBusy] = useState(false)
   const moving = useDialogTarget<MovingPlayer>()
+  const freeing = useDialogTarget<FreeingPlayer>()
+  const navigate = useNavigate()
+  // Only a database that keeps a guest list can free a name (the host's snapshot has guests).
+  const canFree = Array.isArray(snapshot.guests)
   const scanNext = gameId === NO_GAME ? '/host/scan' : `/host/scan?game=${gameId}`
 
   async function award(amount: number) {
@@ -232,7 +238,34 @@ function AwardPage({ snapshot, player }: { snapshot: Snapshot; player: Player })
         </Button>
       </section>
 
+      {canFree && (
+        <section className="mt-6 border-t border-rule pt-6">
+          <h2 className="text-base font-extrabold">Wrong name?</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            If this phone took {player.name} by mistake, free the name. It goes back on the guest list, and the phone asks
+            Who are you? again.
+          </p>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="mt-3"
+            onClick={() => freeing.show({ id: player.id, name: player.name, points })}
+          >
+            <ArrowUUpLeftIcon />
+            Free the name
+          </Button>
+        </section>
+      )}
+
       <MovePlayerDialog player={moving.target} open={moving.open} onOpenChange={moving.onOpenChange} joinCode={session.join_code} />
+      <FreeNameConfirm
+        snapshot={snapshot}
+        player={freeing.target}
+        open={freeing.open}
+        onOpenChange={freeing.onOpenChange}
+        // The player is gone from this page once the name is free: back to the room.
+        onFreed={() => navigate(`/host/s/${session.id}`)}
+      />
     </Screen>
   )
 }

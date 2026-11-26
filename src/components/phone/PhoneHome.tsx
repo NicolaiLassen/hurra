@@ -1,6 +1,6 @@
 import { CaretRightIcon, CrownIcon, FlagCheckeredIcon, HourglassMediumIcon } from '@phosphor-icons/react'
 import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Link } from 'react-router'
+import { Link, Navigate } from 'react-router'
 import Avatar from '@/components/Avatar'
 import { Notice, Screen } from '@/components/layout'
 import Logo from '@/components/Logo'
@@ -30,6 +30,7 @@ import { rememberJoinCode } from '@/lib/storage'
 import { toast } from '@/lib/toast'
 import type { Player, PromptState, PublicSession, Session, SessionGame, Snapshot } from '@/lib/types'
 import { useLive, useServerNow } from '@/lib/useLive'
+import type { FreedState } from '@/pages/joinScreen'
 import { PartyNotFound } from '@/pages/NotFound'
 
 // The phone home (docs/engine-v2.md, 7.1, and user-flows 7), top to bottom:
@@ -68,7 +69,7 @@ export default function PhoneHome({
         return me && snapshot.session ? (
           <Home snapshot={snapshot} session={snapshot.session} player={me} fixtureRecap={fixtureRecap} />
         ) : (
-          <NotInParty party={party} name={player.name} moved={live.moved} />
+          <NotInParty party={party} name={player.name} moved={live.moved} freed={live.freed} />
         )
       }}
     </QueryGate>
@@ -360,8 +361,13 @@ function FinishedLately({
   )
 }
 
-/** This phone is no longer in the party: the host removed the player, or it moved to another phone. */
-function NotInParty({ party, name, moved }: { party: PublicSession; name: string; moved: boolean }) {
+/**
+ * This phone is no longer in the party: the host gave its name back to the
+ * guest list, it moved to another phone, or the host removed the player.
+ */
+function NotInParty({ party, name, moved, freed }: { party: PublicSession; name: string; moved: boolean; freed: boolean }) {
+  // Straight back to Who are you?, with the name for its note (docs/guest-list.md, 6.6).
+  if (freed) return <Navigate to={`/join/${party.join_code}`} state={{ freed: name } satisfies FreedState} replace />
   if (moved) {
     return (
       <Notice

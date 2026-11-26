@@ -69,7 +69,7 @@ screen connects, for guests, the host and the TV, is in
 | Table | What it is |
 | --- | --- |
 | `sessions` | A party. `join_code` is in the join QR; `status` open/closed controls joining; `spotlight_game_id` is the game on the TV; `sound_volume` is how loud the TV plays its sound effects (phones keep their own). |
-| `players` | A guest in a party, tied to their auth user. `code` is in their personal QR. |
+| `players` | A guest in a party: joined, tied to their auth user, or still expected, on the host's guest list with no user yet (`joined_at` null). Only joined guests play and show anywhere but the host's guest list ([guest-list.md](guest-list.md)). `code` is in their personal QR. |
 | `session_games` | A game in a party: `game_type` picks the plugin, `public_state` is what everyone sees, `wake_at` when it wants a timer sync. Several can be `active` at once. |
 | `game_settings` | A game's settings (quiz questions and answers): hosts only, frozen into the state at start. |
 | `game_states` | A game's full state, its round and the settings it started with; written by the engine, read by hosts. |
@@ -94,12 +94,12 @@ public `game-media` bucket (hosts upload; JPEG only).
 | Path                | Who    | What                                                                  |
 | ------------------- | ------ | --------------------------------------------------------------------- |
 | `/`                 | Anyone | Start page: type a party code, continue, or use a code from the host  |
-| `/join/:code`       | Guest  | Join QR target: pick a name                                           |
+| `/join/:code`       | Guest  | Join QR target: Who are you? from the guest list, or a typed name     |
 | `/play/:code`       | Guest  | Points, the games (main card, Also running), Your night, their QR     |
 | `/p/:playerCode`    | Anyone | Player QR target: the award page for hosts, into the game for guests  |
 | `/tv/:code`         | TV     | The TV: pairs with a code; `?mirror=1` is the host's own TV tab       |
 | `/host`             | Host   | Sessions                                                              |
-| `/host/s/:id`       | Host   | Control room: on the TV now, live games, the program, players, join   |
+| `/host/s/:id`       | Host   | Control room: on the TV now, live games, the program, players, the guest list, join |
 | `/host/s/:id/recap` | Host   | The recap of the night: preview, publish, show on the TV, download    |
 | `/host/scan`        | Host   | Camera scanner for player QR codes                                    |
 
@@ -135,9 +135,11 @@ the engine's one save per request, as pure functions of the state:
 | `recap(round)` | Optional highlights for the recap, for finished rounds only. |
 
 Every method reads the party through `info` and `ctx`: the session and its
-shared data, the players, the day's scoreboard, the settings the round started
-with, the database clock (`now`), and this round's prompts and their closed
-answers. Hooks also cause effects, saved in the same transaction as the new
+shared data, the players, the guest list, the day's scoreboard, the settings
+the round started with, the database clock (`now`), and this round's prompts
+and their closed answers. `info.players` are the guests who joined, and only
+they play. `info.guests` is everyone on the host's guest list, joined or
+still expected (`{ id, name, joined }`), for names and settings only. Hooks also cause effects, saved in the same transaction as the new
 state, once per tap even when a phone resends it: `awardPoints`,
 `updateProfile`, `updateSessionData`, `announce` (with `detail`, `to`, `sound`,
 `icon`, `tone`, and `interrupt` for a winner), `openPrompt`, `closePrompt`,
@@ -160,6 +162,10 @@ The rules:
 - `onWake` must move `wakeAt` forward or to null.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
 - `recap()` reveals only what the finished round showed the room.
+- Settings may name guests who have not joined yet. Accept any id in
+  `info.guests` at setup, never require one to be a player, and copy the
+  names the room must see into the public state. What each game must do with
+  expected guests is [guest-list.md, section 9](guest-list.md#9-what-each-game-must-do-with-expected-guests).
 
 **Screens**, typed against the logic in [src/games/types.ts](../src/games/types.ts),
 each optional but the first:
@@ -172,7 +178,7 @@ each optional but the first:
 | `HostView` | The game's controls in the host control room, with the full `state`, the `config` and host `act`. |
 | `TvView`, `FinalTvView` | The TV stage while live, and its final screen: `lazyScreen(() => import('./TvView'))`, which the TV loads as it opens. Without them the TV shows the standings or a generic winners screen. |
 | `TvStatus` | The game's status on the TV while it runs: a whole card for the strip beside the podium, and with `variants` its line in the TV's bottom band (`band`) and its words in the programme strap while it holds the stage (`strap`). See [The TV's frame](identity.md#the-tvs-frame). |
-| `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. |
+| `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. Its `guests` are everyone on the guest list, so settings can name guests before they come: mark the expected ones ("not here yet"). The `HostView` gets `guests` too. |
 
 Shared building blocks: `QrScanner`, `ScanSheet`, `SecretCard` and `PlayerQr`
 in [src/components](../src/components).
@@ -203,8 +209,11 @@ screen also opens on a sample party: `/play/x?fixture=<scene>`,
 `/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
 (the scenes are listed in `fixtures.ts`; Participant fusion has one per step
 of its round, `fusion-lobby` to `fusion-final`, some with 2 or 40 pictures
-as `-2` and `-40`, and their pictures are drawn sample portraits), and
-`/dev/tokens` draws the token sheet ([identity.md](identity.md#the-acceptance-test)).
+as `-2` and `-40`, and their pictures are drawn sample portraits; the host's
+scenes have four guests still expected on the guest list),
+`/join/x?fixture=guests` shows Who are you? on a sample guest list
+(`&names=45`, `&freed=Ana`), and `/dev/tokens` draws the token sheet
+([identity.md](identity.md#the-acceptance-test)).
 
 ## Local development
 
@@ -239,7 +248,8 @@ Against anything but a local stack it also needs `CONFIRM=<project ref>`.
 
 Make yourself a local host: set `DEV_HOST_EMAIL` and `DEV_HOST_PASSWORD` in
 `.env.development.local` (local values only) and run `npm run dev:setup`. It
-also adds a demo party with 6 guests. Run it again after `supabase db reset`.
+also adds a demo party with 6 guests and 4 more names on its guest list who
+haven't joined. Run it again after `supabase db reset`.
 
 The dev server also listens on your LAN IP, so you can open the join page
 from a phone. The camera scanner needs HTTPS (or localhost), so test scanning

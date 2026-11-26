@@ -23,6 +23,14 @@ export type GamePlayer = {
   profile: GameData
 }
 
+/** A name on the party's guest list: a guest who joined, or one the host listed who hasn't yet. */
+export type GameGuest = {
+  readonly id: PlayerId
+  readonly name: string
+  /** True once they joined: then they are in info.players too. */
+  readonly joined: boolean
+}
+
 export type GameSession = {
   id: string
   name: string
@@ -80,13 +88,17 @@ export type Actor =
 export type PromptSpec =
   | {
       readonly kind: 'choice'
-      /** The allowed values, or 'players' for the party's player ids. */
-      readonly options: readonly string[] | 'players'
+      /**
+       * The allowed values; 'players' for the ids of the party's joined players at
+       * the moment of answering; or 'guests' for every name on the guest list,
+       * joined or not, so the room can name a guest who never came.
+       */
+      readonly options: readonly string[] | 'players' | 'guests'
       readonly min?: number // default 1
       readonly max?: number // default 1
       /** The first answer counts (a quiz). Otherwise it may change until the prompt closes (a vote). */
       readonly final?: boolean
-      /** With 'players': a player can't pick themselves. */
+      /** With 'players' or 'guests': a player can't pick themselves. */
       readonly exclude_self?: boolean
     }
   | { readonly kind: 'number'; readonly min: number; readonly max: number; readonly integer?: boolean; readonly final?: boolean }
@@ -124,8 +136,15 @@ export type GameInfo<Config> = {
   /** 1 for the first start, 2 after a restart, and so on. */
   readonly round: number
   readonly session: GameSession
-  /** The party's players right now. Effects aimed at anyone else are dropped. */
+  /** The party's players right now (guests who joined). Effects aimed at anyone else are dropped. */
   readonly players: readonly GamePlayer[]
+  /**
+   * Everyone on the guest list, joined or still expected, for names and
+   * settings only. Only `players` play: effects, scores and views for anyone
+   * else are dropped. A game's settings may name an expected guest; see
+   * docs/guest-list.md, section 9.
+   */
+  readonly guests: readonly GameGuest[]
   /** The day's scoreboard: each player's total across all games. */
   readonly scoreboard: Readonly<Record<PlayerId, number>>
   /** The settings this round started with (checked by parseConfig). Never changes during a round. */
@@ -258,7 +277,12 @@ export abstract class Game<State, Action, PublicState, PlayerView, Config, HostA
 
   /** Someone joined the party while this round runs. */
   onPlayerJoin?(state: State, player: GamePlayer, ctx: GameContext<Config>): State
-  /** The host removed someone (or they moved away). They are already gone from ctx.players. */
+  /**
+   * The host removed someone (or they moved away). They are already gone from
+   * ctx.players. Also for an id the host freed and someone took again: it
+   * leaves (as the old person) and joins (as the new one) in the same save.
+   * Drop everything you hold for it.
+   */
   onPlayerLeave?(state: State, playerId: PlayerId, ctx: GameContext<Config>): State
 
   /** True once the game has its result. The same save finishes it (finished_by 'game'). */

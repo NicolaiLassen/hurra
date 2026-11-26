@@ -20,6 +20,7 @@ function pending(overrides: Partial<Loaded> = {}): Loaded {
     current: null,
     session: { id: 's1', name: 'Party', data: {}, spotlight_game_id: null },
     players: PLAYERS,
+    guests: PLAYERS.map((p) => ({ id: p.id, name: p.name, joined: true })),
     caller: HOST,
     scoreboard: {},
     awards: {},
@@ -255,6 +256,92 @@ describe('membership', () => {
     expect((commit.state as ProbeState).joined).toEqual([])
     expect(commit.effects.announcements).toEqual([])
     expect(commit.members).toEqual(['ana', 'bo', 'dee'])
+  })
+})
+
+describe('the guest list', () => {
+  class Watches extends ProbeGame {
+    seen: { players: string[]; guests: [string, boolean][]; keys: string[] }[] = []
+    calls: string[] = []
+    setup(ctx: GameContext<{ movesToWin: number; seconds: number }>): ProbeState {
+      this.seen.push({
+        players: ctx.players.map((p) => p.id),
+        guests: ctx.guests.map((g) => [g.id, g.joined]),
+        keys: ctx.players.flatMap((p) => Object.keys(p)),
+      })
+      return super.setup(ctx)
+    }
+    onPlayerJoin(state: ProbeState, player: GamePlayer, ctx: GameContext<{ movesToWin: number; seconds: number }>) {
+      this.calls.push(`join ${player.id}: ${ctx.players.map((p) => p.id).join(' ')}`)
+      ctx.awardPoints(player.id, 1, 'Welcome')
+      return { ...state, joined: [...state.joined, player.id] }
+    }
+    onPlayerLeave(state: ProbeState, playerId: PlayerId, ctx: GameContext<{ movesToWin: number; seconds: number }>) {
+      this.calls.push(`leave ${playerId}: ${ctx.players.map((p) => p.id).join(' ')}`)
+      // Aimed at the id that left: dropped, never given to whoever has it next.
+      ctx.awardPoints(playerId, 5, 'Goodbye')
+      ctx.announce('Only for you', { to: [playerId] })
+      return { ...state, left: [...state.left, playerId], moves: state.moves.filter((m) => m.by !== playerId) }
+    }
+  }
+
+  const joinedPlayers = (at: Record<string, number>) => PLAYERS.map((p) => ({ ...p, joined_at: at[p.id] ?? 1_000 }))
+
+  it('gives games the whole guest list in info.guests, and only the joined players, without their join times', () => {
+    const logic = new Watches()
+    const guests = [
+      { id: 'ana', name: 'ana', joined: true },
+      { id: 'zelda', name: 'Zelda', joined: false },
+      { id: 'bo', name: 'bo', joined: true },
+      { id: 'cy', name: 'cy', joined: true },
+    ]
+    commitOf(step(logic, pending({ players: joinedPlayers({}), guests }), start, env()))
+    expect(logic.seen[0].players).toEqual(['ana', 'bo', 'cy'])
+    expect(logic.seen[0].guests).toEqual([
+      ['ana', true],
+      ['zelda', false],
+      ['bo', true],
+      ['cy', true],
+    ])
+    expect(new Set(logic.seen[0].keys)).toEqual(new Set(['id', 'name', 'profile']))
+  })
+
+  it('falls back to the players as joined guests on a database without the guest list', () => {
+    const logic = new Watches()
+    commitOf(step(logic, pending({ guests: undefined }), start, env()))
+    expect(logic.seen[0].guests).toEqual([
+      ['ana', true],
+      ['bo', true],
+      ['cy', true],
+    ])
+  })
+
+  it('leaves, then joins, a member who joined after the last save: a name freed and taken again', () => {
+    const logic = new Watches()
+    const base = running(logic)
+    const current = { ...base.current!, saved_at: 5_000, state: { ...(base.current!.state as ProbeState), moves: [{ by: 'bo', at: 1 }] } }
+    const loaded = { ...base, current, players: joinedPlayers({ bo: 6_000 }), caller: SCREEN }
+    const commit = commitOf(step(logic, loaded, sync, env()))
+    expect(logic.calls).toEqual(['leave bo: ana cy', 'join bo: ana bo cy'])
+    expect(commit.log).toEqual({ joined: ['bo'], left: ['bo'], woke: 0 })
+    expect(commit.members).toEqual(['ana', 'bo', 'cy'])
+    expect((commit.state as ProbeState).moves).toEqual([])
+    // The leave's points and toast for bo are dropped; the join's welcome is the new person's.
+    expect(commit.effects.points).toEqual([{ player_id: 'bo', points: 1, reason: 'Welcome' }])
+    expect(commit.effects.announcements).toEqual([])
+    expect(commit.player_views).toHaveProperty('bo')
+  })
+
+  it('does nothing for members who joined before the last save, or when the save time is unknown', () => {
+    const logic = new Watches()
+    const base = running(logic)
+    const earlier = { ...base, current: { ...base.current!, saved_at: 5_000 }, players: joinedPlayers({ bo: 4_999 }), caller: SCREEN }
+    expect(step(logic, earlier, sync, env())).toEqual({ kind: 'skip' })
+    const sameMs = { ...earlier, players: joinedPlayers({ bo: 5_000 }) }
+    expect(step(logic, sameMs, sync, env())).toEqual({ kind: 'skip' })
+    const unknown = { ...base, players: joinedPlayers({ bo: 6_000 }), caller: SCREEN }
+    expect(step(logic, unknown, sync, env())).toEqual({ kind: 'skip' })
+    expect(logic.calls).toEqual([])
   })
 })
 

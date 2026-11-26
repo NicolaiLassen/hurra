@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { PlayerId } from '@/games/core/Game'
+import type { GameGuest, PlayerId } from '@/games/core/Game'
 import type { FusionConfig, FusionGame, FusionPicture } from '@/games/fusion/logic'
 import {
   DEFAULT_SECONDS,
@@ -19,8 +19,8 @@ import {
   MIN_SHOW_SECONDS,
 } from '@/games/fusion/shapes'
 import type { ConfigEditorProps } from '@/games/types'
+import { sortNames } from '@/lib/guestList'
 import { toast } from '@/lib/toast'
-import type { Player } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** The Select's value for "nobody picked yet": Radix keeps empty values for clearing. */
@@ -33,9 +33,11 @@ type Slot = 'image' | 0 | 1
  * Fusion's settings (hosts only): the numbered pictures, each with an optional
  * label, image and the two people in it, each person with their own photo
  * (secret until the reveal), the timing and the points. Who is in a picture
- * can also wait until the night (Show who in the live game).
+ * can also wait until the night (Show who in the live game). The people come
+ * from the whole guest list, so the host can set the pictures before anyone
+ * joins (docs/guest-list.md, section 9.2).
  */
-export default function ConfigEditor({ config, onChange, players, media }: ConfigEditorProps<FusionGame>) {
+export default function ConfigEditor({ config, onChange, guests, media }: ConfigEditorProps<FusionGame>) {
   const pictures: FusionPicture[] = Array.isArray(config.pictures) ? config.pictures : []
   // Uploads by picture index and slot ("3:image", "3:0"). Adding and removing pictures waits for them, so an index stays put.
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
@@ -124,7 +126,7 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
               key={index}
               n={index + 1}
               picture={picture}
-              players={players}
+              guests={guests}
               uploading={(slot) => uploading[`${index}:${slot}`] === true}
               busy={busy}
               thumbOf={(path) => media.url(path, 'thumb')}
@@ -152,7 +154,7 @@ export default function ConfigEditor({ config, onChange, players, media }: Confi
 function PictureRow({
   n,
   picture,
-  players,
+  guests,
   uploading,
   busy,
   thumbOf,
@@ -162,7 +164,7 @@ function PictureRow({
 }: {
   n: number
   picture: FusionPicture
-  players: Player[]
+  guests: readonly GameGuest[]
   uploading: (slot: Slot) => boolean
   busy: boolean
   thumbOf: (path: string) => string
@@ -260,7 +262,7 @@ function PictureRow({
                   <PersonSelect
                     className="w-full max-w-56"
                     value={people[slot]}
-                    players={players}
+                    guests={guests}
                     label={slot === 0 ? `First person in picture ${n}` : `Second person in picture ${n}`}
                     onChange={(id) => setPerson(slot, id)}
                   />
@@ -328,23 +330,23 @@ function FileButton({
 
 function PersonSelect({
   value,
-  players,
+  guests,
   label,
   className,
   onChange,
 }: {
   value: PlayerId
-  players: Player[]
+  guests: readonly GameGuest[]
   label: string
   className?: string
   onChange: (id: PlayerId) => void
 }) {
-  const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name))
-  // Someone picked earlier who has left the party still shows, so the host sees why the start is refused.
-  const missing = value !== '' && !players.some((p) => p.id === value)
+  const sorted = sortNames(guests)
+  // Someone picked earlier who has left the party and the list still shows, so the host sees why the start is refused.
+  const missing = value !== '' && !guests.some((g) => g.id === value)
   return (
     <Select value={value === '' ? NOBODY : value} onValueChange={(id) => onChange(id === NOBODY ? '' : id)}>
-      <SelectTrigger size="sm" className={cn('w-40', className)} aria-label={label}>
+      <SelectTrigger size="sm" className={cn('w-48', className)} aria-label={label}>
         <SelectValue placeholder="Nobody yet" />
       </SelectTrigger>
       <SelectContent>
@@ -354,14 +356,21 @@ function PersonSelect({
             Someone who left
           </SelectItem>
         )}
-        {sorted.map((p) => (
-          <SelectItem key={p.id} value={p.id}>
-            {p.name}
+        {sorted.map((g) => (
+          <SelectItem key={g.id} value={g.id}>
+            {g.name}
+            {/* A guest on the list who hasn't joined yet. */}
+            {!g.joined && (
+              <>
+                {' '}
+                <span className="text-paper-3">(not here yet)</span>
+              </>
+            )}
           </SelectItem>
         ))}
-        {players.length === 0 && (
-          <SelectItem value="none-joined" disabled>
-            Guests show up here once they join
+        {guests.length === 0 && (
+          <SelectItem value="none-listed" disabled>
+            Add guests to the guest list, or wait for them to join
           </SelectItem>
         )}
       </SelectContent>

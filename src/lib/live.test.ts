@@ -487,6 +487,27 @@ describe('pings', () => {
     live.close()
   })
 
+  it('freed: a phone whose name the host gave back to the guest list learns it from its next read', async () => {
+    const client = new FakeClient()
+    const { live, last } = open(client, 'phone', PLAYER)
+    await answer(client, snapshot({ member: false, session: null, moved: false, freed: true }))
+    expect(last()).toMatchObject({ freed: true, moved: false })
+    live.close()
+  })
+
+  it('freed: a removed phone, and the TV, are never marked freed', async () => {
+    const client = new FakeClient()
+    const { live, last } = open(client, 'phone', PLAYER)
+    await answer(client, snapshot({ member: false, session: null, moved: false, freed: false }))
+    expect(last().freed).toBe(false)
+    live.close()
+    const tvClient = new FakeClient()
+    const tv = open(tvClient, 'tv')
+    await answer(tvClient, snapshot({ member: false, session: null, freed: true }))
+    expect(tv.last().freed).toBe(false)
+    tv.live.close()
+  })
+
   it('keeps the highest pinged tally, and reads once 400 ms after the last one', async () => {
     const client = new FakeClient()
     const { live, last } = open(client, 'host')
@@ -722,19 +743,21 @@ describe('ping health', () => {
       { tallies: { [GAME]: { q1: 9 } } },
       { states: { [GAME]: { state: { secret: 1 }, config: {}, round: 1, members: [] } } },
       { screens: 2 },
+      // The host's guest list changes with stage pings only (docs/guest-list.md).
+      { guests: [{ id: 'z', name: 'Zelda', joined_at: null, created_at: START }] },
       { games: [liveGame(), liveGame({ id: 'pending', status: 'pending', title: 'Renamed', position: 4, public_state: null, started_at: null })] },
       // Unarchiving a finished game pings the stage only.
       { games: [liveGame(), liveGame({ id: 'old', status: 'finished', finished_at: START - 1, archived_at: null })] },
       { me: { player_id: PLAYER, views: { [GAME]: { n: 1 } }, answers: { [GAME]: { q1: { choice: ['1'] } } } } },
     ]
     const archivedOld = snapshot({ ...base, games: [liveGame(), liveGame({ id: 'old', status: 'finished', finished_at: START - 1, archived_at: START })] })
-    const unarchived = stageOnly[7]
+    const unarchived = stageOnly[8]
     expect(pingedFingerprint('phone', { ...archivedOld, ...unarchived })).toBe(pingedFingerprint('phone', archivedOld))
-    for (const patch of stageOnly.slice(0, 7)) {
+    for (const patch of stageOnly.slice(0, 8)) {
       expect(pingedFingerprint('phone', { ...base, ...patch })).toBe(pingedFingerprint('phone', base))
       expect(pingedFingerprint('tv', { ...base, ...patch })).not.toBe(pingedFingerprint('tv', base))
     }
-    expect(pingedFingerprint('phone', { ...base, ...stageOnly[8] })).toBe(pingedFingerprint('phone', base))
+    expect(pingedFingerprint('phone', { ...base, ...stageOnly[9] })).toBe(pingedFingerprint('phone', base))
     // A finished game's points and views leave the snapshot after 60 minutes: no screen counts that as a change.
     const finished = liveGame({ id: 'done', status: 'finished', finished_at: START - 1, public_state: { a: 1 } })
     const shown = snapshot({ games: [finished], game_points: { done: { p: 3 } }, me: { player_id: PLAYER, views: { done: { v: 1 } }, answers: {} } })

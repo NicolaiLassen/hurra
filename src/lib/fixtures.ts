@@ -9,10 +9,11 @@
 // gets what row level security would give it: a phone (as Sofie) gets `me`
 // and its own targeted announcements, the TV and the host page get room-wide
 // ones only, and only the host page gets `states` (with the quiz's answers and
-// the fusion key) and `screens`.
+// the fusion key), `screens` and `guests` (the guest list: the twelve players
+// as joined and four guests still expected, docs/guest-list.md).
 import type { Screen } from './live'
 import type { RecapDoc } from './recap'
-import type { AnswerPayload, FeedItem, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
+import type { AnswerPayload, FeedItem, ListedGuest, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
 
 /** Participant fusion on the stage (8.4), each with 12 pictures, and some with 2 or 40 as well (`-2`, `-40`). */
 export const FUSION_STAGE_SCENES = [
@@ -72,6 +73,28 @@ const uid = (kind: number, n: number) => `f1c7a000-0000-4000-8000-${String(kind 
 export const FIXTURE_SESSION_ID = uid(1, 1)
 
 const NAMES = ['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Ida', 'Emil', 'Clara', 'Noah', 'Maja', 'Oscar']
+/** Guests on the sample party's guest list who haven't joined yet (docs/guest-list.md, 11.1). */
+export const FIXTURE_EXPECTED_NAMES = ['Zelda', 'Quentin', 'Ximena', 'Ulrik']
+/** More invented names, for a guest list as long as the party is built for. */
+const MORE_NAMES = [
+  'Astrid', 'Bjørn', 'Cornelia', 'Dagny', 'Elias', 'Filippa', 'Gorm', 'Halfdan', 'Iben', 'Jens Viggo Østergaard',
+  'Kamma', 'Leo', 'Merle', 'Nanna', 'Ole', 'Pil', 'Ragnvald', 'Signe-Lykke Kjærsgaard', 'Tove', 'Uffe', 'Vibeke', 'Yrsa',
+  'Æbbe', 'Øystein', 'Åse', 'Benedikte', 'Carsten', 'Ditte', 'Eskild',
+]
+
+/**
+ * The free names of a sample guest list, for the join page's dev fixture
+ * (/join/x?fixture=guests): the twelve sample guests and the four still
+ * expected, then more invented names up to `count`. In the order a host
+ * might paste them; the phone sorts them itself.
+ */
+export function fixtureFreeNames(count = 16): string[] {
+  const names = [...NAMES, ...FIXTURE_EXPECTED_NAMES]
+  for (let n = 0; names.length < count; n++) {
+    names.push(MORE_NAMES[n % MORE_NAMES.length] + (n >= MORE_NAMES.length ? ` ${Math.floor(n / MORE_NAMES.length) + 1}` : ''))
+  }
+  return names.slice(0, Math.max(0, count))
+}
 const CODES = ['A4N7Q', 'B7Q3M', 'M2D5S', 'S9F4X', 'F3R8J', 'L6R2T', 'I5D9K', 'E8M3P', 'C2L7W', 'N4H6Y', 'J7M2A', 'O3S8C']
 const ids = NAMES.map((_, i) => uid(2, i + 1))
 const [ANA, BO, MADS, SOFIE, FREJA, LARS, IDA, EMIL, CLARA, NOAH, MAJA, OSCAR] = ids
@@ -96,7 +119,18 @@ const PLAYERS: Player[] = NAMES.map((name, i) => ({
   code: CODES[i],
   profile: PROFILES[ids[i]] ?? {},
   created_at: FIXTURE_NOW - (110 - i * 4) * MIN,
+  joined_at: FIXTURE_NOW - (110 - i * 4) * MIN,
 }))
+
+/**
+ * The host's guest list (docs/guest-list.md, 11.1): the twelve players as
+ * joined, and the four the host listed before the party who haven't joined
+ * yet, by name as the database sorts it. Only the host page reads it.
+ */
+const GUESTS: ListedGuest[] = [
+  ...PLAYERS.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })),
+  ...FIXTURE_EXPECTED_NAMES.map((name, i) => ({ id: uid(2, NAMES.length + i + 1), name, joined_at: null, created_at: FIXTURE_NOW - (170 - i) * MIN })),
+].sort((a, b) => a.name.localeCompare(b.name))
 
 const BASE_SESSION: Session = {
   id: FIXTURE_SESSION_ID,
@@ -1145,6 +1179,7 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
       states: null,
       screens: null,
       recap: null,
+      guests: null,
     }
   }
   const w = world(scene)
@@ -1196,6 +1231,7 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
     states: screen === 'host' ? states : null,
     screens: screen === 'host' ? 1 : null,
     recap: w.recapAt ? { published_at: w.recapAt } : null,
+    guests: screen === 'host' ? GUESTS : null,
   }
 }
 

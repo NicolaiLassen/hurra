@@ -22,7 +22,7 @@ const MOVE_CODE_MS = 5 * 60_000
 /** How long a TV pairing code works (screen_codes' default). */
 const SCREEN_CODE_MS = 15 * 60_000
 
-type DbError = { message: string; details?: string | null; code?: string | null }
+type DbError = { message: string; details?: string | null; code?: string | null; hint?: string | null }
 
 /**
  * A PostgREST error as a GameCallError: custom PT4xx refusals carry their code in
@@ -107,12 +107,65 @@ export async function loadMembership(joinCode: string): Promise<Membership | nul
 }
 
 /**
+ * A typed name that is free on the party's guest list (docs/guest-list.md):
+ * the phone offers "Yes, I'm Ana", which takes it with claimGuest.
+ */
+export class OnListError extends GameCallError {
+  /** The name as the host listed it. */
+  listedName: string
+
+  constructor(message: string, status: number, listedName: string) {
+    super(message, status, 'on_list')
+    this.name = 'OnListError'
+    this.listedName = listedName
+  }
+}
+
+/**
  * join_session. No retry of its own: PostgREST has no rate limit; the 429 comes
  * from the sign-in (5.9). Refusals carry their code: 'closed', 'archived',
- * 'name_taken', 'bad_name', 'not_found'.
+ * 'name_taken', 'bad_name', 'not_found', and 'on_list' as an OnListError.
  */
-export function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
-  return asThisAccount(() => supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() }))
+export async function joinSession(joinCode: string, name: string): Promise<PlayerRow> {
+  let listed: string | null | undefined
+  try {
+    return await asThisAccount(async () => {
+      const result = await supabase.rpc('join_session', { p_join_code: normalCode(joinCode), p_name: name.trim() })
+      listed = result.error?.hint
+      return result
+    })
+  } catch (error) {
+    if (error instanceof GameCallError && error.code === 'on_list') {
+      throw new OnListError(error.message, error.status, listed || name.trim())
+    }
+    throw error
+  }
+}
+
+/**
+ * The free names on a party's guest list (guest_list), for "Who are you?".
+ * An empty list for a party without one, and on any failure (an older
+ * database, a lost connection): the join page then shows the name form.
+ */
+export async function freeGuestNames(joinCode: string): Promise<string[]> {
+  const code = normalCode(joinCode)
+  if (!isJoinCode(code)) return []
+  try {
+    const { data, error } = await supabase.rpc('guest_list', { p_join_code: code })
+    if (error || !Array.isArray(data)) return []
+    return data.filter((name): name is string => typeof name === 'string')
+  } catch {
+    return []
+  }
+}
+
+/**
+ * claim_guest: this phone takes a free name on the guest list, which joins the
+ * party. Refusals: 'guest_taken', 'not_on_list', 'already_player', 'closed',
+ * 'archived', 'bad_name', 'not_found'.
+ */
+export function claimGuest(joinCode: string, name: string): Promise<PlayerRow> {
+  return asThisAccount(() => supabase.rpc('claim_guest', { p_join_code: normalCode(joinCode), p_name: name }))
 }
 
 /** Moves a player to this phone with the code the host showed ('bad_code', 'already_player'). */
@@ -135,6 +188,8 @@ export async function getPlayerByCode(code: string): Promise<(PlayerRow & { sess
       .from('players')
       .select(`${PLAYER_COLUMNS}, session:sessions(id, name, join_code, status, archived_at)`)
       .eq('code', normalized)
+      // A host reads the guests still expected too: never open one of those.
+      .not('joined_at', 'is', null)
       .maybeSingle(),
   )
   if (!row?.session) return null
@@ -401,10 +456,70 @@ export async function removePlayer(sessionId: string, playerId: string): Promise
   await removeGuestPhoto(playerId).catch(() => undefined)
   await clearPlayerFolder(sessionId, playerId)
   unwrap(await supabase.from('players').delete().eq('id', playerId))
+  await syncLiveGames(sessionId)
+}
+
+/** A sync to every live game of the party, so onPlayerLeave and isFinished run at once. A failed sync is not an error. */
+async function syncLiveGames(sessionId: string): Promise<void> {
   const live = unwrap<{ id: string }[]>(
     await supabase.from('session_games').select('id').eq('session_id', sessionId).eq('status', 'active').is('archived_at', null),
   )
   await Promise.allSettled(live.map((game) => callGame({ type: 'sync', gameId: game.id })))
+}
+
+// Host: the guest list (docs/guest-list.md, 7) ------------------------------------------------
+
+/** Why host_add_guests left a name out: over 40 characters, repeated in the same paste, or already in the party. */
+export type SkipReason = 'too_long' | 'repeat' | 'taken'
+/** What host_add_guests did, in the order the names were given: names added as stored (clean), skipped ones as given. */
+export type AddedGuests = { added: { id: string; name: string }[]; skipped: { name: string; reason: SkipReason }[] }
+
+/**
+ * Adds names to the guest list as guests still expected (host_add_guests), in
+ * order. Blank lines are dropped without a word. Refusals: 'too_many' (over
+ * 100 names), 'list_full' (over 200 expected; its words say how many more
+ * fit), 'archived', 'not_host', 'not_found'.
+ */
+export async function addGuests(sessionId: string, names: readonly string[]): Promise<AddedGuests> {
+  const result = unwrap<AddedGuests | null>(await supabase.rpc('host_add_guests', { p_session_id: sessionId, p_names: names }))
+  return { added: result?.added ?? [], skipped: result?.skipped ?? [] }
+}
+
+/**
+ * Free the name: a guest who joined goes back on the list as still expected,
+ * under the same id, and the phone that had the name goes back to "Who are
+ * you?". Like removePlayer: the photo first and the guest's folder, best
+ * effort; then host_free_guest, which takes everything the name earned with
+ * it; then a photo saved in between (its previous_photo); then a sync to every
+ * live game, so onPlayerLeave runs at once. Refusals: 'not_joined' (already
+ * free), 'not_found', 'not_host'.
+ */
+export async function freeGuest(sessionId: string, playerId: string): Promise<void> {
+  await removeGuestPhoto(playerId).catch(() => undefined)
+  await clearPlayerFolder(sessionId, playerId)
+  const freed = unwrap<{ previous_photo?: string | null } | null>(await supabase.rpc('host_free_guest', { p_player_id: playerId }))
+  if (freed?.previous_photo) await removePlayerPhotos([freed.previous_photo]).catch(() => undefined)
+  // The name is free whatever happens next: the next timer or move runs the hooks.
+  await syncLiveGames(sessionId).catch(() => undefined)
+}
+
+/**
+ * Removes a name nobody has taken from the guest list. Never a guest who
+ * joined meanwhile: Players' Remove is for them.
+ */
+export async function removeGuest(playerId: string): Promise<void> {
+  const result = await supabase.from('players').delete().eq('id', playerId).is('joined_at', null).select('id')
+  expectRow(result, "That name isn't waiting on the list any more. If they just joined, they're in Players.")
+}
+
+/**
+ * Removes every name nobody has taken from the party's guest list, in one
+ * step (a paste that went wrong). Never a guest who joined. Resolves with how
+ * many names went.
+ */
+export async function removeExpectedGuests(sessionId: string): Promise<number> {
+  const result = await supabase.from('players').delete().eq('session_id', sessionId).is('joined_at', null).select('id')
+  return unwrap<unknown[] | null>(result)?.length ?? 0
 }
 
 /**

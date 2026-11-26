@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Game, GameError, type GameContext } from './Game'
+import { Game, GameError, type GameContext, type GameInfo, type PlayerId } from './Game'
 import { ProbeGame, type ProbePublicState, type ProbeState } from './probe'
 import { FakeDbError, simulateParty } from './simulate'
 
@@ -129,6 +129,142 @@ describe('members', () => {
     expect(stored.members).toEqual(p.players.map((pl) => pl.id))
     expect(p.game('g').views).toHaveProperty(late.id)
     expect(p.game('g').views).not.toHaveProperty(gone.id)
+  })
+})
+
+describe('the guest list', () => {
+  type AimsState = { target: PlayerId }
+  /** Aims every effect at the guest its settings name, joined or not, and opens two prompts that name people. */
+  class Aims extends Game<AimsState, { type: 'aim' }, { target: string }, { me: boolean }, { target: string }> {
+    readonly type = 'aims'
+    readonly defaultConfig = { target: '' }
+    setup(ctx: GameContext<{ target: string }>): AimsState {
+      if (!ctx.guests.some((g) => g.id === ctx.config.target)) throw new GameError('Pick someone on the guest list')
+      ctx.openPrompt('who', { kind: 'choice', options: 'players' })
+      ctx.openPrompt('anyone', { kind: 'choice', options: 'guests', exclude_self: true })
+      return { target: ctx.config.target }
+    }
+    parseAction(): { type: 'aim' } {
+      return { type: 'aim' }
+    }
+    handleAction(state: AimsState, _action: { type: 'aim' }, _by: PlayerId, ctx: GameContext<{ target: string }>): AimsState {
+      ctx.awardPoints(state.target, 2, 'Aimed')
+      ctx.updateProfile(state.target, { aimed: true })
+      ctx.announce('Only for the target', { to: [state.target] })
+      return state
+    }
+    scores(state: AimsState) {
+      return { [state.target]: 7 }
+    }
+    publicState(state: AimsState, info: GameInfo<{ target: string }>) {
+      return { target: info.guests.find((g) => g.id === state.target)?.name ?? '' }
+    }
+    playerView(state: AimsState, playerId: PlayerId) {
+      return { me: playerId === state.target }
+    }
+  }
+
+  it('lists, takes and frees names as the database does', () => {
+    const p = simulateParty({ games: [new Aims()], players: 2 })
+    const zelda = p.listGuest('Zelda')
+    expect(p.guests.map((g) => g.name)).toEqual(['Zelda'])
+    expect(p.players.map((pl) => pl.id)).not.toContain(zelda.id)
+    expect(p.log.at(-1)).toMatchObject({ kind: 'guest.added', actor: 'host', data: { name: 'Zelda', player_id: zelda.id } })
+    expect(p.pings.at(-1)).toBe('stage')
+    expect(p.guestList()).toEqual([
+      ...p.players.map((pl) => ({ id: pl.id, name: pl.name, joined: true })),
+      { id: zelda.id, name: 'Zelda', joined: false },
+    ])
+
+    const joined = p.claimGuest(zelda.id)
+    expect(joined).toMatchObject({ id: zelda.id, name: 'Zelda' })
+    expect(p.guests).toEqual([])
+    expect(p.players.at(-1)!.id).toBe(zelda.id)
+    expect(p.log.at(-1)).toMatchObject({ kind: 'player.joined', data: { player_id: zelda.id, listed: true } })
+    expect(() => p.claimGuest(zelda.id)).toThrow(FakeDbError)
+
+    p.addGame('g', 'aims', 'Aims', { target: zelda.id })
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    p.send(p.userOf(p.players[0].id), { type: 'action', gameId: 'g', action: { type: 'aim' } })
+    p.submit('g', 'anyone', zelda.id, { choice: [p.players[0].id] })
+    expect(p.game('g').scores).toEqual({ [zelda.id]: 7 })
+    expect(p.infoOf('g')!.scoreboard[zelda.id]).toBe(9)
+    expect(p.feed.map((f) => f.audience)).toEqual([[zelda.id]])
+
+    const code = p.codeOf(zelda.id)
+    p.freeGuest(zelda.id)
+    expect(p.players.map((pl) => pl.id)).not.toContain(zelda.id)
+    expect(p.guests.map((g) => [g.id, g.name])).toEqual([[zelda.id, 'Zelda']])
+    expect(p.codeOf(zelda.id)).not.toBe(code)
+    expect(p.log.at(-1)).toMatchObject({ kind: 'player.freed', actor: 'host', data: { player_id: zelda.id } })
+    expect(p.pings.at(-1)).toBe('room')
+    expect(p.game('g').views).not.toHaveProperty(zelda.id)
+    expect(p.game('g').scores).toEqual({})
+    expect(p.infoOf('g')!.scoreboard).not.toHaveProperty(zelda.id)
+    expect(p.answersOf('g', zelda.id)).toEqual({})
+    expect(p.feed).toEqual([])
+    expect(p.infoOf('g')!.guests).toContainEqual({ id: zelda.id, name: 'Zelda', joined: false })
+  })
+
+  it('gives a guest still expected no view, score, points, badge or toast, even when a game aims at them', () => {
+    const p = simulateParty({ games: [new Aims()], players: 2 })
+    const zelda = p.listGuest('Zelda')
+    p.addGame('g', 'aims', 'Aims', { target: zelda.id })
+    expect(p.send(p.hostUser, { type: 'start', gameId: 'g' })).toMatchObject({ kind: 'commit' })
+    expect(p.game('g').publicState).toEqual({ target: 'Zelda' })
+    const ana = p.players[0]
+    // Every effect is dropped, so the aim changes nothing: no save at all.
+    expect(p.send(p.userOf(ana.id), { type: 'action', gameId: 'g', action: { type: 'aim' } })).toMatchObject({ kind: 'skip' })
+    expect(p.game('g').views).not.toHaveProperty(zelda.id)
+    expect(p.game('g').scores).toEqual({})
+    expect(p.infoOf('g')!.scoreboard).not.toHaveProperty(zelda.id)
+    expect(p.feed).toEqual([])
+    expect(p.stateOf('g')!.members).not.toContain(zelda.id)
+
+    // Once she joins, the same aim reaches her.
+    p.claimGuest(zelda.id)
+    p.send(p.userOf(ana.id), { type: 'action', gameId: 'g', action: { type: 'aim' } })
+    expect(p.game('g').views[zelda.id]).toEqual({ me: true })
+    expect(p.game('g').scores).toEqual({ [zelda.id]: 7 })
+    expect(p.feed.map((f) => f.audience)).toEqual([[zelda.id]])
+  })
+
+  it("lets a 'guests' answer name a guest still expected, and refuses that in a 'players' answer", () => {
+    const p = simulateParty({ games: [new Aims()], players: 2 })
+    const zelda = p.listGuest('Zelda')
+    p.addGame('g', 'aims', 'Aims', { target: zelda.id })
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    const [ana, bo] = p.players
+    const invalid = (fn: () => unknown) => {
+      try {
+        fn()
+      } catch (error) {
+        return (error as FakeDbError).code
+      }
+      return 'accepted'
+    }
+    expect(invalid(() => p.submit('g', 'who', ana.id, { choice: [zelda.id] }))).toBe('answer_invalid')
+    expect(invalid(() => p.submit('g', 'who', ana.id, { choice: [bo.id] }))).toBe('accepted')
+    expect(invalid(() => p.submit('g', 'anyone', ana.id, { choice: [zelda.id] }))).toBe('accepted')
+    expect(invalid(() => p.submit('g', 'anyone', bo.id, { choice: [bo.id] }))).toBe('answer_invalid')
+    // Nobody can answer as a guest still expected.
+    expect(invalid(() => p.submit('g', 'anyone', zelda.id, { choice: [ana.id] }))).toBe('not_player')
+  })
+
+  it('runs leave, then join, for a name freed and taken again with no save in between', () => {
+    const p = party(2)
+    const zelda = p.listGuest('Zelda')
+    p.claimGuest(zelda.id)
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    p.tick(1000)
+    p.freeGuest(zelda.id)
+    p.claimGuest(zelda.id)
+    p.sync('g')
+    const stored = p.stateOf('g')!
+    expect((stored.state as ProbeState).left).toEqual([zelda.id])
+    expect((stored.state as ProbeState).joined).toEqual([zelda.id])
+    expect(stored.members).toContain(zelda.id)
+    expect(p.log.filter((row) => row.kind === 'game.effects').at(-1)!.data.members).toEqual({ joined: [zelda.id], left: [zelda.id] })
   })
 })
 

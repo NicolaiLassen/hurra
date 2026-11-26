@@ -5,7 +5,8 @@
 // Makes (or reuses) the local host user from DEV_HOST_EMAIL and
 // DEV_HOST_PASSWORD in the gitignored .env.development.local, so no password
 // ever sits in the repo, lists it in hosts, and adds a demo party with 6 bot
-// guests and one game of each type. Local only: it refuses any URL that isn't
+// guests, 4 more names on its guest list who haven't joined (docs/guest-list.md)
+// and one game of each type. Local only: it refuses any URL that isn't
 // localhost. Run it again after `supabase db reset`.
 import { createClient } from '@supabase/supabase-js'
 import { existsSync } from 'node:fs'
@@ -86,6 +87,11 @@ for (const name of ['Ana', 'Bo', 'Cy', 'Dee', 'Eli', 'Fay']) {
   if (joinError) throw joinError
 }
 
-console.log(`Demo party ready: join code ${party.join_code}, 6 guests, ${games.length} games.`)
+// Names on the guest list nobody has taken: open the join link to tap one.
+const expected = ['Zelda', 'Quentin', 'Ximena', 'Ulrik']
+const { error: listError } = await host.rpc('host_add_guests', { p_session_id: party.id, p_names: expected })
+if (listError) throw listError
+
+console.log(`Demo party ready: join code ${party.join_code}, 6 guests, ${expected.length} more on the guest list, ${games.length} games.`)
 console.log(`Host page: http://localhost:5173/host/s/${party.id}`)
 process.exit(0)

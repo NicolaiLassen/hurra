@@ -1,5 +1,6 @@
 import {
   ArrowsLeftRightIcon,
+  ArrowUUpLeftIcon,
   DotsThreeIcon,
   HandCoinsIcon,
   MagnifyingGlassIcon,
@@ -10,6 +11,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import Avatar from '@/components/Avatar'
 import Confirm from '@/components/Confirm'
+import FreeNameConfirm, { type FreeingPlayer } from '@/components/host/FreeNameConfirm'
+import { removePlayerDescription } from '@/components/host/guestListWords'
 import { useHostCall } from '@/components/host/hostCalls'
 import MovePlayerDialog, { type MovingPlayer } from '@/components/host/MovePlayerDialog'
 import RenameDialog from '@/components/host/RenameDialog'
@@ -29,6 +32,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { knockedOutIds } from '@/games/registry'
 import { foldName, withRanks } from '@/lib/format'
+import { wasListed } from '@/lib/guestList'
 import { removePlayer, renamePlayer } from '@/lib/queries'
 import type { ScoreRow, Snapshot } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
@@ -40,7 +44,8 @@ const SEARCH_FROM = 9
 /**
  * The guests by the day's points (docs/engine-v2.md, 7.3): rank, token, name,
  * badges and points. The name opens the award page; the row's menu renames,
- * moves the player to a new phone, or removes them. A guest a live game has
+ * moves the player to a new phone, frees the name (it goes back on the guest
+ * list, docs/guest-list.md 7.5), or removes them. A guest a live game has
  * knocked out (the games' knockedOut hook) gets the pink stripe on their token
  * and the word Out beside the points (docs/identity.md, The player token).
  */
@@ -52,7 +57,14 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
   const moving = useDialogTarget<MovingPlayer>()
   const renaming = useDialogTarget<ScoreRow>()
   const removing = useDialogTarget<ScoreRow>()
+  const freeing = useDialogTarget<FreeingPlayer>()
   const removingPhoto = useRemovePhoto(snapshot)
+  // Only a database that keeps a guest list can free a name (the host's snapshot has guests).
+  const canFree = Array.isArray(snapshot.guests)
+
+  // Remove takes a guest off the guest list too; one who took a listed name is offered Free the name instead.
+  const removedRow = removing.target ? snapshot.guests?.find((g) => g.id === removing.target!.player_id) : undefined
+  const removedWasListed = removedRow !== undefined && wasListed(removedRow)
 
   const rows = withRanks(snapshot.standings)
   const out = useMemo(() => knockedOutIds(snapshot.games), [snapshot.games])
@@ -122,6 +134,12 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
                       <ArrowsLeftRightIcon />
                       Move to a new phone…
                     </DropdownMenuItem>
+                    {canFree && (
+                      <DropdownMenuItem onSelect={() => freeing.show({ id: row.player_id, name: row.name, points: row.points })}>
+                        <ArrowUUpLeftIcon />
+                        Free the name…
+                      </DropdownMenuItem>
+                    )}
                     {removingPhoto.item(row)}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => removing.show(row)}>
@@ -154,19 +172,34 @@ export default function PlayersPanel({ snapshot, className }: { snapshot: Snapsh
         }}
       />
 
+      <FreeNameConfirm snapshot={snapshot} player={freeing.target} open={freeing.open} onOpenChange={freeing.onOpenChange} />
+
       <Confirm
         open={removing.open}
         onOpenChange={removing.onOpenChange}
         title={`Remove ${removing.target?.name ?? 'this player'}?`}
-        description={
-          'Their points go with them, and the games running now carry on without them. ' +
-          'On a new phone? Move them instead: their points stay.'
-        }
+        description={removePlayerDescription({
+          name: removing.target?.name ?? 'They',
+          listed: removedWasListed,
+          canFree,
+        })}
         confirmLabel="Remove"
         onConfirm={() => {
           const row = removing.target
           if (row) void call(() => removePlayer(session.id, row.player_id), `Removed ${row.name}`)
         }}
+        // Someone took a name on the list by mistake: Free the name keeps the name, and its picks in the settings.
+        secondary={
+          canFree && removedWasListed && removing.target
+            ? {
+                label: 'Free the name instead',
+                onConfirm: () => {
+                  const row = removing.target!
+                  freeing.show({ id: row.player_id, name: row.name, points: row.points })
+                },
+              }
+            : undefined
+        }
       />
     </Card>
   )

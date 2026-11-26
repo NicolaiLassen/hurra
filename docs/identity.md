@@ -607,6 +607,9 @@ confirmation stays where it was. Its own rules:
   `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
   in paper: no medal coins in the room. There is no Away tag: the app holds
   no presence data for players.
+- **The guest list** card lists only the guests still expected, with their
+  tokens; joined guests stay in the player list. Free the name is a gold
+  confirm, not a destructive one: the guest can take the name again.
 - **Numbers that change in place** (the TV sound level, the quiz's totals and
   gains, answered counts) are `tv-num`, so their columns hold still.
 - **Wells:** a settings form or a question is an `overlay` well in a raised

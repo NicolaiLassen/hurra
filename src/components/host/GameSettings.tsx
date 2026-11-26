@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Confirm from '@/components/Confirm'
 import { errorMessage } from '@/components/host/hostCalls'
 import { Button } from '@/components/ui/button'
+import type { GameGuest } from '@/games/core/Game'
 import type { GameModule } from '@/games/types'
 import { countingUploads, gameMediaUrl, uploadGameMedia } from '@/lib/media'
 import { readGameSettings, saveGameSettings } from '@/lib/queries'
@@ -13,7 +14,8 @@ import type { Player, Session, SessionGame } from '@/lib/types'
  * A game's own settings editor (its ConfigEditor), loaded from game_settings
  * and saved there (hosts only: the quiz's answers, who is in each picture).
  * The settings are frozen into the game when it starts, so they're edited
- * while it isn't live. Images are re-encoded in the browser and uploaded to the
+ * while it isn't live. The editor gets the whole guest list, so settings can
+ * name guests who haven't joined yet (docs/guest-list.md). Images are re-encoded in the browser and uploaded to the
  * public game-media bucket.
  */
 export default function GameSettings({
@@ -21,12 +23,15 @@ export default function GameSettings({
   game,
   gameModule,
   players,
+  guests,
   onClose,
 }: {
   session: Session
   game: SessionGame
   gameModule: GameModule
   players: Player[]
+  /** Everyone on the guest list, joined or still expected, for editors that name guests. */
+  guests: readonly GameGuest[]
   onClose: () => void
 }) {
   const [attempt, setAttempt] = useState(0)
@@ -62,7 +67,15 @@ export default function GameSettings({
   }
   if (!current?.config) return <p className="rounded-lg bg-overlay p-4 text-sm text-paper-2">Loading the settings…</p>
   return (
-    <SettingsForm session={session} game={game} gameModule={gameModule} players={players} initial={current.config} onClose={onClose} />
+    <SettingsForm
+      session={session}
+      game={game}
+      gameModule={gameModule}
+      players={players}
+      guests={guests}
+      initial={current.config}
+      onClose={onClose}
+    />
   )
 }
 
@@ -71,6 +84,7 @@ function SettingsForm({
   game,
   gameModule,
   players,
+  guests,
   initial,
   onClose,
 }: {
@@ -78,6 +92,7 @@ function SettingsForm({
   game: SessionGame
   gameModule: GameModule
   players: Player[]
+  guests: readonly GameGuest[]
   initial: Record<string, unknown>
   onClose: () => void
 }) {
@@ -120,7 +135,7 @@ function SettingsForm({
   return (
     // A solid well in the games panel; the editors' cards inside it stand on raised, their fields on overlay (docs/identity.md).
     <div className="grid w-full min-w-0 gap-4 rounded-lg bg-overlay p-4">
-      <Editor config={config} onChange={setConfig} session={session} game={game} players={players} media={media} />
+      <Editor config={config} onChange={setConfig} session={session} game={game} players={players} guests={guests} media={media} />
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" size="lg" disabled={saving} onClick={() => (dirty ? setDiscarding(true) : onClose())}>
           Cancel

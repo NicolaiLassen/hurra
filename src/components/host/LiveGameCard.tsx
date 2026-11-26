@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { getGameModule } from '@/games/registry'
+import { guestsOf } from '@/lib/guestList'
 import { gameMediaUrl } from '@/lib/media'
 import { callGame, setSpotlight } from '@/lib/queries'
 import { gamePointsOf, promptsOf, talliesOf } from '@/lib/stage'
@@ -19,8 +20,8 @@ import { cn } from '@/lib/utils'
 /**
  * One live game in the control room (docs/engine-v2.md, 7.3): its title and
  * where it shows, Show on the TV and End, and the game's own HostView fed the
- * full state (hosts only), this round's settings, the answers coming in and
- * this round's points.
+ * full state (hosts only), this round's settings, the answers coming in,
+ * this round's points and the whole guest list.
  */
 export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Snapshot; game: SessionGame; onStage: boolean }) {
   const gameModule = getGameModule(game.game_type)
@@ -34,6 +35,7 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
   const session = snapshot.session!
   const held = snapshot.states?.[game.id]
   const prompts = useMemo(() => promptsOf(snapshot, game.id), [snapshot, game.id])
+  const guests = useMemo(() => guestsOf(snapshot), [snapshot])
 
   async function run(id: 'stage' | 'end', request: () => Promise<unknown>) {
     if (pending) return
@@ -111,6 +113,7 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
                 session={session}
                 game={game}
                 players={snapshot.players}
+                guests={guests}
                 publicState={game.public_state}
                 prompts={prompts}
                 serverNow={live.serverNow}

@@ -6,12 +6,14 @@ import { createElement, type ReactNode } from 'react'
 import { prerender } from 'react-dom/static'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
+import { addSummary, freeNameDescription, guestListLine, keptNote, removePlayerDescription, someNames } from '@/components/host/guestListWords'
 import RecapPreview from '@/components/host/RecapPreview'
 import { gameLogic } from '@/games/logic'
 import { knockedOutIds } from '@/games/registry'
-import { FIXTURE_SCENES, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
+import { FIXTURE_EXPECTED_NAMES, FIXTURE_SCENES, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import { buildRecapDoc } from '@/lib/recap'
 import { recordedRawRecap } from '@/lib/recap.recorded'
+import type { Snapshot } from '@/lib/types'
 import { LiveSessionProvider } from '@/lib/useLive'
 import { ControlRoomGate } from '@/pages/host/HostSession'
 
@@ -19,12 +21,16 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 // The join card and the dialogs build links from the page's address.
 vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } })
 
-async function html(node: ReactNode): Promise<string> {
+async function markup(node: ReactNode): Promise<string> {
   const errors: unknown[] = []
   const { prelude } = await prerender(createElement(MemoryRouter, null, node), { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
+  return new Response(prelude).text()
+}
+
+async function html(node: ReactNode): Promise<string> {
   // Plain text, so assertions read like the screen.
-  return (await new Response(prelude).text())
+  return (await markup(node))
     .replace(/<!-- -->/g, '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#x27;/g, "'")
@@ -33,8 +39,11 @@ async function html(node: ReactNode): Promise<string> {
 }
 
 function controlRoom(scene: FixtureScene) {
-  const snapshot = fixtureSnapshot(scene, 'host')
-  return html(
+  return controlRoomOf(fixtureSnapshot(scene, 'host'))
+}
+
+function controlRoomOf(snapshot: Snapshot, render: (node: ReactNode) => Promise<string> = html) {
+  return render(
     createElement(LiveSessionProvider, {
       sessionId: snapshot.session?.id ?? 'removed',
       screen: 'host',
@@ -101,6 +110,160 @@ describe('the control room', () => {
 
   it('says the party is not found for a screen that is not a member', async () => {
     expect(await controlRoom('removed')).toContain('Session not found')
+  })
+})
+
+describe('the guest list', () => {
+  it('lists the guests still expected under the players, with how many are here', async () => {
+    const text = await controlRoom('lobby')
+    expect(text).toContain('Guest list')
+    expect(text).toContain('Add guests')
+    expect(text).toContain('12 of 16 here. 4 still expected.')
+    expect(text).toContain('Still expected (4)')
+    // A bad paste is undone in one step.
+    expect(text).toContain('Remove everyone still expected…')
+    expect(text.indexOf('Players (12)')).toBeLessThan(text.indexOf('Guest list'))
+    const raw = await controlRoomOf(fixtureSnapshot('lobby', 'host'), markup)
+    for (const name of FIXTURE_EXPECTED_NAMES) expect(raw).toContain(`aria-label="More actions for ${name}"`)
+    // Joined guests are in Players only, never repeated on the list: one menu each.
+    expect(raw.split('aria-label="More actions for Ana"').length - 1).toBe(1)
+  })
+
+  it('invites the host to add guests when the list is empty, and says when everyone is here', async () => {
+    const lobby = fixtureSnapshot('lobby', 'host')
+    const empty = await controlRoomOf({ ...lobby, players: [], standings: [], guests: [] })
+    expect(empty).toContain('Nobody has joined yet.')
+    expect(empty).toContain('Add the guests you invited. When they join, they tap their name instead of typing it')
+    expect(empty).not.toContain('Still expected')
+    // Everyone joined, one of them by taking a listed name (joined after their row was made).
+    const joined = lobby.guests!.filter((g) => g.joined_at !== null)
+    const everyone = await controlRoomOf({ ...lobby, guests: joined.map((g, i) => (i === 0 ? { ...g, joined_at: g.created_at + 60_000 } : g)) })
+    expect(everyone).toContain('Everyone on the list is here.')
+    expect(everyone).not.toContain('Still expected')
+    // Guests who typed their names, and nobody listed: the invitation, never "Everyone on the list is here."
+    const typed = await controlRoomOf({ ...lobby, guests: joined })
+    expect(typed).toContain('Add the guests you invited.')
+    expect(typed).not.toContain('Everyone on the list is here.')
+  })
+
+  it('has a search from 9 names still expected', async () => {
+    const lobby = fixtureSnapshot('lobby', 'host')
+    const more = ['Astrid', 'Bjørn', 'Cornelia', 'Dagny', 'Elias'].map((name, i) => ({ id: `extra-${i}`, name, joined_at: null, created_at: 0 }))
+    expect(await controlRoomOf(lobby, markup)).not.toContain('Find a name on the list')
+    const listed = { ...lobby, guests: [...lobby.guests!, ...more] }
+    expect(await controlRoomOf(listed, markup)).toContain('placeholder="Find a name on the list"')
+    const text = await controlRoomOf(listed)
+    expect(text).toContain('Still expected (9)')
+    expect(text).toContain('12 of 21 here. 9 still expected.')
+  })
+
+  it('has no Add guests and no Remove everyone still expected once the party is archived', async () => {
+    const text = await controlRoom('archived')
+    expect(text).toContain('Guest list')
+    expect(text).not.toContain('Add guests')
+    expect(text).not.toContain('Remove everyone still expected')
+  })
+
+  it('is not there on a database without a guest list', async () => {
+    const lobby = fixtureSnapshot('lobby', 'host')
+    const text = await controlRoomOf({ ...lobby, guests: undefined })
+    expect(text).toContain('Players (12)')
+    expect(text).not.toContain('Guest list')
+  })
+
+  it('words the card line in its three states', () => {
+    expect(guestListLine({ here: 0, expected: 0, total: 0, listed: 0 })).toMatch(/^Add the guests you invited\./)
+    expect(guestListLine({ here: 5, expected: 0, total: 5, listed: 0 })).toMatch(/^Add the guests you invited\./)
+    expect(guestListLine({ here: 12, expected: 18, total: 30, listed: 25 })).toBe('12 of 30 here. 18 still expected.')
+    expect(guestListLine({ here: 1, expected: 29, total: 30, listed: 29 })).toBe('1 of 30 here. 29 still expected.')
+    expect(guestListLine({ here: 0, expected: 4, total: 4, listed: 4 })).toBe('0 of 4 here. 4 still expected.')
+    expect(guestListLine({ here: 24, expected: 0, total: 24, listed: 20 })).toBe('Everyone on the list is here.')
+  })
+
+  it('says what Add guests did: added, already on the list, repeated in the paste, too long', () => {
+    expect(addSummary({ added: [{ id: '1', name: 'Zelda' }], skipped: [] })).toEqual({
+      title: 'Added Zelda',
+      description: undefined,
+      added: true,
+      tooLong: [],
+      repeated: [],
+    })
+    const long = 'Signe-Lykke Kjærsgaard Østergaard Holmgaard'
+    expect(
+      addSummary({
+        added: [...Array.from({ length: 11 }, (_, i) => ({ id: String(i), name: `Guest ${i}` })), { id: 'm', name: 'Mads' }],
+        skipped: [
+          { name: 'Ana', reason: 'taken' },
+          { name: 'mads', reason: 'repeat' },
+          { name: long, reason: 'too_long' },
+        ],
+      }),
+    ).toEqual({
+      title: 'Added 12 guests',
+      description: 'Already on the list: Ana. Mads was on more than one line: added once. Over 40 characters: 1 name.',
+      added: true,
+      tooLong: [long],
+      // Kept in the field, as the list has it, in case they are two people.
+      repeated: ['Mads'],
+    })
+    // A repeat of a name already on the list is only "already on the list".
+    expect(addSummary({ added: [], skipped: [{ name: 'Ana', reason: 'taken' }, { name: 'ana', reason: 'repeat' }] })).toEqual({
+      title: 'Everyone you added is already on the list',
+      added: false,
+      tooLong: [],
+      repeated: [],
+    })
+    expect(addSummary({ added: [], skipped: [{ name: 'Ana', reason: 'taken' }, { name: long, reason: 'too_long' }] })).toMatchObject({
+      title: 'Already on the list: Ana',
+      tooLong: [long],
+    })
+    expect(addSummary({ added: [], skipped: [{ name: long, reason: 'too_long' }] })).toMatchObject({ title: null, tooLong: [long] })
+    // A name left out reads as the list has it, a repeat of a name added now too.
+    expect(
+      addSummary(
+        { added: [{ id: '1', name: 'Zelda' }, { id: '2', name: 'Søren' }], skipped: [{ name: 'ana', reason: 'taken' }, { name: 'soren', reason: 'repeat' }, { name: 'ZELDA', reason: 'repeat' }] },
+        ['Ana', 'Bo'],
+      ).description,
+    ).toBe('Already on the list: Ana. Søren and Zelda were on more than one line: added once.')
+    expect(someNames(['Ana', 'Bo', 'Mads', 'Sofie', 'Freja', 'Lars', 'Emil'])).toBe('Ana, Bo, Mads, Sofie, Freja and 2 more')
+  })
+
+  it('says why names stay in the Add guests field', () => {
+    expect(keptNote({ tooLong: 0, repeated: ['Mads'], over: 0 })).toEqual([
+      "Mads was on more than one line, so the list has one Mads. If they are two people, add a last name or an initial to the one here and add it again. If not, you're done.",
+    ])
+    expect(keptNote({ tooLong: 2, repeated: ['Mads', 'Bo'], over: 3 })).toEqual([
+      "Mads and Bo were each on more than one line, so the list has each of them once. If any are two people, add a last name or an initial to the one here and add it again. If not, you're done.",
+      'These are over 40 characters. Shorten them and add them again.',
+      'These are the names after the first 100. Add them now.',
+    ])
+    expect(keptNote({ tooLong: 1, repeated: [], over: 0 })).toEqual(['This name is over 40 characters. Shorten it and add it again.'])
+  })
+
+  it('builds the Free the name confirm from what applies', () => {
+    const plain = 'Ana goes back on the guest list as still expected, and the phone that has the name asks Who are you? again.'
+    expect(freeNameDescription({ name: 'Ana', points: 0, joiningOpen: true })).toBe(plain)
+    expect(freeNameDescription({ name: 'Ana', points: 5, joiningOpen: true })).toBe(`${plain} The 5 points it earned as Ana go with it.`)
+    expect(freeNameDescription({ name: 'Ana', points: 1, joiningOpen: false })).toBe(
+      `${plain} The 1 point it earned as Ana goes with it. Joining is closed: open it so they can pick their name.`,
+    )
+    // A name the guest typed goes on the list for the first time, and may be another spelling of a listed one.
+    expect(freeNameDescription({ name: 'Mads H', points: 0, joiningOpen: true, typed: true })).toBe(
+      'Mads H goes on the guest list as still expected, and the phone that has the name asks Who are you? again. ' +
+        'Another spelling of a name on the list? Free it and take Mads H off the list.',
+    )
+  })
+
+  it('builds the Remove confirm: the guest list and settings lose them, and Free the name for a wrong name', () => {
+    const lead = 'Their points go with them, and the games running now carry on without them.'
+    const move = 'On a new phone? Move them instead: their points stay.'
+    const list = 'Ana also leaves the guest list, and game settings that name Ana lose that pick.'
+    expect(removePlayerDescription({ name: 'Ana', listed: true, canFree: true })).toBe(
+      `${lead} ${list} Took the wrong name? Free the name instead: it stays on the list. ${move}`,
+    )
+    expect(removePlayerDescription({ name: 'Ana', listed: false, canFree: true })).toBe(`${lead} ${list} ${move}`)
+    // A database without the guest list: the words from before.
+    expect(removePlayerDescription({ name: 'Ana', listed: false, canFree: false })).toBe(`${lead} ${move}`)
   })
 })
 

@@ -215,6 +215,16 @@ statement. They are:
   sound volume file's body, and ends with the current self-check block
   (2.12). The live app runs on it unchanged, so it is pushed on its own,
   ahead of the app that shows photos.
+- `20261126000000_guest_list.sql`: the guest list (docs/guest-list.md, 3). A
+  guest on the host's list is a `players` row with no user yet; it adds
+  `players.joined_at` and the `players_joined` check (2.4), keeps members to
+  joined rows (2.5, 2.6), adds `my_exit`, `guest_list`, `claim_guest`,
+  `host_add_guests` and `host_free_guest`, replaces `join_session`,
+  `claim_player`, `check_answer`, `session_snapshot` and `session_recap`
+  (2.7), `game_load` and `game_commit` (2.8) and `log_player_change` (2.9),
+  and ends with the current self-check block (2.12). Every replaced function
+  keeps its signature and returns a superset, so the live app runs on it
+  unchanged; push it before the app that shows the guest list.
 
 ### 2.1 Rules for the file
 
@@ -247,7 +257,8 @@ statement. They are:
 
   A hotfix migration states its own grants and ends with a copy of the
   self-check block (2.12): the newest hotfix's, not the init's, so
-  `20261116000000_guest_photos.sql`'s for now.
+  `20261126000000_guest_list.sql`'s for now (it copied the guest photos
+  file's block and added its own checks).
 - **Functions** all use `set search_path = ''` and fully qualified names.
   `security definer` only where a function must read or write past row level
   security; those are owned by `postgres`.
@@ -328,6 +339,13 @@ spaces and unique by `lower(name)`, so "Ana" with a no-break space, a
 Cyrillic A or a zero-width space joined next to the real Ana and looked the
 same on every screen, a name starting with a direction override reversed the
 banners naming it, and a zero-width space alone made a blank row.
+
+**Changed after the switch-over (26 Nov):** `my_exit(p_session_id) returns
+text` (stable, definer): the kind of the newest of the caller's
+`player.moved`, `player.freed` and `player.removed` rows in the party (by
+`data.from_user`), or null. The snapshot's `moved` and `freed` come from it,
+so a guest removed after an earlier move reads as removed. `moved_away` stays
+(docs/guest-list.md, 3.4).
 
 ### 2.4 Tables
 
@@ -553,6 +571,15 @@ create table public.session_recaps (
 );
 ```
 
+**Changed after the switch-over (26 Nov):** `players.user_id` may be null: a
+guest on the host's guest list who has not joined yet ("expected"). The new
+public column `players.joined_at timestamptz default now()` is null while
+expected and the join time once taken (rows from before got their
+`created_at`); the check `players_joined` keeps `(user_id is null) =
+(joined_at is null)`, and `players_expected_idx` indexes the expected rows of a
+party. `unique (session_id, user_id)` stays, since nulls are distinct
+(`20261126000000_guest_list.sql`, docs/guest-list.md 2 and 3.1).
+
 ### 2.5 Row level security and grants
 
 Every table: `alter table ... enable row level security;` then
@@ -605,6 +632,13 @@ Engine-owned columns (`status`, `public_state`, `started_at`, `finished_*`,
 `sessions`; `profile` on `players`) are never in a client grant, and neither
 are `players.user_id`, `players.session_id` and `score_events.awarded_by`.
 
+**Changed after the switch-over (26 Nov):** "Hosts and members read
+players" lets members read joined rows only (`joined_at is not null`); hosts
+read every row, so the host's direct rename and delete work on expected rows
+too. The players' grants are stated again, with `joined_at`, like `user_id`,
+in no client write grant. "Hosts give points" takes only a guest who joined,
+as `game_commit` does (docs/guest-list.md, 3.2).
+
 ### 2.6 The scoreboard view
 
 ```sql
@@ -617,6 +651,10 @@ from public.players p;
 revoke all on public.scoreboard from anon, authenticated;
 grant select on public.scoreboard to authenticated;
 ```
+
+**Changed after the switch-over (26 Nov):** the view keeps joined guests
+only (`where p.joined_at is not null`), which covers every standings read
+(docs/guest-list.md, 3.3).
 
 ### 2.7 Client RPCs
 
@@ -836,6 +874,34 @@ answer, vote or move.
 party. `claim_player` and `claim_screen`: `not_signed_in`, `bad_code` (PT404),
 `already_player` (PT409). The archive guard (2.9): `active`.
 
+**Changed after the switch-over (26 Nov), the guest list** (docs/guest-list.md, 3):
+
+- `join_session` refuses a typed name that matches a free name on the guest
+  list: `PT409 on_list`, with the listed name in HINT. A party without a list
+  joins exactly as before.
+- New `guest_list(p_join_code) returns jsonb`: the party's free names as
+  strings, nothing else; null signed out or for an unknown code, `[]` while
+  joining is closed or the party is over. Not for anon.
+- New `claim_guest(p_join_code, p_name) returns players`: takes a free name
+  with one atomic update, which is joining (`guest_taken`, `not_on_list`,
+  `already_player`, and `join_session`'s other refusals).
+- New `host_add_guests(p_session_id, p_names text[]) returns jsonb`: up to
+  100 names, 200 expected per party; returns `added` and `skipped` with
+  reasons `too_long`, `repeat`, `taken` (`too_many`, `list_full`, `archived`,
+  `not_host`).
+- New `host_free_guest(p_player_id) returns jsonb`: puts a joined guest back
+  on the list as expected, same id and name, new code; everything they earned
+  goes with the row; returns the `previous_photo` (`not_joined`, `not_found`,
+  `not_host`).
+- `claim_player` sets `joined_at` when a move code is used on an expected row.
+- `check_answer`: `options: 'players'` counts joined guests only; the new
+  `'guests'` accepts every row of the party, joined or not.
+- `session_snapshot`: `players` are joined guests in join order, each with
+  `joined_at`; new `guests` (every row, `{ id, name, joined_at, created_at }`,
+  by name) for a host on the host screen only, else null; new `freed` beside
+  `moved`, both from `my_exit` (2.3).
+- `session_recap`: players are joined guests with their join time.
+
 ### 2.8 Engine RPCs
 
 Both are `security invoker` (they run as `service_role`), revoked from
@@ -988,6 +1054,14 @@ one save carries the save's own clock (`clock_timestamp()` at its start), so a
 round's points include bonuses awarded in its own start save, and all rows of
 one save sort together.
 
+**Changed after the switch-over (26 Nov):** `game_load` lists joined guests
+only in `players` (in join order, each with `joined_at`), adds `guests` (every
+row of the party, `{ id, name, joined }`, in the order they were added) and
+`current.saved_at` (the last save's time, for the re-join rule in 3.3).
+`game_commit`'s six joins and filters on `players` gain `joined_at is not
+null`, so a request that loaded before a free and commits after it writes no
+view, score, bonus, badge or toast for that id (docs/guest-list.md, 3.11).
+
 ### 2.9 Triggers
 
 | Table | Trigger | What it does |
@@ -1015,6 +1089,14 @@ Trigger functions: `touch_spotlight`, `log_session_change`,
 client role. The logging ones are `security definer`, so they can write the
 log and ping. Actor: `host` when `is_host()`, `player` when the caller has a
 player in the party, else `system`.
+
+**Changed after the switch-over (26 Nov):** `log_player_change` also logs the
+guest list: `guest.added`, `guest.renamed` and `guest.removed` for rows
+without a user (they ping the stage only, never phones), `player.joined` with
+`listed: true` when a guest takes a listed name, `player.freed` when a row
+loses its user, and `from_user` on `player.removed`. It stays quiet for the
+row `host_free_guest` is putting back, which logs once itself
+(docs/guest-list.md, 3.5).
 
 ### 2.10 Realtime
 
@@ -1159,6 +1241,16 @@ names is enough, since the file has just recreated its own five. If it trips
 on production: drop the named policy and run the file again (it runs in one
 transaction, so nothing was applied).
 
+**Changed after the switch-over (26 Nov):** the guest list file's block is
+the current one. It adds: `players.joined_at` in no client insert or update
+grant; the new functions exist and authenticated and service_role may run
+them; the `players_joined` check; the `joined_at is not null` filters in the
+members' policy, the host award policy, the scoreboard view,
+`session_snapshot`, `game_load`, `check_answer`, `session_recap`, and at least
+six times in `game_commit`; the
+snapshot's `'guests'` and `'freed'` keys; the `players_logged` trigger
+enabled (docs/guest-list.md, 3.13).
+
 ### 2.13 Host bootstrap
 
 The file creates no host. After a rebuild the main engineer adds the one host
@@ -1204,6 +1296,13 @@ so no password ever sits in the repo.
 
 About 2,000 to 3,000 rows for the night, a few MB with the start and finish
 states.
+
+**Changed after the switch-over (26 Nov):** the guest list adds
+`guest.added`, `guest.renamed` (`{ name, player_id, from }`) and
+`guest.removed` (`{ name, player_id }`) by the trigger, actor host, and
+`player.freed` (`{ name, player_id, from_user }`) by `host_free_guest` or the
+trigger; `player.joined` gains `listed: true` when a guest took a listed name,
+and `player.removed` gains `from_user` (docs/guest-list.md, 3.5).
 
 ## 3. SDK v2: src/games/core
 
@@ -1473,6 +1572,15 @@ export abstract class Game<State, Action, PublicState, PlayerView, Config, HostA
 export type AnyGame = Game<unknown, unknown, unknown, unknown, unknown, unknown>
 ```
 
+**Changed after the switch-over (26 Nov):** `GameGuest = { id, name, joined }`
+and a required `GameInfo.guests`: everyone on the party's guest list, joined or
+still expected, for names and settings only; `info.players` stays the guests
+who joined, and only they play. A choice prompt's `options` may also be
+`'guests'`: every name on the list, joined or not, so a vote can name a guest
+who never came. `onPlayerLeave` also runs for an id the host freed and someone
+took again (3.3). What each game must do with expected guests is
+docs/guest-list.md, section 9.
+
 ### 3.2 context.ts
 
 ```ts
@@ -1664,6 +1772,16 @@ What `step()` does, in order:
     when it is left out and `presentation` isn't `'background'`; else
     `'keep'`. `expected_round` is `env.round ?? current.round` (null on a
     start). `view` is the caller's own projection.
+
+**Changed after the switch-over (26 Nov):** `info.guests` is `loaded.guests`,
+or the players as joined on a database without it, and `info.players` never
+carries `joined_at`. Re-join rule: a present id that is in `current.members`
+and whose `joined_at` is later than `current.saved_at` was freed and taken
+again since the last save. It counts as both left and joined: the leave hooks
+run first, in a context without it (their effects aimed at it are dropped),
+then the join hooks with the full info. `testInfo` gives `guests` (the
+players, all joined, unless overridden) and `simulateParty` mirrors the list
+(`listGuest`, `claimGuest`, `freeGuest`) (docs/guest-list.md, 4.2 and 4.3).
 
 ### 3.4 Testing helpers
 
@@ -2132,6 +2250,14 @@ export type Snapshot = {
 optional `photo`, the path of the guest's photo in the `player-photos` bucket
 or null, so every snapshot's players carry it (`20261116000000_guest_photos.sql`,
 docs/guest-photos.md 4.1). Games never see it.
+
+**Changed after the switch-over (26 Nov):** `Player` gains an optional
+`joined_at`; new `ListedGuest = { id, name, joined_at | null, created_at }`;
+`Snapshot` gains `guests?` (the host page only) and `freed?`. Optional, so
+other branches' fixtures compile. The pure helpers are in
+`src/lib/guestList.ts`, the calls (`freeGuestNames`, `claimGuest`,
+`addGuests`, `freeGuest`, `removeGuest`) in `queries.ts` (docs/guest-list.md,
+4.5).
 
 ### 5.3 gameApi.ts
 
@@ -2871,6 +2997,14 @@ the card contract three ways, so it is fixed here, and the comments in
   success. On the host page it is the other way round (7.3): HOST's wrapper
   shows the toast, and the views catch the rejection and stay quiet.
 
+**Changed after the switch-over (26 Nov):** `ConfigEditorProps` and
+`HostViewProps` gain `guests: readonly GameGuest[]`, everyone on the guest
+list, joined or still expected, so settings and the host's controls can name
+guests before they come; `players` stays the joined ones. No other screen gets
+the list: a game shows an expected guest's name from its own public state.
+`GameSettings` and `LiveGameCard` pass `guestsOf(snapshot)`
+(docs/guest-list.md, 4.4 and 10).
+
 ## 7. Screens and behaviour
 
 ### 7.1 Phone (`/play/:joinCode`)
@@ -2935,6 +3069,11 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
 the host reopens. New: a "Got a code from the host?" link opens a 6-character
 code field; `claimPlayer(code)` then goes to `/play/:code`. The taken-name
 error links to it: "Is that you on another phone? Ask the host for a code."
+**Changed after the switch-over (26 Nov):** the hint names both ways it can be
+you, "Is that you? Ask the host. If someone else took your name, they can free
+it. If you joined on another phone, they can give you a code to move here.",
+in paper-2, and "Got a code from the host?" stays under the form
+(docs/guest-list.md, 6.4).
 **Changed after the switch-over (16 Nov):** after Let's go, the join page
 shows "Add a photo" (Take a selfie, Choose a photo, Skip for now), held above
 its membership reload so coming back from the camera never skips it. On the
@@ -2967,6 +3106,13 @@ is wrong."
 - "The host removed X" also covers a game deleted while its sheet is open.
 - Dev builds: `/play/<any>?fixture=<scene>` renders a fixture through a lazy
   chunk, so production bundles carry none of it.
+
+**Changed after the switch-over (26 Nov):** when the host has listed guests,
+the join page asks "Who are you?" with the free names, then "You're Ana?";
+"I'm not on the list" opens the name form, and a typed name that is on the
+list is offered ("Yes, I'm Ana"). A phone whose name the host freed goes back
+there with a note, from the snapshot's `freed`. A party without a list joins
+as before (docs/guest-list.md, 6).
 
 ### 7.2 TV (`/tv/:joinCode`)
 
@@ -3217,6 +3363,13 @@ game if live, else the newest live game. New: Move to a new phone.
 
 **Host home** (`/host`): as today, through `useSessions`, `createSession`,
 `archiveSession` and `deleteSession`.
+
+**Changed after the switch-over (26 Nov):** the control room has a Guest list
+card under Players: how many of the list are here, Add guests (one name per
+line, pasted or typed), and the guests still expected with Rename and Remove
+from the list. Each player's menu gains Free the name, which puts the guest
+back on the list as expected and sends the phone back to Who are you?
+(docs/guest-list.md, 7).
 
 ### 7.4 Recap page (`/host/s/:sessionId/recap`)
 

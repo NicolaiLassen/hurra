@@ -308,6 +308,7 @@ describe('timers', () => {
       round: 1,
       session: { id: 's', name: 'Party', data: {} },
       players: [{ id: 'p1', name: 'Ana', profile: {} }],
+      guests: [{ id: 'p1', name: 'Ana', joined: true }],
       scoreboard: {},
       config: CONFIG,
       now: 11_250,

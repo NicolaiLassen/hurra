@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FIXTURE_EXPECTED_NAMES,
   FIXTURE_NOW,
   FIXTURE_PLAYER_ID,
   FIXTURE_SCENES,
+  fixtureFreeNames,
   fixtureRecapDoc,
   fixtureSnapshot,
   FUSION_STAGE_SCENES,
   isFixtureScene,
 } from './fixtures'
+import { foldName } from './format'
 import { backgroundGames, phoneLayout, tvScene } from './stage'
 
 const screens = ['phone', 'tv', 'host'] as const
@@ -97,6 +100,25 @@ describe('fixtureSnapshot', () => {
     expect(question.s.tallies[question.quiz.id].q3).toBeGreaterThan(0)
   })
 
+  it('gives the guest list to the host page only: the players as joined and four still expected, by name', () => {
+    for (const scene of FIXTURE_SCENES) {
+      for (const screen of ['phone', 'tv'] as const) expect(fixtureSnapshot(scene, screen).guests).toBeNull()
+      const host = fixtureSnapshot(scene, 'host')
+      if (scene === 'removed') {
+        expect(host.guests).toBeNull()
+        continue
+      }
+      const guests = host.guests!
+      expect(guests.map((g) => g.name)).toEqual([...guests.map((g) => g.name)].sort((a, b) => a.localeCompare(b)))
+      expect(guests.filter((g) => g.joined_at === null).map((g) => g.name).sort()).toEqual([...FIXTURE_EXPECTED_NAMES].sort())
+      // Everyone who joined is a player, with the same id and join time; nobody expected is.
+      const joined = guests.filter((g) => g.joined_at !== null)
+      expect(joined.map((g) => g.id).sort()).toEqual(host.players.map((p) => p.id).sort())
+      for (const g of joined) expect(g.joined_at).toBe(host.players.find((p) => p.id === g.id)!.joined_at)
+      expect(new Set(guests.map((g) => g.id)).size).toBe(guests.length)
+    }
+  })
+
   it('knows its scene names', () => {
     expect(isFixtureScene('final')).toBe(true)
     expect(isFixtureScene('nope')).toBe(false)
@@ -114,5 +136,19 @@ describe('fixtureRecapDoc', () => {
     expect(Object.keys(doc.players)).toContain(FIXTURE_PLAYER_ID)
     expect(doc.race.length).toBeLessThanOrEqual(120)
     expect(doc.timeline.length).toBeLessThanOrEqual(60)
+  })
+})
+
+describe('fixtureFreeNames', () => {
+  it('gives the sample guests and the four still expected, then more invented names, never the same name twice', () => {
+    const sixteen = fixtureFreeNames()
+    expect(sixteen).toHaveLength(16)
+    expect(sixteen.slice(12)).toEqual(FIXTURE_EXPECTED_NAMES)
+    const many = fixtureFreeNames(45)
+    expect(many).toHaveLength(45)
+    expect(new Set(many.map(foldName)).size).toBe(45)
+    expect(fixtureFreeNames(90)).toHaveLength(90)
+    expect(new Set(fixtureFreeNames(90).map(foldName)).size).toBe(90)
+    expect(fixtureFreeNames(3)).toEqual(['Ana', 'Bo', 'Mads'])
   })
 })
