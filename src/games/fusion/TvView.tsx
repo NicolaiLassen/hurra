@@ -399,9 +399,14 @@ function PulsingPlaceholder({ label, pulse }: { label: string; pulse: boolean })
       label={label}
       className="absolute inset-0"
       mark={(mark) => (
-        <motion.span className="inline-block" initial={false} animate={pulse ? { scale: [1, 1.14, 1] } : { scale: 1 }} transition={{ duration: 0.3, ease: EASE_OUT }}>
+        <motion.g
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+          initial={false}
+          animate={pulse ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+        >
           {mark}
-        </motion.span>
+        </motion.g>
       )}
     />
   )

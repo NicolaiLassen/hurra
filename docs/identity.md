@@ -261,7 +261,13 @@ edges never cuts anything off. Games play inside it and get it for free.
 - **News** ([news.ts](../src/components/tv/news.ts) routes it): big news is
   a strap across the whole top row for 8 seconds, over the programme strap
   and the bug, so it never covers the stage (a quiz's answered count
-  included) or the band. Its tab is the game's title, pink with the stripes
+  included) or the band. It is routed when it arrives, and holds its 8
+  seconds only while it is still big news for what holds the stage: when a
+  game takes the stage under it (or a game's final screen comes), a strap
+  from a game in the background comes down and its news moves to the band's
+  event line without a second sound, so it never lies over the new game's
+  title card and programme strap (`restage` in news.ts); a winner's and news
+  for the whole party stay. Its tab is the game's title, pink with the stripes
   for any news from the hunt and gold for anything else on air. A game's
   own news never covers its final screen, which shows the result itself:
   there it only plays its sound (`newsStage` in scene.ts). Over a winner's
@@ -337,30 +343,55 @@ quiz is ("Question 3 of 10"), so the stage never repeats it.
 Fusion's stage screens ([src/games/fusion/TvView.tsx](../src/games/fusion/TvView.tsx),
 with its parts in [tvParts.tsx](../src/games/fusion/tvParts.tsx), the wall's
 layout in [wall.ts](../src/games/fusion/wall.ts) and the reveal's timing in
-[reveal.ts](../src/games/fusion/reveal.ts)) speak the quiz's language
-without importing it. The strap says where the round is ("Showing 3 of 12",
+[reveal.ts](../src/games/fusion/reveal.ts), the suspense's timing in
+[suspense.ts](../src/games/fusion/suspense.ts)) speak the quiz's language
+without importing it. The strap says where the round is ("12 pictures",
 "4 of 12 revealed", "Picture 4 of 12"), so the stage never repeats it.
+Changed on 26 November: no showing; the pictures stay hidden until each one
+is asked, and asking one plays a little suspense.
 
 - **The lobby:** words only, as the quiz's: "Two guests, one face" in `wide`,
-  "Who is in each picture?", how it scores, and "Getting the pictures ready:
-  8 of 12" at the foot until every picture is in.
-- **The frame and the column** (the showing and a picture asked): the
-  picture on the left at the stage's full height, `raised` with
-  `rounded-tile`, the image whole inside it; its shape is the pictures' own,
-  portrait or square, at most half the stage. The column beside it, top
-  aligned, holds the label chip (paper with ink, `wide`, tilted 2 degrees, at
-  the question's size) and the words. One frame through the showing, the
-  asking and the reveal, so the picture never jumps; between a wall tile and
-  the frame, and from the frame to the middle at its reveal, it moves
-  (motion's shared layout), a crossfade with reduced motion.
-- **The showing:** each picture crossfades into the next over 600 ms, never
-  blinking: the one before stays under it until it is covered. "Look closely."
-  and one pip per picture at the column's foot, paper up to the one on show.
+  "Who is in each picture?", "The pictures come up here one at a time, and
+  nobody knows which is next. Guess who is in it on your phone:" and how it
+  scores. No picture is loaded: none is known yet.
+- **The placeholder** (`Placeholder` in
+  [parts.tsx](../src/games/fusion/parts.tsx)): a picture not asked yet. A
+  drawn head and shoulders, flat, in `rule` on `raised`, with a big "?" in
+  `wide` paper over the face, drawn in the same SVG box so it sits on the head
+  at every size; its label chip as on any picture. No glow, no gradient. Lit
+  (the suspense's highlight): `paper`, the figure in `paper-2`, the "?" in
+  ink and its label chip ink with paper words. A picture's image path reaches
+  the TV only once it is asked; the TV loads it then (thumbnail, and the full
+  image decoded at high priority) and shows the placeholder until it is in.
+- **The suspense** (about 2.8 s, `SUSPENSE_MS`; the logic starts the
+  countdown after it, so nobody loses guessing time): on the wall a highlight
+  hops forward across the placeholders still to come (a stride apart on a big
+  wall), each hop slower than the one before, 1.3 s in all, landing on the
+  picture asked; it rests, grows out of its tile to the middle of the stage at
+  its full height (450 ms), its "?" pulses once (300 ms), then its face flips
+  in (a 500 ms turn about the vertical axis) with the whoosh. Soft ticks are
+  the pop, on the landing and on hops at least 650 ms apart (the pop's
+  length, so one never cuts the last). The same path on every TV (no
+  randomness). Then the frame moves to its place on the left and the column
+  comes in. A TV that was up as the ask came in plays it (squeezing the hops
+  when the ask reached it late); one that opens in the middle shows how it
+  ends. With reduced motion: no hops, the frame fades in with the
+  placeholder and the face fades in over it.
+- **The frame and the column** (a picture asked): the picture on the left
+  at the stage's full height, `raised` with `rounded-tile`, the image whole
+  inside it; its shape is the pictures' own, portrait or square, at most half
+  the stage. The column beside it, top aligned, holds the label chip (paper
+  with ink, `wide`, tilted 2 degrees, at the question's size) and the words.
+  One frame through the suspense, the asking and the reveal, so the picture
+  never jumps; from its wall tile to the frame, and from the frame to the
+  middle at its reveal, it moves (motion's shared layout), a crossfade with
+  reduced motion.
 - **A picture asked:** "Who is in it?", the quiz's countdown (`tv-num` at
   `text-tv-count`, paper, gold for its last 5 seconds, `paper-3` with "Time's
-  up", then "The answer is coming."), and the lock-in pips with "7 of 22 have
-  locked in": counts only, never names. The pips' total is the guests less
-  two, so the room never learns that someone in the picture has left.
+  up", then "The answer is coming."), held at the full time until the
+  suspense is over, and the lock-in pips with "7 of 22 have locked in":
+  counts only, never names. The pips' total is everyone here: everyone
+  guesses every picture, the two in it too.
 - **The reveal**, the round's big moment, centred on the whole stage and
   reading as "Ana + Bo = this picture": the picture moves from the frame to
   the middle (500 ms) at the row's full height, its label chip on its top
@@ -368,7 +399,8 @@ without importing it. The strap says where the round is ("Showing 3 of 12",
   in from the left at 0.7 s and the second from the right at 0.85 s (550 ms,
   ease-out; with reduced motion they fade), each a square 72 percent of the
   picture's height: their own photo from the settings on `raised` with
-  `rounded-tile`, else their profile photo, else their token. Each is named
+  `rounded-tile`, else the profile photo of the guest with their name, else a
+  token (a name nobody joined with gets a token of its own). Each is named
   on a paper name chip across its foot, the wall's chip (`NameChip`, the
   condensed numerals, the first tilted one way and the second the other) at
   `text-tv-answer` (`short:` score, `low:` name), landing like a tab; a bare
@@ -394,7 +426,9 @@ without importing it. The strap says where the round is ("Showing 3 of 12",
   voters (the `fusion-reveal`, `fusion-reveal-nobody-both` and
   `fusion-reveal-no-guesses` scenes).
 - **The wall:** every picture at once, 1 to 40, as big as the stage allows,
-  uniform tiles that never tilt. Each tile has its label chip at
+  uniform tiles that never tilt; a picture not asked yet is its placeholder.
+  The tiles' shape is the pictures' own once one is in (4:5 before). Each
+  tile has its label chip at
   `max(28px, min(11cqw, 50px))`, every chip on one wall in the same face
   (`wide`, or the condensed one for all where any label needs it). A revealed
   tile carries the two first names as two paper name chips at the picture's
@@ -414,6 +448,10 @@ The board between games ([src/components/tv/Board.tsx](../src/components/tv/Boar
 has two columns, both measured in [fit.ts](../src/components/tv/fit.ts), so it
 fills whatever stage the frame gives it:
 
+- **No leader yet:** before anyone has scored there is no leader: the hero
+  is the party's name in `wide` and "Nobody has scored yet" in `paper-2`,
+  with no token, no crown and no gold, and the places and the field list
+  everyone in A to Z without a rank (everyone is level on 0).
 - **The leader's column:** the leader as a hero (their token at 264 px,
   their points at `text-tv-lead` in gold, what they last won at its finish
   time, on two lines rather than cut when the column is narrow, and their
@@ -567,38 +605,40 @@ the standings card below the fold, and Show my code in the thumb zone.
 [phoneLines.ts](../src/games/fusion/phoneLines.ts) and its parts in
 [phoneParts.tsx](../src/games/fusion/phoneParts.tsx). The TV is the show:
 phones load thumbnails only until a reveal, and send eyes to the TV in the
-lobby and the showing ("Now showing #3.").
+lobby and while the TV shows which picture comes next ("Look at the TV. The
+next picture is on its way. Then pick the two in it.", until the countdown
+starts).
 
-- **Picking:** the asked picture's thumbnail, its label chip, "Who is in it?"
-  and the seconds left (`tv-num`, gold for the last 5). Everyone but you on
-  `overlay` tiles, four across, each with the token and the first name (a name
-  breaks after its hyphen, Marie- over Louise, and a long one steps down a
-  size rather than end in an ellipsis); a search over 16 guests. Guests on
-  the host's guest list who haven't joined follow on the same tiles under
-  "Not here yet" in paper-2, since a picture may be of one of them, and the
-  search finds them too. A picked tile turns paper with a check.
+- **Picking, names only** (the owner's call, 26 Nov: no photos makes it
+  harder): the asked picture's thumbnail, its label chip, "Who is in it?" and
+  the seconds left (`tv-num`, gold for the last 5). The names the guess offers
+  (everyone who joined and every name in the pictures, each once by its
+  folded name) A to Z the Danish way, never your own, on plain `overlay`
+  tiles three across (two under 360 px): the name and nothing else, no token,
+  no photo; a long name breaks after its hyphen (Marie- over Louise) and steps
+  down a size rather than end in an ellipsis. A search over 16 names. A
+  picked tile turns paper with a check.
 - **Lock in** is the screen's one gold step, on a solid bar fixed to the
   screen's foot where Show my code stands at other times (it steps aside for
   the timed prompt), so the phone's toasts, which stack from 96 px up, never
-  sit over it. Nothing is gold once locked in: "Locked in: Mads and Ida." with
-  the two tokens, on `raised`.
-- **The two in the picture** see the same picker and the same gold Lock in,
-  under "This one is you. Keep a straight face and pick any two: it won't
-  count.", and reach the same locked card. Their lock never leaves the phone,
-  so a glance from the next seat can't tell and nothing they pick can score.
+  sit over it; beside it the two names picked. Nothing is gold once locked
+  in: "Locked in: Mads and Ida." with the two names on `overlay` tiles, on
+  `raised`.
+- **The two in the picture** pick and lock in like anyone and score like
+  anyone; their own name is never offered, so the most they get is the other
+  one. Nothing on the phone says "this one is you".
 - **The reveal** is the phone's version of the TV's (26 Nov): first what you
   got and your points ("You got both." with +3 in the condensed figures,
-  "You got one of the two.", "Not this time.", "No guess this time." or
-  "That was you."), in reach the moment it lands, since the wall comes back
+  "You got one of the two.", "Not this time." or "No guess this time."), in
+  reach the moment it lands, since the wall comes back
   by itself after 10 s; then the picture square across the card's width
   with its label chip on its top left; "It was" and the two people side by
   side, each a square half the card wide, named on the TV's tilted paper
   name chips (`NameChip`, "You" for this phone's guest), each their own photo
-  from the settings, else their profile photo, else their token (a bare
-  token gets no chip: its slate names them), and a guest on the list who
-  never came by the name the reveal carries; then the room's counts, your
-  two picks with "Right" and a check or "Not in it" (never colour alone, no
-  red), and your place, named for the round: "You have 4 points, 1st of the
+  from the settings, else the profile photo of the guest with that name,
+  else a token (a bare token gets no chip: its slate names them); then the
+  room's counts, your two picks by name with "Right" and a check or "Not in
+  it" (never colour alone, no red), and your place, named for the round: "You have 4 points, 1st of the
   face detectives so far.", the rank gold only at 1st. The picture and the
   own photos show their thumbnail at once and the full image over it once
   loaded (`PictureImage`, shared with the TV in
@@ -615,11 +655,13 @@ confirmation stays where it was. Its own rules:
 
 - **One gold step per item.** A game's host view has at most one gold button,
   its next step (the quiz's Reveal now, Show the leaderboard, Next question or
-  Crown the winner; Participant fusion's Start the showing, Skip to the wall,
-  Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
-  that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
-  the menu beside it, behind the same confirmation, never next to it. Fusion's
-  Ask on each picture and the Save of who is in it are `secondary`. A
+  Crown the winner; Participant fusion's Ask #5 (from the lobby too), Reveal
+  now, Back to the wall or Crown the face detective). A step that skips ahead
+  (skip the leaderboard, crown early, skip the wall, show the wall first)
+  goes in the menu beside it, behind the same confirmation where it ends
+  something, never next to it. Fusion's Ask on each picture and the Save of
+  who is in it are `secondary`; who is in it is two name fields with the
+  guest list as suggestions, each saying where the typed name stands. A
   program's Start is gold only on the game that is the room's next step,
   `nextStartId` in
   [src/components/host/scene.ts](../src/components/host/scene.ts): the first

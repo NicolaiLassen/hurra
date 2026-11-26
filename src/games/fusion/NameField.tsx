@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 const STATUS_WORDS: Record<Exclude<NameStatus, 'empty'>, string> = {
   here: 'Here',
   expected: 'On the guest list, not here yet',
-  unknown: 'Not on the guest list: check the spelling',
+  unknown: 'Nobody here or on the guest list by this name: check the spelling',
 }
 
 /**

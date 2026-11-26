@@ -134,10 +134,11 @@ export function Pair({
 
 /**
  * A picture not asked yet: nobody knows what it looks like. A drawn head and
- * shoulders, flat, in `rule` on the raised surface, with a big "?" over it in
- * the on-air voice. `lit` while the TV's highlight is on it: paper, the
- * figure in `paper-2` and the "?" in ink. No glow, no gradient. Its label
- * chip is the caller's, as on any picture.
+ * shoulders, flat, in `rule` on the raised surface, with a big "?" in the on
+ * air voice over its face, drawn in the same box so it sits on the head at
+ * every size and shape. `lit` while the TV's highlight is on it: paper, the
+ * figure in `paper-2` and the "?" in ink. No glow, no gradient. Its label chip
+ * is the caller's, as on any picture.
  */
 export function Placeholder({
   label,
@@ -148,33 +149,36 @@ export function Placeholder({
   label: string
   lit?: boolean
   className?: string
-  /** Wraps the "?" (the TV's frame pulses it). */
+  /** Wraps the "?" (an SVG element; the TV's frame pulses it). */
   mark?: (mark: ReactNode) => ReactNode
 }) {
   const sign = (
-    <span data-placeholder-mark="" className="wide inline-block text-[46cqw] leading-none">
+    <text
+      data-placeholder-mark=""
+      x="50"
+      y="50"
+      textAnchor="middle"
+      dominantBaseline="central"
+      className={cn('wide', lit ? 'fill-ink' : 'fill-paper')}
+      style={{ fontSize: 50 }}
+    >
       ?
-    </span>
+    </text>
   )
   return (
     <div
       role="img"
       aria-label={`Picture ${label}, not shown yet`}
       data-placeholder={lit ? 'lit' : ''}
-      className={cn('@container relative overflow-hidden', lit ? 'bg-paper' : 'bg-raised', className)}
+      className={cn('relative overflow-hidden', lit ? 'bg-paper' : 'bg-raised', className)}
     >
-      <svg
-        aria-hidden
-        viewBox="0 0 100 125"
-        preserveAspectRatio="xMidYMax meet"
-        className={cn('absolute inset-x-0 bottom-0 h-[86%] w-full', lit ? 'text-paper-2' : 'text-rule')}
-      >
-        <circle cx="50" cy="47" r="21" fill="currentColor" />
-        <path d="M8 125 C8 93 26 76 50 76 C74 76 92 93 92 125 Z" fill="currentColor" />
-      </svg>
-      <span aria-hidden className={cn('absolute inset-x-0 top-[12%] flex justify-center', lit ? 'text-ink' : 'text-paper')}>
+      <svg aria-hidden viewBox="0 0 100 125" preserveAspectRatio="xMidYMax meet" className="absolute inset-x-0 bottom-0 h-[86%] w-full">
+        <g className={lit ? 'fill-paper-2' : 'fill-rule'}>
+          <circle cx="50" cy="50" r="22" />
+          <path d="M8 125 C8 94 27 79 50 79 C73 79 92 94 92 125 Z" />
+        </g>
         {mark ? mark(sign) : sign}
-      </span>
+      </svg>
     </div>
   )
 }

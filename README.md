@@ -59,9 +59,10 @@
   ones take the TV.
 - **A live quiz.** Questions on the TV, answers on every phone. Faster right
   answers score more.
-- **Participant fusion.** The TV shows each AI portrait of two fused guests,
-  then all of them, then one at a time: pick the two on your phone and lock
-  in. The name search works like an autocomplete, so "soren" finds Søren.
+- **Participant fusion.** AI portraits of two fused guests, hidden until each
+  is asked: the TV picks the next one with a little suspense, then you pick
+  the two names on your phone and lock in. The name search works like an
+  autocomplete, so "soren" finds Søren.
 - **The night's recap.** The host previews and publishes it, the TV plays it,
   and every guest finds their own night on their phone.
 - **The TV from your own browser.** No second device for the TV? *Show the TV
@@ -83,7 +84,7 @@
 | --- | --- | --- |
 | **Last one standing** | All night, in the background | Everyone gets a secret task and one life. Get someone to do your task and they're out, and their task becomes yours. Or catch someone trying theirs on you. Scan their code to knock them out. The TV keeps count of who is still standing, and the last one standing wins. |
 | **Quiz** | On the TV | The host runs the questions and everyone answers on their phone. Right answers score more the faster they come. Time's up reveals the answer, a leaderboard follows, and the host crowns the winner. |
-| **Participant fusion** | On the TV | AI images fuse two guests into one portrait. The TV shows each picture large, one at a time, then all of them at once. Then the host asks them one by one: everyone picks the two guests in the picture on their phone and locks in before time runs out, and the reveal shows who it was. The two in the picture can't score on it, and their phones look like everyone else's. The host crowns the sharpest eye. |
+| **Participant fusion** | On the TV | AI images fuse two guests into one portrait. The pictures stay hidden on the TV (a "?" over a drawn head and shoulders) until the host asks them one by one; the TV picks each with a little suspense, and everyone picks the two names in it on their phone (names only, no photos) and locks in before time runs out. The reveal shows who it was, with their own photos. Everyone guesses every picture, the two in it too. The host crowns the sharpest eye. |
 | **In-person round** | In the room | Points for anything that happens in the room, like a round of beer pong. The host gives them by hand, by scanning the guest's code. |
 
 Several games run at once: a long one in the background while short ones take

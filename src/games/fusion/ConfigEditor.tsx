@@ -246,7 +246,7 @@ function PictureRow({
             const original = originals[slot]
             const busySlot = uploading(slot)
             return (
-              <div key={slot} className="flex min-w-0 items-center gap-2" role="group" aria-label={`The ${ordinal} person in picture ${n}`}>
+              <div key={slot} className="flex min-w-0 items-start gap-2" role="group" aria-label={`The ${ordinal} person in picture ${n}`}>
                 <div className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-chip bg-overlay text-paper-3">
                   {original ? (
                     <img
@@ -342,7 +342,7 @@ function Rules({ config, change }: { config: FusionConfig; change: (patch: Parti
     <div className="grid gap-5 sm:grid-cols-2">
       <section className="grid content-start gap-2">
         <h3 className="text-sm font-extrabold">Timing</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:max-w-56">
           <NumberField
             id="fusion-seconds"
             label="Seconds to guess each picture"
@@ -360,7 +360,8 @@ function Rules({ config, change }: { config: FusionConfig; change: (patch: Parti
       </section>
       <section className="grid content-start gap-2">
         <h3 className="text-sm font-extrabold">Points</h3>
-        <div className="grid grid-cols-2 gap-3">
+        {/* Bottom aligned, so the two fields line up when one label takes two lines. */}
+        <div className="grid grid-cols-2 items-end gap-3">
           <NumberField
             id="fusion-points-person"
             label="Points per right person"

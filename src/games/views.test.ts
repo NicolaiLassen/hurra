@@ -164,7 +164,7 @@ describe('fusion settings editor', () => {
     expect(html).toContain('value="Ana"')
     expect(html).toContain('value="Tilde"')
     // A name nobody is on the list as: shown, so the host can check the spelling, and kept all the same.
-    expect(html).toContain('Not on the guest list: check the spelling')
+    expect(html).toContain('Nobody here or on the guest list by this name: check the spelling')
     expect(html).toContain('>Here<')
     // The suggestions: everyone here and on the list, once each.
     for (const name of ['Ana', 'Bo', FIXTURE_EXPECTED_NAMES[0]]) expect(html).toContain(`<option value="${name}">`)

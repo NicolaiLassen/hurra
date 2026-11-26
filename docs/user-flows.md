@@ -224,11 +224,16 @@ flowchart TD
   LOCKED -- "the host reveals song n" --> REV["The storyteller tells the story. Look at the TV.<br/>Song 1: 3 of 4 points; per part what I typed<br/>and whether it counted (Spelling forgiven.)"]:::screen
   REV -- "the host accepts my close answer" --> REV
   REV -- "the next reveal" --> REV
-  REV -- "after the last reveal" --> TOP["The top 5 is on the TV.<br/>My points with my own average:<br/>Your own photo counts as 3 of them."]:::screen
+  REV -- "after the last reveal" --> TOP["The top 5 is on the TV.<br/>My points and my place"]:::screen
   TOP -- "the host crowns Lydspor" --> RES
   REV -- "the host crowns Lydspor" --> RES["Result card: You won Lydspor, +20 on the night board,<br/>or my place and payout"]:::closed
   START -- "I sit this one out" --> SIT["You sit this one out. Enjoy the show."]:::closed
 ```
+
+Everyone playing scores every song the same way, whoever is in its photo (the
+in-photo rule and its own average are gone since 26 November). A guest sits
+out when their name is on the host's "Doesn't play this game" list, matched
+by name (case, accents and spaces never matter), not by the guest list.
 
 Typed answers are saved when a field is left (Next, Done, another field, a
 photo, the page going hidden, or the last call changing the screen under it),
@@ -321,25 +326,25 @@ flowchart TD
 
 The Guest list card sits under Players (on a phone, before the join card).
 Before the party the host adds every guest's name; a guest who joins taps
-theirs under Who are you?, and game settings, such as fusion's "Who is in
-it?" and Lydspor's "Who's in this photo" and "Doesn't play this game", can
-name guests who haven't joined yet, marked "(not here yet)". The
+theirs under Who are you?. The list is a join helper and the attendance
+list, nothing more: game settings that name people (fusion's "Who is in it?",
+Lydspor's "Doesn't play this game") take typed names, with the list and the
+guests here only as suggestions so the spelling matches. The
 card lists only the guests still expected: joined guests are in Players. Free
 the name is for a guest who tapped the wrong name, from Players' menu or the
 award page; for another spelling (Ulle for Ulrik), Free and take off the list
 on Ulle. Remove also takes a guest off the list, and its confirm offers Free
 the name for a listed name. Remove everyone still expected undoes a paste that
-went wrong. A name on the list that never joins appears nowhere else but in
-Participant fusion, where a picture may be of them: phones can name them in a
-guess (under "Not here yet") and the reveal shows their name. The words of each screen are in
+went wrong. A name on the list that never joins appears nowhere else; a
+fusion picture may still be of them (or of anyone), since its people are
+typed names. The words of each screen are in
 [guest-list.md](guest-list.md), section 7.
 
 Each live game has its own card, so its controls sit with its title and its End
 (P2-4). The game's own controls are its `HostView`: the quiz's one big button
-for the next step and its answered count; fusion's one gold step (Start the
-showing, Ask the next picture, Reveal now, Back to the wall, Crown the face
-detective), its locked-in count, an Ask on every picture and who is in each
-picture; Last one standing's who is still in; Lydspor's Play song n, Last
+for the next step and its answered count; fusion's one gold step (Ask the
+next picture, Reveal now, Back to the wall, Crown the face detective), its
+locked-in count, an Ask on every picture and who is in each picture; Last one standing's who is still in; Lydspor's Play song n, Last
 call, Reveal song n with the close answers to accept (one tap counts an
 answer for everyone who typed it, Undo takes it back) and Crown Lydspor.
 Secrets (the quiz's
@@ -357,26 +362,39 @@ Participant fusion on the stage, from the host's side:
 flowchart LR
   classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
 
-  START["Start: the title card,<br/>then the lobby"]:::screen -- "Start the showing" --> SHOW["The showing<br/>each picture, 6 s"]:::screen
-  START -- "menu: Skip the showing" --> WALL
-  SHOW -- "by itself, or Skip to the wall" --> WALL["The wall<br/>every picture at once"]:::screen
-  WALL -- "Ask #5, or Ask on any picture" --> ASK["A picture asked<br/>30 s, phones lock in"]:::screen
+  START["Start: the title card,<br/>then the lobby"]:::screen -- "Ask #1" --> HOP
+  START -- "menu: Show the wall first" --> WALL["The wall<br/>pictures not asked yet as placeholders"]:::screen
+  WALL -- "Ask #5, or Ask on any picture" --> HOP["The suspense, about 3 s<br/>a highlight hops the placeholders,<br/>lands, grows, its face flips in"]:::screen
+  HOP -- "by itself" --> ASK["A picture asked<br/>30 s, phones lock in by name"]:::screen
   ASK -- "by itself when time's up,<br/>or Reveal now" --> REV["The reveal<br/>the two people's own photos<br/>beside it, 10 s"]:::screen
   REV -- "by itself, or Back to the wall" --> WALL
-  REV -- "menu: Skip the wall: ask #6" --> ASK
+  REV -- "menu: Skip the wall: ask #6" --> HOP
   WALL -- "after the last: Crown the face detective;<br/>before it: the menu, after a confirm" --> DONE["The winner's screen"]:::screen
 ```
 
-A picture without its two people can't be asked: set them with Show who
-first. In the settings each person can have their own photo; it stays
-secret until the reveal, where the TV shows it beside the picture, and the
-host picks each person beside their photo (with Show who too). Without one,
-the reveal shows the guest's profile photo, or their token. The settings and
-Show who pick from the whole guest list, so a picture may be of a guest who
-hasn't come, marked "(not here yet)"; it is asked and revealed like any other,
-with that guest's name, and phones list the guests still expected after the
-guests here when they pick. A round started before the update (when fusion ran in the background)
-can't go on: End it, then restart it, and its pictures and people are kept.
+Changed on 26 November, after the owner played the demo: there is no
+showing. A picture not asked yet is a placeholder on the wall (a drawn head
+and shoulders with a "?"), and its image reaches no phone or TV until it is
+asked. Asking it plays the suspense on the TV: a highlight hops across the
+placeholders still to come, slowing with soft ticks, lands on the picture
+asked, it grows to the middle, its "?" pulses and its face flips in with a
+whoosh; the countdown starts after that, so nobody loses guessing time.
+Phones say "Look at the TV." until then, then show the picker: names only,
+no photos (everyone who joined and every name in the pictures, A to Z, never
+their own), with a search over 16 names. Everyone guesses every picture and
+scores on it, the two in it too.
+
+A picture without its two people can't be asked: type them with Show who
+first. Who is in a picture is two typed names (the guest list and the guests
+here are suggestions, and each field says whether the name is here, on the
+list but not here yet, or neither, so a misspelling shows); a picture may be
+of someone who never joins. In the settings each person can have their own
+photo; it stays secret until the reveal, where the TV and the phones show it
+beside the picture, so the host types each name beside its photo. Without
+one, the reveal shows the profile photo of the guest with that name, or a
+token. Settings saved with guests' ids still start, as those guests' names.
+A round started before the update (when fusion ran in the background) can't
+go on: End it, then restart it, and its pictures and people are kept.
 
 ### 3.3 Scanning and points
 
@@ -491,7 +509,10 @@ programme strap and the bug, so it never covers the stage or the band; a
 game's own news on its final screen only plays its sound. While a game holds
 the stage, news from a game in the background is the band's event line, with
 its time and no sound, except a winner, which gets the strap and its sound.
-Nothing crawls, there is no red, and the TV says a game's news without its
+A strap that came up while the standings showed comes down when the host
+starts a game on the TV (a knockout then moves to the band's Last one
+standing line, without a second sound), so it never lies over the game's
+title card and programme strap (26 Nov). Nothing crawls, there is no red, and the TV says a game's news without its
 exclamation marks. Phones show the same news as a toast (the shared callout,
 `src/components/Callout.tsx`): a square icon chip by its job, the title and
 an optional detail line.
@@ -501,6 +522,8 @@ button, the sound toggle ("Click for sound" while the browser blocks audio)
 and the connection as a word, Live or Reconnecting. The standings fit any
 party: the leader's column (the hero, the next five places and a line on how
 the last game moved the places) beside the field of rows, measured in fit.ts,
+(before anyone has scored the hero is the party's name and "Nobody has scored
+yet", no guest, and everyone stands in A to Z without a rank)
 with the join block under the field (the QR code on paper, the code and the
 page's own address) or its short form, the code over the address, when the
 rows need the room.

@@ -2,14 +2,19 @@
 
 Before the party the host adds every guest's name in the control room, one at
 a time or as a pasted list. A guest who joins taps their name under "Who are
-you?" instead of typing it. Game settings can name guests who have not joined
-yet, so the host sets up fusion's pictures (and the photo and song game's
-photos and "Doesn't play this game") at home. Everywhere guests play, only
-guests who have joined count: a name on the list that never joined never
-appears on the TV, on a phone, in a game, in the standings or in the recap,
-with one exception by design: Participant fusion, where a picture may be of
-them, so phones can name them in a guess and the reveal shows their name
-(9.2).
+you?" instead of typing it. Everywhere guests play, only guests who have
+joined count: a name on the list that never joined never appears on the TV,
+on a phone, in a game, in the standings or in the recap.
+
+**Changed on 26 November (branch `fusion/surprise`):** the owner wants the
+list "just as a list so it makes it easier, but not tied to the state". It
+stays the join helper and the attendance list. Participant fusion's pictures
+and Lydspor's "Doesn't play this game" now take typed names, with the list
+and the guests here only as suggestions so the spelling matches; no game
+keeps a guest's id for who is in a picture or who sits out. A fusion picture
+may still be of someone who never joins: their name is simply typed (9.2,
+9.3). Settings saved with ids before that still start, as those guests'
+names. The rest of this page describes the list as built.
 
 Why, in the owner's words about Participant fusion's "Who is in it?" picker,
 which listed only guests who had joined: "I need to add my guests beforehand,
@@ -723,6 +728,16 @@ lydspor/game), and for any new game.
 
 ### 9.2 Participant fusion (fusion/stage)
 
+**Superseded on 26 November (`fusion/surprise`):** who is in a picture is two
+typed names, not guest ids; the vote is two names out of everyone who has
+joined and every name in the pictures (an array of `options`, not
+`'guests'`); the public state's `expected` is gone; everyone guesses and
+scores, the two in the picture too. Old settings with ids are read as names
+at the start ("#3 names someone who isn't on the guest list any more. Type
+their name in the settings." only for an id on no list). See
+[engine-v2.md, 8.4](engine-v2.md#84-participant-fusion-new). What follows is
+the guest-list version, as it was applied:
+
 **Applied on `party/integration` (26 Nov),** on fusion as the stage show with
 the two people's own photos. What it does, as built: setup and `setKey`
 accept anyone in `info.guests`; `state.names` comes from the list; the vote is
@@ -770,6 +785,14 @@ and `fusion.integration.test.ts`. The plan it followed:
   scores lack the id and the picture still names the guest.
 
 ### 9.3 The photo and song game (lydspor/game)
+
+**Changed again on 26 November (`fusion/surprise`):** Lydspor no longer reads
+who is in a photo (no own average), and `sitOut` is typed names matched by
+`nameKey`, not ids; the guest list only suggests the spelling. Old id-based
+settings are read as names at setup. A freed name taken again sits out only
+if the name is on the list. `onPlayerLeave` drops `picks`, review rows and
+`shownTop` (there are no `credits` any more). What follows is the guest-list
+version, as it was applied:
 
 **Applied on `party/integration` (26 Nov).** Lydspor's logic never checked
 `sitOut` or `inPhoto` against the players, so it starts with expected guests
@@ -918,9 +941,10 @@ optional. A screen test that renders a `HostView` or a `ConfigEditor` passes
 - `GamesPanel` passes `guests={guestsOf(snapshot)}` to `GameSettings`, which
   hands it to the game's `ConfigEditor` next to `players`.
 - `LiveGameCard` passes the same to the game's `HostView`.
-- [src/games/fusion/ConfigEditor.tsx](../src/games/fusion/ConfigEditor.tsx),
-  the one game file changed here: "Who is in it?" lists `guests` in place of
-  `players`, sorted with `sortNames`, an expected guest as **"Zelda (not here
+- [src/games/fusion/ConfigEditor.tsx](../src/games/fusion/ConfigEditor.tsx)
+  (superseded on 26 November: two name fields with the list as suggestions,
+  each saying where the typed name stands), as first changed here: "Who is in
+  it?" lists `guests` in place of `players`, sorted with `sortNames`, an expected guest as **"Zelda (not here
   yet)"** (the mark in paper-3, in the menu and on the chosen value); "Someone
   who left" for a saved id no longer on the list; with nobody on the list,
   **"Add guests to the guest list, or wait for them to join"** (disabled).

@@ -164,10 +164,12 @@ The rules:
 - `onWake` must move `wakeAt` forward or to null.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
 - `recap()` reveals only what the finished round showed the room.
-- Settings may name guests who have not joined yet. Accept any id in
-  `info.guests` at setup, never require one to be a player, and copy the
-  names the room must see into the public state. What each game must do with
-  expected guests is [guest-list.md, section 9](guest-list.md#9-what-each-game-must-do-with-expected-guests).
+- Settings may name guests who have not joined yet. Either take typed names
+  and match them to players by `nameKey` (`src/games/core/names.ts`; the
+  guest list only suggests the spelling, as fusion and Lydspor do since 26
+  November), or accept any id in `info.guests` at setup, never require one to
+  be a player, and copy the names the room must see into the public state.
+  What each game must do with expected guests is [guest-list.md, section 9](guest-list.md#9-what-each-game-must-do-with-expected-guests).
 - A typed answer (a `text` prompt) is stored as the guest typed it, trimmed.
   Judge it on the server, once, when the prompts lock, never on the phone,
   and never show one guest's text to anyone else: Lydspor keeps its verdicts
@@ -218,8 +220,10 @@ real engine step with `simulateParty`, and check the game's own example with
 screen also opens on a sample party: `/play/x?fixture=<scene>`,
 `/tv/x?fixture=<scene>` and, signed in as a host, `/host/s/x?fixture=<scene>`
 (the scenes are listed in `fixtures.ts`; Participant fusion has one per step
-of its round, `fusion-lobby` to `fusion-final`, some with 2 or 40 pictures
-as `-2` and `-40`, and their pictures are drawn sample portraits; the host's
+of its round, `fusion-lobby` to `fusion-final`, some with 2, 8 or 40
+pictures as `-2`, `-8` and `-40`, `fusion-start` for the first wall of
+placeholders and `fusion-hop` for the suspense, which plays 3 s after the
+scene opens, and their pictures are drawn sample portraits; the host's
 scenes have four guests still expected on the guest list),
 `/join/x?fixture=guests` shows Who are you? on a sample guest list
 (`&names=45`, `&freed=Ana`), and `/dev/tokens` draws the token sheet
