@@ -37,7 +37,7 @@ it('asks every game whether its settings are ready, on its defaults, and the in-
     soundtrack: { ready: false, line: 'No songs yet' },
   })
   // The saved settings go over the defaults, as the engine merges them at start.
-  expect(setupStatusOf('elimination', { tasks: ['Get someone to wave'] }, [])).toEqual({ ready: true, line: '1 task to deal' })
+  expect(setupStatusOf('elimination', { tasks: ['Get someone to wave'] }, [])).toEqual({ ready: true, line: '1 task to deal; the default list has 60' })
 })
 
 it('shows nothing for a game without the hook, a type it doesn’t know, or a hook that throws', () => {

@@ -389,6 +389,22 @@ describe('the games’ settings in the control room', () => {
     }
   })
 
+  it('puts Reset to the 60 default tasks on top of Last one standing’s settings while its saved list is shorter', async () => {
+    // The scene's saved list has 12 tasks: its row says the default list's size.
+    const room = await roomWithSettings('setup', html)
+    expect(room).toContain('12 tasks for 16 guests, so some get the same task; the default list has 60')
+    const at = `/host/s/x?settings=${idOf('setup', 'Last one standing')}`
+    const text = await roomWithSettings('setup', (node) => html(node, at))
+    const raw = await roomWithSettings('setup', (node) => markup(node, at))
+    expect(text).toContain('This game has 12 saved tasks. The default list has 60 party moments')
+    expect(text).toContain('Reset to the 60 default tasks')
+    // One reset: the note's button, never also the small link beside the count.
+    expect(text).not.toContain('Reset to the default tasks')
+    expect(raw.replace(/<!-- -->/g, '')).toMatch(/<button[^>]*data-variant="secondary"[^>]*>(?:(?!<\/button>)[^])*Reset to the 60 default tasks/)
+    // Quiet, so the page's Save stays its one gold step.
+    expect(goldButtons(pageOf(raw))).toBe(0)
+  })
+
   it('stays in the room for a game that is live or gone', async () => {
     const live = fixtureSnapshot('background', 'host').games.find((g) => g.status === 'active')!
     const text = await roomWithSettings('background', (node) => html(node, `/host/s/x?settings=${live.id}`))

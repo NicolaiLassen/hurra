@@ -367,6 +367,13 @@ not ready: setting the games up comes before pairing the TV. Its start is
 still in the menu as Start anyway, when the game's own check would start it
 (fusion starts with pictures still without their people, to be set with
 Show who). A game added from the Games panel opens its settings at once.
+Last one standing's default list has 60 tasks (it had 30): a game whose
+saved list is shorter says so on its row ("30 tasks, enough for all 24
+guests; the default list has 60"), and its settings open on a note, "This
+game has 30 saved tasks. The default list has 60 party moments, so every
+guest gets a task of their own, latecomers too.", with a `secondary`
+**Reset to the 60 default tasks** in place of the small link beside the
+count; then Save keeps them.
 
 The settings are a page of their own (`?settings=<game id>`): the game's
 name and its readiness, which changes as the host types, on a bar that

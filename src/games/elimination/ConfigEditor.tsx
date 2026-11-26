@@ -1,3 +1,4 @@
+import { ArrowCounterClockwiseIcon, InfoIcon } from '@phosphor-icons/react'
 import EditableList from '@/components/EditableList'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,10 +12,20 @@ import {
   MAX_TASKS,
   type EliminationGame,
 } from '@/games/elimination/logic'
+import { shorterThanDefaults } from '@/games/elimination/setup'
 import type { ConfigEditorProps } from '@/games/types'
 
+/**
+ * Last one standing's settings: the tasks, how long latecomers are dealt in,
+ * and the points. A saved list shorter than the default one (the 30 saved
+ * before the default list grew to 60, or a short list of the host's own)
+ * gets a note on top with Reset to the 60 default tasks, so the reset isn't
+ * only the small link beside the count.
+ */
 export default function ConfigEditor({ config, onChange }: ConfigEditorProps<EliminationGame>) {
   const count = config.tasks.filter((task) => task.trim()).length
+  const shorter = shorterThanDefaults(config.tasks)
+  const reset = () => onChange({ ...config, tasks: DEFAULT_TASKS })
   // The same limits the game checks when the host starts it, shown while editing.
   const tooLong = config.tasks.flatMap((task, i) => (Array.from(task.trim()).length > MAX_TASK_LENGTH ? [i + 1] : []))
   const problems = [
@@ -25,19 +36,32 @@ export default function ConfigEditor({ config, onChange }: ConfigEditorProps<Eli
 
   return (
     <div className="grid gap-5">
+      {shorter && (
+        <div role="note" className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg bg-raised p-4 text-sm">
+          <InfoIcon weight="fill" aria-hidden className="size-5 shrink-0 self-start text-paper-2" />
+          <p className="min-w-0 flex-1 basis-56 text-paper-2">
+            <span className="font-semibold text-paper">
+              {count === 1 ? 'This game has 1 saved task.' : `This game has ${count} saved tasks.`}
+            </span>{' '}
+            The default list has {DEFAULT_TASKS.length} party moments, so every guest gets a task of their own, latecomers too.
+          </p>
+          <Button type="button" variant="secondary" onClick={reset}>
+            <ArrowCounterClockwiseIcon />
+            Reset to the {DEFAULT_TASKS.length} default tasks
+          </Button>
+        </div>
+      )}
       <div className="grid gap-2">
         <div className="flex items-baseline justify-between gap-3">
           <Label asChild>
             <p>Tasks ({count})</p>
           </Label>
-          <Button
-            type="button"
-            variant="link"
-            className="px-0 text-muted-foreground"
-            onClick={() => onChange({ ...config, tasks: DEFAULT_TASKS })}
-          >
-            Reset to the default tasks
-          </Button>
+          {/* With the note on top, its button is the reset: one is enough. */}
+          {!shorter && (
+            <Button type="button" variant="link" className="px-0 text-muted-foreground" onClick={reset}>
+              Reset to the default tasks
+            </Button>
+          )}
         </div>
         <EditableList
           items={config.tasks}
