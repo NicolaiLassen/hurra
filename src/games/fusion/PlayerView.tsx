@@ -4,7 +4,7 @@ import Avatar from '@/components/Avatar'
 import type { AnswerPayload, PlayerId } from '@/games/core/Game'
 import type { FusionGame } from '@/games/fusion/logic'
 import { isLockedIn, lockedPick, NO_LOCK, sendLock, type LockState, type Pick2 } from '@/games/fusion/lock'
-import { Pair, LabelChip, PictureArt } from '@/games/fusion/parts'
+import { LabelChip, NameChip, PictureImage } from '@/games/fusion/parts'
 import {
   askingCase,
   doneWords,
@@ -36,6 +36,7 @@ import {
 import { choiceOf, nameOf, shortNames, stillExpected, togglePick, type Pickable } from '@/games/fusion/view'
 import type { PlayerViewProps } from '@/games/types'
 import { useMomentSoundAt, useServerTime } from '@/lib/gameClock'
+import { usePlayerPhoto } from '@/lib/photoIndex'
 import type { Player, PromptState, SessionGame, SubmitResult } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -319,7 +320,17 @@ function Asking({
   )
 }
 
-/** The reveal on your phone: what you got and your points, who it was, your two picks, and your place. */
+/**
+ * The reveal on your phone, the phone's version of the TV's: what you got and
+ * your points first (in reach the moment it lands: the wall comes back by
+ * itself after 10 s), then the picture large and square across the card with
+ * its label chip, "It was" and the two people side by side as large squares
+ * named on the TV's tilted paper chips, how the room did, your two picks and
+ * your place. Each person is their own photo from the settings, else their
+ * profile photo, else their token; a guest on the list who never came keeps
+ * the name the reveal carries. The images show their thumbnail at once and
+ * the full image over it once loaded.
+ */
 function Revealed({
   game,
   pub,
@@ -348,6 +359,7 @@ function Revealed({
   const outcome = outcomeFor(picture, player.id, view, mine)
   const points = outcomePoints(outcome, pub.rules)
   const people = picture.revealed.people
+  const names = people.map((who, i) => nameOf(players, who, picture.revealed.names[i]))
   // When the reveal reached this phone: its sound follows 2 s later, only while fresh.
   const [arrived] = useState(serverNow)
   const fresh = revealedAt !== null && arrived - revealedAt < FRESH_MS
@@ -355,8 +367,8 @@ function Revealed({
   useMomentSoundAt(moment, points > 0 ? 'coin' : 'sad', arrived + SOUND_AFTER_MS, serverNow)
 
   return (
-    <div className="grid grid-cols-1 gap-6">
-      <div className="grid grid-cols-1 gap-1.5 duration-300 animate-in fade-in-0 motion-reduce:animate-none">
+    <div className="grid grid-cols-1 gap-5">
+      <div data-reveal-result="" className="grid grid-cols-1 gap-1 duration-300 animate-in fade-in-0 motion-reduce:animate-none">
         <p className="text-phone-head leading-tight font-extrabold">{outcomeHead(outcome)}</p>
         {points > 0 && (
           <p className="flex items-baseline gap-2 text-[1.0625rem] font-semibold text-paper-2">
@@ -364,43 +376,50 @@ function Revealed({
             {points === 1 ? 'point' : 'points'}
           </p>
         )}
-        {/* For the two in it: how well the disguise held. */}
-        {outcome === 'you' && <p className="text-[1.0625rem] leading-snug text-paper-2">{countsLine(picture.revealed)}</p>}
       </div>
 
-      <div className="flex items-center gap-4 rounded-phone bg-raised p-3">
-        <PictureArt picture={picture} mediaUrl={mediaUrl} size="thumb" className="size-20 shrink-0 rounded-tile" labelClassName="text-2xl" />
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-2">
-          <p className="flex items-center gap-2">
-            <LabelChip label={picture.label} className="shrink-0 text-[1.0625rem]" />
-            <span className="font-semibold text-paper-2">It was</span>
-          </p>
-          {/* Each person's own photo from the settings, small (the TV shows them large); else their profile photo or token. */}
-          <Pair
-            stacked
-            people={people}
-            kept={picture.revealed.names}
-            photos={picture.revealed.originals.map((path) => (path ? mediaUrl(path, 'thumb') : null))}
-            players={players}
-            meId={player.id}
-            className="text-[1.0625rem]"
-            avatarClassName="size-10"
-          />
-        </div>
+      <div className="relative">
+        <PictureImage picture={picture} mediaUrl={mediaUrl} size="full" fit="cover" className="aspect-square w-full rounded-tile" labelClassName="text-[28cqw]" />
+        {picture.image !== null && (
+          <span className="pointer-events-none absolute top-3 left-3 flex max-w-[85%]">
+            <LabelChip label={picture.label} className="text-[1.375rem]" />
+          </span>
+        )}
       </div>
+
+      <section aria-labelledby={id} className="grid grid-cols-1 gap-2.5">
+        <h3 id={id} className="text-lg font-bold text-paper-2">
+          It was
+        </h3>
+        <ul aria-label={`${picture.label} was ${names[0]} and ${names[1]}`} className="grid grid-cols-2 gap-3 pb-5">
+          {people.map((who, i) => (
+            <RevealPerson
+              key={who}
+              slot={i === 0 ? 0 : 1}
+              id={who}
+              name={names[i]}
+              you={who === player.id}
+              path={picture.revealed.originals[i]}
+              fresh={fresh}
+              mediaUrl={mediaUrl}
+            />
+          ))}
+        </ul>
+        <p className="text-[1.0625rem] leading-snug text-paper-2">{countsLine(picture.revealed)}</p>
+      </section>
 
       {mine && outcome !== 'you' && (
-        <section aria-labelledby={id} className="grid grid-cols-1 gap-2">
-          <h3 id={id} className="text-sm font-bold text-paper-2">
+        <section aria-labelledby={`${id}-guess`} className="grid grid-cols-1 gap-2">
+          <h3 id={`${id}-guess`} className="text-sm font-bold text-paper-2">
             Your guess
           </h3>
           <ul className="grid grid-cols-1 gap-2">
-            {mine.map((id) => {
-              const right = people.includes(id)
-              const name = nameOf(players, id)
+            {mine.map((pick) => {
+              const right = people.includes(pick)
+              const name = nameOf(players, pick)
               return (
-                <li key={id} className={cn('flex min-h-14 items-center gap-3 rounded-phone py-2 pr-4 pl-2', right ? 'bg-paper text-ink' : 'bg-overlay')}>
-                  <Avatar name={name} playerId={id} className="size-10 shrink-0" />
+                <li key={pick} className={cn('flex min-h-14 items-center gap-3 rounded-phone py-2 pr-4 pl-2', right ? 'bg-paper text-ink' : 'bg-overlay')}>
+                  <Avatar name={name} playerId={pick} className="size-10 shrink-0" />
                   <span className="min-w-0 flex-1 truncate font-bold">{name}</span>
                   {right ? (
                     <span className="flex shrink-0 items-center gap-1 font-bold">
@@ -421,3 +440,67 @@ function Revealed({
     </div>
   )
 }
+
+/**
+ * One of the two in the revealed picture, a square half the card wide: their
+ * own photo from the settings, else their profile photo, else their token
+ * (whose slate names them already, so it gets no chip), named on a tilted
+ * paper chip across its foot as on the TV ("You" for this phone's guest).
+ * Fresh, each comes in from its side, the first, then the second.
+ */
+function RevealPerson({
+  slot,
+  id,
+  name,
+  you,
+  path,
+  fresh,
+  mediaUrl,
+}: {
+  slot: 0 | 1
+  id: PlayerId
+  name: string
+  you: boolean
+  path: string | null
+  fresh: boolean
+  mediaUrl: PlayerViewProps['mediaUrl']
+}) {
+  const photo = usePlayerPhoto(id, name)
+  const first = firstName(name)
+  const named = path !== null || photo !== null
+  return (
+    <li
+      className={cn(
+        'relative aspect-square',
+        fresh && 'duration-500 animate-in fade-in-0 [animation-fill-mode:backwards] motion-reduce:animate-none',
+        fresh && (slot === 0 ? 'slide-in-from-left-6 [animation-delay:200ms]' : 'slide-in-from-right-6 [animation-delay:450ms]'),
+      )}
+    >
+      {path !== null ? (
+        <PictureImage
+          picture={{ label: first, image: path }}
+          mediaUrl={mediaUrl}
+          size="full"
+          fit="cover"
+          alt={you ? 'Your own photo' : `${first}'s own photo`}
+          className="size-full rounded-tile"
+          labelClassName="text-[18cqw]"
+        />
+      ) : (
+        <Avatar name={name} playerId={id} className="size-full" />
+      )}
+      {named && (
+        <span className="absolute inset-x-0 bottom-0 flex translate-y-1/2 justify-center px-[6%]">
+          <NameChip
+            name={you ? 'You' : first}
+            first={slot === 0}
+            className={cn('text-[1.625rem]', fresh && 'animate-tab-land [animation-delay:700ms] motion-reduce:animate-none')}
+          />
+        </span>
+      )}
+    </li>
+  )
+}
+
+/** "Marie-Louise" for Marie-Louise Christensen. */
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name

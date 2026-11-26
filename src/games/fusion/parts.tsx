@@ -1,7 +1,9 @@
 // Participant fusion's parts every screen shares (the TV, the phones, the host
 // room), in the Running Order look (docs/identity.md): a picture on the raised
-// surface, its label as a tilted paper chip, and two people as tokens.
-import { useState } from 'react'
+// surface (lazily as a thumbnail, or sharp with the full image over the
+// thumbnail), its label as a tilted paper chip, two people as tokens, and a
+// guest's name on a paper chip. No motion here, so phones can draw them.
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import Avatar from '@/components/Avatar'
 import type { PlayerId } from '@/games/core/Game'
 import type { FusionPublicPicture } from '@/games/fusion/shapes'
@@ -128,6 +130,118 @@ export function Pair({
         ))}
       </span>
       <span className="min-w-0 truncate font-semibold">{shown.join(' and ')}</span>
+    </span>
+  )
+}
+
+/**
+ * A picture drawn sharp, filling its box (the TV, and a phone's reveal): the thumbnail at once and,
+ * with `size` full, the full image over it, fading in over 200 ms once it has
+ * loaded; one already decoded (preloaded) shows at once. A full image that
+ * fails keeps the thumbnail; with neither, or no image at all, the label
+ * stands large in `wide` on the raised surface (the print is the real thing).
+ */
+export function PictureImage({
+  picture,
+  mediaUrl,
+  size,
+  fit,
+  className,
+  labelClassName,
+  alt,
+}: {
+  picture: Pick<FusionPublicPicture, 'label' | 'image'>
+  mediaUrl: (path: string, size?: 'full' | 'thumb') => string
+  size: 'thumb' | 'full'
+  /** `cover` fills the box (faces sit 35 percent from the top); `contain` shows the whole picture. */
+  fit: 'cover' | 'contain'
+  className?: string
+  /** The label's text size when there is no image to show. */
+  labelClassName?: string
+  /** What the image is, for a screen reader: "Picture #4" unless said. */
+  alt?: string
+}) {
+  const thumb = picture.image ? mediaUrl(picture.image, 'thumb') : null
+  const full = picture.image && size === 'full' ? mediaUrl(picture.image, 'full') : null
+  // Which sources failed, so a new picture tries again.
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set())
+  const fail = (src: string) => setFailed((set) => new Set(set).add(src))
+  const showThumb = thumb !== null && !failed.has(thumb)
+  const showFull = full !== null && !failed.has(full)
+  const fitClass = fit === 'cover' ? 'object-cover object-[50%_35%]' : 'object-contain'
+
+  return (
+    <div role="img" aria-label={alt ?? `Picture ${picture.label}`} className={cn('@container relative overflow-hidden bg-raised', className)}>
+      {!showThumb && !showFull ? (
+        <span className="absolute inset-0 grid place-items-center">
+          {/* Padded so a label's descenders ("The viking") stay inside truncate's clip. */}
+          <span className={cn('wide max-w-full truncate px-[6cqw] py-[0.12em] leading-none text-paper', labelClassName ?? 'text-[28cqw]')}>{picture.label}</span>
+        </span>
+      ) : (
+        <>
+          {showThumb && (
+            <img
+              key={thumb}
+              src={thumb}
+              alt=""
+              draggable={false}
+              decoding="async"
+              onError={() => fail(thumb)}
+              className={cn('absolute inset-0 size-full', fitClass)}
+            />
+          )}
+          {showFull && <FullImage key={full} src={full} fitClass={fitClass} onError={() => fail(full)} />}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The full image over the thumbnail: at once when it is ready as it mounts, else fading in when it loads. */
+function FullImage({ src, fitClass, onError }: { src: string; fitClass: string; onError: () => void }) {
+  const ref = useRef<HTMLImageElement>(null)
+  const [state, setState] = useState<'waiting' | 'ready' | 'loaded'>('waiting')
+  useLayoutEffect(() => {
+    const img = ref.current
+    // Already in memory (warmed and decoded): show it in the first frame, with no fade.
+    if (img?.complete && img.naturalWidth > 0) setState('ready')
+  }, [])
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt=""
+      draggable={false}
+      decoding="async"
+      onLoad={() => setState((s) => (s === 'waiting' ? 'loaded' : s))}
+      onError={onError}
+      className={cn(
+        'absolute inset-0 size-full',
+        fitClass,
+        state === 'waiting' ? 'opacity-0' : 'opacity-100',
+        state === 'loaded' && 'transition-opacity duration-200 ease-out',
+      )}
+    />
+  )
+}
+
+/**
+ * A guest's name on a paper chip in the condensed numerals, tilted like a
+ * letter chip: the first of two one way, the second the other. The wall's
+ * revealed tiles and the reveal (on the TV and on a phone) name the two this way. Its size comes
+ * from `className` or `style`.
+ */
+export function NameChip({ name, first, className, style }: { name: string; first: boolean; className?: string; style?: CSSProperties }) {
+  return (
+    <span
+      className={cn(
+        'inline-block max-w-full truncate rounded-chip bg-paper px-[0.28em] py-[0.1em] tv-num leading-[1.1] text-ink',
+        first ? '-rotate-2' : 'rotate-1',
+        className,
+      )}
+      style={style}
+    >
+      {name}
     </span>
   )
 }

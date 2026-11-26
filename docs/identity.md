@@ -566,8 +566,8 @@ the standings card below the fold, and Show my code in the thumb zone.
 [PlayerView](../src/games/fusion/PlayerView.tsx), with its words in
 [phoneLines.ts](../src/games/fusion/phoneLines.ts) and its parts in
 [phoneParts.tsx](../src/games/fusion/phoneParts.tsx). The TV is the show:
-phones load thumbnails only, and send eyes to the TV in the lobby and the
-showing ("Now showing #3.").
+phones load thumbnails only until a reveal, and send eyes to the TV in the
+lobby and the showing ("Now showing #3.").
 
 - **Picking:** the asked picture's thumbnail, its label chip, "Who is in it?"
   and the seconds left (`tv-num`, gold for the last 5). Everyone but you on
@@ -586,12 +586,27 @@ showing ("Now showing #3.").
   under "This one is you. Keep a straight face and pick any two: it won't
   count.", and reach the same locked card. Their lock never leaves the phone,
   so a glance from the next seat can't tell and nothing they pick can score.
-- **The reveal:** "You got both." with the points in paper, "You got one of
-  the two.", "Not this time.", "No guess this time." or "That was you.", who it
-  was (two small tokens wearing their own photos, thumbnails, where the
-  settings have them; the TV shows them large), your two picks with "Right" and a check or "Not in it" (never colour
-  alone, no red), and your place, named for the round: "You have 4 points,
-  1st of the face detectives so far.", the rank gold only at 1st.
+- **The reveal** is the phone's version of the TV's (26 Nov): first what you
+  got and your points ("You got both." with +3 in the condensed figures,
+  "You got one of the two.", "Not this time.", "No guess this time." or
+  "That was you."), in reach the moment it lands, since the wall comes back
+  by itself after 10 s; then the picture square across the card's width
+  with its label chip on its top left; "It was" and the two people side by
+  side, each a square half the card wide, named on the TV's tilted paper
+  name chips (`NameChip`, "You" for this phone's guest), each their own photo
+  from the settings, else their profile photo, else their token (a bare
+  token gets no chip: its slate names them), and a guest on the list who
+  never came by the name the reveal carries; then the room's counts, your
+  two picks with "Right" and a check or "Not in it" (never colour alone, no
+  red), and your place, named for the round: "You have 4 points, 1st of the
+  face detectives so far.", the rank gold only at 1st. The picture and the
+  own photos show their thumbnail at once and the full image over it once
+  loaded (`PictureImage`, shared with the TV in
+  [parts.tsx](../src/games/fusion/parts.tsx), without motion). Fresh, the two
+  come in from their sides and their chips land; a phone opened later shows
+  it still. On an iPhone SE (375 by 667) the result stands under the strap
+  and the picture's top shows under it; the people and the picks follow a
+  scroll away, above Show my code. Captures: `.design/party/phone-reveal`.
 
 ## The host room
 

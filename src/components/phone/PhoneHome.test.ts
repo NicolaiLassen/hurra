@@ -169,10 +169,9 @@ describe('the phone home', () => {
   it('fusion revealed: what you got, who it was, your two picks and your place', async () => {
     const both = await phone('fusion-reveal')
     expect(both).toContain('Who is fused? Picture 4 of 12')
-    expect(both).toContain('You got both. +3 points')
-    // Tokens name their guests too, so each name reads twice in plain text.
-    expect(both).toContain('#4 It was Bo Bo Maja Maja')
-    expect(both).toContain('Your guess Bo Bo Right Maja Maja Right')
+    // Your result first, then the picture with its label chip, the two people on their own photos named on
+    // paper chips, how the room did, and your picks (tokens name their guests too, so those names read twice).
+    expect(both).toContain('You got both. +3 points #4 It was Bo Maja 3 of 8 got both, 3 got one. Your guess Bo Bo Right Maja Maja Right')
     expect(both).toContain('You have 7 points, 1st of the face detectives so far.')
     expect(await phone('fusion-reveal-one')).toContain('You got one of the two. +1 point')
     expect(await phone('fusion-reveal-one')).toContain('Not in it')
@@ -182,7 +181,7 @@ describe('the phone home', () => {
     expect(missed).not.toContain('Your guess')
     const you = await phone('fusion-reveal-you')
     expect(you).toContain('That was you.')
-    expect(you).toContain('#6 It was Emil Emil Sofie You')
+    expect(you).toContain('#6 It was Emil Sofie')
     for (const scene of ['fusion-reveal', 'fusion-reveal-one', 'fusion-reveal-none', 'fusion-reveal-missed', 'fusion-reveal-you'] as const) {
       expect(await phone(scene), scene).not.toContain('!')
     }
