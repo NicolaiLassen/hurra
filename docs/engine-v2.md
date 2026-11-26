@@ -3495,10 +3495,57 @@ back on the list as expected and sends the phone back to Who are you?
 - **Rules**: unchanged. Everyone gets a secret task and one life; tag (do my
   task, I take theirs) or catch (caught trying theirs, I keep mine); scan the
   code; the last one standing wins.
-- **Config** (`game_settings`): `{ tasks: string[], pointsPerTag, pointsPerCatch }`,
+- **Config** (`game_settings`): `{ tasks: string[], pointsPerTag, pointsPerCatch, dealInMinutes }`,
   defaults as today. `parseConfig`: tasks trimmed, empty ones dropped, 1 to
   200 tasks of at most 200 characters; points whole numbers from 0 to 100.
-- **State**: unchanged (`tasks`, `playerIds`, `knockouts`).
+  **Changed for latecomers (26 Nov):** `dealInMinutes`, whole 0 to 600,
+  default 105 (settings saved before it get the default): dealing in closes
+  by itself that long after the start, and 0 keeps it open until the host
+  closes it ("Dealing in must be a whole number of minutes from 0 to 600").
+  The default tasks went from 30 to 60 party moments (`DEFAULT_TASKS`), so a
+  party of 45 never repeats one; the owner's editable copy is
+  `.design/latecomers/tasks.md` in the main checkout.
+- **State**: `tasks`, `playerIds`, `knockouts` and, since the guest list,
+  `left`. **Changed for latecomers (26 Nov),** all optional so rounds saved
+  before it load: `deck` (the settings' tasks, each text once, shuffled at
+  the start), `dealt` (cards taken so far; `deck[dealt]` is next while it
+  lasts), `dealIn` (the host's switch, on at the start; missing means on),
+  `dealInUntil` (when it closes by itself, or null) and `late` (who was dealt
+  in after the start, in order).
+- **Latecomers (26 Nov).** A guest who joins while dealing in is open (the
+  switch on and `dealInUntil` null or later than `ctx.now`, a time check, so
+  it closes on the minute with no save then) gets the next card and one
+  life: `onPlayerJoin`, which also covers taking a name from the guest list,
+  and the `{ type: 'join' }` move their phone sends, because the membership
+  step runs only on a save and phones never sync. The card: the top of the
+  deck while it has any (none of them is held); once it is used up, a task
+  nobody holds that no knockout showed, then one nobody holds, and only when
+  every task is held, the one held by the fewest, first in deck order. So a
+  latecomer never gets a task a standing player holds while a free one is
+  left, and a task repeats only once the deck is used up. Setup deals the
+  first cards the same way, so more players than tasks still share them
+  evenly. Never dealt in: an id already in `playerIds` (so a freed name taken
+  again, by the same guest or another, still watches, as
+  [guest-list.md, 9.4](guest-list.md#94-last-one-standing-the-quiz-in-person-rounds)
+  says, and nobody gets a second life by rejoining), a guest not in the
+  party, and anyone once the round has a winner (so the winner check, which
+  still needs more than one dealt in, and a crown already announced in the
+  same save hold). Dealt in, they hear "You're in Last one standing" with
+  "Your secret task is on your phone" (to them, megaphone, chime). The join
+  move never throws: when it can't deal, the state comes back unchanged and
+  the engine answers it as skipped. A round saved before the deck shuffles
+  one from the round's settings on its first latecomer, every card counted
+  as dealt, so the latecomer gets a task nobody holds; its dealing in is
+  open until the host closes it.
+- **Host action** (26 Nov): `{ type: 'dealIn', open }`. Close: dealing in
+  off (`dealInUntil` null); a skip when it is already closed, by the switch
+  or by the time. Open: on with no time to close by itself, and everyone in
+  the party who was never dealt in gets a card at once; a skip when it is
+  already open with no timer.
+- **Public state** adds `dealIn` (open at this save's `now`) and
+  `dealInUntil`, both optional for public states saved before them. A phone
+  reads dealing in as open only when a save said so and `dealInUntil` hasn't
+  passed by `serverNow()` (`dealingInNow`).
 - **New in the logic**:
   - export `standing(state, info)` (dealt-in players who still have a task and
     are still in the party) and `winnerOf(state, info)`; the host view uses
@@ -3545,9 +3592,25 @@ back on the list as expected and sends the phone back to Who are you?
     and Got someone? Scan (the `ScanSheet` and knockout dialog, so knockouts
     work during the quiz). The knockout button is disabled while its `act` is
     pending.
+  - **Latecomers (26 Nov),** on the card and the full view alike: a guest
+    with no view while the public state says dealing in is open sends
+    `{ type: 'join' }` once per page and round (`dealMeIn.ts`) and reads
+    "Dealing you in…"; dealt in, their view is `alive` with `late: true` and
+    the heading is "You're in." over the task and Scan, as for everyone. A
+    guest who watches reads "You watch this round." and "Dealing in had
+    closed when you joined. You'll be dealt in next time." (or "You'll be
+    dealt in next time." while it is open, for a freed name they took); if
+    the move didn't get through, "Couldn't deal you in." with Try again.
+    The knockout dialog says "You're being dealt in. Try again in a moment."
+    and "{name} isn't in this round" while dealing in is open.
   - `ResultView` (new): "You're the last one standing!", or "You're out: Mads
     got you with 'hum a tune'. Ana won.", or "Ana won" for spectators.
-  - `HostView`: as today, using `standing` and `winnerOf`. **Changed during
+  - `HostView`: as today, using `standing` and `winnerOf`. **Latecomers
+    (26 Nov):** a "Deal in latecomers: on" row under the count, "A guest who
+    joins gets a task until 20:30." (or "until you close it"), "Closed by
+    itself at 20:30." or "Closed.", with "N dealt in late so far", and
+    Close dealing in or Open dealing in; "dealt in late" beside those names
+    in Still in. **Changed during
     review:** with Show tasks off, Latest knockouts shows a knockout's task
     only once nobody still holds the same text, the rule of the room's feed
     (`publicState.feed`): tasks repeat when there are more guests than tasks
@@ -3558,10 +3621,13 @@ back on the list as expected and sends the phone back to Who are you?
     screen.
   - `TvStatus` (new): a slim `SurvivorMeter` ("17 of 45 still standing"), the
     top hunter, the latest knockout.
-  - `ConfigEditor`: points capped at 100, the task limits.
+  - `ConfigEditor`: points capped at 100, the task limits, the count of
+    tasks ("Tasks (60)") and, since latecomers, "Deal in latecomers for
+    (minutes)" with "0 keeps it open until you close it on the night".
 - **Bot** (`bot.ts`): while standing, now and then (about one chance in 20 per
   call) tags or catches a random other standing player; no `hostMove`;
-  default settings.
+  default settings. Since latecomers, with no view yet and dealing in open,
+  it sends `{ type: 'join' }`, as the phone does.
 - `acceptsScans: true`; `profileBadges` unchanged; `icon: SwordIcon`.
 
 ### 8.2 In-person rounds, ported

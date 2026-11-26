@@ -542,7 +542,8 @@ the standings card below the fold, and Show my code in the thumb zone.
 
 ### The hunt on a phone
 
-- **Its section:** the pink tab; "You're still in.", or "You're out." with your
+- **Its section:** the pink tab; "You're still in." ("You're in." for a
+  guest dealt in late), or "You're out." with your
   token wearing the stripe and the word in pink; the line "18 of 24 left.
   Clara got Frida at 22:41." from the feed's own times
   ([hunt.ts](../src/games/elimination/hunt.ts)); the task card face down
