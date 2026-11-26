@@ -117,14 +117,24 @@ flowchart TD
   P0 -- "unknown or malformed code" --> NF["Party not found<br/>Join another party"]:::closed
   P0 -- "error" --> ER["Something went wrong<br/>Retry"]:::closed
   P0 -- "not a player here" --> JOIN["/join/:code"]:::screen
-  P0 -- "player" --> PH["Phone home<br/>avatar, name, badges, sound, points"]:::screen
+  P0 -- "player" --> F{"A stage game on the TV,<br/>live or on its final screen?"}:::gate
+  F -- "yes, also for a guest who just joined" --> TAKE["The takeover: that game alone<br/>slim header with Standings,<br/>the bar: My task and Show my code"]:::closed
+  F -- "no" --> PH["Phone home<br/>header, main card, your place, sound"]:::screen
+  TAKE -- "Standings" --> PEEK["The peek: the home as a sheet<br/>your place, the standings, On the TV,<br/>the games underneath, Back to the game"]:::closed
+  PEEK -- "Back to the game, Escape,<br/>a new timed question, the next game" --> TAKE
+  TAKE -- "My task" --> TASK["The task turned over across the bar,<br/>back by itself after 8 s"]:::closed
+  TASK --> TAKE
+  TAKE -- "the game finishes" --> TRES["Its result alone<br/>Waiting for the next game"]:::closed
+  TRES -- "the TV moves on:<br/>Back to standings, or 3 minutes" --> RES
+  TAKE -- "the host sends the TV back to the standings<br/>(the game keeps running)" --> LIVE2
+  TAKE -.- C27["C27 closed: during a stage game the phone<br/>shows only that game (C27)"]:::closed
   PH --> S{"The main card"}:::gate
   S -- "no game live, none finished lately" --> LOBBY["Lobby: You're in.<br/>faces of the latest joiners"]:::screen
-  S -- "a game on the TV" --> LIVE["On the TV: the game's own screen"]:::screen
+  S -- "a background game on the TV<br/>(the hunt's board)" --> LIVE["On the TV: the game's own screen"]:::screen
   S -- "a game live off the TV, no result to show" --> LIVE2["Now playing: the newest live game"]:::screen
   S -- "the last game finished, none started since<br/>(background games stay compact cards)" --> RES["Finished: the game's result for me<br/>Waiting for the next game"]:::closed
   S -- "party archived" --> WRAP["That's a wrap.<br/>Your night once the recap is published"]:::closed
-  PH --> ALSO["Also running: a compact card per other live game<br/>Open shows the whole game in a sheet"]:::screen
+  PH --> ALSO["Also running: a section per other live game<br/>Open shows the whole game in a sheet"]:::screen
   PH --> LATE["Finished lately: a row per other finished game<br/>tap shows its result in a sheet"]:::screen
   PH --> NIGHT["Your night: rank, points by game, moments<br/>once the recap is published"]:::screen
   PH --> STAND["Standings, Show my code bar"]:::screen
@@ -134,11 +144,29 @@ flowchart TD
   S -- "host freed my name" --> FREED["Who are you?, with: The host gave the name Ana<br/>back to the list. Pick your own name."]:::closed
   REM --> JOIN
   FREED --> JOIN
-  LOBBY -- "host starts a game" --> LIVE
-  LIVE -- "the game finishes, by itself or by End" --> RES
-  RES -- "the next game starts" --> LIVE
+  LOBBY -- "host starts a game on the TV" --> TAKE
+  LOBBY -- "host starts a game in the background" --> ALSO
+  RES -- "the next game starts on the TV" --> TAKE
   RES -.- C22["G1 closed: a result card per finished game,<br/>the game's own ResultView or a generic one (C22)"]:::closed
 ```
+
+**The takeover** (26 Nov, the owner's ask: "when a game comes on, the
+current showcased game on the screen should take over the phone screen, so
+there is not too much overload of information on the phone screen"). While
+a game made for the stage (the quiz, Participant fusion, Lydspor, an
+in-person round) holds the TV, from its start to the end of its final
+screen, the phone shows only that game under a slim header: the logo, the
+party, Standings and the sound. Standings opens the rest of the home as the
+peek, a sheet with your place and the standings first. The bar stays at the
+foot with Show my code and, while the hunt runs underneath, a quiet
+face-down "My task" that turns over to show the task and back by itself, so
+a guest can try their task at any moment. Both step aside while a timed
+question or a text field needs the screen. The hunt's moments still reach
+the phone as toasts with their sounds, and a camera scan still opens its
+sheet over the game. When the TV moves on, the home is back as it was, with
+the game's result card on top. The rules are `phoneFocus`, `barSecret` and
+`peekOpen` in [running.ts](../src/components/phone/running.ts); the look is
+in [identity.md](identity.md#the-phone).
 
 Announcements from games show as toasts on every phone. Ones aimed at one player
 replace the room-wide one and play one sound (the strongest of the batch). A
@@ -567,6 +595,7 @@ never shows on the TV.
 | C24 | G9: with two in-person rounds live, a round's Scan a player opened the award page with the stage game or the newest live game picked | The round's Scan a player sends its own game id (`?game=<id>`), which the scanner carries to the award page |
 | C25 | An old phone that slept through its player's move woke to "You're no longer in X" | The snapshot says the player moved, so it shows "Your player moved to another phone" with Join with a new name |
 | C26 | Fusion's pictures could only name guests who had joined, so the host couldn't set the game up before the party | The guest list ([guest-list.md](guest-list.md)): the host adds every name before the party, a guest taps theirs under Who are you?, and settings can name guests still expected |
+| C27 | During a stage game the phone stacked the game, your place, On the TV, every background game, what finished lately and the standings: too much to read while watching the TV | The takeover: the stage game alone under a slim header, Standings opens the rest as a sheet, and the bar keeps Show my code and the hunt's task one tap away (section 2.2) |
 
 ### Open, in priority order
 
@@ -650,9 +679,9 @@ sequenceDiagram
 | Moment | Host page | TV | Phones that played | Others |
 | --- | --- | --- | --- | --- |
 | The winning move | The card shows the winner | The game's screen shows the winner and one fanfare; a game in the background gets the news strap | Winner: toast and fanfare. Last one out: out state, sad sound | Toast |
-| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: the news strap, and a Finished chip beside the standings later | The main card turns into the result card; games live in the background stay compact cards. If another game is live on the TV: a Finished lately row | The generic result card or row |
-| Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | No change: the result stays until the next game | No change |
-| The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | Its card becomes main. Whatever the guest had open in the game that had the main card (such as a knockout being confirmed) stays on top until they finish | Same |
+| Finished, a moment later | The card moves to Games as Finished, with Mads won and On the TV (or Show on the TV). On the TV now says Final result with a gold Back to standings and "The TV goes back in 2:59" | If it held the stage or the stage was free: the final screen. If another game holds the stage: the news strap, and a Finished chip beside the standings later | The main card turns into the result card; games live in the background stay compact cards. A stage game's takeover shows its result alone while the TV shows the final screen. If another game is live on the TV: a Finished lately row | The generic result card or row |
+| Back to standings, or 3 minutes | The countdown goes away | The standings with "Last game: Mads won X" | The takeover ends with the TV and the home comes back, the result card on top until the next game | No change |
+| The host starts a game on the TV | That game is live and on the TV | The title card, then its screen | A stage game takes the phone over (section 2.2); a background game's card becomes main. Whatever the guest had open in the game that had the main card, or in a section of the home (such as a knockout being confirmed), stays on top until they finish | Same |
 | The host restarts the finished game | Live again, a new round | Its screen if it takes the TV | Dealt in again | Dealt in |
 | The host archives the party | Archived note | Final standings, or the recap if shown | That's a wrap., Your night when published | Same |
 

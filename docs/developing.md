@@ -95,7 +95,7 @@ public `game-media` bucket (hosts upload; JPEG only).
 | ------------------- | ------ | --------------------------------------------------------------------- |
 | `/`                 | Anyone | Start page: type a party code, continue, or use a code from the host  |
 | `/join/:code`       | Guest  | Join QR target: Who are you? from the guest list, or a typed name     |
-| `/play/:code`       | Guest  | Points, the games (main card, Also running), Your night, their QR     |
+| `/play/:code`       | Guest  | A stage game on the TV alone (the takeover), else points, the games, Your night, their QR |
 | `/p/:playerCode`    | Anyone | Player QR target: the award page for hosts, into the game for guests  |
 | `/tv/:code`         | TV     | The TV: pairs with a code; `?mirror=1` is the host's own TV tab       |
 | `/host`             | Host   | Sessions                                                              |
@@ -196,14 +196,15 @@ in [src/components](../src/components).
 **`index.ts`**: `defineGameModule({ logic, name, description, icon, PlayerView, ... })`,
 with `stageBanners: 'sound-only'` when the `TvView` shows each moment itself,
 and `profileBadges` to show the game's profile data as badges (`tone`: gold
-for a win, pink for the hunt). Three more optional hooks reach the core
+for a win, pink for the hunt). Four more optional hooks reach the core
 without it naming the game:
 
 | Hook | What the core does with it |
 | ---- | -------------------------- |
 | `knockedOut(publicState)` | The players this live game has knocked out: the TV board, the host's player list and the phone's standings mark them Out with the token's stripe (`knockedOutIds` in the registry). |
 | `phoneStrap(publicState)` | The words on the paper strap beside the game's tab on a phone while it holds the main card ("Question 3 of 10"). |
-| `accent: 'hunt'` | The game's tabs are the hunt's pink with the popper's stripes: the TV's news strap and programme strap, its ticker line, and a phone's tab. | **`bot.ts`**:
+| `accent: 'hunt'` | The game's tabs are the hunt's pink with the popper's stripes: the TV's news strap and programme strap, its ticker line, and a phone's tab. |
+| `phoneSecret(view)` | This player's secret, read from their own view (`{ label: 'task', text }`): while a stage game takes over the phone and this game runs in the background, the bottom bar keeps it one tap away as a face-down "My task" beside Show my code ([identity.md](identity.md#the-phone)). | **`bot.ts`**:
 the game's rehearsal bot ([src/games/core/bot.ts](../src/games/core/bot.ts)).
 
 **Register** the logic in [src/games/logic.ts](../src/games/logic.ts), the module

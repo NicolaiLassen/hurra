@@ -3110,6 +3110,18 @@ is wrong."
 - Dev builds: `/play/<any>?fixture=<scene>` renders a fixture through a lazy
   chunk, so production bundles carry none of it.
 
+**Changed after the switch-over (26 Nov), the takeover:** while a game made
+for the stage holds the TV (`tvScene` live or final, the game's logic's
+`presentation` not `background`), the phone shows only that game under a
+slim header with Standings, which opens the rest of the home as a sheet (the
+peek); the bar keeps Show my code and a background game's secret
+(`GameModule.phoneSecret`, the hunt's task) one tap away. On its final screen
+the phone shows its result alone, and goes home with the TV. The home's
+sections stay mounted out of sight meanwhile. Rules in
+`src/components/phone/running.ts` (`phoneFocus`, `barSecret`, `peekOpen`);
+the look in docs/identity.md (The phone), the flow in docs/user-flows.md,
+2.2.
+
 **Changed after the switch-over (26 Nov):** when the host has listed guests,
 the join page asks "Who are you?" with the free names, then "You're Ana?";
 "I'm not on the list" opens the name form, and a typed name that is on the
