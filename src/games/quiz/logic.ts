@@ -348,6 +348,24 @@ export class QuizGame extends Game<QuizState, never, QuizPublicState, QuizPlayer
     return { ...state, phase: 'done' }
   }
 
+  /**
+   * Someone left the party (removed, or the host freed their name): their
+   * totals and answers go, so a guest who takes a freed name starts at 0
+   * (docs/guest-list.md, 9.4). The counts per option stay as the room saw them.
+   */
+  onPlayerLeave(state: QuizState, playerId: PlayerId): QuizState {
+    const answered = state.results.some((r) => Object.hasOwn(r.answers, playerId))
+    if (!Object.hasOwn(state.right, playerId) && !Object.hasOwn(state.quizPoints, playerId) && !answered) return state
+    const without = <T>(record: Record<PlayerId, T>): Record<PlayerId, T> =>
+      Object.fromEntries(Object.entries(record).filter(([id]) => id !== playerId))
+    return {
+      ...state,
+      right: without(state.right),
+      quizPoints: without(state.quizPoints),
+      results: state.results.map((r) => (Object.hasOwn(r.answers, playerId) ? { ...r, answers: without(r.answers) } : r)),
+    }
+  }
+
   scores(state: QuizState, info: GameInfo<QuizConfig>): Scores {
     const scores: Scores = {}
     for (const [playerId, right] of Object.entries(state.right)) {

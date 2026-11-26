@@ -531,6 +531,31 @@ describe('finishing', () => {
   })
 })
 
+describe('a name freed and taken again', () => {
+  it('starts at 0: no points, no right answers, no answers in the results', () => {
+    const party = startQuiz(2)
+    const zelda = party.listGuest('Zelda')
+    party.claimGuest(zelda.id)
+    party.sync(GAME)
+    host(party, { type: 'next', from: -1 })
+    party.submit(GAME, promptKey(state(party).index), zelda.id, { choice: [String(QUESTIONS[0].correct)] }, 500)
+    revealNow(party)
+    expect(party.game(GAME).scores).toEqual({ [zelda.id]: CONFIG.pointsPerRight })
+    party.tick(1000)
+    party.freeGuest(zelda.id)
+    party.sync(GAME)
+    expect(party.game(GAME).scores).toEqual({})
+    party.tick(1000)
+    party.claimGuest(zelda.id)
+    party.sync(GAME)
+    expect(party.game(GAME).scores).toEqual({})
+    expect(state(party).right).not.toHaveProperty(zelda.id)
+    expect(state(party).quizPoints).not.toHaveProperty(zelda.id)
+    expect(state(party).results[0].answers).not.toHaveProperty(zelda.id)
+    expect(state(party).results[0].counts[QUESTIONS[0].correct]).toBe(1)
+  })
+})
+
 describe('recap', () => {
   it('names no question the host never got to, nor the answer of one left open', () => {
     const party = startQuiz(4)

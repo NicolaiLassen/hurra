@@ -806,6 +806,10 @@ longer keeps their picks in the state. Tests: `soundtrack/logic.test.ts`
 
 ### 9.4 Last one standing, the quiz, in-person rounds
 
+**Applied on `party/integration` (26 Nov):** the patch below applied cleanly
+with `git apply` on the integrated tree (guests/list, fusion/stage and
+lydspor/game together), unchanged, with its tests.
+
 - Nothing in their settings names guests, and they deal, ask and score
   `info.players` only, so a listed guest who never comes is invisible to them.
   Nothing to change for expected guests.
@@ -1005,12 +1009,14 @@ reads `freed: true`, and the TV is back to the guests it had.
    recap moment from before the free can name the listed guest. Freeing is meant
    for mistakes caught at arrival.
 5. **Freed and retaken during a live round** relies on the games' leave hooks
-   (9.1, rule 6). Until the integration applies 9.4's patch, a retaken id
-   keeps the old person's quiz points if a quiz runs at that moment, and Last
-   one standing marks the new person Out and gives them the old person's
-   knockout points. The new person never sees the old person's private view:
-   freeing deletes it with the row. Until the game's next save they see what a
-   late joiner sees; that save runs the join hooks.
+   (9.1, rule 6). `party/integration` has them for every game that keeps
+   something per guest: the quiz and Last one standing (9.4's patch),
+   Participant fusion (9.2) and Lydspor (9.3). On `guests/list` alone a
+   retaken id keeps the old person's quiz points if a quiz runs at that
+   moment, and Last one standing marks the new person Out and gives them the
+   old person's knockout points. The new person never sees the old person's
+   private view: freeing deletes it with the row. Until the game's next save
+   they see what a late joiner sees; that save runs the join hooks.
 6. **Impersonation** is as before: anyone with the join code can take any free
    name, as they could type any name. Closing joining and Free the name are the
    host's tools.

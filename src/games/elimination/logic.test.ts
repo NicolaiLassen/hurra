@@ -260,11 +260,11 @@ describe('players who leave the party', () => {
     expect(standing(next, testInfo(config, ['ana', 'cy', 'dee']))).toEqual(['ana', 'cy', 'dee'])
   })
 
-  it('changes nothing when the player was already out or never dealt in', () => {
+  it('only marks a player already out as gone, and changes nothing for one never dealt in', () => {
     const { state } = start()
     const afterBo = tag(state, 'ana', 'bo').state
     const { ctx, effects } = systemContext(['ana', 'cy', 'dee'])
-    expect(game.onPlayerLeave(afterBo, 'bo', ctx)).toBe(afterBo)
+    expect(game.onPlayerLeave(afterBo, 'bo', ctx)).toEqual({ ...afterBo, left: ['bo'] })
     expect(game.onPlayerLeave(afterBo, 'latecomer', ctx)).toBe(afterBo)
     expect(effects).toMatchObject({ announcements: [], profiles: {} })
   })
@@ -612,13 +612,54 @@ describe('a round in a party', () => {
     p.removePlayer(dee.id)
     p.sync('g')
     expect(p.game('g').status).toBe('active')
-    expect(publicOf(p)).toMatchObject({ alive: [ana.id, bo.id, cy.id], out: [dee.id] })
+    expect(publicOf(p)).toMatchObject({ alive: [ana.id, bo.id, cy.id], out: [] })
     expect(knock(p, ana, dee)).toMatchObject({ kind: 'refuse', status: 400, message: 'That player left the party' })
 
     knock(p, bo, ana, 'catch')
     knock(p, bo, cy)
     expect(p.game('g')).toMatchObject({ status: 'finished', finishedBy: 'game', winners: [bo.id] })
     expect(lastOneStanding(p)).toHaveLength(1)
+  })
+
+  it('gives a freed name taken again nothing from the round: no task, no Out, no knockouts', () => {
+    const p = party(3)
+    const zelda = p.listGuest('Zelda')
+    p.claimGuest(zelda.id)
+    const [ana] = p.players
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    knock(p, zelda, ana)
+    expect(p.game('g').scores).toEqual({ [zelda.id]: 1 })
+    p.tick(1000)
+    p.freeGuest(zelda.id)
+    p.sync('g')
+    expect(p.game('g').scores).toEqual({})
+    expect(publicOf(p).out).toEqual([ana.id])
+    p.tick(1000)
+    p.claimGuest(zelda.id)
+    p.sync('g')
+    expect(viewOf(p, zelda)).toEqual({ status: 'spectator' })
+    expect(publicOf(p)).toMatchObject({ out: [ana.id], knockoutCounts: {} })
+    expect(publicOf(p).outBy).not.toHaveProperty(zelda.id)
+    expect(p.game('g').scores).toEqual({})
+    expect(knock(p, zelda, p.players[1])).toMatchObject({ kind: 'refuse', message: 'You joined after this game started' })
+  })
+
+  it('lets a freed name that was out be taken again without the Out', () => {
+    const p = party(3)
+    const zelda = p.listGuest('Zelda')
+    p.claimGuest(zelda.id)
+    const [ana] = p.players
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    knock(p, ana, zelda, 'catch')
+    p.tick(1000)
+    p.freeGuest(zelda.id)
+    p.tick(1000)
+    p.claimGuest(zelda.id)
+    p.sync('g')
+    expect(publicOf(p).out).toEqual([])
+    expect(publicOf(p).outBy).not.toHaveProperty(zelda.id)
+    expect(viewOf(p, zelda)).toEqual({ status: 'spectator' })
+    expect(p.game('g').scores).toEqual({ [ana.id]: 1 })
   })
 
   it("lets a joiner watch, and doesn't deal them in", () => {

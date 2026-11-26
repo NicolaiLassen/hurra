@@ -44,6 +44,12 @@ export type EliminationState = {
   /** Everyone who was dealt in. */
   playerIds: PlayerId[]
   knockouts: Knockout[]
+  /**
+   * Dealt in, then gone from the party: removed, or the host freed the name.
+   * Their knockouts no longer score, and whoever takes a freed name watches
+   * this round (docs/guest-list.md, 9.4). Missing in rounds saved before it.
+   */
+  left?: PlayerId[]
 }
 
 export type EliminationAction = { type: Method; target: PlayerId }
@@ -54,7 +60,7 @@ export type PublicKnockout = Omit<Knockout, 'task'> & { task: string | null }
 export type EliminationPublicState = {
   /** Still standing, in deal order. */
   alive: PlayerId[]
-  /** Dealt in and no longer standing: knocked out, or gone from the party. */
+  /** Dealt in and knocked out; never someone who left the party (state.left). */
   out: PlayerId[]
   winner: PlayerId | null
   /** Who knocked each player out, and how. */
@@ -201,7 +207,7 @@ export class EliminationGame extends Game<
 
     if (winnerOf(state, ctx)) throw new GameError('The game is over')
     if (!holds(state, playerId)) {
-      throw new GameError(state.playerIds.includes(playerId) ? "You're out" : 'You joined after this game started')
+      throw new GameError(dealtIn(state, playerId) ? "You're out" : 'You joined after this game started')
     }
     if (target === playerId) throw new GameError("That's your own code")
     if (!ctx.players.some((p) => p.id === target)) {
@@ -210,7 +216,7 @@ export class EliminationGame extends Game<
     }
     if (!holds(state, target)) {
       throw new GameError(
-        state.playerIds.includes(target) ? `${name(target)} is already out` : `${name(target)} isn't in this game`,
+        dealtIn(state, target) ? `${name(target)} is already out` : `${name(target)} isn't in this game`,
       )
     }
 
@@ -293,10 +299,13 @@ export class EliminationGame extends Game<
    * with them. If that leaves one standing, they win, as after a knockout.
    */
   onPlayerLeave(state: EliminationState, playerId: PlayerId, ctx: GameContext<EliminationConfig>): EliminationState {
-    if (!holds(state, playerId)) return state
+    if (!state.playerIds.includes(playerId)) return state
+    // Out or not: the id stops counting, so a guest who takes a freed name starts with nothing from this round.
+    const marked = hasLeft(state, playerId) ? state : { ...state, left: [...(state.left ?? []), playerId] }
+    if (!holds(marked, playerId)) return marked
     const next: EliminationState = {
-      ...state,
-      tasks: Object.fromEntries(Object.entries(state.tasks).filter(([id]) => id !== playerId)),
+      ...marked,
+      tasks: Object.fromEntries(Object.entries(marked.tasks).filter(([id]) => id !== playerId)),
     }
     // When several leave at once, this runs once per leaver, and ctx.players
     // already lacks all of them: crown only once the last of them is gone, when
@@ -333,7 +342,7 @@ export class EliminationGame extends Game<
 
   scores(state: EliminationState, info: GameInfo<EliminationConfig>): Scores {
     const scores: Scores = {}
-    for (const knockout of state.knockouts) {
+    for (const knockout of counted(state)) {
       const points = knockout.method === 'catch' ? info.config.pointsPerCatch : info.config.pointsPerTag
       scores[knockout.by] = (scores[knockout.by] ?? 0) + points
     }
@@ -343,15 +352,17 @@ export class EliminationGame extends Game<
   publicState(state: EliminationState, info: GameInfo<EliminationConfig>): EliminationPublicState {
     const live = new Set(Object.values(state.tasks))
     const knockoutCounts: Record<PlayerId, number> = {}
-    for (const knockout of state.knockouts) knockoutCounts[knockout.by] = (knockoutCounts[knockout.by] ?? 0) + 1
+    for (const knockout of counted(state)) knockoutCounts[knockout.by] = (knockoutCounts[knockout.by] ?? 0) + 1
     // In deal order: jsonb reorders object keys, so Object.keys(state.tasks) isn't stable.
     const alive = standing(state, info)
     const standingNow = new Set(alive)
     return {
       alive,
-      out: state.playerIds.filter((id) => !standingNow.has(id)),
+      out: state.playerIds.filter((id) => !standingNow.has(id) && !hasLeft(state, id)),
       winner: winnerOf(state, info),
-      outBy: Object.fromEntries(state.knockouts.map((k) => [k.target, { by: k.by, method: k.method }])),
+      outBy: Object.fromEntries(
+        state.knockouts.filter((k) => !hasLeft(state, k.target)).map((k) => [k.target, { by: k.by, method: k.method }]),
+      ),
       knockoutCounts,
       feed: state.knockouts
         .slice(-10)
@@ -361,7 +372,7 @@ export class EliminationGame extends Game<
   }
 
   playerView(state: EliminationState, playerId: PlayerId, info: GameInfo<EliminationConfig>): EliminationPlayerView {
-    if (!state.playerIds.includes(playerId)) return { status: 'spectator' }
+    if (!dealtIn(state, playerId)) return { status: 'spectator' }
     const knockouts = state.knockouts.filter((k) => k.by === playerId).length
     if (winnerOf(state, info) === playerId) return { status: 'winner', knockouts }
     if (holds(state, playerId)) return { status: 'alive', task: state.tasks[playerId], knockouts }
@@ -381,7 +392,7 @@ export class EliminationGame extends Game<
     const highlights: Highlight[] = []
 
     const counts = new Map<PlayerId, number>()
-    for (const k of state.knockouts) counts.set(k.by, (counts.get(k.by) ?? 0) + 1)
+    for (const k of counted(state)) counts.set(k.by, (counts.get(k.by) ?? 0) + 1)
 
     const winner = round.winners.length === 1 && holds(state, round.winners[0]) ? round.winners[0] : null
     const holders = state.playerIds.filter((id) => holds(state, id))
@@ -448,6 +459,21 @@ export class EliminationGame extends Game<
     }
     return highlights
   }
+}
+
+/** Whether the player was dealt in and then left the party (removed, or their name freed). */
+function hasLeft(state: EliminationState, playerId: PlayerId): boolean {
+  return Array.isArray(state.left) && state.left.includes(playerId)
+}
+
+/** Dealt in and still the same guest: not someone who left, whose freed name another guest may have taken since. */
+function dealtIn(state: EliminationState, playerId: PlayerId): boolean {
+  return state.playerIds.includes(playerId) && !hasLeft(state, playerId)
+}
+
+/** The knockouts that still score: none by someone who left, so a freed name's next guest doesn't inherit them. */
+function counted(state: EliminationState): Knockout[] {
+  return state.knockouts.filter((k) => !hasLeft(state, k.by))
 }
 
 /** Whether the player still has a task (own keys only: a player id is never "constructor"). */

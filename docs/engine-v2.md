@@ -3513,7 +3513,14 @@ back on the list as expected and sends the phone back to Who are you?
     already out", "Bo joined after this round started");
   - `onPlayerLeave`: drops the leaver's task; if exactly one player is left
     standing, announces "{name} is the last one standing!" (crown, fanfare,
-    `interrupt`) and the personal one;
+    `interrupt`) and the personal one; **changed for the guest list (26
+    Nov):** it also adds the id to `state.left` (dealt in, then gone: removed
+    or a freed name), out or not, so whoever takes a freed name watches the
+    round: `playerView` is `spectator`, `out` and `outBy` leave the id out,
+    and `scores()`, `knockoutCounts` and the recap's hunter counts skip
+    knockouts by anyone in `left`. `playerIds` stays as dealt, so a round of
+    two where one is freed still crowns the other
+    ([guest-list.md, 9.4](guest-list.md#94-last-one-standing-the-quiz-in-person-rounds));
   - the deciding knockout's "{name} is the last one standing!" is marked
     `interrupt` too, so the TV banners it while the quiz holds the stage;
   - `isFinished`: one standing and more than one dealt in; `winners`: that
@@ -3672,6 +3679,11 @@ questions; the host crowns the winner.
   "{names} won with N quiz points" (trophy, fanfare, `interrupt`), "You won
   the quiz!" to the winners and the Quiz champion badge; an open question
   stays unscored. With no scorer: "Nobody scored this time" (gong).
+- **onPlayerLeave** (26 Nov, for the guest list): a guest removed, or whose
+  name the host frees, takes their `right`, `quizPoints` and every
+  `results[].answers` entry with them, so whoever takes a freed name starts at
+  0; the counts per option stay as the room saw them
+  ([guest-list.md, 9.4](guest-list.md#94-last-one-standing-the-quiz-in-person-rounds)).
 - **publicState** (never the right answer before its reveal):
 
   ```ts
