@@ -1,7 +1,9 @@
 // The app's sound library. Games pick sounds by name (e.g. ctx.announce(...,
 // { sound: 'slash' })) and the app plays them. The audio files live in
-// public/sounds/<name>.mp3 and are generated from these prompts with
-// ElevenLabs: `npm run sounds` (see scripts/generate-sounds.ts).
+// public/sounds/<name>.mp3. Since 26 Nov 2026 they are a simple set made in
+// code (bells, marimba and soft air, all in D major, level matched by role),
+// not ElevenLabs; the prompts below describe the older ElevenLabs set, which
+// `npm run sounds:elevenlabs` would bring back over the new files.
 //
 // Prompts are written as sound-design briefs: what makes the sound, its
 // attack and tail, its length, and what must not be in it.

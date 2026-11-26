@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:integration": "INTEGRATION=1 vitest run integration --no-file-parallelism",
     "check": "tsc -b && eslint . && vitest run",
-    "sounds": "node scripts/generate-sounds.ts",
+    "sounds:elevenlabs": "node scripts/generate-sounds.ts",
     "dev:setup": "node scripts/dev-setup.ts",
     "db:smoke": "node scripts/db-smoke.ts",
     "smoke": "node scripts/smoke.mjs"

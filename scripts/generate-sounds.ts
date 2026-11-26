@@ -1,10 +1,10 @@
 // Generates the app's sound library (src/games/core/sounds.ts) with the
 // ElevenLabs sound effects API.
 //
-//   npm run sounds                    generate the sounds that are missing
-//   npm run sounds -- coin gong       regenerate these
-//   npm run sounds -- coin --takes 4  make 4 takes in sound-takes/ to listen to
-//   npm run sounds -- --pick coin 3   use take 3 as public/sounds/coin.mp3
+//   npm run sounds:elevenlabs                    generate the sounds that are missing
+//   npm run sounds:elevenlabs -- coin gong       regenerate these
+//   npm run sounds:elevenlabs -- coin --takes 4  make 4 takes in sound-takes/ to listen to
+//   npm run sounds:elevenlabs -- --pick coin 3   use take 3 as public/sounds/coin.mp3
 //
 // Reads ELEVENLABS_API_KEY from the environment or .env.development.local.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -56,7 +56,7 @@ if (args[0] === '--pick') {
   const names = args.filter((arg, i) => !arg.startsWith('--') && (takesIndex < 0 || i !== takesIndex + 1))
   names.forEach(assertSound)
   const targets = (names.length ? names : SOUND_NAMES.filter((name) => !existsSync(`${OUT_DIR}/${name}.mp3`))) as SoundName[]
-  if (targets.length === 0) console.log('All sounds exist. Name some to regenerate them, e.g. npm run sounds -- coin')
+  if (targets.length === 0) console.log('All sounds exist. Name some to regenerate them, e.g. npm run sounds:elevenlabs -- coin')
 
   mkdirSync(OUT_DIR, { recursive: true })
   mkdirSync(TAKES_DIR, { recursive: true })
