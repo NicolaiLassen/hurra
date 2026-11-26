@@ -30,7 +30,11 @@ const FINAL_SCREEN_MS = 180_000
 /** The party night, 19:00 in Copenhagen. */
 const PARTY_NIGHT = 1_795_888_800_000
 
-export function simulateParty(options: { games: AnyGame[]; players: number; start?: number }): FakeParty {
+/**
+ * A party in memory. `seed` seeds the games' random (ctx.random); the same
+ * seed and the same requests give the same party. Default 7.
+ */
+export function simulateParty(options: { games: AnyGame[]; players: number; start?: number; seed?: number }): FakeParty {
   return new FakeParty(options)
 }
 
@@ -128,9 +132,9 @@ export class FakeParty {
   private seq = 0
   private ids = 0
 
-  constructor({ games, players, start = PARTY_NIGHT }: { games: AnyGame[]; players: number; start?: number }) {
+  constructor({ games, players, start = PARTY_NIGHT, seed = 7 }: { games: AnyGame[]; players: number; start?: number; seed?: number }) {
     this.now = start
-    this.random = seededRandom(7)
+    this.random = seededRandom(seed)
     this.logic = new Map(games.map((game) => [game.type, game]))
     this.sessionId = this.uuid()
     for (let i = 1; i <= players; i++) this.addPlayer(`Guest ${i}`, { silent: true })
@@ -513,6 +517,27 @@ export class FakeParty {
           log: this.rows.filter((row) => row.gameId === gameId && row.round === started.round).map(entryOf),
         }
       })
+  }
+
+  /**
+   * Every table back from JSON text, as a server that restarted would read
+   * them: fresh objects in jsonb key order, nothing shared with what the
+   * hooks saw before. A game that keeps anything outside its saved state, or
+   * that relies on an object it handed back being the one it gets, shows it
+   * here. The games' random stream goes on where it was.
+   */
+  reload(): void {
+    const back = <T>(value: T): T => deepFreeze(jsonbRoundTrip(JSON.parse(JSON.stringify(value)) as T))
+    for (const [id, row] of this.games) this.games.set(id, { ...row, public_state: back(row.public_state), winners: [...row.winners] })
+    for (const [id, settings] of this.settings) this.settings.set(id, jsonbRoundTrip(JSON.parse(JSON.stringify(settings))))
+    for (const [id, st] of this.states) this.states.set(id, back(st))
+    for (const [id, views] of this.views) this.views.set(id, new Map([...views].map(([player, view]) => [player, back(view)])))
+    for (const [id, prompts] of this.prompts) {
+      this.prompts.set(id, new Map([...prompts].map(([key, row]) => [key, { ...row, spec: back(row.spec) }])))
+    }
+    for (const [id, subs] of this.subs) this.subs.set(id, new Map([...subs].map(([player, row]) => [player, back(row)])))
+    this.players = this.players.map((p) => ({ ...p, profile: jsonbRoundTrip(JSON.parse(JSON.stringify(p.profile))) }))
+    this.sessionData = jsonbRoundTrip(JSON.parse(JSON.stringify(this.sessionData)))
   }
 
   // game_load ------------------------------------------------------------------

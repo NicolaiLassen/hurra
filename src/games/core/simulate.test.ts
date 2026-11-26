@@ -400,3 +400,49 @@ describe('the recap rounds', () => {
     ])
   })
 })
+
+describe('seeds and reloads', () => {
+  /** A probe round played to its end, as a list of everything the room and the phones saw. */
+  function play(seed: number | undefined, reloadEvery: number) {
+    class Dealer extends ProbeGame {
+      readonly type = 'dealer'
+      setup(ctx: GameContext<{ movesToWin: number; seconds: number }>): ProbeState {
+        return { ...super.setup(ctx), step: Math.floor(ctx.random() * 1e9) }
+      }
+    }
+    const p = simulateParty({ games: [new Dealer()], players: 3, seed })
+    p.addGame('g', 'dealer', 'Dealer', { movesToWin: 6, seconds: 10 })
+    const seen: unknown[] = []
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    for (let i = 0; i < 6; i++) {
+      if (reloadEvery > 0 && i % reloadEvery === 0) p.reload()
+      const player = p.players[i % 3]
+      p.send(p.userOf(player.id), { type: 'action', gameId: 'g', action: { type: 'move' } })
+      seen.push(p.game('g'))
+    }
+    return seen
+  }
+
+  it('gives the same party for the same seed, and another for another seed', () => {
+    expect(play(11, 0)).toEqual(play(11, 0))
+    expect((play(11, 0)[0] as { publicState: ProbePublicState }).publicState.step).not.toBe(
+      (play(12, 0)[0] as { publicState: ProbePublicState }).publicState.step,
+    )
+    // The default is the seed every test had before seeds.
+    expect(play(undefined, 0)).toEqual(play(7, 0))
+  })
+
+  it('plays on from every table reloaded from JSON as if nothing happened', () => {
+    expect(play(5, 1)).toEqual(play(5, 0))
+    const p = party()
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'ask', step: 0 } })
+    p.submit('g', 'q1', p.players[0].id, { choice: ['yes'] })
+    p.reload()
+    // Still the one answer, still open, and the reveal finds it.
+    expect(() => p.submit('g', 'q1', p.players[0].id, { choice: ['no'] })).toThrow(FakeDbError)
+    p.tick(10_000)
+    p.sync('g')
+    expect(p.game('g').publicState).toMatchObject({ question: null, results: [{ key: 'q1', yes: 1, no: 0 }] })
+  })
+})
