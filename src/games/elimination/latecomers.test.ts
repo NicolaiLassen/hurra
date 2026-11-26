@@ -81,9 +81,19 @@ describe('the default tasks', () => {
     for (const task of DEFAULT_TASKS) {
       expect(task, task).toMatch(/^Get someone to [a-z]/)
       expect(Array.from(task).length, task).toBeLessThanOrEqual(Math.min(55, MAX_TASK_LENGTH))
-      // Curly quotes and apostrophes, no straight ones, no dashes, no full stop.
-      expect(task, task).not.toMatch(/['"–—.]$|['"]|–|—/)
+      // Curly quotes and apostrophes, never straight ones; no dashes; no full stop at the end.
+      expect(task, task).not.toMatch(/['"\u2013\u2014]|\.$/)
     }
+  })
+
+  it('name nobody: they ship in the app', () => {
+    // A capital after the start is a title or a song, never a guest: Happy Birthday, Disney, Your Majesty, Australia.
+    const capitals = DEFAULT_TASKS.flatMap((task) => task.slice('Get someone to '.length).match(/\b[A-Z][a-z]+/g) ?? [])
+    expect([...new Set(capitals)].sort()).toEqual(['Australia', 'Birthday', 'Disney', 'Happy', 'Majesty', 'Your'])
+  })
+
+  it('need no drink, since nobody has to drink to play', () => {
+    for (const task of DEFAULT_TASKS) expect(task, task).not.toMatch(/\b(drink|beer|wine|shot|sip|glass)\b/i)
   })
 
   it('deal 45 guests 45 different tasks, latecomers included', () => {
