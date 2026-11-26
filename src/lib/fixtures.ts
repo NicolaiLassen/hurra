@@ -10,8 +10,10 @@
 // and its own targeted announcements, the TV and the host page get room-wide
 // ones only, and only the host page gets `states` (with the quiz's answers and
 // the fusion key), `screens` and `guests` (the guest list: the twelve players
-// as joined and four guests still expected, docs/guest-list.md).
-import { SOUNDTRACK_SCENES, soundtrackSample, type SoundtrackScene } from '@/games/soundtrack/samples'
+// as joined and four guests still expected, docs/guest-list.md). The host page
+// also reads each scene's game settings (fixtureSettings), as game_settings
+// would hold them.
+import { sampleSettings, SOUNDTRACK_SCENES, soundtrackSample, type SoundtrackScene } from '@/games/soundtrack/samples'
 import type { Screen } from './live'
 import type { RecapDoc } from './recap'
 import type { AnswerPayload, FeedItem, ListedGuest, Player, PromptState, Session, SessionGame, Snapshot, Tallies } from './types'
@@ -57,6 +59,9 @@ export const FIXTURE_SCENES = [
   // the last call, locked, reveal 1 with an accepted close title, the top 5
   // after reveal 4, and the crown.
   ...SOUNDTRACK_SCENES.map((scene) => `soundtrack-${scene}` as const),
+  // Before the party, no TV yet: a program with Lydspor and fusion still to set up, and the same program ready, with a TV.
+  'setup',
+  'setup-ready',
   'final',
   'background',
   'removed',
@@ -589,6 +594,63 @@ function soundtrackWorld(scene: SoundtrackScene): World {
   }
 }
 
+// Settings (host page only) -------------------------------------------------------------------
+// What game_settings holds for each game, as the host made them before the
+// party. Every scene has these; the setup scenes leave some work undone.
+
+const ELIMINATION_SETTINGS = { tasks: TASKS, pointsPerTag: 1, pointsPerCatch: 1 }
+
+/**
+ * Participant fusion's settings with `count` pictures: each with its drawn
+ * image, its two people and their own photos, but for the pictures left out
+ * of each. Picture 8 is of a guest still expected.
+ */
+function fusionSettings(count: number, without: { people?: number[]; image?: number[]; originals?: number[] } = {}) {
+  return {
+    pictures: Array.from({ length: count }, (_, i) => {
+      const n = i + 1
+      const people: [string, string] = n === 8 ? [ids[0], EXPECTED_GUESTS[0].id] : stagePair(n)
+      return {
+        label: n === 9 ? 'The viking' : '',
+        ...(without.image?.includes(n) ? {} : { image: `fixture/fusion-${n}.jpg` }),
+        ...(without.people?.includes(n) ? {} : { people }),
+        ...(without.originals?.includes(n) ? {} : { originals: [`fixture/original-${n}-1.jpg`, `fixture/original-${n}-2.jpg`] }),
+      }
+    }),
+    pointsPerPerson: 1,
+    bonusForBoth: 1,
+    seconds: 30,
+    showSeconds: 6,
+  }
+}
+
+/** Lydspor's sample settings (8 invented songs, 4 extra photos), with drawn photos, but for the songs left without one. */
+function lydsporSettings(withoutPhoto: number[] = []) {
+  const settings = sampleSettings({ players: PLAYERS })
+  return {
+    ...settings,
+    songs: settings.songs.map((song, i) => ({ ...song, photo: withoutPhoto.includes(i + 1) ? '' : `fixture/lydspor-${i + 1}.jpg` })),
+    extraPhotos: settings.extraPhotos.map((photo, k) => ({ ...photo, photo: `fixture/lydspor-${21 + k}.jpg` })),
+  }
+}
+
+/** The settings every scene's games have: all of them ready. */
+const READY_SETTINGS = (): Record<string, Record<string, unknown>> => ({
+  [ELIMINATION]: ELIMINATION_SETTINGS,
+  [QUIZ]: quizConfig,
+  [FUSION]: fusionSettings(12),
+  [SOUNDTRACK]: lydsporSettings(),
+})
+
+/** The program before the party: Last one standing all night, then Lydspor, fusion, the quiz and beer pong. */
+const setupGames = () => [
+  game(ELIMINATION, 'elimination', 'Last one standing', 0),
+  game(SOUNDTRACK, 'soundtrack', 'Lydspor', 1),
+  game(FUSION, 'fusion', 'Who is fused?', 2),
+  game(QUIZ, 'quiz', 'Quiz', 3),
+  game(PONG, 'in-person', 'Beer pong', 4),
+]
+
 // Scenes --------------------------------------------------------------------------------------
 
 /** One scene's party, before it is cut down to what a screen may read. */
@@ -606,6 +668,10 @@ type World = {
   states?: Record<string, { state: unknown; config: unknown; round: number; members: string[] }>
   feed?: FeedItem[]
   recapAt?: number
+  /** Paired TVs, for the host page: 1 unless the scene says. */
+  screens?: number
+  /** The games' saved settings (host page only), over the ones every scene has (fixtureSettings). */
+  settings?: Record<string, Record<string, unknown>>
 }
 
 const AWARDS = { [CLARA]: 3, [BO]: 2 }
@@ -1156,6 +1222,20 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
         ].sort((a, b) => a.created_at - b.created_at),
       }
     }
+    // Before the party, with no TV yet: Lydspor has 2 songs without their photo, and
+    // fusion 2 pictures without their people and 3 of its own photos missing.
+    case 'setup':
+      return {
+        screens: 0,
+        games: setupGames(),
+        settings: {
+          [SOUNDTRACK]: lydsporSettings([3, 6]),
+          [FUSION]: fusionSettings(8, { people: [4, 7], originals: [2, 5, 6] }),
+        },
+      }
+    // The same program, all set up, and the TV paired.
+    case 'setup-ready':
+      return { games: setupGames(), settings: { [FUSION]: fusionSettings(8, { originals: [5] }) } }
     case 'soundtrack-lobby':
     case 'soundtrack-playing':
     case 'soundtrack-last-call':
@@ -1303,10 +1383,16 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
     feed,
     me: phone ? { player_id: FIXTURE_PLAYER_ID, views, answers } : null,
     states: screen === 'host' ? states : null,
-    screens: screen === 'host' ? 1 : null,
+    screens: screen === 'host' ? (w.screens ?? 1) : null,
     recap: w.recapAt ? { published_at: w.recapAt } : null,
     guests: screen === 'host' ? GUESTS : null,
   }
+}
+
+/** A scene's game settings by game id, as game_settings holds them: what the host page reads (hosts only). */
+export function fixtureSettings(scene: FixtureScene): Record<string, Record<string, unknown>> {
+  if (scene === 'removed') return {}
+  return { ...READY_SETTINGS(), ...world(scene).settings }
 }
 
 /** The recap published in the 'archived' scene, for the TV's recap scene and the phone's "Your night". */

@@ -2,6 +2,7 @@
 // the TV shows right now, who won a game, how a game starts, which game a host
 // award goes to. Pure functions of a snapshot, so they are unit-tested.
 import type { Presentation } from '@/games/core/Game'
+import type { SetupStatus } from '@/games/types'
 import { listNames } from '@/lib/recap'
 import { liveGames, type TvScene } from '@/lib/stage'
 import type { Player, Session, SessionGame, Snapshot } from '@/lib/types'
@@ -64,17 +65,83 @@ export function partyLine(guests: number, session: Pick<Session, 'status' | 'arc
   return `${count}, joining is ${session.status === 'open' ? 'open' : 'closed'}`
 }
 
+/** A game's readiness in the room: undefined while its settings load, null when the game says nothing (it starts as always). */
+export type Readiness = (gameId: string) => SetupStatus | null | undefined
+
 /**
- * The game whose Start is the control room's one gold step (docs/identity.md):
- * the first game of the program that hasn't run, once nothing else leads. A
- * TV is open (else Pair a TV leads), the TV shows the standings (a live game
- * on the TV has its own next step, a final screen has Back to standings, the
- * recap Back to the party), and the party isn't archived. Games live in the
- * background don't stop it: Last one standing runs all night.
+ * The control room's one gold step (docs/identity.md) where the TV leaves it
+ * to the program: Pair a TV, a game's Set up, or a game's Start.
  */
-export function nextStartId(s: Snapshot, scene: TvScene, tvOpen: boolean): string | null {
-  if (!s.session || s.session.archived_at !== null || !tvOpen || scene.kind !== 'standings') return null
-  return arrangeGames(s).program.find((g) => g.status === 'pending')?.id ?? null
+export type RoomStep = { kind: 'pair' } | { kind: 'setup'; gameId: string } | { kind: 'start'; gameId: string } | null
+
+/**
+ * The room's one gold step while the TV shows the standings and the party
+ * isn't archived (a live game on the TV has its own next step, a final screen
+ * Back to standings, the recap Back to the party). Games live in the
+ * background don't stop it: Last one standing runs all night.
+ *
+ * - No TV open yet: setting the games up comes first, so the first game not
+ *   started that isn't ready gets Set up; once every one is ready, Pair a TV.
+ * - A TV open: the first game not started, with Set up when it isn't ready
+ *   and its Start when it is.
+ *
+ * Nothing is gold while the settings are still read, so the gold never jumps
+ * from Start to Set up as they come in.
+ */
+export function roomStep(s: Snapshot, scene: TvScene, tvOpen: boolean, readiness: Readiness): RoomStep {
+  if (!s.session || s.session.archived_at !== null || scene.kind !== 'standings') return null
+  const pending = arrangeGames(s).program.filter((g) => g.status === 'pending')
+  if (pending.some((g) => readiness(g.id) === undefined)) return null
+  const notReady = (g: SessionGame) => readiness(g.id)?.ready === false
+  if (!tvOpen) {
+    const todo = pending.find(notReady)
+    return todo ? { kind: 'setup', gameId: todo.id } : { kind: 'pair' }
+  }
+  const next = pending[0]
+  if (!next) return null
+  return { kind: notReady(next) ? 'setup' : 'start', gameId: next.id }
+}
+
+/** What a game's row in the program shows, beside its title (docs/user-flows.md, 3.2). */
+export type RowPlan = {
+  /** The line under its name: its readiness, when it says one. */
+  status: SetupStatus | null
+  /** The settings button: Set up while a game not started isn't ready, else Settings; null without settings to edit. */
+  settings: { label: 'Settings' | 'Set up'; gold: boolean } | null
+  /** The split Start, for a game not started that is ready (or says nothing): gold when it is the room's step. */
+  start: { gold: boolean } | null
+  /** Start anyway in the menu: a game not started that isn't ready, but that its own check would start. */
+  startAnyway: boolean
+}
+
+/**
+ * A row's buttons and line. A game not started shows its readiness and, when
+ * it isn't ready, Set up in place of its Start (the Start moves to the menu as
+ * Start anyway, when the game would start at all). A finished game keeps
+ * Settings beside Show on the TV for a restart, and says it only when its
+ * settings aren't ready. A live or archived game has neither: settings are
+ * frozen into a round when it starts.
+ */
+export function rowPlan(
+  game: Pick<SessionGame, 'id' | 'status' | 'archived_at'>,
+  { editable, status, step, startable }: { editable: boolean; status: SetupStatus | null | undefined; step: RoomStep; startable: boolean },
+): RowPlan {
+  const none: RowPlan = { status: null, settings: null, start: null, startAnyway: false }
+  if (game.archived_at !== null || game.status === 'active') return none
+  const isStep = (kind: 'setup' | 'start') => step !== null && step.kind === kind && step.gameId === game.id
+  const notReady = status?.ready === false
+  if (game.status === 'finished') {
+    return { ...none, status: notReady ? status : null, settings: editable ? { label: 'Settings', gold: false } : null }
+  }
+  if (notReady && editable) {
+    return { status, settings: { label: 'Set up', gold: isStep('setup') }, start: null, startAnyway: startable }
+  }
+  return {
+    status: status ?? null,
+    settings: editable ? { label: 'Settings', gold: false } : null,
+    start: { gold: isStep('start') },
+    startAnyway: false,
+  }
 }
 
 /** "No TV paired yet", "1 TV paired", "2 TVs paired". */

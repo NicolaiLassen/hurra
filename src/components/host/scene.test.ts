@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { FIXTURE_NOW, fixtureSnapshot } from '@/lib/fixtures'
+import { setupStatusOf } from '@/games/registry'
+import { FIXTURE_NOW, fixtureSettings, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
+import { guestsOf } from '@/lib/guestList'
 import { FINAL_SCREEN_MS, tvScene } from '@/lib/stage'
 import type { SessionGame, Snapshot } from '@/lib/types'
 import {
@@ -7,10 +9,12 @@ import {
   defaultAwardGame,
   formatCountdown,
   nextPosition,
-  nextStartId,
   partyLine,
   resultLine,
+  roomStep,
+  rowPlan,
   screensLine,
+  type Readiness,
   stageWords,
   startChoices,
   winnersChip,
@@ -163,23 +167,60 @@ describe('partyLine', () => {
   })
 })
 
-describe('nextStartId', () => {
+describe('roomStep', () => {
   const at = (s: Snapshot) => tvScene(s, FIXTURE_NOW)
+  /** Each game's readiness from the scene's own settings, as the control room reads them. */
+  const readinessOf = (scene: FixtureScene, s: Snapshot): Readiness => {
+    const settings = fixtureSettings(scene)
+    return (id) => {
+      const game = s.games.find((g) => g.id === id)
+      return game ? setupStatusOf(game.game_type, settings[id] ?? null, guestsOf(s)) : null
+    }
+  }
+  const ready: Readiness = () => ({ ready: true, line: 'Ready' })
+  const idOf = (s: Snapshot, title: string) => s.games.find((g) => g.title === title)!.id
 
   it('is the first game not started while the TV shows the standings', () => {
     const s = fixtureSnapshot('lobby', 'host')
-    expect(nextStartId(s, at(s), true)).toBe(s.games.find((g) => g.title === 'Last one standing')!.id)
+    expect(roomStep(s, at(s), true, ready)).toEqual({ kind: 'start', gameId: idOf(s, 'Last one standing') })
   })
 
-  it('leaves the gold to Pair a TV while no TV is open', () => {
+  it('is Set up on that game when it is not ready', () => {
     const s = fixtureSnapshot('lobby', 'host')
-    expect(nextStartId(s, at(s), false)).toBeNull()
+    const first = idOf(s, 'Last one standing')
+    const readiness: Readiness = (id) => (id === first ? { ready: false, line: 'No tasks yet' } : { ready: true, line: 'Ready' })
+    expect(roomStep(s, at(s), true, readiness)).toEqual({ kind: 'setup', gameId: first })
+  })
+
+  it('leaves the gold to Pair a TV while no TV is open and every game is ready', () => {
+    const s = fixtureSnapshot('lobby', 'host')
+    expect(roomStep(s, at(s), false, ready)).toEqual({ kind: 'pair' })
+    expect(roomStep(s, at(s), false, () => null)).toEqual({ kind: 'pair' })
+  })
+
+  it('puts setting a game up before pairing a TV: the first game that is not ready', () => {
+    const s = fixtureSnapshot('setup', 'host')
+    expect(s.screens).toBe(0)
+    expect(roomStep(s, at(s), false, readinessOf('setup', s))).toEqual({ kind: 'setup', gameId: idOf(s, 'Lydspor') })
+  })
+
+  it('starts the first game once the program is set up and a TV is open', () => {
+    const s = fixtureSnapshot('setup-ready', 'host')
+    expect(roomStep(s, at(s), true, readinessOf('setup-ready', s))).toEqual({ kind: 'start', gameId: idOf(s, 'Last one standing') })
+    expect(roomStep(s, at(s), false, readinessOf('setup-ready', s))).toEqual({ kind: 'pair' })
+  })
+
+  it('holds the gold back while the settings are still read', () => {
+    const s = fixtureSnapshot('lobby', 'host')
+    expect(roomStep(s, at(s), true, () => undefined)).toBeNull()
+    expect(roomStep(s, at(s), false, () => undefined)).toBeNull()
   })
 
   it('leaves the gold to the game on the TV, a final screen, and an archived party', () => {
     for (const scene of ['quiz-question', 'final', 'archived'] as const) {
       const s = fixtureSnapshot(scene, 'host')
-      expect(nextStartId(s, at(s), true)).toBeNull()
+      expect(roomStep(s, at(s), true, ready)).toBeNull()
+      expect(roomStep(s, at(s), false, ready)).toBeNull()
     }
   })
 
@@ -187,6 +228,75 @@ describe('nextStartId', () => {
     const lobby = fixtureSnapshot('lobby', 'host')
     const [first, ...rest] = lobby.games
     const s: Snapshot = { ...lobby, games: [{ ...first, status: 'active', started_at: FIXTURE_NOW }, ...rest] }
-    expect(nextStartId(s, at(s), true)).toBe(rest[0].id)
+    expect(roomStep(s, at(s), true, ready)).toEqual({ kind: 'start', gameId: rest[0].id })
+  })
+})
+
+describe('rowPlan', () => {
+  const pending = { id: 'g', status: 'pending' as const, archived_at: null }
+  const finished = { ...pending, status: 'finished' as const }
+  const ready = { ready: true, line: '12 tasks, enough for all 12 guests' }
+  const notReady = { ready: false, line: '6 of 8 songs ready: 2 need a photo' }
+  const startStep = { kind: 'start' as const, gameId: 'g' }
+  const setupStep = { kind: 'setup' as const, gameId: 'g' }
+
+  it('shows a ready game its line, Settings and its Start, gold when it is the room’s step', () => {
+    expect(rowPlan(pending, { editable: true, status: ready, step: startStep, startable: true })).toEqual({
+      status: ready,
+      settings: { label: 'Settings', gold: false },
+      start: { gold: true },
+      startAnyway: false,
+    })
+    expect(rowPlan(pending, { editable: true, status: ready, step: { kind: 'start', gameId: 'other' }, startable: true }).start).toEqual({ gold: false })
+    expect(rowPlan(pending, { editable: true, status: ready, step: { kind: 'pair' }, startable: true }).start).toEqual({ gold: false })
+  })
+
+  it('puts Set up in the Start’s place while the game is not ready, and the start in the menu when it would start', () => {
+    expect(rowPlan(pending, { editable: true, status: notReady, step: setupStep, startable: true })).toEqual({
+      status: notReady,
+      settings: { label: 'Set up', gold: true },
+      start: null,
+      startAnyway: true,
+    })
+    const elsewhere = rowPlan(pending, { editable: true, status: notReady, step: { kind: 'setup', gameId: 'other' }, startable: false })
+    expect(elsewhere.settings).toEqual({ label: 'Set up', gold: false })
+    expect(elsewhere.startAnyway).toBe(false)
+  })
+
+  it('shows a game without the hook no line and its Start as always, and one without settings no Settings', () => {
+    expect(rowPlan(pending, { editable: true, status: null, step: startStep, startable: true })).toEqual({
+      status: null,
+      settings: { label: 'Settings', gold: false },
+      start: { gold: true },
+      startAnyway: false,
+    })
+    const inPerson = rowPlan(pending, { editable: false, status: { ready: true, line: 'Nothing to set up' }, step: null, startable: true })
+    expect(inPerson.settings).toBeNull()
+    expect(inPerson.start).toEqual({ gold: false })
+  })
+
+  it('shows the Start while the settings are read, never gold', () => {
+    expect(rowPlan(pending, { editable: true, status: undefined, step: null, startable: true })).toEqual({
+      status: null,
+      settings: { label: 'Settings', gold: false },
+      start: { gold: false },
+      startAnyway: false,
+    })
+  })
+
+  it('keeps Settings on a finished game for its restart, with its line only when it is not ready', () => {
+    expect(rowPlan(finished, { editable: true, status: ready, step: null, startable: true })).toEqual({
+      status: null,
+      settings: { label: 'Settings', gold: false },
+      start: null,
+      startAnyway: false,
+    })
+    expect(rowPlan(finished, { editable: true, status: notReady, step: null, startable: true }).status).toEqual(notReady)
+  })
+
+  it('shows nothing for a live game or an archived one: their settings are frozen or put away', () => {
+    const none = { status: null, settings: null, start: null, startAnyway: false }
+    expect(rowPlan({ ...pending, status: 'active' }, { editable: true, status: notReady, step: setupStep, startable: true })).toEqual(none)
+    expect(rowPlan({ ...pending, archived_at: FIXTURE_NOW }, { editable: true, status: notReady, step: null, startable: true })).toEqual(none)
   })
 })

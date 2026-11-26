@@ -7,6 +7,7 @@ import PlayerCard from '@/games/soundtrack/PlayerCard'
 import PlayerView from '@/games/soundtrack/PlayerView'
 import { readPublic } from '@/games/soundtrack/read'
 import ResultView from '@/games/soundtrack/ResultView'
+import { soundtrackSetup } from '@/games/soundtrack/setup'
 import TvStatus from '@/games/soundtrack/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
@@ -28,6 +29,8 @@ export const soundtrack = defineGameModule({
   FinalTvView: lazyScreen(() => import('@/games/soundtrack/FinalTvView')),
   TvStatus,
   ConfigEditor,
+  // "6 of 8 songs ready: 2 need a photo", from the game's own check.
+  setupStatus: soundtrackSetup,
   // The TV view shows each moment itself; Lydspor announces only its winner.
   stageBanners: 'sound-only',
   // The phone's strap over Lydspor: where the round is.

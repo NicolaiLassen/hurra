@@ -16,10 +16,11 @@ import {
 import { useState } from 'react'
 import Confirm from '@/components/Confirm'
 import ConfirmByTyping from '@/components/ConfirmByTyping'
-import GameSettings from '@/components/host/GameSettings'
+import { ReadinessLine } from '@/components/host/GameSettings'
 import { errorMessage, useHostCall } from '@/components/host/hostCalls'
+import { useProgramSettings, useRoomStep } from '@/components/host/programSettings'
 import RenameDialog from '@/components/host/RenameDialog'
-import { nextPosition, winnersChip } from '@/components/host/scene'
+import { nextPosition, rowPlan, winnersChip, type RoomStep } from '@/components/host/scene'
 import StartButton from '@/components/host/StartButton'
 import StateChip from '@/components/host/StateChip'
 import { useDialogTarget } from '@/components/host/useDialogTarget'
@@ -36,7 +37,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { gameModules, getGameModule } from '@/games/registry'
-import { guestsOf } from '@/lib/guestList'
 import { addGame, archiveGame, callGame, deleteGame, renameGame, setSpotlight } from '@/lib/queries'
 import { tvScene } from '@/lib/stage'
 import { toast } from '@/lib/toast'
@@ -44,28 +44,35 @@ import type { SessionGame, Snapshot } from '@/lib/types'
 import { useLive, useServerNow } from '@/lib/useLive'
 
 /**
- * The night's program (docs/engine-v2.md, 7.3): games not started yet (Start
- * on the TV or in the background), finished ones (who won, Show on the TV,
- * Restart), the archive, and Add game. Live games have their own cards above.
+ * The night's program (docs/engine-v2.md, 7.3): games not started yet, each
+ * with whether its settings are ready (GameModule.setupStatus), its Settings
+ * and its Start (on the TV or in the background), or Set up in the Start's
+ * place while it isn't ready; finished ones (who won, Settings, Show on the
+ * TV, Restart); the archive; and Add game, which opens the new game's
+ * settings. Live games have their own cards above. A game's settings open as
+ * a page of their own (`onOpenSettings`).
  */
 export default function GamesPanel({
   snapshot,
   program,
   archived,
+  onOpenSettings,
 }: {
   snapshot: Snapshot
   program: SessionGame[]
   archived: SessionGame[]
+  onOpenSettings: (gameId: string) => void
 }) {
   const session = snapshot.session!
   const { refresh } = useLive()
   const call = useHostCall()
-  // The game whose settings are open, as it stood: starting it closes them, and they stay closed once it finishes.
-  const [settingsFor, setSettingsFor] = useState<{ id: string; startedAt: number | null }>()
+  const step = useRoomStep(snapshot)
   const [showArchived, setShowArchived] = useState(false)
   const renaming = useDialogTarget<SessionGame>()
   const restarting = useDialogTarget<SessionGame>()
+  const startingAnyway = useDialogTarget<SessionGame>()
   const deleting = useDialogTarget<SessionGame>()
+  const settings = useProgramSettings()
 
   async function setArchived(game: SessionGame, archive: boolean) {
     const done = await call(() => archiveGame(game.id, archive))
@@ -82,10 +89,11 @@ export default function GamesPanel({
 
   const rowProps = {
     snapshot,
-    onSettings: (game: SessionGame) =>
-      setSettingsFor((open) => (open?.id === game.id ? undefined : { id: game.id, startedAt: game.started_at })),
+    step,
+    onSettings: (game: SessionGame) => onOpenSettings(game.id),
     onRename: renaming.show,
     onRestart: restarting.show,
+    onStartAnyway: startingAnyway.show,
     onArchive: (game: SessionGame, archive: boolean) => void setArchived(game, archive),
     onDelete: deleting.show,
   }
@@ -108,13 +116,7 @@ export default function GamesPanel({
         {program.length > 0 && (
           <ul className="divide-y divide-rule">
             {program.map((game) => (
-              <GameRow
-                key={game.id}
-                game={game}
-                settingsOpen={settingsFor?.id === game.id && settingsFor.startedAt === game.started_at}
-                onCloseSettings={() => setSettingsFor(undefined)}
-                {...rowProps}
-              />
+              <GameRow key={game.id} game={game} {...rowProps} />
             ))}
           </ul>
         )}
@@ -133,14 +135,21 @@ export default function GamesPanel({
             {showArchived && (
               <ul className="divide-y divide-rule">
                 {archived.map((game) => (
-                  <GameRow key={game.id} game={game} settingsOpen={false} onCloseSettings={() => {}} {...rowProps} />
+                  <GameRow key={game.id} game={game} {...rowProps} />
                 ))}
               </ul>
             )}
           </div>
         )}
 
-        <AddGame sessionId={session.id} games={snapshot.games} />
+        <AddGame
+          sessionId={session.id}
+          games={snapshot.games}
+          // A new game opens its settings at once: setting it up is what comes next.
+          onAdded={(id, gameType) => {
+            if (getGameModule(gameType)?.ConfigEditor) onOpenSettings(id)
+          }}
+        />
       </CardContent>
 
       <RenameDialog
@@ -171,6 +180,24 @@ export default function GamesPanel({
         }}
       />
 
+      <Confirm
+        open={startingAnyway.open}
+        onOpenChange={startingAnyway.onOpenChange}
+        title={`Start ${startingAnyway.target?.title ?? 'the game'} anyway?`}
+        description={
+          startingAnyway.target
+            ? `${settings.status(startingAnyway.target.id)?.line ?? 'Its settings are not ready'}. It starts with its settings as they are.`
+            : undefined
+        }
+        confirmLabel="Start anyway"
+        variant="default"
+        onConfirm={() => {
+          const game = startingAnyway.target
+          // Started as the game presents itself: the quiz takes the TV, Last one standing runs in the background.
+          if (game) void call(() => callGame({ type: 'start', gameId: game.id }))
+        }}
+      />
+
       <ConfirmByTyping
         open={deleting.open}
         onOpenChange={deleting.onOpenChange}
@@ -195,35 +222,41 @@ export default function GamesPanel({
 function GameRow({
   game,
   snapshot,
-  settingsOpen,
-  onCloseSettings,
+  step,
   onSettings,
   onRename,
   onRestart,
+  onStartAnyway,
   onArchive,
   onDelete,
 }: {
   game: SessionGame
   snapshot: Snapshot
-  settingsOpen: boolean
-  onCloseSettings: () => void
+  step: RoomStep
   onSettings: (game: SessionGame) => void
   onRename: (game: SessionGame) => void
   onRestart: (game: SessionGame) => void
+  onStartAnyway: (game: SessionGame) => void
   onArchive: (game: SessionGame, archive: boolean) => void
   onDelete: (game: SessionGame) => void
 }) {
   const gameModule = getGameModule(game.game_type)
   const GameIcon = gameModule?.icon ?? GameControllerIcon
+  const settings = useProgramSettings()
   const archived = game.archived_at !== null
   const finished = game.status === 'finished'
   const live = game.status === 'active'
   const chip = finished ? winnersChip(game, snapshot.players) : null
-  const canEditSettings = Boolean(gameModule?.ConfigEditor) && !live && !archived
+  const plan = rowPlan(game, {
+    editable: Boolean(gameModule?.ConfigEditor),
+    status: settings.status(game.id),
+    step,
+    startable: settings.startProblem(game.id) === null,
+  })
 
   return (
-    <li className="grid grid-cols-1 gap-3 py-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <li className="py-3">
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2.5">
         <span className="grid size-9 shrink-0 place-items-center rounded-control bg-overlay text-paper-2">
           <GameIcon weight="duotone" className="size-5" />
         </span>
@@ -241,18 +274,12 @@ function GameRow({
             )}
             {finished && !chip && <span>No winner</span>}
           </p>
-        </div>
-        {/* Beside the title on a laptop; on a phone a row of their own, under it, so the title keeps its room. */}
-        <div className="order-last flex w-full flex-wrap items-center gap-2 pl-12 sm:order-none sm:w-auto sm:pl-0">
-          {/* A phone has no room to spare: its Start button says the game hasn't started. */}
-          <StateChip state={archived ? 'archived' : game.status} className={!archived && game.status === 'pending' ? 'max-sm:hidden' : undefined} />
-          {!archived && game.status === 'pending' && <StartButton game={game} />}
-          {!archived && finished && <FinishedOnTv snapshot={snapshot} game={game} />}
+          {plan.status && <ReadinessLine status={plan.status} className="mt-1 text-xs" />}
         </div>
         {/* Not modal, so the dialogs it opens don't fight it for focus. */}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-lg" aria-label={`More actions for ${game.title}`}>
+            <Button variant="ghost" size="icon-lg" className="-my-0.5" aria-label={`More actions for ${game.title}`}>
               <DotsThreeIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -263,10 +290,10 @@ function GameRow({
                 Restart…
               </DropdownMenuItem>
             )}
-            {canEditSettings && (
-              <DropdownMenuItem onSelect={() => onSettings(game)}>
-                <GearSixIcon />
-                {settingsOpen ? 'Close settings' : 'Settings'}
+            {plan.startAnyway && (
+              <DropdownMenuItem onSelect={() => onStartAnyway(game)}>
+                <PlayIcon />
+                Start anyway…
               </DropdownMenuItem>
             )}
             {!archived && (
@@ -293,17 +320,30 @@ function GameRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/*
+          A row of their own under the name and its readiness, so both keep their room. When they don't fit on one
+          line (a phone), the Start or Show on the TV goes on top: wrap-reverse puts the line that holds it first.
+        */}
+        <div className="flex w-full flex-wrap-reverse items-center gap-2 pl-12">
+          {/* A phone has no room to spare: its Start button says the game hasn't started. */}
+          <StateChip state={archived ? 'archived' : game.status} className={!archived && game.status === 'pending' ? 'max-sm:hidden' : undefined} />
+          {plan.settings && (
+            <Button
+              // Set up is the row's next step while the game isn't ready: gold when it is the room's (roomStep).
+              variant={plan.settings.gold ? 'default' : plan.settings.label === 'Set up' ? 'secondary' : 'outline'}
+              size="lg"
+              data-settings-for={game.id}
+              aria-label={`${plan.settings.label === 'Set up' ? 'Set up' : 'Settings of'} ${game.title}`}
+              onClick={() => onSettings(game)}
+            >
+              <GearSixIcon />
+              {plan.settings.label}
+            </Button>
+          )}
+          {plan.start && <StartButton game={game} gold={plan.start.gold} />}
+          {!archived && finished && <FinishedOnTv snapshot={snapshot} game={game} />}
+        </div>
       </div>
-      {gameModule && settingsOpen && canEditSettings && (
-        <GameSettings
-          session={snapshot.session!}
-          game={game}
-          gameModule={gameModule}
-          players={snapshot.players}
-          guests={guestsOf(snapshot)}
-          onClose={onCloseSettings}
-        />
-      )}
     </li>
   )
 }
@@ -349,8 +389,16 @@ function FinishedOnTv({ snapshot, game }: { snapshot: Snapshot; game: SessionGam
   )
 }
 
-/** Add game: a type and an optional title. It goes last in the program. */
-function AddGame({ sessionId, games }: { sessionId: string; games: SessionGame[] }) {
+/** Add game: a type and an optional title. It goes last in the program; `onAdded` hears its id. */
+function AddGame({
+  sessionId,
+  games,
+  onAdded,
+}: {
+  sessionId: string
+  games: SessionGame[]
+  onAdded: (id: string, gameType: string) => void
+}) {
   const { refresh } = useLive()
   const [gameType, setGameType] = useState(gameModules[0].logic.type)
   const [title, setTitle] = useState('')
@@ -360,9 +408,10 @@ function AddGame({ sessionId, games }: { sessionId: string; games: SessionGame[]
     const fallback = getGameModule(gameType)?.name ?? gameType
     setPending(true)
     try {
-      await addGame(sessionId, gameType, title.trim() || fallback, nextPosition(games))
+      const { id } = await addGame(sessionId, gameType, title.trim() || fallback, nextPosition(games))
       setTitle('')
       refresh()
+      onAdded(id, gameType)
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {

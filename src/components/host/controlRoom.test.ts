@@ -10,7 +10,7 @@ import { addSummary, freeNameDescription, guestListLine, keptNote, removePlayerD
 import RecapPreview from '@/components/host/RecapPreview'
 import { gameLogic } from '@/games/logic'
 import { knockedOutIds } from '@/games/registry'
-import { FIXTURE_EXPECTED_NAMES, FIXTURE_SCENES, fixtureRecapDoc, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
+import { FIXTURE_EXPECTED_NAMES, FIXTURE_SCENES, fixtureRecapDoc, fixtureSettings, fixtureSnapshot, type FixtureScene } from '@/lib/fixtures'
 import { buildRecapDoc } from '@/lib/recap'
 import { recordedRawRecap } from '@/lib/recap.recorded'
 import type { Snapshot } from '@/lib/types'
@@ -21,16 +21,16 @@ vi.mock('@/lib/supabase', () => ({ supabase: {} }))
 // The join card and the dialogs build links from the page's address.
 vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } })
 
-async function markup(node: ReactNode): Promise<string> {
+async function markup(node: ReactNode, at = '/'): Promise<string> {
   const errors: unknown[] = []
-  const { prelude } = await prerender(createElement(MemoryRouter, null, node), { onError: (error) => void errors.push(error) })
+  const { prelude } = await prerender(createElement(MemoryRouter, { initialEntries: [at] }, node), { onError: (error) => void errors.push(error) })
   if (errors.length > 0) throw errors[0]
   return new Response(prelude).text()
 }
 
-async function html(node: ReactNode): Promise<string> {
+async function html(node: ReactNode, at?: string): Promise<string> {
   // Plain text, so assertions read like the screen.
-  return (await markup(node))
+  return (await markup(node, at))
     .replace(/<!-- -->/g, '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#x27;/g, "'")
@@ -264,6 +264,97 @@ describe('the guest list', () => {
     expect(removePlayerDescription({ name: 'Ana', listed: false, canFree: true })).toBe(`${lead} ${list} ${move}`)
     // A database without the guest list: the words from before.
     expect(removePlayerDescription({ name: 'Ana', listed: false, canFree: false })).toBe(`${lead} ${move}`)
+  })
+})
+
+describe('the games’ settings in the control room', () => {
+  /** The room with the scene's own game settings, as the fixture page reads them, at an address in the room. */
+  function roomWithSettings(scene: FixtureScene, render: (node: ReactNode) => Promise<string>) {
+    const snapshot = fixtureSnapshot(scene, 'host')
+    return render(
+      createElement(LiveSessionProvider, {
+        sessionId: snapshot.session!.id,
+        screen: 'host',
+        fixture: snapshot,
+        children: createElement(ControlRoomGate, { live: false, settings: fixtureSettings(scene) }),
+      }),
+    )
+  }
+  /** The gold buttons on the screen: the default Button variant, unless disabled (then it is a plain overlay bar). */
+  const goldButtons = (raw: string) => raw.match(/<button(?![^>]*disabled="")[^>]*data-variant="default"/g)?.length ?? 0
+  /** The markup before the hidden room: what the settings page shows. */
+  const pageOf = (raw: string) => raw.slice(0, raw.search(/<main class="[^"]*hidden/))
+  const idOf = (scene: FixtureScene, title: string) => fixtureSnapshot(scene, 'host').games.find((g) => g.title === title)!.id
+
+  it('says under each game whether it is ready, and puts Set up in place of the Start of those that are not', async () => {
+    const text = await roomWithSettings('setup', html)
+    expect(text).toContain('12 tasks for 16 guests, so some get the same task')
+    expect(text).toContain('Not ready: 6 of 8 songs ready: 2 need a photo')
+    expect(text).toContain('Not ready: 6 of 8 pictures ready: 2 need both their people')
+    expect(text).toContain('Ready: 10 questions ready, 20 s each')
+    expect(text).toContain('Nothing to set up')
+    expect(text.split(' Set up ').length - 1).toBe(2)
+    // Settings beside the Start of the two ready games with settings; the in-person round has none.
+    expect(text.split(' Settings ').length - 1).toBe(2)
+    expect(text).toContain('Start in the background')
+  })
+
+  it('has one gold step: Set up on the first game not ready while no TV is paired, not Pair a TV', async () => {
+    const raw = await roomWithSettings('setup', markup)
+    expect(goldButtons(raw)).toBe(1)
+    expect(raw).toMatch(/data-slot="button" data-variant="default"[^>]*data-settings-for="[^"]+"[^>]*aria-label="Set up Lydspor"/)
+    expect(raw).toContain('No TV paired yet')
+  })
+
+  it('starts the first game with its gold Start once everything is set up and a TV is paired', async () => {
+    const raw = await roomWithSettings('setup-ready', markup)
+    expect(goldButtons(raw)).toBe(2) // the split Start's two halves
+    expect(raw).not.toContain('aria-label="Set up')
+    expect(raw).toMatch(/aria-label="Start Last one standing"[^]*?data-variant="default"/)
+  })
+
+  it('gives each game a Settings button in the row, never only in its menu', async () => {
+    const raw = await roomWithSettings('lobby', markup)
+    for (const title of ['Last one standing', 'Quiz', 'Who is fused?']) expect(raw).toContain(`aria-label="Settings of ${title}"`)
+  })
+
+  it('opens a game’s settings as a page of its own, with its name, readiness, Cancel and Save, the room kept underneath', async () => {
+    const at = `/host/s/x?fixture=setup&settings=${idOf('setup', 'Who is fused?')}`
+    const raw = await roomWithSettings('setup', (node) => markup(node, at))
+    const text = await roomWithSettings('setup', (node) => html(node, at))
+    expect(text).toContain('Who is fused?')
+    expect(text).toContain('Participant fusion settings')
+    expect(text).toContain('6 of 8 pictures ready: 2 need both their people')
+    expect(text).toContain('Cancel')
+    expect(text).toContain('Pictures (8)')
+    expect(raw).toContain('aria-label="Back to the room"')
+    // Nothing changed yet, so nothing on the page is gold: Save waits for a change.
+    expect(goldButtons(pageOf(raw))).toBe(0)
+    expect(pageOf(raw)).toMatch(/<button[^>]*disabled=""[^>]*>Save<\/button>/)
+    // The room is still there, hidden, so it comes back where the host left it.
+    expect(raw).toMatch(/<main class="[^"]*hidden/)
+  })
+
+  it('opens Lydspor, the quiz and Last one standing on their own settings', async () => {
+    for (const [title, words] of [
+      ['Lydspor', 'Songs (8 of 12)'],
+      ['Quiz', 'Which planet is known as the red planet?'],
+      ['Last one standing', 'Tasks (12)'],
+    ] as const) {
+      const at = `/host/s/x?settings=${idOf('setup', title)}`
+      const text = await roomWithSettings('setup', (node) => html(node, at))
+      expect(text, title).toContain(words)
+      expect(await roomWithSettings('setup', (node) => markup(node, at)), title).toContain('aria-label="Back to the room"')
+    }
+  })
+
+  it('stays in the room for a game that is live or gone', async () => {
+    const live = fixtureSnapshot('background', 'host').games.find((g) => g.status === 'active')!
+    const text = await roomWithSettings('background', (node) => html(node, `/host/s/x?settings=${live.id}`))
+    expect(text).toContain('On the TV now')
+    expect(text).not.toContain('Cancel')
+    const gone = await roomWithSettings('setup', (node) => html(node, '/host/s/x?settings=no-such-game'))
+    expect(gone).toContain('On the TV now')
   })
 })
 

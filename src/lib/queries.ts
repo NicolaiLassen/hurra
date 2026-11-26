@@ -424,6 +424,17 @@ export async function readGameSettings(gameId: string): Promise<Record<string, u
   return row?.config ?? null
 }
 
+/** Several games' saved settings in one read (hosts only), by game id: a game with none saved is null. */
+export async function readGamesSettings(gameIds: readonly string[]): Promise<Record<string, Record<string, unknown> | null>> {
+  const read: Record<string, Record<string, unknown> | null> = Object.fromEntries(gameIds.map((id) => [id, null]))
+  if (gameIds.length === 0) return read
+  const rows = unwrap<{ game_id: string; config: Record<string, unknown> }[]>(
+    await supabase.from('game_settings').select('game_id, config').in('game_id', [...gameIds]),
+  )
+  for (const row of rows ?? []) read[row.game_id] = row.config ?? null
+  return read
+}
+
 export async function saveGameSettings(gameId: string, config: Record<string, unknown>): Promise<void> {
   const result = await supabase.from('game_settings').upsert({ game_id: gameId, config })
   if (result.error?.code === '23514') throw new GameCallError('These settings are too big to save', 400, 'too_big')

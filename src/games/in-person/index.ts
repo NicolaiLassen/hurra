@@ -21,4 +21,6 @@ export const inPerson = defineGameModule({
   ResultView,
   HostView,
   TvStatus,
+  // Played in the room and scored by hand: there is nothing to set up.
+  setupStatus: () => ({ ready: true, line: 'Nothing to set up: you give the points as it plays' }),
 })

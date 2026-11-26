@@ -3,8 +3,10 @@ import { gameBots } from './bots'
 import { botExample, checkGameContract } from './core/contract'
 import { GameError } from './core/Game'
 import { jsonbRoundTrip } from './core/testing'
+import { DEFAULT_TASKS } from './elimination/logic'
 import { gameLogic } from './logic'
-import { accentOf, gameModules, preloadTvScreens } from './registry'
+import { accentOf, gameModules, preloadTvScreens, setupStatusOf, startProblemOf } from './registry'
+import type { GameModule } from './types'
 
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
 const NOT_READY = "This game isn't ready yet"
@@ -22,6 +24,40 @@ it("gives only the hunt its pink accent, and nothing for a game the registry doe
   expect(accentOf('quiz')).toBeUndefined()
   expect(accentOf('no-such-game')).toBeUndefined()
   expect(accentOf(null)).toBeUndefined()
+})
+
+it('asks every game whether its settings are ready, on its defaults, and the in-person round always is', () => {
+  const guests = [{ id: 'a', name: 'Ana', joined: true }]
+  const lines = Object.fromEntries(gameModules.map((m) => [m.logic.type, setupStatusOf(m.logic.type, null, guests)]))
+  expect(lines).toEqual({
+    'in-person': { ready: true, line: 'Nothing to set up: you give the points as it plays' },
+    elimination: { ready: true, line: `${DEFAULT_TASKS.length} tasks, enough for the one guest` },
+    quiz: { ready: false, line: 'No questions yet' },
+    fusion: { ready: false, line: 'No pictures yet' },
+    soundtrack: { ready: false, line: 'No songs yet' },
+  })
+  // The saved settings go over the defaults, as the engine merges them at start.
+  expect(setupStatusOf('elimination', { tasks: ['Get someone to wave'] }, [])).toEqual({ ready: true, line: '1 task to deal' })
+})
+
+it('shows nothing for a game without the hook, a type it doesn’t know, or a hook that throws', () => {
+  const [inPerson] = gameModules
+  const without: GameModule = { ...inPerson, setupStatus: undefined }
+  const throwing: GameModule = { ...inPerson, ConfigEditor: () => null, setupStatus: () => { throw new Error('unreadable') } }
+  expect(setupStatusOf('in-person', null, [], [without])).toBeNull()
+  expect(setupStatusOf('in-person', null, [], [throwing])).toBeNull()
+  expect(setupStatusOf('no-such-game', null, [])).toBeNull()
+  // Not ready, but with no settings to edit: there is nothing the host could set up.
+  const stuck: GameModule = { ...inPerson, setupStatus: () => ({ ready: false, line: 'Waiting' }) }
+  expect(setupStatusOf('in-person', null, [], [stuck])).toEqual({ ready: true, line: 'Waiting' })
+})
+
+it('says what the start would refuse in the game’s own words', () => {
+  const quiz = gameModules.find((m) => m.logic.type === 'quiz')!
+  expect(startProblemOf(quiz, { questions: [], seconds: 20, pointsPerRight: 1 })).toBe('Add at least one question in the settings')
+  const fusion = gameModules.find((m) => m.logic.type === 'fusion')!
+  // A picture without its people still starts: the host sets them on the night with Show who.
+  expect(startProblemOf(fusion, { ...fusion.logic.defaultConfig as object, pictures: [{ label: '' }] })).toBeNull()
 })
 
 it("makes every game's TV screens with lazyScreen, and the TV loads them all as it opens", () => {
