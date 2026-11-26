@@ -13,9 +13,12 @@ import type { Player } from '../../lib/types'
 import { bot } from './bot'
 import {
   DEFAULT_DEAL_IN_MINUTES,
+  DEFAULT_TASKS,
   dealingIn,
   dealingInNow,
   EliminationGame,
+  MAX_TASK_LENGTH,
+  MAX_TASKS,
   standing,
   winnerOf,
   type EliminationConfig,
@@ -66,6 +69,35 @@ function host(state: EliminationState, open: boolean, present: string[], options
 }
 
 const held = (state: EliminationState) => Object.values(state.tasks)
+
+describe('the default tasks', () => {
+  it('are a long list, so a party of up to 45 never deals the same task twice', () => {
+    expect(DEFAULT_TASKS.length).toBeGreaterThanOrEqual(60)
+    expect(DEFAULT_TASKS.length).toBeLessThanOrEqual(MAX_TASKS)
+    expect(new Set(DEFAULT_TASKS.map((t) => t.toLowerCase())).size).toBe(DEFAULT_TASKS.length)
+  })
+
+  it('read the same way and fit a phone at a glance', () => {
+    for (const task of DEFAULT_TASKS) {
+      expect(task, task).toMatch(/^Get someone to [a-z]/)
+      expect(Array.from(task).length, task).toBeLessThanOrEqual(Math.min(55, MAX_TASK_LENGTH))
+      // Curly quotes and apostrophes, no straight ones, no dashes, no full stop.
+      expect(task, task).not.toMatch(/['"–—.]$|['"]|–|—/)
+    }
+  })
+
+  it('deal 45 guests 45 different tasks, latecomers included', () => {
+    const players = Array.from({ length: 30 }, (_, i) => `p${i}`)
+    let { state } = start(players, { config: game.defaultConfig })
+    const present = [...players]
+    for (let i = 30; i < 45; i++) {
+      present.push(`p${i}`)
+      state = join(state, `p${i}`, present, { config: game.defaultConfig }).state
+    }
+    expect(state.playerIds).toHaveLength(45)
+    expect(new Set(held(state)).size).toBe(45)
+  })
+})
 
 describe('the deck', () => {
   it('is the settings shuffled, each text once, with one card dealt per player and dealing in on', () => {

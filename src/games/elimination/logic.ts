@@ -110,6 +110,12 @@ export type EliminationPlayerView =
 /** Lasting achievements across rounds, shown as badges. */
 export type EliminationProfile = { tags?: number; catches?: number; wins?: number }
 
+/**
+ * Sixty, so a party of up to 60 never deals the same task twice, latecomers
+ * included (it is built for 45). Each is short enough to read at a glance on
+ * a phone, doable at a dinner party, kind (nothing about drinking, bodies or
+ * money), and something a guest wouldn't do unasked, so it can be caught.
+ */
 export const DEFAULT_TASKS = [
   'Get someone to sing a line from a song',
   'Get someone to say ‘ribbit’ like a frog',
@@ -119,28 +125,58 @@ export const DEFAULT_TASKS = [
   'Get someone to take a selfie with you',
   'Get someone to say the word ‘banana’',
   'Get someone to sit down on the floor',
-  'Get someone to hum a tune',
   'Get someone to compliment your outfit',
   'Get someone to touch their nose',
-  'Get someone to clink glasses with you',
   'Get someone to tell you a joke',
-  'Get someone to show you the last photo on their phone',
-  'Get someone to talk in an accent',
+  'Get someone to show you a photo they love',
   'Get someone to say your name three times',
-  'Get someone to say ‘cheers’ in another language',
   'Get someone to do an impression of someone famous',
   'Get someone to tell you their star sign',
   'Get someone to hold your drink for you',
   'Get someone to say ‘bless you’',
-  'Get someone to give you a hug',
   'Get someone to pull a funny face',
   'Get someone to whistle',
   'Get someone to tell you their favourite film',
   'Get someone to count to five in another language',
   'Get someone to check the time for you',
   'Get someone to snap their fingers',
-  'Get someone to fix your collar or hair',
   'Get someone to say ‘you’re right’',
+  'Get someone to name three vegetables',
+  'Get someone to name the capital of Australia',
+  'Get someone to name a song with a colour in it',
+  'Get someone to guess how many people are here',
+  'Get someone to say a tongue twister',
+  'Get someone to say a word that rhymes with ‘cake’',
+  'Get someone to salute you',
+  'Get someone to write their name in the air',
+  'Get someone to cross their fingers for you',
+  'Get someone to make a heart with their hands',
+  'Get someone to tie a knot in a napkin',
+  'Get someone to raise their hand',
+  'Get someone to play air guitar',
+  'Get someone to do a magic trick',
+  'Get someone to drum on the table',
+  'Get someone to freeze like a statue',
+  'Get someone to swap seats with you',
+  'Get someone to fetch you a glass of water',
+  'Get someone to look under the table',
+  'Get someone to whisper something to you',
+  'Get someone to play rock, paper, scissors with you',
+  'Get someone to promise you a dance later',
+  'Get someone to give you a nickname',
+  'Get someone to say something kind about a friend',
+  'Get someone to tell you a fun fact',
+  'Get someone to name the superpower they’d want',
+  'Get someone to tell you about a hidden talent',
+  'Get someone to name the first concert they went to',
+  'Get someone to name their childhood dream job',
+  'Get someone to recommend you a book',
+  'Get someone to tell you their phone’s battery level',
+  'Get someone to tell you what they’d name a boat',
+  'Get someone to recite a nursery rhyme',
+  'Get someone to tell you their favourite dessert',
+  'Get someone to pick a number from 1 to 10',
+  'Get someone to describe their day in three words',
 ]
 
 /** Anything that knows the party's players right now: GameInfo, a hook's context, or a view's props. */
