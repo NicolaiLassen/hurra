@@ -49,7 +49,8 @@ export default function Confirm({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        {/* Three buttons don't fit side by side in the dialog: with a second way through they stack, the main one on top. */}
+        <AlertDialogFooter className={secondary ? 'sm:flex-col-reverse' : undefined}>
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           {secondary && (
             <AlertDialogAction variant="secondary" onClick={secondary.onConfirm}>

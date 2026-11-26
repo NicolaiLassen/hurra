@@ -75,7 +75,7 @@ export function WhoAreYou({
       {notes}
 
       <h1 className="mt-4 text-3xl font-bold">Who are you?</h1>
-      <p className="text-paper-2">Tap your name. Names already taken aren't shown.</p>
+      <p className="text-paper-2">Tap your name. Taken names aren't shown.</p>
 
       {searching && (
         <div className="sticky top-0 z-10 -mx-4 mt-2 bg-ground px-4 py-2">

@@ -46,7 +46,7 @@ describe('Who are you?', () => {
     const text = plain(html)
     expect(text).toContain("You're joining Birthday party")
     // Why a name can be missing: someone took it.
-    expect(text).toContain("Who are you? Tap your name. Names already taken aren't shown.")
+    expect(text).toContain("Who are you? Tap your name. Taken names aren't shown.")
     // No logo here: the names start high enough for a small phone.
     expect(html).not.toContain('favicon.svg')
     expect(rows(html)).toEqual(['Ana', 'bo', 'Zelda', 'Ørn', 'Åse'])

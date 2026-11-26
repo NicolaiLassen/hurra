@@ -404,13 +404,13 @@ When Joining is closed sees the party open, it goes through the same choice.
 ### 6.2 Who are you?
 
 - No logo: **"You're joining Birthday party"** on one small line in paper-2,
-  so an iPhone SE with Safari's bars showing fits 4 names above the bottom
-  bar.
+  so an iPhone SE with Safari's bars showing (375 x 548) fits 4 names above
+  the bottom bar, where it fitted 2.
 - For a phone just freed (6.6), a solid note with `ArrowUUpLeftIcon`: **"The
   host gave the name Ana back to the list. Pick your own name."**
-- **"Who are you?"** (the page's heading), under it **"Tap your name. Names
-  already taken aren't shown."**, so a guest whose name someone else took
-  knows why it is missing.
+- **"Who are you?"** (the page's heading), under it **"Tap your name. Taken
+  names aren't shown."** (one line at 375 px), so a guest whose name someone
+  else took knows why it is missing.
 - From 9 names, a search sticky at the top of the list: **"Find your name"**,
   folded ("soren" finds Søren). No match: **"No free name matches “mads”. If
   someone took yours, ask the host to free it."**, and 0.4 s later the list is
@@ -606,7 +606,9 @@ The confirm:
   **"The 5 points it earned as Ana go with it."**, and while joining is closed
   **"Joining is closed: open it so they can pick their name."**
 - The gold **"Free the name"**: not destructive, since the guest can take the
-  name again; Remove stays the destructive one.
+  name again; Remove stays the destructive one. A confirm with a second way
+  through (7.5's typed name, 7.6) stacks its buttons, the main one on top,
+  since three don't fit side by side.
 - Toast **"Ana is free again"**.
 - For a name the guest typed (never listed: joined the moment its row was
   made), the first line says **"Mads H goes on the guest list as still
