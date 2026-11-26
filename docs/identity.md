@@ -595,26 +595,56 @@ confirmation stays where it was. Its own rules:
   Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
   that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
   the menu beside it, behind the same confirmation, never next to it. Fusion's
-  Ask on each picture and the Save of who is in it are `secondary`. A
-  program's Start is gold only on the game that is the room's next step,
-  `nextStartId` in
-  [src/components/host/scene.ts](../src/components/host/scene.ts): the first
-  game not started, while a TV is open and shows the standings. Back to
-  standings is gold on a final screen, Pair a TV while no TV is open.
+  Ask on each picture and the Save of who is in it are `secondary`. Where
+  the TV leaves the step to the program (it shows the standings), the room's
+  one gold step is `roomStep` in
+  [src/components/host/scene.ts](../src/components/host/scene.ts): with no
+  TV open, Set up on the first game not started that isn't ready, else Pair
+  a TV (setting the games up comes before the night's TV); with a TV open,
+  the first game not started, its Set up while it isn't ready and its Start
+  once it is. Nothing in the program is gold while the settings are still
+  read, so the gold never jumps from Start to Set up. Back to standings is
+  gold on a final screen.
+- **A game's row** in the program: its name, the type when the title
+  doesn't say it, and its readiness line from the game's `setupStatus` hook,
+  a check in `paper-2` when it is ready and a filled warning circle with the
+  words in `paper` when it isn't (never red: danger is for destructive steps
+  only). Under them, on a line of their own: the state chip, Settings (an
+  `outline` button, a word with the gear) and the Start split button; while
+  the game isn't ready, Set up (`secondary`, gold as the room's step) in the
+  Start's place, and Start anyway in the menu behind a confirm. When the
+  buttons don't fit one line (a phone), the Start goes on top
+  (`flex-wrap-reverse`). A finished game keeps Settings beside Show on the
+  TV, for a restart.
+- **A game's settings** are a page of their own
+  ([GameSettings.tsx](../src/components/host/GameSettings.tsx)): a bar on
+  the ground that stays at the top (back, the game's icon, name and
+  readiness as the host types, Cancel and Save), over the editor in an
+  overlay well on a raised panel. Save is the page's gold step, and only once
+  there is something to save; disabled it is a plain overlay bar, so an
+  editor's own gold step (fusion's Add pictures, the quiz's sample
+  questions) is never a second gold. The room stays mounted, hidden, so it
+  comes back at its scroll place.
 - **States are words** on chips:
   [src/components/host/StateChip.tsx](../src/components/host/StateChip.tsx)
   (Live, Open on the overlay; Done, Not started, Closed as plain words;
   Archived in a rule outline). The game on the TV wears the gold On the TV
   chip, since it is on air, with the clock time it started (`started_at`).
   The connection dot is paper with Live, an empty ring with Catching up.
-- **The player list** marks a knocked-out guest with the token's `out` stripe
-  and the word Out in pink, from `knockedOutIds` (the games' generic
-  `knockedOut` hook). Ranks are plain `tv-num` in `paper-3`, points `tv-num`
-  in paper: no medal coins in the room. There is no Away tag: the app holds
-  no presence data for players.
-- **The guest list** card lists only the guests still expected, with their
-  tokens; joined guests stay in the player list. Free the name is a gold
-  confirm, not a destructive one: the guest can take the name again.
+- **The guests** are one list
+  ([GuestsPanel.tsx](../src/components/host/GuestsPanel.tsx)): everyone on
+  the guest list and anyone who joined without being on it, with the count
+  on top in `tv-num` ("14 of 22 here"). Each row carries its mark as a word
+  with a glyph in a column of its own: Here, a quiet check in `paper-2`, and
+  Not yet, a dashed circle in the dimmer `paper-3`, its name in `paper-2`.
+  No gold, no pink and no traffic-light colours: presence is not a win, the
+  hunt or a warning. Not yet comes first, then Here, each by name, so the
+  list never jumps as guests arrive. A guest who typed a name that was not
+  on the list says so in `paper-3` under their name. A knocked-out guest
+  keeps the token's `out` stripe and the word Out in pink, from
+  `knockedOutIds` (the games' generic `knockedOut` hook); points are
+  `tv-num` in paper, with no medal coins in the room. Free the name is a
+  gold confirm, not a destructive one: the guest can take the name again.
 - **Numbers that change in place** (the TV sound level, the quiz's totals and
   gains, answered counts) are `tv-num`, so their columns hold still.
 - **Wells:** a settings form or a question is an `overlay` well in a raised

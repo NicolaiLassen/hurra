@@ -3005,6 +3005,17 @@ the list: a game shows an expected guest's name from its own public state.
 `GameSettings` and `LiveGameCard` pass `guestsOf(snapshot)`
 (docs/guest-list.md, 4.4 and 10).
 
+**Changed after the switch-over (26 Nov), later that day:** `GameModule`
+gains the optional `setupStatus(config, guests): { ready, line }`, whether a
+game's settings are ready to play, in one line for its row in the host's
+Games panel. `config` is the saved settings over `defaultConfig`. Every game
+has one, built from its own check: fusion (each picture's image and two
+people, own photos optional), Lydspor (`checkConfig`), Last one standing
+(`parseConfig`), the quiz (`checkQuizConfig`), and the in-person round, which
+is simply ready. The words they count with are in `src/games/core/setup.ts`.
+The core calls it through `setupStatusOf` in `src/games/registry.ts`, which
+merges the defaults and shows nothing for a hook that throws.
+
 ## 7. Screens and behaviour
 
 ### 7.1 Phone (`/play/:joinCode`)
@@ -3373,6 +3384,19 @@ line, pasted or typed), and the guests still expected with Rename and Remove
 from the list. Each player's menu gains Free the name, which puts the guest
 back on the list as expected and sends the phone back to Who are you?
 (docs/guest-list.md, 7).
+
+**Changed on 26 Nov, later that day:** the room reads every game's saved
+settings in one query (`readGamesSettings`, in
+`src/components/host/programSettings.tsx`) as it opens, when a game is added
+and when the tab comes back, so each row in the Games panel shows its
+readiness (`setupStatus`, section 6) and a visible Settings button beside its
+Start. A game not ready shows Set up in its Start's place; the room's one
+gold step is `roomStep` in `src/components/host/scene.ts` (Set up before Pair
+a TV, then the next game's Set up or Start). The settings open as a page of
+their own (`?settings=<game id>`), with Cancel and Save on a bar that stays
+at the top, and a new game opens its settings at once. Players and the Guest
+list card became one Guests list, every name marked Here or Not yet
+(docs/guest-list.md, 7.1).
 
 ### 7.4 Recap page (`/host/s/:sessionId/recap`)
 

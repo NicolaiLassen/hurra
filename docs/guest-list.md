@@ -57,7 +57,7 @@ Ximena and Ulrik for guests still expected.
 | Caps | 100 names per Add, 200 expected names per party, names 1 to 40 characters after `clean_name`. |
 | A party without a list | Behaves exactly as before: no free names means the join page shows the name form. If `guest_list` fails or is missing (an older database), the name form too. |
 | The SDK | `GameGuest = { id, name, joined }`; `GameInfo.guests` (required); `ConfigEditorProps.guests` and `HostViewProps.guests`. `players` stays what it was everywhere: joined guests. |
-| Where the host sees it | The Guest list card under Players in the control room (expected names, Add guests, Rename, Remove from the list), and Free the name in each player's menu. |
+| Where the host sees it | The Guests list in the control room (changed on 26 Nov): everyone on the list and anyone who joined without being on it, each marked Here or Not yet, with Add guests, Rename and Remove from the list on the names not here yet, and Free the name in the menu of each guest who is here. |
 
 ---
 
@@ -373,7 +373,7 @@ without a change of their own:
   the standings, Finished lately, Your night, every game's view.
 - **The TV:** the board and its tiers by count, the header and strip, the
   winner's screen, the band, the recap's slides.
-- **The host room:** the header's "12 guests, joining is open", Players (n),
+- **The host room:** the header's "12 guests, joining is open", the Guests list's Here,
   the award page (`getPlayerByCode` skips expected rows, and the database
   refuses an award to one), the move dialog,
   the recap preview.
@@ -489,47 +489,66 @@ network, `&names=45` for 45, `&freed=Ana` for the note. A tap shows 6.3, and
 
 ## 7. The host's guest list, screen by screen
 
-The control room (`/host/s/:id`), the right column: the join card, Players,
-then the **Guest list** card; on a phone, Players, Guest list, then the join
-card last. Host room rules: a raised card with no hairline, states as words,
-no gold here (the program's Start keeps the room's gold).
+The control room (`/host/s/:id`), the right column: the join card, then the
+**Guests** list; on a phone, the Guests list, then the join card last. Host
+room rules: a raised card with no hairline, states as words, no gold here
+(the program keeps the room's gold).
 
-### 7.1 The Guest list card
+### 7.1 The Guests list
 
-[src/components/host/GuestListPanel.tsx](../src/components/host/GuestListPanel.tsx),
-its words in [guestListWords.ts](../src/components/host/guestListWords.ts).
+[src/components/host/GuestsPanel.tsx](../src/components/host/GuestsPanel.tsx),
+its rows from `presenceRows` in [src/lib/guestList.ts](../src/lib/guestList.ts)
+and its words in [guestListWords.ts](../src/components/host/guestListWords.ts).
+**Changed on 26 Nov:** the Players card and the Guest list card became this
+one list, at the owner's wish ("we need some sort of indicator when a person
+has signed in"): the Still expected heading under a second card didn't read
+as one.
 
-- Title **"Guest list"**, and at its right the `secondary` **"Add guests"**
-  with `UserPlusIcon` (not on an archived party).
-- The line under the title:
-  - while the host has listed nobody (an empty list, or only guests who typed
-    their names): **"Add the guests you invited. When they join, they tap
-    their name instead of typing it, and you can name them in a game's
-    settings before they arrive."** A listed name is one still expected, or
-    taken later than its row was made (`wasListed` in
-    [src/lib/guestList.ts](../src/lib/guestList.ts)); a typed join's row is
-    made and joined at the same moment;
-  - otherwise **"12 of 30 here. 18 still expected."**;
-  - nobody expected, once the host listed names: **"Everyone on the list is
-    here."**
-- When guests are expected: from 9 of them a search, **"Find a name on the
-  list"** (no match: **"Nobody called “Ulr” on the list."**); the heading
-  **"Still expected (18)"**; a row per guest, sorted the Danish way, with the
-  28 px token and the name in bold, and a menu (**"More actions for Zelda"**):
-  **"Rename…"** and, after a separator, **"Remove from the list…"**
-  (destructive).
-- Under the rows, from 2 expected and not on an archived party, the ghost
-  **"Remove everyone still expected…"** (`UsersThreeIcon`): a paste that went
-  wrong is undone in one step. Its confirm: **"Remove everyone still
-  expected?"**, **"The 18 names nobody has taken yet leave the guest list, and
-  game settings that name them lose those picks. Guests who joined stay."**,
-  the destructive **"Remove 18 names"**; toast **"Removed 18 names from the
-  list"**. One delete of the party's rows with `joined_at` null
-  (`removeExpectedGuests`), so a guest who joins meanwhile stays; each row is
-  logged as `guest.removed`.
-- Joined guests are not repeated here: they are in Players.
-- The card shows only where the database keeps a guest list (the host's
-  snapshot has `guests`), so the new app on an older database shows none.
+- Title **"Guests"**, and at its right the `secondary` **"Add guests"** with
+  `UserPlusIcon` (not on an archived party, nor on a database without the
+  list).
+- The count under the title, in `tv-num` (`presenceLine`): **"14 of 22
+  here"**, everyone on the list and anyone who joined without being on it;
+  **"All 22 here"** once nobody is expected; **"12 here"** while the host
+  has listed nobody (or on a database without the list); **"Nobody here
+  yet"** for an empty party.
+- While the host has listed nobody (an empty list, or only guests who typed
+  their names), the line under the count: **"Add the guests you invited.
+  When they join, they tap their name instead of typing it, and you can name
+  them in a game's settings before they arrive."** A listed name is one
+  still expected, or taken later than its row was made (`wasListed`); a
+  typed join's row is made and joined at the same moment.
+- From 9 names, a search, **"Find a guest"** (no match: **"Nobody called
+  “Ulr”."**), over both groups.
+- Two groups, each by name the Danish way: **"Not yet (8)"** first, then
+  **"Here (14)"**. Not yet stays on top all night, so the order never jumps
+  as guests arrive: during arrival it is who the host is waiting for, later
+  only the few who never came. The list follows the party's snapshot, so a
+  guest moves to Here as they tap their name.
+- Each row: the 28 px token, the name, the mark, the points and a menu
+  (**"More actions for Zelda"**). The mark is a word with a glyph in a
+  column of its own: **Here** with a check in `paper-2`, **Not yet** with a
+  dashed circle in the dimmer `paper-3` (the name dimmer too). No gold, no
+  pink and no traffic-light colours.
+  - Here: the name opens the award page; the game badges and **"Typed their
+    name"** (a guest who typed a name not on the list, said only once the
+    host listed anyone) on a line under the name; Out in pink while a live
+    game has knocked them out; their points in `tv-num`. The menu: **"Give
+    points"**, **"Rename…"**, **"Move to a new phone…"**, **"Free the
+    name…"**, **"Remove photo…"** (with a photo) and, after a separator,
+    **"Remove…"** (destructive).
+  - Not yet: the token from the name alone, no points. The menu:
+    **"Rename…"** and, after a separator, **"Remove from the list…"**
+    (destructive).
+- Under the rows, from 2 not here yet and not on an archived party, the
+  ghost **"Remove everyone not here yet…"** (`UsersThreeIcon`): a paste that
+  went wrong is undone in one step. Its confirm: **"Remove everyone not here
+  yet?"**, **"The 18 names nobody has taken yet leave the guest list, and
+  game settings that name them lose those picks. Guests who are here
+  stay."**, the destructive **"Remove 18 names"**; toast **"Removed 18
+  names from the list"**. One delete of the party's rows with `joined_at`
+  null (`removeExpectedGuests`), so a guest who joins meanwhile stays; each
+  row is logged as `guest.removed`.
 
 ### 7.2 Add guests
 
@@ -589,9 +608,9 @@ typing a name. Game settings that name Zelda lose that pick."**, the
 destructive **"Remove"**; toast **"Removed Zelda from the list"**. It deletes
 the row only while nobody has taken it; a guest who joined a moment before
 stays, with **"That name isn't waiting on the list any more. If they just
-joined, they're in Players."** Logged as `guest.removed`.
+joined, it's marked Here now."** Logged as `guest.removed`.
 
-### 7.5 Free the name (Players and the award page)
+### 7.5 Free the name (the Guests list and the award page)
 
 Each player's menu gains **"Free the name…"** (`ArrowUUpLeftIcon`) after
 "Move to a new phone…", and the award page (where Scan player lands at the
@@ -604,7 +623,7 @@ control room. Both use
 The confirm:
 
 - **"Free the name Ana?"**
-- **"Ana goes back on the guest list as still expected, and the phone that
+- **"Ana goes back on the guest list as not here yet, and the phone that
   has the name asks Who are you? again."**, then when their points are not 0
   **"The 5 points it earned as Ana go with it."**, and while joining is closed
   **"Joining is closed: open it so they can pick their name."**
@@ -621,9 +640,9 @@ The confirm:
   list (`removeGuest`), so the stray spelling never shows on arriving phones.
   Toast **"Mads H is free and off the list"**.
 
-### 7.6 Remove (Players)
+### 7.6 Remove (a guest who is here)
 
-Every joined guest is also their place on the guest list, so Players' Remove
+Every joined guest is also their place on the guest list, so the Remove on a Here row
 takes them off the list and out of the settings that name them. Its confirm
 (`removePlayerDescription`) says so: **"Remove Ana?"**, **"Their points go with
 them, and the games running now carry on without them. Ana also leaves the
@@ -636,7 +655,7 @@ the guest list the words are the ones from before.
 
 ### 7.7 Nothing else changes in the room
 
-The header's count, Players (n), the award page, the move dialog and the recap
+The header's count, the Guests list's Here, the award page, the move dialog and the recap
 count and list joined guests, as before.
 
 ---
@@ -652,7 +671,7 @@ count and list joined guests, as before.
    the row back as expected with the same id and a new code, the taker's
    targeted toasts gone, `player.freed` logged, the room pinged.
 4. Every screen reads again: Ana leaves the TV board, the phones' standings
-   and Players, and appears under Still expected.
+   and moves from Here to Not yet in the host's Guests list.
 5. Bo's phone reads `member: false, freed: true` and lands on Who are you?
    with the note. Bo taps Bo, or "I'm not on the list".
 6. The syncs run each live game's `onPlayerLeave` for the id at once. When the
@@ -664,7 +683,7 @@ count and list joined guests, as before.
 
 | What happened | What the host does |
 | --- | --- |
-| Someone tapped the wrong name | Free the name on it (Players' menu, or Scan player and the award page's Wrong name?). Their phone goes back to Who are you?. |
+| Someone tapped the wrong name | Free the name on it (its menu in the Guests list, or Scan player and the award page's Wrong name?). Their phone goes back to Who are you?. |
 | A guest says their name is taken | The same: Free the name on it. The guest's phone already says to ask the host ("If someone took yours, ask the host to free it."). |
 | Someone typed another spelling of a listed name (Ulle for Ulrik) | Free the name on Ulle and choose "Free and take off the list" (the phone goes back to Who are you?, where they tap Ulrik). |
 | A paste added rubbish | Remove everyone still expected, then paste again. |
@@ -835,7 +854,7 @@ lydspor/game together), unchanged, with its tests.
   - **Last one standing** drops the leaver's task but keeps the id in
     `playerIds`, and its `knockouts` still hold the old person's knockouts
     `by` that id. So the new guest is marked Out on the TV board, in the
-    host's Players and the phone standings ("4 of 5 still in"), their card
+    host's Guests list and the phone standings ("4 of 5 still in"), their card
     says "You're out. Someone got you." after the next save, and `scores()`
     and `knockoutCounts` give them the old person's knockout points. While
     the name is free, `publicState.out` also carries the id to every screen.
@@ -935,8 +954,9 @@ optional. A screen test that renders a `HostView` or a `ConfigEditor` passes
   `guests`, the twelve players as joined (`joined_at` their `created_at`) and
   four expected (Zelda, Quentin, Ximena, Ulrik), by name; phone and TV
   snapshots carry `guests: null`. Players have `joined_at`. So every host
-  scene, `/host/s/x?fixture=lobby` and the rest, shows the Guest list card with
-  four expected.
+  scene, `/host/s/x?fixture=lobby` and the rest, shows the Guests list with
+  four Not yet. The list was made a week before the party, and Oscar typed
+  his name, so he is the one marked "Typed their name".
 - `fixtureFreeNames(count)`: the names for the join page's fixture (6.7).
 - `npm run dev:setup` adds four names nobody has taken to the demo party.
 
@@ -986,7 +1006,7 @@ reads `freed: true`, and the TV is back to the guests it had.
   on it: same signatures, extra keys ignored, and no expected rows exist until
   the new host room adds some.
 - **The new app on a database without it** falls back to the name form on
-  phones, shows no Guest list card and no Free the name, and gives games the
+  phones, shows every player as Here with no Add guests and no Free the name, and gives games the
   players as the guest list. So the push goes first.
 
 ---
