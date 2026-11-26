@@ -4,9 +4,11 @@ import Avatar from '@/components/Avatar'
 import { SectionHead, SectionLink } from '@/components/phone/Strap'
 import SecretCard from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
+import { useDealMeIn } from '@/games/elimination/dealMeIn'
 import { huntHeading, huntLine } from '@/games/elimination/hunt'
 import KnockoutFlow from '@/games/elimination/KnockoutFlow'
 import type { EliminationGame } from '@/games/elimination/logic'
+import WatchLine from '@/games/elimination/WatchLine'
 import type { PlayerCardProps } from '@/games/types'
 
 /**
@@ -19,10 +21,11 @@ import type { PlayerCardProps } from '@/games/types'
  * opens the full view (`open`). Camera scans don't land here: the phone
  * opens the full view with them.
  */
-export default function PlayerCard({ game, player, players, publicState, view, act, open }: PlayerCardProps<EliminationGame>) {
+export default function PlayerCard({ game, player, players, publicState, view, act, serverNow, open }: PlayerCardProps<EliminationGame>) {
   const id = useId()
   const [scanning, setScanning] = useState(false)
-  const heading = huntHeading(view, publicState)
+  const dealing = useDealMeIn({ game, view, publicState, serverNow, act })
+  const heading = dealing.waiting ? 'Dealing you in…' : huntHeading(view, publicState)
   const line = huntLine(players, publicState, view, player.id)
   const out = view?.status === 'out'
   const won = view?.status === 'winner'
@@ -74,8 +77,8 @@ export default function PlayerCard({ game, player, players, publicState, view, a
         </>
       )}
 
-      {(view === null || view?.status === 'spectator') && (
-        <p className="text-paper-2">This round started before you joined. You'll be dealt in next time.</p>
+      {(view === null || view?.status === 'spectator') && !dealing.waiting && (
+        <WatchLine publicState={publicState} serverNow={serverNow} dealing={dealing} />
       )}
 
       <KnockoutFlow

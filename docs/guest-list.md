@@ -832,8 +832,16 @@ lydspor/game together), unchanged, with its tests.
 - Nothing in their settings names guests, and they deal, ask and score
   `info.players` only, so a listed guest who never comes is invisible to them.
   Nothing to change for expected guests.
-- A listed guest who arrives late joins like any late joiner (Last one
-  standing: a spectator until the next deal).
+- A listed guest who arrives late joins like any late joiner. **Changed for
+  latecomers (26 Nov):** in Last one standing that means dealt in with the
+  next card while dealing in is open (105 minutes after the start by
+  default, or until the host closes it), and a spectator after that
+  ([engine-v2.md, 8.1](engine-v2.md#81-last-one-standing-elimination-ported)).
+  Rule 6 holds as below: an id dealt in before, which a freed name taken
+  again is, is never dealt in again, so the new person watches the round.
+  A guest the host removed who joins again is a new row with a new id, and
+  so a new guest to the game: dealt in while dealing in is open, as anyone
+  arriving.
 - In-person rounds keep nothing per guest in their state (their points are
   host awards, which go with the row on a free), so rule 6 needs nothing there.
 - **Rule 6: both the quiz and Last one standing must change before the

@@ -156,7 +156,12 @@ flowchart TD
   START(["Host starts the game, usually in the background"]) --> V{"My view"}:::gate
   V -- "still loading" --> DEAL["Dealing tasks..."]:::screen
   V -- "dealt in" --> ALIVE["Survivor meter, secret task card,<br/>Got someone? Scan their code, players list"]:::screen
-  V -- "joined after the start" --> SPEC["Spectator: you'll be dealt in next time<br/>survivor meter and players list"]:::screen
+  V -- "joined after the start,<br/>dealing in open" --> JOIN["Dealing you in...<br/>the phone sends the join move once"]:::screen
+  JOIN -- "dealt the next card" --> LATE["You're in. over the task card<br/>toast: You're in Last one standing"]:::screen
+  LATE --> ALIVE
+  JOIN -- "no answer" --> RETRY["Couldn't deal you in. Try again"]:::screen
+  RETRY --> JOIN
+  V -- "joined after dealing in closed,<br/>or took a freed name" --> SPEC["You watch this round. You'll be dealt in next time<br/>survivor meter and players list"]:::screen
   V -- "another game holds the main card" --> CARD["Compact card: You're in, 17 of 45 standing<br/>the task behind a tap, Got someone? Scan"]:::screen
   CARD -- "Open" --> ALIVE
   ALIVE -- "tap the card" --> REVEAL["Task shown, hides after 8 s"]:::screen
@@ -374,7 +379,10 @@ Each live game has its own card, so its controls sit with its title and its End
 for the next step and its answered count; fusion's one gold step (Start the
 showing, Ask the next picture, Reveal now, Back to the wall, Crown the face
 detective), its locked-in count, an Ask on every picture and who is in each
-picture; Last one standing's who is still in; Lydspor's Play song n, Last
+picture; Last one standing's who is still in and Deal in latecomers (on
+until the time the settings give, 105 minutes after the start by default;
+Close dealing in, and Open dealing in, which deals in everyone waiting);
+Lydspor's Play song n, Last
 call, Reveal song n with the close answers to accept (one tap counts an
 answer for everyone who typed it, Undo takes it back) and Crown Lydspor.
 Secrets (the quiz's

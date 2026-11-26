@@ -3,10 +3,12 @@ import { useId, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import SecretCard from '@/components/SecretCard'
 import { Button } from '@/components/ui/button'
+import { useDealMeIn } from '@/games/elimination/dealMeIn'
 import { huntHeading, huntLine } from '@/games/elimination/hunt'
 import KnockoutFlow from '@/games/elimination/KnockoutFlow'
 import type { EliminationGame } from '@/games/elimination/logic'
 import { nameFrom } from '@/games/elimination/roster'
+import WatchLine from '@/games/elimination/WatchLine'
 import WhoIsLeft from '@/games/elimination/WhoIsLeft'
 import type { PlayerViewProps } from '@/games/types'
 
@@ -17,16 +19,19 @@ import type { PlayerViewProps } from '@/games/types'
  * Out beside the ones knocked out. The phone draws the strap above it.
  */
 export default function PlayerView({
+  game,
   player,
   players,
   publicState,
   view,
   act,
+  serverNow,
   scannedCode,
   onScanHandled,
 }: PlayerViewProps<EliminationGame>) {
   const listId = useId()
   const [scanning, setScanning] = useState(false)
+  const dealing = useDealMeIn({ game, view, publicState, serverNow, act })
   const nameOf = nameFrom(players)
   const line = huntLine(players, publicState, view, player.id)
   const out = view?.status === 'out'
@@ -43,6 +48,8 @@ export default function PlayerView({
               <span>
                 You're <span className="text-pink">out</span>.
               </span>
+            ) : dealing.waiting ? (
+              'Dealing you in…'
             ) : (
               huntHeading(view, publicState)
             )}
@@ -89,8 +96,8 @@ export default function PlayerView({
 
       {won && <p className="text-paper-2">You knocked out {view.knockouts} and nobody got you.</p>}
 
-      {(view === null || view?.status === 'spectator') && (
-        <p className="text-paper-2">This round started before you joined. You'll be dealt in next time.</p>
+      {(view === null || view?.status === 'spectator') && !dealing.waiting && (
+        <WatchLine publicState={publicState} serverNow={serverNow} dealing={dealing} />
       )}
 
       <section aria-labelledby={listId} className="grid gap-2.5">

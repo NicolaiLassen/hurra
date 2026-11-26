@@ -4,7 +4,7 @@ import { DEFAULT_TASKS, type EliminationConfig } from './logic'
 import { eliminationSetup } from './setup'
 
 const guests = (count: number): GameGuest[] => Array.from({ length: count }, (_, i) => ({ id: `g${i}`, name: `Guest ${i}`, joined: i % 2 === 0 }))
-const settings = (patch: Partial<EliminationConfig> = {}): EliminationConfig => ({ tasks: DEFAULT_TASKS, pointsPerTag: 1, pointsPerCatch: 1, ...patch })
+const settings = (patch: Partial<EliminationConfig> = {}): EliminationConfig => ({ tasks: DEFAULT_TASKS, pointsPerTag: 1, pointsPerCatch: 1, dealInMinutes: 105, ...patch })
 
 describe('Last one standing’s readiness', () => {
   it('is ready with its tasks, and says whether there is one for every guest', () => {

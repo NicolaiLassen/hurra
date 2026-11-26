@@ -150,9 +150,13 @@ function problemWith(
   if (scanned.id === me.id) return "That's your own code"
   if (view?.status === 'out') return "You're out, so you can't knock anyone out"
   if (view?.status === 'winner' || publicState.winner) return 'The game is over'
+  // A latecomer whose task is on its way (dealing in is open and their phone has no view yet).
+  if (view === null && publicState.dealIn === true) return "You're being dealt in. Try again in a moment."
   if (view?.status !== 'alive') return "You'll be dealt in next round"
   if (publicState.out.includes(scanned.id)) return `${scanned.name} is already out`
-  if (!publicState.alive.includes(scanned.id)) return `${scanned.name} joined after this round started`
+  if (!publicState.alive.includes(scanned.id)) {
+    return publicState.dealIn === true ? `${scanned.name} isn't in this round` : `${scanned.name} joined after this round started`
+  }
   return null
 }
 

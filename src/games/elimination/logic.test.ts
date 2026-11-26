@@ -23,6 +23,7 @@ const config: EliminationConfig = {
   tasks: ['sing', 'dance', 'ribbit', 'high five'],
   pointsPerTag: 1,
   pointsPerCatch: 1,
+  dealInMinutes: 105,
 }
 
 function start(players = ['ana', 'bo', 'cy', 'dee'], overrides = {}) {
@@ -80,6 +81,7 @@ describe('settings', () => {
       tasks: ['sing', 'dance'],
       pointsPerTag: 2,
       pointsPerCatch: 0,
+      dealInMinutes: 105,
     })
     expect(game.parseConfig({ ...game.defaultConfig })).toEqual(game.defaultConfig)
   })
@@ -115,6 +117,7 @@ describe('settings', () => {
       tasks: DEFAULT_TASKS,
       pointsPerTag: 1,
       pointsPerCatch: 1,
+      dealInMinutes: 105,
     })
   })
 })
@@ -414,7 +417,7 @@ describe('what players and the TV can see', () => {
     expect(view.knockoutCounts).toEqual({ ana: 2 })
   })
 
-  it('shows latecomers as spectators', () => {
+  it('shows a guest who was never dealt in as a spectator', () => {
     const { state, info } = start()
     expect(game.playerView(state, 'newcomer', info)).toEqual({ status: 'spectator' })
   })
@@ -662,13 +665,17 @@ describe('a round in a party', () => {
     expect(p.game('g').scores).toEqual({ [ana.id]: 1 })
   })
 
-  it("lets a joiner watch, and doesn't deal them in", () => {
+  it('deals a joiner in while dealing in is open, and lets one who comes after it closed watch', () => {
     const p = party(3)
     p.send(p.hostUser, { type: 'start', gameId: 'g' })
     const late = p.addPlayer('Late')
     p.sync('g')
-    expect(viewOf(p, late)).toEqual({ status: 'spectator' })
-    expect(knock(p, late, p.players[0])).toMatchObject({ kind: 'refuse', message: 'You joined after this game started' })
+    expect(viewOf(p, late)).toMatchObject({ status: 'alive', late: true })
+    p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'dealIn', open: false } })
+    const later = p.addPlayer('Later')
+    p.sync('g')
+    expect(viewOf(p, later)).toEqual({ status: 'spectator' })
+    expect(knock(p, later, p.players[0])).toMatchObject({ kind: 'refuse', message: 'You joined after this game started' })
   })
 
   it('says how it stood when the host ends it, and crowns nobody', () => {

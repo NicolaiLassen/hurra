@@ -625,3 +625,46 @@ describe('a quiz as long as its editor allows', () => {
     expect(error).toBeNull()
   })
 })
+
+describe('latecomers in Last one standing through the real handler', () => {
+  it('deals in a guest who takes a listed name and one who types a name, then lets the next one watch once the host closes it', async () => {
+    const late = await world.party(host, 'Latecomers')
+    for (const name of ['Ana', 'Bo', 'Cy']) await world.guest(late, name)
+    const gameId = await world.game(host, late, 'elimination', 'Late', { tasks: ['sing', 'dance', 'ribbit', 'wave', 'hum', 'clap'] })
+    expect((await call(host, { type: 'start', gameId, stage: false })).status).toBe(200)
+    await world.listGuests(host, late, ['Zelda'])
+    const zelda = await world.claimGuest(late, 'Zelda')
+    const walkIn = await world.guest(late, 'Walk-in')
+    const join = (guest: Guest) => call(guest, { type: 'action', gameId, action: { type: 'join' } })
+
+    // Zelda's phone asks first: its save deals both in, each with a card of their own.
+    expect(await join(zelda)).toMatchObject({ status: 200, body: { view: { status: 'alive', late: true } } })
+    expect(await join(walkIn)).toMatchObject({ status: 200, body: { skipped: true, view: { status: 'alive', late: true } } })
+    const [held] = await rows<{ state: { tasks: Record<string, string>; late: string[] }; members: string[] }>('game_states', 'game_id', gameId)
+    expect([...held.state.late].sort()).toEqual([zelda.playerId, walkIn.playerId].sort())
+    expect(new Set(Object.values(held.state.tasks)).size).toBe(5)
+    const row = await gameRow(gameId)
+    expect((row.public_state as EliminationPublicState)).toMatchObject({ dealIn: true })
+    expect((row.public_state as EliminationPublicState).alive).toHaveLength(5)
+
+    // The host closes dealing in: a second Close is a skip, and the next guest watches.
+    expect(await call(host, { type: 'host-action', gameId, action: { type: 'dealIn', open: false } })).toMatchObject({ status: 200 })
+    expect(await call(host, { type: 'host-action', gameId, action: { type: 'dealIn', open: false } })).toMatchObject({ body: { skipped: true } })
+    const later = await world.guest(late, 'Later')
+    expect(await join(later)).toMatchObject({ status: 200, body: { view: { status: 'spectator' } } })
+    expect(await rows<{ view: unknown }>('game_player_views', 'player_id', later.playerId)).toEqual([
+      expect.objectContaining({ view: { status: 'spectator' } }),
+    ])
+
+    // Open again: everyone here without a task is dealt in at once.
+    expect(await call(host, { type: 'host-action', gameId, action: { type: 'dealIn', open: true } })).toMatchObject({ status: 200 })
+    expect(await rows<{ view: unknown }>('game_player_views', 'player_id', later.playerId)).toEqual([
+      expect.objectContaining({ view: expect.objectContaining({ status: 'alive', late: true }) }),
+    ])
+    const feed = await rows<{ message: string; audience: string[] | null }>('session_feed', 'game_id', gameId)
+    expect(feed.filter((f) => f.message === "You're in Last one standing").map((f) => f.audience).sort()).toEqual(
+      [[zelda.playerId], [walkIn.playerId], [later.playerId]].sort(),
+    )
+    expect(await call(host, { type: 'end', gameId })).toMatchObject({ status: 200 })
+  })
+})
