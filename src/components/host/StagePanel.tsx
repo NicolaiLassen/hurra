@@ -13,6 +13,7 @@ import { useState } from 'react'
 import Confirm from '@/components/Confirm'
 import { useHostCall } from '@/components/host/hostCalls'
 import PairTvButton from '@/components/host/PairTvButton'
+import { useRoomStep } from '@/components/host/programSettings'
 import { formatCountdown, screensLine, stageWords } from '@/components/host/scene'
 import TvSoundControl from '@/components/host/TvSoundControl'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
   const screens = snapshot.screens ?? 0
   // A TV shown in a tab of this browser (Show the TV here), for when no second device can be paired.
   const tvTab = useTvTabOpen(session.join_code)
+  // Pair a TV is gold only when it is the room's one next step: no TV yet, and every game not started is set up.
+  const pairIsNext = useRoomStep(snapshot)?.kind === 'pair'
 
   async function run(id: string, request: () => Promise<unknown>, success?: string) {
     if (pending) return
@@ -140,8 +143,8 @@ export default function StagePanel({ snapshot, className }: { snapshot: Snapshot
               joinCode={session.join_code}
               screens={snapshot.screens}
               label={screens > 0 ? 'Pair another TV' : 'Pair a TV'}
-              // Gold while no TV is open at all: then pairing is the room's next step (nextStartId waits for it).
-              variant={screens > 0 || tvTab ? 'ghost' : 'default'}
+              // Gold while it is the room's next step (roomStep); before that, a game's Set up leads.
+              variant={pairIsNext ? 'default' : screens > 0 || tvTab ? 'ghost' : 'secondary'}
               size="default"
             />
           </div>

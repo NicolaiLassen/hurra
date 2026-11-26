@@ -5,6 +5,7 @@ import { FusionGame, type FusionProfile } from '@/games/fusion/logic'
 import PlayerCard from '@/games/fusion/PlayerCard'
 import PlayerView from '@/games/fusion/PlayerView'
 import ResultView from '@/games/fusion/ResultView'
+import { fusionSetup } from '@/games/fusion/setup'
 import { readPublic, strapWords } from '@/games/fusion/shapes'
 import TvStatus from '@/games/fusion/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
@@ -26,6 +27,8 @@ export const fusion = defineGameModule({
   FinalTvView: lazyScreen(() => import('@/games/fusion/FinalTvView')),
   TvStatus,
   ConfigEditor,
+  // "8 pictures, all with their people", or what is left: "6 of 8 pictures ready: 2 need both their people".
+  setupStatus: fusionSetup,
   // The TV view plays each moment itself, so its announcements only bring their sound there.
   stageBanners: 'sound-only',
   // "Showing 12 pictures", "4 of 12 revealed", "Picture 4 of 12"; the phone's own words in the lobby and once done.

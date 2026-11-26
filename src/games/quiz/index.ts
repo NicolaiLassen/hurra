@@ -6,6 +6,7 @@ import PlayerCard from '@/games/quiz/PlayerCard'
 import PlayerView from '@/games/quiz/PlayerView'
 import { readPublic } from '@/games/quiz/read'
 import ResultView from '@/games/quiz/ResultView'
+import { quizSetup } from '@/games/quiz/setup'
 import TvStatus from '@/games/quiz/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
@@ -23,6 +24,8 @@ export const quiz = defineGameModule({
   FinalTvView: lazyScreen(() => import('@/games/quiz/FinalTvView')),
   TvStatus,
   ConfigEditor,
+  // "10 questions ready, 20 s each", or what is left: "8 of 10 questions ready: 2 need the right answer".
+  setupStatus: quizSetup,
   // The TV view shows each moment itself, so its announcements only sound there.
   stageBanners: 'sound-only',
   // The phone's strap over the quiz: which question it is on.

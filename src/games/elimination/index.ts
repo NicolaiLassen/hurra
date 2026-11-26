@@ -5,6 +5,7 @@ import { EliminationGame, type EliminationProfile } from '@/games/elimination/lo
 import PlayerCard from '@/games/elimination/PlayerCard'
 import PlayerView from '@/games/elimination/PlayerView'
 import ResultView from '@/games/elimination/ResultView'
+import { eliminationSetup } from '@/games/elimination/setup'
 import TvStatus from '@/games/elimination/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
@@ -27,6 +28,8 @@ export const elimination = defineGameModule({
   // CSS only (no motion), so it can sit in the TV's rail without a lazy load.
   TvStatus,
   ConfigEditor,
+  // "12 tasks, enough for all 16 guests", or what the start would refuse.
+  setupStatus: eliminationSetup,
   // Players scan each other's codes to knock them out, also with the camera app.
   acceptsScans: true,
   // Pink is the hunt: its tab is pink with the popper's stripes wherever the frame draws it.

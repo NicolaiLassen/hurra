@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { guestsOf, listCounts, matchNames, nameInLine, namesFromText, sortNames, wasListed } from '@/lib/guestList'
+import { guestsOf, listCounts, matchNames, nameInLine, namesFromText, presenceRows, sortNames, wasListed } from '@/lib/guestList'
 import type { Player } from '@/lib/types'
 
 const player = (id: string, name: string): Player => ({ id, name, code: 'ABCDE', profile: {}, created_at: 0 })
@@ -129,5 +129,39 @@ describe('guestsOf and listCounts', () => {
       { id: 'b', name: 'Bo', joined: true },
     ])
     expect(listCounts({ players })).toEqual({ here: 2, expected: 0, total: 2, listed: 0 })
+  })
+})
+
+describe('presenceRows', () => {
+  const score = (id: string, name: string, points = 0) => ({ player_id: id, name, code: id.toUpperCase(), points, profile: {} })
+  const listed = (id: string, name: string, joinedAt: number | null) => ({ id, name, joined_at: joinedAt, created_at: 100 })
+
+  it('puts the guests not here yet first and everyone here after, each by name the Danish way', () => {
+    const { notYet, here } = presenceRows({
+      standings: [score('s', 'Søren', 5), score('a', 'Åse'), score('b', 'Bo', 9)],
+      guests: [listed('s', 'Søren', 200), listed('a', 'Åse', 300), listed('b', 'Bo', 400), listed('z', 'Zelda', null), listed('e', 'Æbbe', null), listed('c', 'Carl', null)],
+    })
+    expect(notYet.map((r) => r.name)).toEqual(['Carl', 'Zelda', 'Æbbe'])
+    expect(here.map((r) => r.name)).toEqual(['Bo', 'Søren', 'Åse'])
+    expect(here.every((r) => r.here)).toBe(true)
+    expect(notYet.every((r) => !r.here)).toBe(true)
+  })
+
+  it('marks a guest who typed a name that was not on the list, once the host listed anyone', () => {
+    const typed = { id: 't', name: 'Ulle', joined_at: 500, created_at: 500 }
+    const rows = presenceRows({ standings: [score('t', 'Ulle'), score('b', 'Bo')], guests: [typed, listed('b', 'Bo', 400), listed('u', 'Ulrik', null)] })
+    expect(rows.here.map((r) => [r.name, r.here && r.typed])).toEqual([
+      ['Bo', false],
+      ['Ulle', true],
+    ])
+    // Nobody listed: everyone typed their name, which is no news.
+    const nobodyListed = presenceRows({ standings: [score('t', 'Ulle')], guests: [typed] })
+    expect(nobodyListed.here.map((r) => r.here && r.typed)).toEqual([false])
+  })
+
+  it('lists the players as here on a database without a guest list', () => {
+    const rows = presenceRows({ standings: [score('b', 'Bo'), score('a', 'Ana')], guests: null })
+    expect(rows.notYet).toEqual([])
+    expect(rows.here.map((r) => r.name)).toEqual(['Ana', 'Bo'])
   })
 })

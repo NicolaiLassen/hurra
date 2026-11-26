@@ -3,7 +3,8 @@ import { fusion } from '@/games/fusion'
 import { inPerson } from '@/games/in-person'
 import { quiz } from '@/games/quiz'
 import { soundtrack } from '@/games/soundtrack'
-import type { GameModule } from '@/games/types'
+import type { GameGuest } from '@/games/core/Game'
+import type { GameModule, ProfileBadge, SetupStatus } from '@/games/types'
 import type { SessionGame } from '@/lib/types'
 
 // Every game's screens. Register new games here, their logic in logic.ts and
@@ -46,4 +47,51 @@ export function knockedOutIds(games: readonly SessionGame[], modules: readonly G
     }
   }
   return out
+}
+
+/** The badges every game has put on a player's profile (GameModule.profileBadges), in the registry's order. */
+export function profileBadgesOf(profile: Readonly<Record<string, unknown>> | undefined, modules: readonly GameModule[] = gameModules): ProfileBadge[] {
+  return modules.flatMap((m) => {
+    const data = profile?.[m.logic.type]
+    return data && m.profileBadges ? m.profileBadges(data as Record<string, unknown>) : []
+  })
+}
+
+/** A game's settings as its round would start with them: the saved ones over its defaults, as the engine merges them. */
+export function configOf(gameModule: GameModule, saved: Readonly<Record<string, unknown>> | null | undefined): Record<string, unknown> {
+  return { ...(gameModule.logic.defaultConfig as Record<string, unknown>), ...(saved ?? {}) }
+}
+
+/**
+ * A game's readiness before it starts (GameModule.setupStatus), from its saved
+ * settings over its defaults. Null for a game without the hook, an unknown
+ * type, and a hook that throws on settings it can't read: the row then shows
+ * no line and its Start as always. A game without a settings editor is
+ * always ready, since there is nothing the host could set up.
+ */
+export function setupStatusOf(
+  gameType: string,
+  saved: Readonly<Record<string, unknown>> | null | undefined,
+  guests: readonly GameGuest[],
+  modules: readonly GameModule[] = gameModules,
+): SetupStatus | null {
+  const gameModule = modules.find((m) => m.logic.type === gameType)
+  if (!gameModule?.setupStatus) return null
+  try {
+    const status = gameModule.setupStatus(configOf(gameModule, saved), guests)
+    if (!status || typeof status.line !== 'string') return null
+    return { ready: status.ready === true || !gameModule.ConfigEditor, line: status.line }
+  } catch {
+    return null
+  }
+}
+
+/** The game's own check of its settings (parseConfig), as the engine runs it at start: its words, or null when they would start. */
+export function startProblemOf(gameModule: GameModule, config: Readonly<Record<string, unknown>>): string | null {
+  try {
+    gameModule.logic.parseConfig?.(config as Record<string, unknown>)
+    return null
+  } catch (error) {
+    return error instanceof Error && error.message ? error.message : 'These settings would not start'
+  }
 }

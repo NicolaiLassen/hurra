@@ -6,19 +6,28 @@ import { MAX_NAMES_PER_ADD } from '@/lib/guestList'
 import type { AddedGuests } from '@/lib/queries'
 
 /**
- * The Guest list card's line under its title, from listCounts. The invitation
- * while the host has listed nobody yet, even when guests joined by typing
- * their names.
+ * The count at the top of the host's guest list: "14 of 22 here", everyone on
+ * the list and anyone who joined without being on it. "All 22 here" once
+ * nobody is expected, "12 here" while the host has listed nobody (or on a
+ * database without a guest list), "Nobody here yet" for an empty party.
  */
-export function guestListLine({ here, expected, total, listed }: { here: number; expected: number; total: number; listed: number }): string {
-  if (total === 0 || listed === 0) {
-    return (
-      'Add the guests you invited. When they join, they tap their name instead of typing it, ' +
-      "and you can name them in a game's settings before they arrive."
-    )
-  }
-  if (expected === 0) return 'Everyone on the list is here.'
-  return `${here} of ${total} here. ${expected} still expected.`
+export function presenceLine({ here, expected, total, listed }: { here: number; expected: number; total: number; listed: number }): string {
+  if (total === 0) return 'Nobody here yet'
+  if (expected === 0) return listed > 0 ? `All ${total} here` : `${here} here`
+  return `${here} of ${total} here`
+}
+
+/**
+ * The line under the count while the host has listed nobody (an empty list,
+ * or only guests who typed their names): the invitation to add them. Null
+ * once anyone is listed: the list says the rest.
+ */
+export function guestListLine({ listed }: { listed: number }): string | null {
+  if (listed > 0) return null
+  return (
+    'Add the guests you invited. When they join, they tap their name instead of typing it, ' +
+    "and you can name them in a game's settings before they arrive."
+  )
 }
 
 /** A few names in a line: "Ana, Bo and Mads", or "Ana, Bo, Mads, Sofie, Freja and 7 more". */
@@ -123,8 +132,8 @@ export function freeNameDescription({
 }): string {
   return [
     typed
-      ? `${name} goes on the guest list as still expected, and the phone that has the name asks Who are you? again.`
-      : `${name} goes back on the guest list as still expected, and the phone that has the name asks Who are you? again.`,
+      ? `${name} goes on the guest list as not here yet, and the phone that has the name asks Who are you? again.`
+      : `${name} goes back on the guest list as not here yet, and the phone that has the name asks Who are you? again.`,
     points !== 0 ? `The ${count(points, 'point', 'points')} it earned as ${name} ${Math.abs(points) === 1 ? 'goes' : 'go'} with it.` : null,
     typed ? `Another spelling of a name on the list? Free it and take ${name} off the list.` : null,
     joiningOpen ? null : 'Joining is closed: open it so they can pick their name.',
@@ -134,7 +143,7 @@ export function freeNameDescription({
 }
 
 /**
- * Players' Remove confirm. Every joined guest is also their place on the
+ * The guest list's Remove, for a guest who is here. Every joined guest is also their place on the
  * guest list, so Remove takes them off it and out of game settings that name
  * them. `listed`: the name was on the list before this guest took it, so a
  * wrong name is fixed with Free the name, which keeps it on the list.

@@ -424,6 +424,17 @@ export async function readGameSettings(gameId: string): Promise<Record<string, u
   return row?.config ?? null
 }
 
+/** Several games' saved settings in one read (hosts only), by game id: a game with none saved is null. */
+export async function readGamesSettings(gameIds: readonly string[]): Promise<Record<string, Record<string, unknown> | null>> {
+  const read: Record<string, Record<string, unknown> | null> = Object.fromEntries(gameIds.map((id) => [id, null]))
+  if (gameIds.length === 0) return read
+  const rows = unwrap<{ game_id: string; config: Record<string, unknown> }[]>(
+    await supabase.from('game_settings').select('game_id, config').in('game_id', [...gameIds]),
+  )
+  for (const row of rows ?? []) read[row.game_id] = row.config ?? null
+  return read
+}
+
 export async function saveGameSettings(gameId: string, config: Record<string, unknown>): Promise<void> {
   const result = await supabase.from('game_settings').upsert({ game_id: gameId, config })
   if (result.error?.code === '23514') throw new GameCallError('These settings are too big to save', 400, 'too_big')
@@ -505,11 +516,11 @@ export async function freeGuest(sessionId: string, playerId: string): Promise<vo
 
 /**
  * Removes a name nobody has taken from the guest list. Never a guest who
- * joined meanwhile: Players' Remove is for them.
+ * joined meanwhile: the Remove on their row (Here) is for them.
  */
 export async function removeGuest(playerId: string): Promise<void> {
   const result = await supabase.from('players').delete().eq('id', playerId).is('joined_at', null).select('id')
-  expectRow(result, "That name isn't waiting on the list any more. If they just joined, they're in Players.")
+  expectRow(result, "That name isn't waiting on the list any more. If they just joined, it's marked Here now.")
 }
 
 /**

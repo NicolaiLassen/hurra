@@ -239,8 +239,8 @@ reaches another phone or the TV.
 ## 3. Host
 
 The host pages are the same on a laptop and a phone. On a phone the header
-buttons wrap under the title, each game's buttons get a row of their own under
-its title, and the join card moves to the bottom. The host pages load on
+buttons wrap under the title, a game's Start goes on top of its Settings when
+they don't fit one line, and the join card moves to the bottom. The host pages load on
 demand, so guests' phones never download them.
 
 ### 3.1 Login, sessions and the control room
@@ -271,8 +271,7 @@ flowchart TD
   PAGE --> STAGE["On the TV now (3.4)"]:::screen
   PAGE --> LIVEG["Live now: a card per live game (3.2)"]:::screen
   PAGE --> GP["Games: the program (3.2)"]:::screen
-  PAGE --> PL["Players (3.2)"]:::screen
-  PAGE --> GLC["Guest list (3.2)"]:::screen
+  PAGE --> PL["Guests: everyone, Here or Not yet (3.2)"]:::screen
   PAGE --> JC["Join card: QR, code, Copy join link"]:::screen
 ```
 
@@ -282,54 +281,90 @@ keeps failing to get through shows a warning above the live games: "Quiz's
 timer isn't getting through. Use its buttons to move on by hand." The host
 page sends each timer's sync 1.5 s after the TV would, as a backup.
 
-### 3.2 Live games, the program and the players
+### 3.2 Live games, the program and the guests
 
 ```mermaid
 flowchart TD
   classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
   classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
 
-  ADD["Add game: type and title"]:::screen --> PEND["Row: not started<br/>Start split button, menu"]:::screen
-  PEND -- "menu: Settings" --> SET["The game's own settings editor<br/>Save or Cancel; a problem that would stop<br/>the start shows when you save"]:::screen
-  SET --> PEND
+  ADD["Add game: type and title"]:::screen -- "a game with settings" --> SET
+  ADD -- "an in-person round" --> PEND["Row: not started, its readiness line<br/>Settings and the Start split button, menu"]:::screen
+  PEND -- "Settings" --> SET["The game's settings, a page of its own<br/>name and readiness on a bar that stays on top,<br/>Cancel and Save; a problem that would stop<br/>the start shows when you save"]:::closed
+  SET -- "Save, Cancel, the arrow or the browser's back<br/>(with changes: Throw away your changes?)" --> PEND
+  PEND -. "not ready: Set up in the Start's place,<br/>gold when it is the room's next step" .-> SET
+  PEND -- "not ready, menu: Start anyway, after a confirm" --> LIVE
   PEND -- "Start on the TV, or Start in the background,<br/>disabled while it sends" --> LIVE["Live card: title, Live, On the TV or In the background,<br/>Show on the TV, End, the game's own controls"]:::closed
   PEND -- "can't start: no questions, under 2 players" --> ERR["Error toast in the game's words"]:::screen
   ERR --> PEND
   LIVE -- "a winner is decided" --> FIN
-  LIVE -- "End, after a confirm" --> FIN["Row: finished, Mads won,<br/>On the TV or Show on the TV, menu"]:::closed
+  LIVE -- "End, after a confirm" --> FIN["Row: finished, Mads won,<br/>Settings, On the TV or Show on the TV, menu"]:::closed
+  FIN -- "Settings" --> SET
   FIN -- "menu: Restart, after a confirm" --> LIVE
   FIN -- "menu: Archive" --> ARCH["Archived list<br/>Undo toast, Unarchive"]:::screen
   ARCH -- "menu: Unarchive" --> FIN
   FIN -- "menu: Delete, type the name" --> GONE["Game deleted<br/>it leaves every screen"]:::closed
   PEND -- "menu: Delete, type the name" --> GONE
   ARCH -- "menu: Delete, type the name" --> GONE
-  PLR["Player row: rank, avatar, name, badges, points"]:::screen -- "name, or menu: Give points" --> AW["/p/:code Award points"]:::screen
+  PLR["Guests: 14 of 22 here<br/>Not yet first, then Here, each by name<br/>Here row: token, name, badges, Here, points"]:::closed -- "name, or menu: Give points" --> AW["/p/:code Award points"]:::screen
   PLR -- "menu: Rename" --> PLR
   PLR -- "menu: Move to a new phone" --> MOVE["A 6-character code with its time left,<br/>the join link as a QR"]:::closed
   PLR -- "menu: Remove, after a confirm" --> REMV["Player removed, their points with them<br/>off the guest list too; live games carry on without them"]:::closed
   REMV -. "a listed name: Free the name instead" .-> FREE
-  PLR -- "menu: Free the name, after a confirm" --> FREE["Back on the guest list as still expected,<br/>the phone asks Who are you? again, its points go"]:::closed
+  PLR -- "menu: Free the name, after a confirm" --> FREE["Back on the list as Not yet,<br/>the phone asks Who are you? again, its points go"]:::closed
   AW -- "Wrong name? Free the name" --> FREE
   FREE -- "a typed name: Free and take off the list" --> GLR
-  GL["Guest list: 12 of 30 here. 18 still expected.<br/>Still expected, with a search from 9"]:::screen -- "Add guests" --> ADDG["One name per line, pasted or typed, a table too<br/>the names as they will be stored, then Added 12 guests"]:::closed
+  GL["Not yet row: token, name, Not yet<br/>a search from 9 names"]:::screen -- "Add guests" --> ADDG["One name per line, pasted or typed, a table too<br/>the names as they will be stored, then Added 12 guests"]:::closed
   ADDG -- "a name over 40 characters, or on two lines, stays in the field" --> ADDG
-  GL -- "Remove everyone still expected, after a confirm" --> GLR
+  GL -- "Remove everyone not here yet, after a confirm" --> GLR
   GL -- "menu: Rename" --> GL
   GL -- "menu: Remove from the list, after a confirm" --> GLR["The name leaves the list<br/>settings that named it lose that pick"]:::closed
   FREE --> GL
 ```
 
-The Guest list card sits under Players (on a phone, before the join card).
-Before the party the host adds every guest's name; a guest who joins taps
-theirs under Who are you?, and game settings, such as fusion's "Who is in
-it?" and Lydspor's "Who's in this photo" and "Doesn't play this game", can
-name guests who haven't joined yet, marked "(not here yet)". The
-card lists only the guests still expected: joined guests are in Players. Free
-the name is for a guest who tapped the wrong name, from Players' menu or the
-award page; for another spelling (Ulle for Ulrik), Free and take off the list
-on Ulle. Remove also takes a guest off the list, and its confirm offers Free
-the name for a listed name. Remove everyone still expected undoes a paste that
-went wrong. A name on the list that never joins appears nowhere else but in
+Every game's row says under its name whether the game is ready, from the
+game's own rules (its `setupStatus` hook): "8 pictures, all with their
+people", "6 of 8 songs ready: 2 need a photo", "12 tasks for 16 guests, so
+some get the same task", "10 questions ready, 20 s each"; an in-person round
+has nothing to set up. Settings sits on every row that has settings, beside
+the Start (on a finished game, beside Show on the TV). A game that isn't
+ready shows Set up in its Start's place, and that is the room's one gold
+step when it is the next game, or, while no TV is paired, the first game
+not ready: setting the games up comes before pairing the TV. Its start is
+still in the menu as Start anyway, when the game's own check would start it
+(fusion starts with pictures still without their people, to be set with
+Show who). A game added from the Games panel opens its settings at once.
+
+The settings are a page of their own (`?settings=<game id>`): the game's
+name and its readiness, which changes as the host types, on a bar that
+stays at the top with Cancel and Save, and the editor below it, full width
+on a laptop and the whole screen on a phone. Save is gold once there is
+something to save. Cancel, the arrow and the browser's back button (a
+phone's back gesture) go back to the room at the place the host left it,
+with the focus on the button that opened the page; with changes they ask
+first, and a reload or a closed tab asks the browser's own question. A game
+that starts from another device while its page is open closes it and says
+so. Live games keep only what they change on the night in their own
+controls (fusion's Show who, Lydspor's people and accepted answers): a
+round's settings are frozen when it starts.
+
+The Guests list sits under the join card on a laptop (on a phone, before
+it): everyone on the guest list and anyone who joined without being on it,
+"14 of 22 here" on top, and each name marked Here (a quiet check) or Not
+yet (dimmer). Not yet comes first and Here after, each by name: the order
+never jumps as guests arrive, the guests the host is waiting for stay on
+top, and later only the few who never came are there. It follows the party
+live, so a guest moves to Here as they tap their name. A guest who typed a
+name that wasn't on the list says "Typed their name", often another
+spelling of a name still Not yet. Before the party the host adds every
+guest's name; a guest who joins taps theirs under Who are you?, and game
+settings, such as fusion's "Who is in it?" and Lydspor's "Who's in this
+photo" and "Doesn't play this game", can name guests who haven't joined
+yet, marked "(not here yet)". Free the name is for a guest who tapped the
+wrong name, from their menu or the award page; for another spelling (Ulle
+for Ulrik), Free and take off the list on Ulle. Remove also takes a guest
+off the list, and its confirm offers Free the name for a listed name.
+Remove everyone not here yet undoes a paste that went wrong. A name on the list that never joins appears nowhere else but in
 Participant fusion, where a picture may be of them: phones can name them in a
 guess (under "Not here yet") and the reveal shows their name. The words of each screen are in
 [guest-list.md](guest-list.md), section 7.
@@ -526,7 +561,7 @@ never shows on the TV.
 | Joining closed | Joining is closed, opens by itself when the host reopens | Joining is closed card, faded QR | No join card |
 | Player removed | You're no longer in X, Join again | Row gone | Row gone |
 | Player moved to another phone | Your player moved to another phone | Row stays, with its points | Row stays |
-| Name freed by the host | Who are you?, with "The host gave the name Ana back to the list. Pick your own name." | Row gone from Players, back under Still expected | Row gone |
+| Name freed by the host | Who are you?, with "The host gave the name Ana back to the list. Pick your own name." | Ana moves from Here to Not yet in the guests | Row gone |
 | Name taken a moment before (Yes, I'm Ana) | Back to Who are you?, with "Someone just took Ana. If that's you, ask the host to free your name." | Not applicable | Not applicable |
 | Game deleted (End it first if it is live) | It leaves the lists, its result card too | Row gone | Back to the standings if it was on the stage |
 | A game's timer can't get through | Not applicable | A warning above the live games | Keeps trying, with backoff |
@@ -572,6 +607,8 @@ never shows on the TV.
 | C24 | G9: with two in-person rounds live, a round's Scan a player opened the award page with the stage game or the newest live game picked | The round's Scan a player sends its own game id (`?game=<id>`), which the scanner carries to the award page |
 | C25 | An old phone that slept through its player's move woke to "You're no longer in X" | The snapshot says the player moved, so it shows "Your player moved to another phone" with Join with a new name |
 | C26 | Fusion's pictures could only name guests who had joined, so the host couldn't set the game up before the party | The guest list ([guest-list.md](guest-list.md)): the host adds every name before the party, a guest taps theirs under Who are you?, and settings can name guests still expected |
+| C27 | A game's settings, where the host spends most of the time before the party, opened only from its row's menu, inline in the Games panel | Settings on every row, a readiness line from each game's own rules (`setupStatus`), Set up as the room's next step while a game isn't ready, and the settings as a page of their own with Cancel and Save always in reach (3.2) |
+| C28 | The host couldn't see at a glance who had signed in: joined guests were in Players and the rest in the Guest list card under Still expected | One Guests list with "14 of 22 here" on top and every name marked Here or Not yet, live as guests join (3.2) |
 
 ### Open, in priority order
 

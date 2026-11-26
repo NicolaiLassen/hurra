@@ -1,16 +1,14 @@
 import { CaretDownIcon, PlayIcon, SpinnerIcon, StackIcon, TelevisionSimpleIcon } from '@phosphor-icons/react'
 import { useRef, useState } from 'react'
 import { useHostCall } from '@/components/host/hostCalls'
-import { nextStartId, startChoices, type StartChoice } from '@/components/host/scene'
+import { startChoices, type StartChoice } from '@/components/host/scene'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { getGameModule } from '@/games/registry'
 import { callGame, setSpotlight } from '@/lib/queries'
 import { toast } from '@/lib/toast'
 import type { SessionGame } from '@/lib/types'
-import { tvScene } from '@/lib/stage'
-import { useTvTabOpen } from '@/lib/tvTab'
-import { useLive, useServerNow } from '@/lib/useLive'
+import { useLive } from '@/lib/useLive'
 import { cn } from '@/lib/utils'
 
 /**
@@ -21,17 +19,14 @@ import { cn } from '@/lib/utils'
  * A start in the background says so, with Show on the TV right in the toast:
  * the TV keeps what it shows, which can look as if nothing started.
  *
- * Gold only on the game that is the room's one next step (nextStartId): the
- * others are the overlay's secondary buttons (docs/identity.md).
+ * Gold only on the game whose Start is the room's one next step (`gold`, from
+ * roomStep): the others are the overlay's secondary buttons (docs/identity.md).
  */
-export default function StartButton({ game }: { game: SessionGame }) {
+export default function StartButton({ game, gold }: { game: SessionGame; gold: boolean }) {
   const [main, other] = startChoices(getGameModule(game.game_type)?.logic.presentation)
   const call = useHostCall()
-  const snapshot = useLive().snapshot
-  const sessionId = snapshot?.session?.id
-  const now = useServerNow(1000)
-  const tvTab = useTvTabOpen(snapshot?.session?.join_code ?? '')
-  const next = snapshot ? nextStartId(snapshot, tvScene(snapshot, now), (snapshot.screens ?? 0) > 0 || tvTab) === game.id : false
+  const sessionId = useLive().snapshot?.session?.id
+  const next = gold
   const variant = next ? 'default' : 'secondary'
   const [pending, setPending] = useState(false)
   const inFlight = useRef(false)

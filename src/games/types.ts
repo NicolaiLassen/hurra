@@ -6,6 +6,7 @@
 import type { Icon } from '@phosphor-icons/react'
 import type { ComponentType } from 'react'
 import type { AnswerPayload, AnyGame, Game, GameGuest, PlayerId } from '@/games/core/Game'
+import type { SetupStatus } from '@/games/core/setup'
 import type { FeedItem, Player, PromptState, ScoreRow, Session, SessionGame, SubmitResult } from '@/lib/types'
 
 /** The types a game declares. */
@@ -225,7 +226,20 @@ export type GameModule<G extends AnyGame = AnyGame> = {
    * out: where the game is ("On the TV", or since when it runs).
    */
   phoneStrap?: (publicState: Parts<G>['publicState']) => string | null
+  /**
+   * Whether the game's settings are ready to play, in one line under its name
+   * in the host's Games panel: "8 pictures, all with their people", "6 of 8
+   * songs ready: 2 need a photo". `config` is the saved settings over the
+   * game's defaultConfig, as the engine merges them at start; `guests` is the
+   * whole guest list. Not ready makes Set up the row's next step instead of
+   * Start. Asked for games not started and finished ones, never live ones;
+   * it must not throw (one that does shows nothing). Left out: the row shows
+   * no line and its Start as always.
+   */
+  setupStatus?: (config: Parts<G>['config'], guests: readonly GameGuest[]) => SetupStatus
 }
+
+export type { SetupStatus } from '@/games/core/setup'
 
 /** Type-checks a module against its own game, then widens it for the registry. */
 export function defineGameModule<G extends AnyGame>(module: GameModule<G>): GameModule {

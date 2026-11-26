@@ -3,7 +3,7 @@
 // "Who are you?", and the host's counts. No client, so unit tests pin them.
 import type { GameGuest } from '@/games/core/Game'
 import { foldName } from '@/lib/format'
-import type { ListedGuest, Snapshot } from '@/lib/types'
+import type { ListedGuest, ScoreRow, Snapshot } from '@/lib/types'
 
 /** At most this many names go in one Add guests (host_add_guests refuses more). */
 export const MAX_NAMES_PER_ADD = 100
@@ -119,4 +119,36 @@ export function listCounts(snapshot: Pick<Snapshot, 'players' | 'guests'>): {
   const here = guests.filter((g) => g.joined).length
   const listed = (snapshot.guests ?? []).filter(wasListed).length
   return { here, expected: guests.length - here, total: guests.length, listed }
+}
+
+/** A guest in the host's one list (docs/guest-list.md, 7.1): here, with their row on the scoreboard, or not here yet. */
+export type PresenceRow =
+  | {
+      here: true
+      id: string
+      name: string
+      score: ScoreRow
+      /** Joined by typing a name that was not on the list (only said once the host listed anyone). */
+      typed: boolean
+    }
+  | { here: false; id: string; name: string; guest: ListedGuest }
+
+/**
+ * Everyone the host's list shows, in its two groups, each by name the Danish
+ * way: the guests not here yet first, then everyone here. Not yet stays on
+ * top all night, so the list never jumps when most have come: during arrival
+ * it is who the host is waiting for, and later only the few who never came.
+ * Here is every guest who joined, on the list or not; on a database without
+ * a guest list, every player.
+ */
+export function presenceRows(snapshot: Pick<Snapshot, 'standings' | 'guests'>): { notYet: PresenceRow[]; here: PresenceRow[] } {
+  const guests = snapshot.guests ?? []
+  const anyListed = guests.some(wasListed)
+  const listedById = new Map(guests.map((g) => [g.id, g]))
+  const here: PresenceRow[] = snapshot.standings.map((score) => {
+    const guest = listedById.get(score.player_id)
+    return { here: true, id: score.player_id, name: score.name, score, typed: anyListed && guest !== undefined && !wasListed(guest) }
+  })
+  const notYet: PresenceRow[] = guests.filter((g) => g.joined_at === null).map((guest) => ({ here: false, id: guest.id, name: guest.name, guest }))
+  return { notYet: sortNames(notYet), here: sortNames(here) }
 }
