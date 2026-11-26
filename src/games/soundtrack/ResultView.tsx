@@ -18,7 +18,6 @@ export default function ResultView({ game, player, players, view: rawView, gameP
   const final = view?.final ?? null
   const paid = final?.paid ?? gamePoints[player.id] ?? 0
   const points = (count: number) => `${count} Lydspor ${count === 1 ? 'point' : 'points'}`
-  const credit = final && final.credit > 0 ? `Your own photo counted as ${final.credit} of them.` : null
 
   if (view?.sittingOut) return <p className="text-lg text-paper-2">You sat this one out.</p>
 
@@ -38,7 +37,7 @@ export default function ResultView({ game, player, players, view: rawView, gameP
           You <span className="text-gold">won</span> Lydspor.
         </p>
         <p className="text-paper-2">
-          {points(final.points)}.{credit && ` ${credit}`}
+          {points(final.points)}.
         </p>
         {others.length > 0 && <p className="text-sm font-semibold">A tie with {joinNames(others.map((id) => nameIn(players, id)))}.</p>}
       </Moment>
@@ -51,7 +50,6 @@ export default function ResultView({ game, player, players, view: rawView, gameP
         <p className="text-xl leading-tight font-extrabold text-balance">
           You placed {ordinal(final.place)} in Lydspor with {points(final.points)}.
         </p>
-        {credit && <p className="text-paper-2">{credit}</p>}
       </Moment>
     )
   }

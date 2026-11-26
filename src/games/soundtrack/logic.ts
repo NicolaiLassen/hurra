@@ -20,11 +20,11 @@
 // answer: a song reaches publicState only at its reveal, and a typed answer
 // never does. Relative imports only: the Netlify function bundles this file.
 //
-// "Doesn't play this game" and who is in each photo may name guests on the
-// host's guest list who haven't joined (docs/guest-list.md, 9.3): they name
-// the listed guest, so one who joins later sits out or is in the photo from
-// then on, and one who never comes changes nothing. Only the guests here
-// answer and score. No reveal names anyone in a photo.
+// "Doesn't play this game" is typed names, not tied to the guest list
+// (people.ts): a guest here sits out when their name folds to one on it, so
+// one who joins later with that name sits out from then on, and a name nobody
+// joins with changes nothing. Everyone else answers and scores every song the
+// same way, whoever is in its photo.
 import { shuffle } from '../core/context'
 import {
   Game,
@@ -40,7 +40,9 @@ import {
   type RecapRound,
   type Scores,
 } from '../core/Game'
+import { MAX_NAME_LENGTH, uniqueNames } from '../core/names'
 import { counts as verdictCounts, judge, normalise, type Judgement } from './match'
+import { MAX_SIT_OUT, sameNames, sitOutNames, sittingOut } from './people'
 import {
   MAX_TYPED,
   NO_PHOTO,
@@ -81,7 +83,6 @@ export const LONG_CAPTION = 20
 export const MAX_NOTE = 140
 export const MAX_INTRO = 120
 export const MAX_STORYTELLER = 40
-export const MAX_IN_PHOTO = 10
 export const MAX_POINTS = 5
 export const MIN_LAST_CALL = 20
 export const MAX_LAST_CALL = 180
@@ -164,10 +165,19 @@ function whole(value: unknown): number | null {
   return typeof number === 'number' && Number.isInteger(number) ? number : null
 }
 
-const isPlayerId = (value: unknown): value is PlayerId => typeof value === 'string' && value.length > 0 && value.length <= 64
-
-/** Player ids, once each, in their order. */
-const ids = (value: unknown): PlayerId[] => [...new Set(Array.isArray(value) ? value.filter(isPlayerId) : [])]
+/**
+ * "Doesn't play this game" as saved: typed names (or guests' ids, from before
+ * names), trimmed, each once by nameKey, with a problem for a name over
+ * MAX_NAME_LENGTH or a list over MAX_SIT_OUT.
+ */
+function sitOutList(value: unknown, problems: string[]): string[] {
+  const typed = (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === 'string')
+  // An id stays as saved: only setup knows the guest list it names.
+  const names = uniqueNames(typed)
+  if (names.some((name) => length(name) > MAX_NAME_LENGTH)) problems.push(`A name under Doesn't play this game is at most ${MAX_NAME_LENGTH} characters`)
+  if (names.length > MAX_SIT_OUT) problems.push(`Doesn't play this game takes at most ${MAX_SIT_OUT} names`)
+  return names.slice(0, MAX_SIT_OUT)
+}
 
 /** A list of extra answers: texts trimmed, empty rows dropped. */
 const texts = (value: unknown): string[] => (Array.isArray(value) ? value.map(trimmed).filter(Boolean) : [])
@@ -236,7 +246,7 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
     boardMax: boardMax ?? 20,
     intro,
     storyteller,
-    sitOut: ids(raw.sitOut),
+    sitOut: sitOutList(raw.sitOut, problems),
   }
   warnings.push(...configWarnings(config))
   return { config, problems, warnings }
@@ -278,9 +288,7 @@ function checkSong(input: unknown, n: number, problems: string[]): SoundtrackSon
   const note = trimmed(raw.note)
   if (length(note) > MAX_NOTE) problems.push(`Song ${n}: the story note is at most ${MAX_NOTE} characters`)
 
-  const inPhoto = ids(raw.inPhoto)
-  if (inPhoto.length > MAX_IN_PHOTO) problems.push(`Song ${n}: at most ${MAX_IN_PHOTO} people in its photo`)
-
+  // Who was in the photo (settings from before 26 November) is read no more: everyone scores every song.
   return {
     title,
     singer,
@@ -290,7 +298,6 @@ function checkSong(input: unknown, n: number, problems: string[]): SoundtrackSon
     caption,
     startAt: startAt ?? 0,
     note,
-    inPhoto: inPhoto.slice(0, MAX_IN_PHOTO),
   }
 }
 
@@ -478,18 +485,15 @@ export function buildReview(
 // Scoring, from the state when read ------------------------------------------------
 
 /** How one revealed song went for one guest. */
-type Outcome = { inPhoto: boolean; event: EventResult; title: PartResult; singer: PartResult; points: number }
+type Outcome = { event: EventResult; title: PartResult; singer: PartResult; points: number }
 
 /** Everything the projections need, computed from the state, the settings and who is here. */
 type Sheet = {
   /** Present guests, not sitting out, with any answer at the lock: party order. */
   participants: PlayerId[]
   outcomes: Map<PlayerId, Outcome[]>
-  /** Lydspor points so far, before the own average. */
+  /** Lydspor points so far. */
   earned: Map<PlayerId, number>
-  /** Revealed songs each participant could score on, and revealed songs they are in the photo of. */
-  played: Map<PlayerId, number>
-  inPhoto: Map<PlayerId, number>
   /** Per revealed song: scoring guests who got each part, and how many could. */
   songs: { counts: { event: number; title: number; singer: number }; scoring: number }[]
   /** Per revealed song and typed part: each guest's review row. */
@@ -506,7 +510,6 @@ function partResult(row: ReviewRow | undefined): PartResult {
 const partCounts = (result: PartResult) => result === 'exact' || result === 'typo' || result === 'accepted'
 
 function outcomeOf(state: SoundtrackState, points: SoundtrackPoints, sheetRows: Sheet['rows'], playerId: PlayerId, i: number): Outcome {
-  const inPhoto = (state.inPhoto[i] ?? []).includes(playerId)
   const mine = state.picks?.[playerId]
   const e = mine?.event[i] ?? null
   // The guard: a photo on two of a guest's songs at the lock scores on neither.
@@ -515,13 +518,19 @@ function outcomeOf(state: SoundtrackState, points: SoundtrackPoints, sheetRows: 
   const title = partResult(sheetRows[i]?.title.get(playerId))
   const singer = partResult(sheetRows[i]?.singer.get(playerId))
   const earned = (event === 'right' ? points.event : 0) + (partCounts(title) ? points.title : 0) + (partCounts(singer) ? points.singer : 0)
-  return { inPhoto, event, title, singer, points: inPhoto ? 0 : earned }
+  return { event, title, singer, points: earned }
 }
 
 let memo: { state: SoundtrackState; config: SoundtrackConfig; players: readonly unknown[]; sheet: Sheet } | null = null
 
+/** Someone here, by id and name: who sits out is matched by name. */
+type Here = Pick<GamePlayer, 'id' | 'name'>
+
+/** The sit out list a state holds: names, or ids in a save from before names. */
+const sitOutOf = (state: SoundtrackState): string[] => (Array.isArray(state.sitOut) ? state.sitOut.filter((x) => typeof x === 'string') : [])
+
 /** The scores of every revealed song for everyone here (spec 8.2). Memoised for one state, as project() asks once per player. */
-function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: readonly Pick<GamePlayer, 'id'>[]): Sheet {
+function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: readonly Here[]): Sheet {
   if (memo && memo.state === state && memo.config === config && memo.players === players) return memo.sheet
   const revealed = Math.min(state.revealed, state.playedAt.length, state.review?.length ?? 0)
   const rows: Sheet['rows'] = Array.from({ length: revealed }, (_, i) => {
@@ -532,29 +541,20 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
     }
     return { title: byPlayer(state.review?.[i]?.title), singer: byPlayer(state.review?.[i]?.singer) }
   })
-  const sitOut = new Set(state.sitOut)
+  const sitOut = sittingOut(sitOutOf(state), players)
   const picks = state.picks ?? {}
   const participants = players.map((p) => p.id).filter((id) => !sitOut.has(id) && Object.hasOwn(picks, id))
   const sheet: Sheet = {
     participants,
     outcomes: new Map(),
     earned: new Map(),
-    played: new Map(),
-    inPhoto: new Map(),
     songs: Array.from({ length: revealed }, () => ({ counts: { event: 0, title: 0, singer: 0 }, scoring: 0 })),
     rows,
   }
   for (const id of participants) {
     const outcomes = Array.from({ length: revealed }, (_, i) => outcomeOf(state, config.points, rows, id, i))
     let earned = 0
-    let played = 0
-    let inPhoto = 0
     outcomes.forEach((outcome, i) => {
-      if (outcome.inPhoto) {
-        inPhoto++
-        return
-      }
-      played++
       earned += outcome.points
       const song = sheet.songs[i]
       song.scoring++
@@ -564,31 +564,9 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
     })
     sheet.outcomes.set(id, outcomes)
     sheet.earned.set(id, earned)
-    sheet.played.set(id, played)
-    sheet.inPhoto.set(id, inPhoto)
   }
   memo = { state, config, players, sheet }
   return sheet
-}
-
-/** The own average: a guest in a song's photo scores that song as their average over the songs they could score on. */
-function creditOf(sheet: Sheet, id: PlayerId): number {
-  const played = sheet.played.get(id) ?? 0
-  const inPhoto = sheet.inPhoto.get(id) ?? 0
-  return played >= 1 && inPhoto >= 1 ? Math.round(((sheet.earned.get(id) ?? 0) / played) * inPhoto) : 0
-}
-
-/**
- * A guest's Lydspor points as the room sees them: what they earned, plus the
- * own average once every song played is revealed (it can't grow after that,
- * only follow an accept), so the last top 5 ranks the way the crown will.
- * The crown's own averages are kept in the state.
- */
-function standingOf(state: SoundtrackState, sheet: Sheet, id: PlayerId): { points: number; credit: number } {
-  const earned = sheet.earned.get(id) ?? 0
-  const allRevealed = sheet.songs.length > 0 && sheet.songs.length === state.playedAt.length
-  const credit = !allRevealed ? 0 : (state.credits?.[id] ?? creditOf(sheet, id))
-  return { points: earned + credit, credit }
 }
 
 /** Competition ranks (1, 2, 2, 4) of the rows, highest first; ties keep their order. */
@@ -601,16 +579,15 @@ function ranked<T extends { points: number }>(rows: T[]): (T & { rank: number })
   })
 }
 
-/** Lydspor's final rows, once crowned: every participant's points with the own average, place and payout. */
-function finalRows(state: SoundtrackState, config: SoundtrackConfig, players: readonly Pick<GamePlayer, 'id'>[]) {
+/** Lydspor's final rows, once crowned: every participant's points, place and payout. */
+function finalRows(state: SoundtrackState, config: SoundtrackConfig, players: readonly Here[]) {
   const sheet = sheetOf(state, config, players)
   const most = Math.min(state.revealed, state.playedAt.length) * pointsPerSong(config.points)
   const rows = sheet.participants.map((playerId) => {
-    const credit = state.credits?.[playerId] ?? creditOf(sheet, playerId)
-    const points = (sheet.earned.get(playerId) ?? 0) + credit
+    const points = sheet.earned.get(playerId) ?? 0
     // The night board never gets raw Lydspor points: a scale to at most boardMax.
     const paid = most > 0 ? Math.round((points * config.boardMax) / most) : 0
-    return { playerId, points, credit, paid }
+    return { playerId, points, paid }
   })
   return ranked(rows).map(({ rank, ...row }) => ({ ...row, place: rank }))
 }
@@ -652,7 +629,12 @@ export class SoundtrackGame extends Game<
     return config
   }
 
-  /** Deals the wall: the songs' photos and the extra photos, shuffled, lettered A on. Nothing is announced: the TV's title card opens the game. */
+  /**
+   * Deals the wall: the songs' photos and the extra photos, shuffled, lettered
+   * A on. Who sits out becomes names here, the first place the guest list is
+   * known: an id from settings saved before names is its guest's name. Nothing
+   * is announced: the TV's title card opens the game.
+   */
   setup(ctx: GameContext<SoundtrackConfig>): SoundtrackState {
     const { songs, extraPhotos } = ctx.config
     return {
@@ -669,10 +651,8 @@ export class SoundtrackGame extends Game<
       picks: null,
       review: null,
       revealed: 0,
-      inPhoto: songs.map((song) => [...song.inPhoto]),
-      sitOut: [...ctx.config.sitOut],
+      sitOut: sitOutNames(ctx.config.sitOut, ctx.guests, ctx.players),
       shownTop: {},
-      credits: null,
     }
   }
 
@@ -719,17 +699,17 @@ export class SoundtrackGame extends Game<
         break
       case 'crown':
         return { type: 'crown' }
-      case 'setInPhoto':
-        if (step(action.index) && Array.isArray(action.playerIds) && action.playerIds.every(isPlayerId)) {
-          if (new Set(action.playerIds).size > MAX_IN_PHOTO) throw new GameError(`At most ${MAX_IN_PHOTO} people in a photo`)
-          return { type: 'setInPhoto', index: action.index, playerIds: ids(action.playerIds) }
+      case 'sitOut': {
+        // Typed names; a host page from before names sends the guests' ids, which setup's rule turns into names.
+        const list = Array.isArray(action.names) ? action.names : action.playerIds
+        if (Array.isArray(list) && list.length <= MAX_SIT_OUT && list.every((item) => typeof item === 'string')) {
+          // Ids stay as sent: handleHostAction knows the guest list they name.
+          const names = uniqueNames(list as string[])
+          if (names.some((name) => length(name) > MAX_NAME_LENGTH)) throw new GameError(`Names are at most ${MAX_NAME_LENGTH} characters`)
+          return { type: 'sitOut', names }
         }
         break
-      case 'sitOut':
-        if (Array.isArray(action.playerIds) && action.playerIds.length <= 200 && action.playerIds.every(isPlayerId)) {
-          return { type: 'sitOut', playerIds: ids(action.playerIds) }
-        }
-        break
+      }
     }
     throw new GameError('Unknown Lydspor step')
   }
@@ -763,17 +743,12 @@ export class SoundtrackGame extends Game<
         if (state.phase === 'done') return stale(state)
         if (state.phase === 'playing' || state.phase === 'lastCall') throw new GameError('Lock the answers first')
         return this.finish(state, ctx, 'crown')
-      case 'setInPhoto': {
+      case 'sitOut': {
         if (state.phase === 'done') throw new GameError('Lydspor is over')
-        if (action.index >= ctx.config.songs.length) throw new GameError('There is no such song')
-        if (sameIds(state.inPhoto[action.index] ?? [], action.playerIds)) return stale(state)
-        const inPhoto = ctx.config.songs.map((_, i) => (i === action.index ? [...action.playerIds] : [...(state.inPhoto[i] ?? [])]))
-        return { ...state, inPhoto }
+        const names = sitOutNames(action.names, ctx.guests, ctx.players)
+        if (sameNames(sitOutNames(sitOutOf(state), ctx.guests, ctx.players), names)) return stale(state)
+        return { ...state, sitOut: names }
       }
-      case 'sitOut':
-        if (state.phase === 'done') throw new GameError('Lydspor is over')
-        if (sameIds(state.sitOut, action.playerIds)) return stale(state)
-        return { ...state, sitOut: [...action.playerIds] }
     }
   }
 
@@ -797,17 +772,15 @@ export class SoundtrackGame extends Game<
    * Someone left the party: removed, or the host freed their name, which
    * someone else may take next under the same id (docs/guest-list.md, 9.3).
    * Their answers go: their picks, their place in every review row (a row left
-   * with nobody goes), their points at the last top 5 and their own average.
-   * `sitOut` and `inPhoto` keep the id: they name the listed guest, not the
-   * phone. Before the lock their answers are prompt answers, which the
-   * database deletes with them.
+   * with nobody goes) and their points at the last top 5. `sitOut` keeps its
+   * names: a name, not a phone. Before the lock their answers are prompt
+   * answers, which the database deletes with them.
    */
   onPlayerLeave(state: SoundtrackState, playerId: PlayerId): SoundtrackState {
     const picked = state.picks !== null && Object.hasOwn(state.picks, playerId)
     const reviewed = (state.review ?? []).some((song) => [...song.title, ...song.singer].some((row) => row.players.includes(playerId)))
     const shown = Object.hasOwn(state.shownTop, playerId)
-    const credited = state.credits !== null && Object.hasOwn(state.credits, playerId)
-    if (!picked && !reviewed && !shown && !credited) return state
+    if (!picked && !reviewed && !shown) return state
     const rows = (list: ReviewRow[]) =>
       list
         .map((row) => (row.players.includes(playerId) ? { ...row, players: row.players.filter((id) => id !== playerId) } : row))
@@ -817,7 +790,6 @@ export class SoundtrackGame extends Game<
       picks: state.picks === null ? null : without(state.picks, playerId),
       review: state.review === null ? null : state.review.map((song) => ({ title: rows(song.title), singer: rows(song.singer) })),
       shownTop: without(state.shownTop, playerId),
-      credits: state.credits === null ? null : without(state.credits, playerId),
     }
   }
 
@@ -847,7 +819,7 @@ export class SoundtrackGame extends Game<
     const { config } = info
     const sheet = sheetOf(state, config, info.players)
     const revealed = sheet.songs.length
-    const sitOut = new Set(state.sitOut)
+    const sitOut = sittingOut(sitOutOf(state), info.players)
     const last = revealed > 0 ? revealed - 1 : -1
     const song = last >= 0 ? config.songs[last] : undefined
     const reveal: SoundtrackReveal | null =
@@ -886,10 +858,10 @@ export class SoundtrackGame extends Game<
               return { path: photo.photo, caption: photo.caption }
             })
         : null,
-      top: ranked(sheet.participants.map((playerId) => ({ playerId, ...standingOf(state, sheet, playerId) })).filter((row) => row.points > 0))
+      top: ranked(sheet.participants.map((playerId) => ({ playerId, points: sheet.earned.get(playerId) ?? 0 })).filter((row) => row.points > 0))
         .slice(0, TOP_SIZE)
-        // The gain counts what was earned since the last top 5; the own average shows on its own.
-        .map((row) => ({ ...row, gained: row.points - row.credit - (state.shownTop[row.playerId] ?? 0) })),
+        // The gain counts what was earned since the last top 5.
+        .map((row) => ({ ...row, gained: row.points - (state.shownTop[row.playerId] ?? 0) })),
       final:
         state.phase === 'done'
           ? finalRows(state, config, info.players).map(({ playerId, points, place, paid }) => ({ playerId, points, place, paid }))
@@ -900,7 +872,7 @@ export class SoundtrackGame extends Game<
   }
 
   playerView(state: SoundtrackState, playerId: PlayerId, info: GameInfo<SoundtrackConfig>): SoundtrackPlayerView {
-    if (state.sitOut.includes(playerId)) return { sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null }
+    if (sittingOut(sitOutOf(state), info.players).has(playerId)) return { sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null }
     const sheet = sheetOf(state, info.config, info.players)
     const mine = state.picks && Object.hasOwn(state.picks, playerId) ? state.picks[playerId] : null
     const outcomes =
@@ -908,16 +880,15 @@ export class SoundtrackGame extends Game<
     const songs: SoundtrackSongView[] = outcomes.map((outcome, i) => ({
       n: i + 1,
       points: sheet.outcomes.has(playerId) ? outcome.points : 0,
-      inPhoto: outcome.inPhoto,
       event: outcome.event,
       title: outcome.title,
       singer: outcome.singer,
     }))
-    // Ranked as the TV's top 5 ranks: with the own average once every song played is revealed.
-    const { points, credit } = sheet.outcomes.has(playerId) ? standingOf(state, sheet, playerId) : { points: 0, credit: 0 }
+    // Ranked as the TV's top 5 ranks.
+    const points = sheet.outcomes.has(playerId) ? (sheet.earned.get(playerId) ?? 0) : 0
     const rank =
       points > 0
-        ? (ranked(sheet.participants.map((id) => ({ id, points: standingOf(state, sheet, id).points })).filter((row) => row.points > 0)).find(
+        ? (ranked(sheet.participants.map((id) => ({ id, points: sheet.earned.get(id) ?? 0 })).filter((row) => row.points > 0)).find(
             (row) => row.id === playerId,
           )?.rank ?? null)
         : null
@@ -927,9 +898,8 @@ export class SoundtrackGame extends Game<
       mine: mine ? { event: [...mine.event], title: [...mine.title], singer: [...mine.singer] } : null,
       songs,
       points,
-      credit,
       rank,
-      final: final ? { points: final.points, credit: final.credit, place: final.place, paid: final.paid } : null,
+      final: final ? { points: final.points, place: final.place, paid: final.paid } : null,
     }
   }
 
@@ -1070,12 +1040,9 @@ export class SoundtrackGame extends Game<
     return { ...state, review }
   }
 
-  /** The crown (or End by the host): the own averages, the payout and the winner. */
+  /** The crown (or End by the host): the payout and the winner. */
   private finish(state: SoundtrackState, ctx: GameContext<SoundtrackConfig>, how: 'crown' | 'end'): SoundtrackState {
-    const sheet = sheetOf(state, ctx.config, ctx.players)
-    const credits: Record<PlayerId, number> = {}
-    for (const id of sheet.participants) credits[id] = creditOf(sheet, id)
-    const done: SoundtrackState = { ...state, phase: 'done', closingAt: null, credits }
+    const done: SoundtrackState = { ...state, phase: 'done', closingAt: null }
     const rows = finalRows(done, ctx.config, ctx.players)
     const winners = winnersOf(rows)
     const nameOf = (id: PlayerId) => ctx.players.find((p) => p.id === id)?.name ?? 'Someone'
@@ -1122,7 +1089,7 @@ function photoAt(config: SoundtrackConfig, k: number): { photo: string; caption:
   return { photo: extra?.photo ?? '', caption: extra?.caption ?? '' }
 }
 
-/** Lydspor points so far per participant (before the own average): the next top 5's base. */
+/** Lydspor points so far per participant: the next top 5's base. */
 function pointsNow(state: SoundtrackState, info: Pick<GameInfo<SoundtrackConfig>, 'config' | 'players'>): Record<PlayerId, number> {
   const sheet = sheetOf(state, info.config, info.players)
   const points: Record<PlayerId, number> = {}
@@ -1137,7 +1104,3 @@ function pointsNow(state: SoundtrackState, info: Pick<GameInfo<SoundtrackConfig>
 function without<T>(record: Readonly<Record<PlayerId, T>>, id: PlayerId): Record<PlayerId, T> {
   return Object.fromEntries(Object.entries(record).filter(([key]) => key !== id))
 }
-
-/** The same ids, whatever their order. */
-const sameIds = (a: readonly PlayerId[], b: readonly PlayerId[]) =>
-  a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n')

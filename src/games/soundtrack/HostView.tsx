@@ -2,7 +2,6 @@ import {
   ClockClockwiseIcon,
   CrownIcon,
   DotsThreeIcon,
-  ImageIcon,
   ListNumbersIcon,
   LockKeyIcon,
   MegaphoneSimpleIcon,
@@ -30,7 +29,7 @@ import { cueOf, titleLine } from '@/games/soundtrack/host/cue'
 import CueCard from '@/games/soundtrack/host/CueCard'
 import CueList from '@/games/soundtrack/host/CueList'
 import { cueListRows } from '@/games/soundtrack/host/cueRows'
-import { InPhotoDialog, SitOutDialog } from '@/games/soundtrack/host/PeopleDialogs'
+import { SitOutDialog } from '@/games/soundtrack/host/PeopleDialogs'
 import { acceptId, closeLeft, songReview } from '@/games/soundtrack/host/review'
 import ReviewPanel from '@/games/soundtrack/host/ReviewPanel'
 import { menuSteps, moreTime, nextStep, type Step, type StepIcon, type Where } from '@/games/soundtrack/host/steps'
@@ -66,8 +65,8 @@ const PHASE_WORD: Record<SoundtrackPhase, string> = {
  * for Spotify, one gold button for the next step (Play song n, Last call,
  * Reveal song n, Show the top 5, Crown Lydspor), the steps that skip ahead in
  * the menu beside it behind a confirmation, and at each reveal the close
- * answers to accept while the story is told. Who sits out and who is in each
- * photo open from the menu, out of sight, and pick from the whole guest list. Every action names its step, and
+ * answers to accept while the story is told. Who sits out opens from the
+ * menu: typed names, with the guest list's names as suggestions. Every action names its step, and
  * each button stays busy until the game has moved, so a double tap is a skip.
  */
 export default function HostView({
@@ -80,14 +79,13 @@ export default function HostView({
   config,
   tallies,
   serverNow,
-  mediaUrl,
   act,
 }: HostViewProps<SoundtrackGame>) {
   // A step in flight, then settling until the state it was sent from is replaced, so the button never flashes back.
   const [inFlight, setInFlight] = useState<string | null>(null)
   const [settling, setSettling] = useState<{ id: string; from: unknown } | null>(null)
   const [confirming, setConfirming] = useState<Step | null>(null)
-  const [dialog, setDialog] = useState<'sitOut' | 'inPhoto' | null>(null)
+  const [dialog, setDialog] = useState<'sitOut' | null>(null)
   // An older song's review, opened from the cue list until the next reveal.
   const [picked, setPicked] = useState<{ index: number; at: number } | null>(null)
   const pub = readPublic(publicState)
@@ -212,10 +210,6 @@ export default function HostView({
                 <UserMinusIcon />
                 Who sits out…
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!settings} onSelect={() => setDialog('inPhoto')}>
-                <ImageIcon />
-                Who's in each photo…
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -265,20 +259,10 @@ export default function HostView({
         open={dialog === 'sitOut'}
         onOpenChange={(open) => setDialog(open ? 'sitOut' : null)}
         guests={guests}
+        players={players}
         current={Array.isArray(state.sitOut) ? state.sitOut : []}
-        onSave={(playerIds: PlayerId[]) => act({ type: 'sitOut', playerIds })}
+        onSave={(names: string[]) => act({ type: 'sitOut', names })}
       />
-      {settings && (
-        <InPhotoDialog
-          open={dialog === 'inPhoto'}
-          onOpenChange={(open) => setDialog(open ? 'inPhoto' : null)}
-          guests={guests}
-          songs={settings.songs}
-          current={Array.isArray(state.inPhoto) ? state.inPhoto : []}
-          mediaUrl={mediaUrl}
-          onSave={(index, playerIds) => act({ type: 'setInPhoto', index, playerIds })}
-        />
-      )}
     </div>
   )
 }
@@ -312,7 +296,7 @@ function stageLine(pub: SoundtrackPublicState): string {
 function TopFive({ pub, players, title }: { pub: SoundtrackPublicState; players: readonly Player[]; title: string }) {
   const nameOf = (id: PlayerId) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const rows = pub.final
-    ? pub.final.slice(0, 5).map((row) => ({ playerId: row.playerId, rank: row.place, points: row.points, credit: 0, gained: 0 }))
+    ? pub.final.slice(0, 5).map((row) => ({ playerId: row.playerId, rank: row.place, points: row.points, gained: 0 }))
     : pub.top
   return (
     <section>
@@ -327,8 +311,7 @@ function TopFive({ pub, players, title }: { pub: SoundtrackPublicState; players:
               <Avatar name={nameOf(row.playerId)} playerId={row.playerId} className="size-7" />
               <span className="min-w-0 flex-1 truncate font-bold">{nameOf(row.playerId)}</span>
               {/* The gain since the last top 5; at the first one it would only repeat the points. */}
-              {row.gained > 0 && row.gained !== row.points - row.credit && <span className="tv-num text-base text-paper-2">+{row.gained}</span>}
-              {row.credit > 0 && <span className="text-sm font-semibold whitespace-nowrap text-paper-2">+{row.credit} own photo</span>}
+              {row.gained > 0 && row.gained !== row.points && <span className="tv-num text-base text-paper-2">+{row.gained}</span>}
               <span className="tv-num min-w-8 text-right text-lg text-paper">{row.points}</span>
             </li>
           ))}

@@ -42,8 +42,6 @@ export type SoundtrackSong = {
   startAt: number
   /** 0 to 140 characters, host only: a story prompt on the cue card. */
   note: string
-  /** Who is in the photo, at most 10: this song scores as their own average. */
-  inPhoto: PlayerId[]
 }
 
 /** A photo that fits no song. */
@@ -74,7 +72,13 @@ export type SoundtrackConfig = {
   intro: string
   /** 0 to 40 characters: who tells the stories. */
   storyteller: string
-  sitOut: PlayerId[]
+  /**
+   * "Doesn't play this game": typed names, at most 200, each once by nameKey
+   * (src/games/core/names.ts). A guest here whose name folds to one of them
+   * sits out. Settings saved before names held guests' ids: those still read,
+   * as their guest's name (people.ts).
+   */
+  sitOut: string[]
 }
 
 // State (hosts only) ------------------------------------------------------------
@@ -156,13 +160,10 @@ export type SoundtrackState = {
   review: SongReview[] | null
   /** Songs revealed, 0 to playedAt.length. */
   revealed: number
-  /** Per song: who is in its photo (from the settings, changed by setInPhoto). */
-  inPhoto: PlayerId[][]
-  sitOut: PlayerId[]
+  /** Who sits out, as names (from the settings, changed by the host's sitOut). A save from before names may hold ids. */
+  sitOut: string[]
   /** Points at the last top 5, for its gains. */
   shownTop: Record<PlayerId, number>
-  /** The own average per guest, set at the crown. */
-  credits: Record<PlayerId, number> | null
 }
 
 // Host actions --------------------------------------------------------------------
@@ -176,8 +177,8 @@ export type SoundtrackHostAction =
   | { type: 'accept'; index: number; part: TypedPart; key: string; accepted: boolean }
   | { type: 'standings'; after: number }
   | { type: 'crown' }
-  | { type: 'setInPhoto'; index: number; playerIds: PlayerId[] }
-  | { type: 'sitOut'; playerIds: PlayerId[] }
+  /** Replaces who sits out: typed names (a host page from before names sent ids, which still work). */
+  | { type: 'sitOut'; names: string[] }
 
 // What everyone sees ----------------------------------------------------------------
 
@@ -192,7 +193,7 @@ export type SoundtrackReveal = {
   caption: string
   /** Scoring guests who got each part, the host's accepts included. */
   counts: { event: number; title: number; singer: number }
-  /** Scoring guests for this song: present, not sitting out, not in its photo, with any answer at the lock. */
+  /** Scoring guests for this song: present, not sitting out, with any answer at the lock. */
   scoring: number
 }
 
@@ -213,12 +214,8 @@ export type SoundtrackPublicState = {
   reveal: SoundtrackReveal | null
   /** The photos that fit no song, after the last reveal only. */
   extras: { path: string; caption: string }[] | null
-  /**
-   * The top 5. Once every song played is revealed, `points` include the own
-   * average (`credit`), as the crown will count them; before that `credit` is 0.
-   * `gained` is what was earned since the last top 5, without the own average.
-   */
-  top: { playerId: PlayerId; points: number; credit: number; rank: number; gained: number }[]
+  /** The top 5. `gained` is what was earned since the last top 5. */
+  top: { playerId: PlayerId; points: number; rank: number; gained: number }[]
   final: { playerId: PlayerId; points: number; place: number; paid: number }[] | null
   intro: string
   storyteller: string
@@ -247,9 +244,8 @@ export type EventResult = 'right' | 'wrong' | 'doubled' | 'none'
 export type SoundtrackSongView = {
   /** The song's number, from 1. */
   n: number
-  /** What this song gave; 0 when in its photo (the own average comes at the crown). */
+  /** What this song gave. */
   points: number
-  inPhoto: boolean
   event: EventResult
   title: PartResult
   singer: PartResult
@@ -261,11 +257,9 @@ export type SoundtrackPlayerView = {
   mine: Picks | null
   /** Revealed songs, in order. */
   songs: SoundtrackSongView[]
-  /** Lydspor points so far: what this guest earned, plus the own average once every song played is revealed. */
+  /** Lydspor points so far. */
   points: number
-  /** The own average in `points`: 0 until every song played is revealed. */
-  credit: number
   /** Place among scoring guests, once this guest has scored. */
   rank: number | null
-  final: { points: number; credit: number; place: number; paid: number } | null
+  final: { points: number; place: number; paid: number } | null
 }

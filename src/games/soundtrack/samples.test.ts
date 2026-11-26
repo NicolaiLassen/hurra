@@ -65,18 +65,26 @@ describe('the Lydspor scenes', () => {
     expect(held).toBeUndefined()
   })
 
-  it('show the top 5 after reveal 4, with Sofie in the photo of song 4', () => {
+  it('show the top 5 after reveal 4, every song scoring for Sofie as for anyone', () => {
     const { pub, view } = lydspor('standings', 'phone')
     expect(pub).toMatchObject({ phase: 'standings', revealed: 4 })
     expect(pub.top.length).toBeGreaterThan(0)
-    expect(view!.songs[3]).toMatchObject({ inPhoto: true, points: 0 })
+    expect(pub.top.every((row) => !('credit' in row))).toBe(true)
+    expect(view!.songs[3]).toEqual({ n: 4, points: 4, event: 'right', title: 'exact', singer: 'exact' })
+  })
+
+  it('sit the operator and the storyteller out by the names the host typed, whatever their case', () => {
+    const { held } = lydspor('lobby', 'host')
+    expect(held!.config.sitOut).toEqual(['lars', 'Ida'])
+    expect(held!.state.sitOut).toEqual(['lars', 'Ida'])
+    expect(lydspor('playing', 'tv').pub.playing).toBe(10)
   })
 
   it('crown a winner and pay the night board at most 20', () => {
     const { pub, view, game, snapshot } = lydspor('final', 'phone')
     expect(pub.final!.length).toBeGreaterThan(0)
     expect(game.winners.length).toBeGreaterThan(0)
-    expect(view!.final).toMatchObject({ credit: expect.any(Number) })
+    expect(view!.final).toEqual({ points: expect.any(Number), place: expect.any(Number), paid: expect.any(Number) })
     expect(Math.max(...Object.values(snapshot.game_points[game.id] ?? {}))).toBeLessThanOrEqual(20)
     expect(pub.extras).toHaveLength(4)
   })

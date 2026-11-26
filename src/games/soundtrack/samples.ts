@@ -7,6 +7,7 @@
 // call, the timer's lock, reveals, an accept, the top 5, the crown) on the
 // fixture party, so its state, public state, views and points always agree.
 import { createGameContext } from '../core/context'
+import { nameKey } from '../core/names'
 import type { Answer, AnswerPayload, GameContext, GameInfo, GamePlayer, PlayerId, Prompt, PromptSpec } from '../core/Game'
 import { seededRandom } from '../core/testing'
 import { misspell } from './bot'
@@ -77,11 +78,13 @@ export type SoundtrackSample = {
   announcements: { message: string; detail?: string; to?: PlayerId[]; sound?: string; icon?: string; tone?: string; interrupt?: boolean; at: number }[]
 }
 
-/** The settings of the sample round: 8 songs, 4 extra photos, the storyteller and the operator sitting out. */
+/**
+ * The settings of the sample round: 8 songs, 4 extra photos, the storyteller
+ * and the operator sitting out, by name as the host types them (the operator
+ * in lower case: case never matters).
+ */
 export function sampleSettings(cast: SampleCast): SoundtrackConfig {
-  const id = (i: number) => cast.players[i]?.id
-  const people = (...indices: number[]) => indices.map(id).filter((x): x is PlayerId => x !== undefined)
-  const inPhoto: Record<number, PlayerId[]> = { 1: people(2), 3: people(3), 5: people(1, 4) }
+  const named = (i: number, typed: (name: string) => string = (name) => name) => (cast.players[i] ? [typed(cast.players[i].name)] : [])
   return {
     songs: SAMPLE_SONGS.map((song, i) => ({
       title: song.title,
@@ -92,7 +95,6 @@ export function sampleSettings(cast: SampleCast): SoundtrackConfig {
       caption: song.caption,
       startAt: song.startAt,
       note: i === 0 ? 'The night the boat broke down.' : '',
-      inPhoto: inPhoto[i] ?? [],
     })),
     extraPhotos: EXTRA_CAPTIONS.map((caption, k) => ({ photo: photoPath(20 + k), caption })),
     points: { event: 2, title: 1, singer: 1 },
@@ -102,7 +104,7 @@ export function sampleSettings(cast: SampleCast): SoundtrackConfig {
     boardMax: 20,
     intro: '',
     storyteller: cast.players[6]?.name ?? '',
-    sitOut: people(5, 6),
+    sitOut: [...named(5, (name) => name.toLowerCase()), ...named(6)],
   }
 }
 
@@ -133,10 +135,10 @@ const REVEAL_GAP = 150_000
 
 /** Every guest's answers to every song, as they stand at the lock. */
 function script(cast: SampleCast, config: SoundtrackConfig, wall: readonly number[]) {
-  const sitOut = new Set(config.sitOut)
+  const sitOut = new Set(config.sitOut.map(nameKey))
   const byPlayer: Record<PlayerId, Record<string, AnswerPayload>> = {}
   cast.players.forEach((player, g) => {
-    if (sitOut.has(player.id)) return
+    if (sitOut.has(nameKey(player.name))) return
     const random = seededRandom(1000 + g * 7919)
     // A small seed's first draw is always tiny: skip it.
     random()

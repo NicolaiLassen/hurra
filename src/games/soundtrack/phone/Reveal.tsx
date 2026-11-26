@@ -5,7 +5,7 @@ import { pointsPerSong } from '@/games/soundtrack/logic'
 import { letterOf, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
 import { cn } from '@/lib/utils'
 import { LetterChip, PhotoImage } from './Wall'
-import { eventLine, gotItLine, nextLine, ownPhotoLine, partCounts, partLine, soFarWords, storyLine } from './words'
+import { eventLine, gotItLine, nextLine, partCounts, partLine, soFarWords, storyLine } from './words'
 
 // The reveal on a guest's phone (spec 4.11), for the song just revealed: the
 // story first, heads up to the TV; then how the song went for this guest,
@@ -50,8 +50,6 @@ export function Reveal({
   const head = standings ? 'Lydspor’s top 5 is on the TV.' : storyLine(pub.storyteller)
   const points = view?.points ?? 0
   const place = view?.rank ? ordinal(view.rank) : null
-  // Once every song is revealed, the points count the own average, as the TV's top 5 does.
-  const credit = view && view.credit > 0 ? ownPhotoLine(view.credit) : null
   const next = reveal.n < played ? nextLine(reveal.n + 1, mine) : null
 
   return (
@@ -61,7 +59,7 @@ export function Reveal({
         {onStage && !standings && <span className="block font-semibold text-paper-2">Look at the TV.</span>}
       </p>
       <p className="mt-3 text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em]">
-        {song?.inPhoto ? `Song ${reveal.n}: you’re in the photo.` : `Song ${reveal.n}: ${song?.points ?? 0} of ${most} points.`}
+        {`Song ${reveal.n}: ${song?.points ?? 0} of ${most} points.`}
       </p>
 
       <div className="relative mt-3 h-[132px] overflow-hidden rounded-phone bg-overlay">
@@ -74,44 +72,37 @@ export function Reveal({
         )}
       </div>
 
-      {song?.inPhoto ? (
-        <p className="mt-3 rounded-phone bg-overlay px-4 py-3.5 text-[17px] leading-snug font-bold">
-          You’re in this one. It counts as your own average at the end.
-        </p>
-      ) : (
-        <ul className="mt-2.5 grid gap-1.5" aria-label={`How song ${reveal.n} went for you`}>
-          <ResultRow
-            label="Event"
-            truth={reveal.event >= 0 ? `Photo ${letterOf(reveal.event)}` : 'The photo'}
-            counted={song?.event === 'right'}
-            points={pub.points.event}
-            sub={eventLine(song?.event ?? 'none', mine?.event[i] ?? null)}
-            count={gotItLine(reveal.counts.event, reveal.scoring)}
-          />
-          <ResultRow
-            label="Title"
-            truth={reveal.title}
-            counted={partCounts(song?.title ?? 'none')}
-            points={pub.points.title}
-            sub={partLine(song?.title ?? 'none', mine?.title[i] ?? null)}
-            count={gotItLine(reveal.counts.title, reveal.scoring)}
-          />
-          <ResultRow
-            label="Singer"
-            truth={reveal.singer}
-            counted={partCounts(song?.singer ?? 'none')}
-            points={pub.points.singer}
-            sub={partLine(song?.singer ?? 'none', mine?.singer[i] ?? null)}
-            count={gotItLine(reveal.counts.singer, reveal.scoring)}
-          />
-        </ul>
-      )}
+      <ul className="mt-2.5 grid gap-1.5" aria-label={`How song ${reveal.n} went for you`}>
+        <ResultRow
+          label="Event"
+          truth={reveal.event >= 0 ? `Photo ${letterOf(reveal.event)}` : 'The photo'}
+          counted={song?.event === 'right'}
+          points={pub.points.event}
+          sub={eventLine(song?.event ?? 'none', mine?.event[i] ?? null)}
+          count={gotItLine(reveal.counts.event, reveal.scoring)}
+        />
+        <ResultRow
+          label="Title"
+          truth={reveal.title}
+          counted={partCounts(song?.title ?? 'none')}
+          points={pub.points.title}
+          sub={partLine(song?.title ?? 'none', mine?.title[i] ?? null)}
+          count={gotItLine(reveal.counts.title, reveal.scoring)}
+        />
+        <ResultRow
+          label="Singer"
+          truth={reveal.singer}
+          counted={partCounts(song?.singer ?? 'none')}
+          points={pub.points.singer}
+          sub={partLine(song?.singer ?? 'none', mine?.singer[i] ?? null)}
+          count={gotItLine(reveal.counts.singer, reveal.scoring)}
+        />
+      </ul>
 
       <p className="mt-3.5 flex items-baseline gap-2">
         <span className={cn('text-[30px] leading-none tv-num', view?.rank === 1 && 'text-gold')}>{points}</span>
         <span className="text-[17px] font-bold">{soFarWords(points, place)}</span>
       </p>
-      {credit && <p className="mt-1 text-base leading-snug font-semibold text-paper-2">{credit}</p>}
       <Tally played={played} revealed={pub.revealed} songs={view?.songs ?? []} />
       <p className="mt-3 text-base leading-snug text-pretty text-paper-2">
         {next ? (
@@ -220,7 +211,7 @@ function Tally({ played, revealed, songs }: { played: number; revealed: number; 
               {i + 1}
             </span>
             <span className="h-4 text-[16px] leading-4 text-paper-2 tv-num">
-              {done ? (song?.inPhoto ? 'Avg' : `+${song?.points ?? 0}`) : next ? 'Next' : ''}
+              {done ? `+${song?.points ?? 0}` : next ? 'Next' : ''}
             </span>
           </li>
         )

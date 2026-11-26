@@ -43,14 +43,15 @@ function shuffled<T>(items: readonly T[]): T[] {
 /**
  * Lydspor's settings (spec section 12), as lists rather than a markup format:
  * a card per song with its photo, title, singer, the other answers that
- * count, its caption, where its hook starts, a story note and who is in the
- * photo; the extra photos that fit no song; the points and the pace; and the
- * intro, the storyteller and who sits out. The game's own check runs as you
+ * count, its caption, where its hook starts and a story note; the extra
+ * photos that fit no song; the points and the pace; and the intro, the
+ * storyteller and who sits out (typed names, suggested from the guest list).
+ * The game's own check runs as you
  * type, each problem and warning under what it is about. The settings live
  * in game_settings (hosts only), so no title reaches a phone before its
  * reveal.
  */
-export default function ConfigEditor({ config: raw, onChange, game, guests, media }: ConfigEditorProps<SoundtrackGame>) {
+export default function ConfigEditor({ config: raw, onChange, game, guests, players, media }: ConfigEditorProps<SoundtrackGame>) {
   const config = readSettings(raw)
   const { problems, warnings } = checkConfig(config)
   const placed = placeIssues(problems, warnings, config.songs, config.extraPhotos.length)
@@ -175,7 +176,6 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, medi
                 n={i + 1}
                 song={song}
                 count={config.songs.length}
-                guests={guests}
                 photoUrl={url(song.photo)}
                 uploading={(uploading[`song:${i}`] ?? 0) > 0}
                 busy={busy}
@@ -380,8 +380,19 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, medi
         </div>
         <div className="grid grid-cols-1 gap-1.5">
           <p className="text-sm font-medium">Doesn't play this game</p>
-          <PeopleField label="Doesn't play Lydspor" guests={guests} value={config.sitOut} empty="Everyone plays" onChange={(sitOut) => change({ sitOut })} />
-          <p className="text-sm text-paper-2">Usually the storyteller and whoever runs Spotify. You can change it on the night too.</p>
+          <PeopleField
+            label="Doesn't play Lydspor"
+            guests={guests}
+            players={players}
+            value={config.sitOut}
+            empty="Everyone plays"
+            onChange={(sitOut) => change({ sitOut })}
+          />
+          <Issues issues={placed.fields.sitOut} />
+          <p className="text-sm text-paper-2">
+            Usually the storyteller and whoever runs Spotify. Type each name as they join with it: the guest list suggests the
+            spelling. You can change it on the night too.
+          </p>
         </div>
       </Panel>
 

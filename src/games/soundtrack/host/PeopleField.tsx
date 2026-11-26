@@ -1,103 +1,110 @@
 import { MagnifyingGlassIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { GameGuest, PlayerId } from '@/games/core/Game'
+import type { GameGuest } from '@/games/core/Game'
+import { cleanName, MAX_NAME_LENGTH, nameFromSetting, nameKey, uniqueNames } from '@/games/core/names'
 import { foldName } from '@/lib/format'
 import { sortNames } from '@/lib/guestList'
 import { cn } from '@/lib/utils'
+import { sitOutNames } from '../people'
 
-/** How many matches the search lists at once. */
+/** How many suggestions show at once. */
 const SHOWN = 8
 
+/** Someone a name can be suggested from: a guest on the list, or a player. */
+type Named = { readonly id: string; readonly name: string }
+
 /**
- * A list of guests, for "Doesn't play this game" and "Who's in this photo"
- * (party-night 3.7): the picked guests as chips with their token and a
- * remove button, and Add someone, which searches the guest list by name
- * (accents and Danish letters folded, so "soren" finds Søren). It lists the
- * whole guest list, so the host can set it up before the party: a guest who
- * hasn't joined is marked "(not here yet)", in the list and on their chip
- * (docs/guest-list.md, 9.3). Someone picked who has left the list shows as
- * "A guest who left", still removable.
+ * A list of typed names, for "Doesn't play this game" (party-night 3.7): the
+ * names as chips with a remove button, and Add someone, a name field with
+ * suggestions from the guest list and the guests who joined (accents and
+ * Danish letters folded, so "soren" finds Søren), so a name is spelled the way
+ * the guest joins with it. A name is plain text, not tied to the list: one
+ * nobody has joined with yet is kept, and a guest who joins later with it is
+ * matched by name. Each chip says whether the name is someone here, someone
+ * on the list who hasn't joined ("not here yet"), or nobody on the list yet.
+ * A guest's id saved before names reads as their name, and the next change
+ * saves it as one; an id on neither list shows as "A guest who left".
  */
 export default function PeopleField({
   label,
   guests,
+  players = [],
   value,
   onChange,
-  max,
   empty = 'Nobody',
   disabled = false,
 }: {
   label: string
-  /** Everyone on the guest list, joined or not. */
+  /** Everyone on the guest list, joined or not: suggestions, and how to read an old id. */
   guests: readonly GameGuest[]
-  value: readonly PlayerId[]
-  onChange: (ids: PlayerId[]) => void
-  /** At most this many. */
-  max?: number
-  /** Shown while nobody is picked. */
+  /** The guests who joined, for suggestions on a party without a list. */
+  players?: readonly Named[]
+  /** The names as saved (an old setting may hold ids). */
+  value: readonly string[]
+  /** The new list, as names, each once. */
+  onChange: (names: string[]) => void
+  /** Shown while nobody is on it. */
   empty?: string
   disabled?: boolean
 }) {
   const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState('')
-  const full = max !== undefined && value.length >= max
-  const picked = new Set(value)
+  const chips = value.map((saved) => ({ saved, name: nameFromSetting(saved, guests, players) }))
+  const taken = new Set(chips.flatMap((chip) => (chip.name === null ? [] : [nameKey(chip.name)])))
   const folded = foldName(query)
-  const matches = sortNames(guests.filter((g) => !picked.has(g.id) && (folded === '' || foldName(g.name).includes(folded))))
-  const guestOf = (id: PlayerId) => guests.find((g) => g.id === id) ?? null
+  const typed = cleanName(query)
+  const known = sortNames(uniqueNames([...players.map((p) => p.name), ...guests.map((g) => g.name)]))
+  const matches = known.filter((name) => !taken.has(nameKey(name)) && (folded === '' || foldName(name).includes(folded)))
+  // The typed name itself, when it isn't one of the suggestions: kept as typed.
+  const exact = known.find((name) => nameKey(name) === nameKey(typed))
+  const offerTyped = typed !== '' && exact === undefined && !taken.has(nameKey(typed))
+  const tooLong = Array.from(typed).length > MAX_NAME_LENGTH
 
-  function add(id: PlayerId) {
-    onChange([...value, id])
+  function save(next: readonly string[]) {
+    onChange(sitOutNames(next, guests, players))
+  }
+
+  function add(name: string) {
+    if (taken.has(nameKey(name)) || Array.from(cleanName(name)).length > MAX_NAME_LENGTH) return
+    save([...value, name])
     setQuery('')
-    if (max !== undefined && value.length + 1 >= max) setAdding(false)
   }
 
   return (
     <div className="grid grid-cols-1 gap-2" role="group" aria-label={label}>
       <ul className="flex flex-wrap items-center gap-1.5">
         {value.length === 0 && <li className="text-sm text-paper-2">{empty}</li>}
-        {value.map((id) => {
-          const guest = guestOf(id)
-          const name = guest?.name ?? null
-          return (
-            <li key={id} className="flex h-8 items-center gap-1.5 rounded-control bg-overlay pr-0.5 pl-1">
-              {name ? <Avatar name={name} playerId={id} className="size-6" /> : null}
-              <span className={cn('max-w-56 truncate text-sm font-bold', !name && 'pl-1.5 text-paper-2')}>
-                {name ?? 'A guest who left'}
-                {guest && !guest.joined && <NotHereYet />}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={disabled}
-                aria-label={`Remove ${name ?? 'the guest who left'}`}
-                onClick={() => onChange(value.filter((x) => x !== id))}
-              >
-                <XIcon />
-              </Button>
-            </li>
-          )
-        })}
-        {!adding && (
-          <li>
+        {chips.map(({ saved, name }) => (
+          <li key={saved} className="flex h-8 items-center gap-1.5 rounded-control bg-overlay pr-0.5 pl-1">
+            {name ? <Avatar name={name} className="size-6" /> : null}
+            <span className={cn('max-w-56 truncate text-sm font-bold', !name && 'pl-1.5 text-paper-2')}>
+              {name ?? 'A guest who left'}
+              {name && <Mark name={name} guests={guests} players={players} />}
+            </span>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled || full || guests.length === 0}
-              onClick={() => setAdding(true)}
+              variant="ghost"
+              size="icon-xs"
+              disabled={disabled}
+              aria-label={`Remove ${name ?? 'the guest who left'}`}
+              onClick={() => save(value.filter((x) => x !== saved))}
             >
+              <XIcon />
+            </Button>
+          </li>
+        ))}
+        {!adding && (
+          <li>
+            <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setAdding(true)}>
               <PlusIcon />
-              {full ? `${max} at most` : 'Add someone'}
+              Add someone
             </Button>
           </li>
         )}
       </ul>
-      {guests.length === 0 && <p className="text-sm text-paper-2">Add guests to the guest list, or wait for them to join.</p>}
       {adding && (
         <div className="grid grid-cols-1 gap-1.5">
           <div className="flex items-center gap-2">
@@ -107,8 +114,11 @@ export default function PeopleField({
                 autoFocus
                 type="search"
                 value={query}
-                placeholder="Search by name"
-                aria-label={`${label}: search by name`}
+                placeholder="Type a name"
+                aria-label={`${label}: type a name`}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 className="h-9 pl-9"
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -117,9 +127,10 @@ export default function PeopleField({
                     e.stopPropagation()
                     setAdding(false)
                     setQuery('')
-                  } else if (e.key === 'Enter' && matches.length > 0) {
+                  } else if (e.key === 'Enter' && typed !== '') {
+                    // The name as the list spells it when it is on the list, else as typed.
                     e.preventDefault()
-                    add(matches[0].id)
+                    add(exact ?? typed)
                   }
                 }}
               />
@@ -136,25 +147,31 @@ export default function PeopleField({
               Done
             </Button>
           </div>
+          {tooLong && <p className="px-1.5 text-sm text-paper-2">Names are at most {MAX_NAME_LENGTH} characters.</p>}
           <ul className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
-            {matches.slice(0, SHOWN).map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  className="flex h-9 w-full items-center gap-2 rounded-control px-1.5 text-left text-sm font-bold hover:bg-overlay focus-visible:bg-overlay focus-visible:outline-none disabled:opacity-50"
-                  onClick={() => add(p.id)}
-                >
-                  <Avatar name={p.name} playerId={p.id} className="size-6" />
+            {offerTyped && !tooLong && (
+              <li>
+                <SuggestionButton disabled={disabled} onClick={() => add(typed)}>
+                  <PlusIcon className="size-4 shrink-0 text-paper-2" />
+                  <span className="min-w-0 truncate">Add “{typed}”</span>
+                </SuggestionButton>
+              </li>
+            )}
+            {matches.slice(0, SHOWN).map((name) => (
+              <li key={name}>
+                <SuggestionButton disabled={disabled} onClick={() => add(name)}>
+                  <Avatar name={name} className="size-6" />
                   <span className="min-w-0 truncate">
-                    {p.name}
-                    {!p.joined && <NotHereYet />}
+                    {name}
+                    <Mark name={name} guests={guests} players={players} />
                   </span>
-                </button>
+                </SuggestionButton>
               </li>
             ))}
-            {matches.length === 0 && (
-              <li className="px-1.5 py-2 text-sm text-paper-2">{query ? `Nobody called “${query}”` : 'Everyone is on the list'}</li>
+            {matches.length === 0 && !offerTyped && (
+              <li className="px-1.5 py-2 text-sm text-paper-2">
+                {known.length === 0 ? 'Type their name as they will join with it.' : query ? 'Already on it' : 'Everyone on the list is on it'}
+              </li>
             )}
           </ul>
           {matches.length > SHOWN && <p className="px-1.5 text-xs text-paper-2">and {matches.length - SHOWN} more: type a name to find them.</p>}
@@ -164,12 +181,33 @@ export default function PeopleField({
   )
 }
 
-/** The mark of a guest on the list who hasn't joined yet. */
-function NotHereYet() {
+function SuggestionButton({ disabled, onClick, children }: { disabled: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className="flex h-9 w-full items-center gap-2 rounded-control px-1.5 text-left text-sm font-bold hover:bg-overlay focus-visible:bg-overlay focus-visible:outline-none disabled:opacity-50"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * How a name stands: nothing for someone here, "(not here yet)" for a guest
+ * on the list who hasn't joined, "(not on the list)" for a name nobody on the
+ * list has. Only a hint for the spelling: the name is kept either way.
+ */
+function Mark({ name, guests, players }: { name: string; guests: readonly GameGuest[]; players: readonly Named[] }) {
+  const key = nameKey(name)
+  const here = players.some((p) => nameKey(p.name) === key) || guests.some((g) => g.joined && nameKey(g.name) === key)
+  if (here) return null
+  const listed = guests.some((g) => nameKey(g.name) === key)
   return (
     <>
       {' '}
-      <span className="font-medium text-paper-3">(not here yet)</span>
+      <span className="font-medium text-paper-3">{listed ? '(not here yet)' : '(not on the list)'}</span>
     </>
   )
 }

@@ -143,11 +143,12 @@ describe('Lydspor on the phone', () => {
     expect(text).toMatch(/Song 2 is next\. You have photo [A-L], “Seven ferries” and “Coldwave” \./)
   })
 
-  it('the top 5 after reveal 4: song 4 is her own photo, counted as her average', async () => {
+  it('the top 5 after reveal 4: song 4 scores for her like any song, whoever is in its photo', async () => {
     const text = plain(await phoneMarkup('soundtrack-standings'))
     expect(text).toContain('Lydspor’s top 5 is on the TV.')
-    expect(text).toContain('Song 4: you’re in the photo.')
-    expect(text).toContain('You’re in this one. It counts as your own average at the end.')
+    expect(text).toContain('Song 4: 4 of 4 points.')
+    expect(text).not.toContain('in the photo')
+    expect(text).not.toContain('own average')
   })
 
   it('the end: the result card with the payout on the night board', async () => {
@@ -181,7 +182,7 @@ describe('Lydspor for a guest sitting out, or with no answers', () => {
       serverNow: () => snapshot.now,
       mediaUrl: (path: string) => `/media/${path}`,
       player,
-      view: { sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null },
+      view: { sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null },
       myAnswers: {},
       onStage: true,
       act: async () => {},
@@ -202,7 +203,7 @@ describe('Lydspor for a guest sitting out, or with no answers', () => {
         createElement(loose(ResultView), {
           ...base,
           game: { ...base.game, winners: [player.id] },
-          view: { sittingOut: false, songs: [], points: 30, rank: 1, final: { points: 30, credit: 0, place: 1, paid: 20 } },
+          view: { sittingOut: false, songs: [], points: 30, rank: 1, final: { points: 30, place: 1, paid: 20 } },
         }),
       ),
     )
