@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /** How long a secret shows before the card turns back over by itself. */
-const SHOW_MS = 8000
+export const SHOW_MS = 8000
 
 /**
  * A face-down card that turns over to show a secret when tapped, and turns

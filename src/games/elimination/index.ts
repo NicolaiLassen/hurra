@@ -33,6 +33,8 @@ export const elimination = defineGameModule({
   accent: 'hunt',
   // Everyone dealt in who no longer stands: lists of the party mark them Out.
   knockedOut: (publicState) => (Array.isArray(publicState?.out) ? publicState.out.filter((id) => typeof id === 'string') : []),
+  // A guest can try their task at any moment of the evening, also while a stage game fills the phone.
+  phoneSecret: (view) => (view?.status === 'alive' && typeof view.task === 'string' ? { label: 'task', text: view.task } : null),
   profileBadges: (data) => {
     const { tags = 0, catches = 0, wins = 0 } = data as EliminationProfile
     const badges: ProfileBadge[] = []

@@ -24,8 +24,11 @@ function JoinStateProbe({ onState }: { onState: (state: unknown) => void }) {
   return null
 }
 
-// No network here: the provider renders the fixture, and nothing calls the client while rendering.
-vi.mock('@/lib/supabase', () => ({ supabase: {} }))
+// No network here: the provider renders the fixture, and nothing calls the client while rendering
+// (a public media URL is only built, never fetched).
+vi.mock('@/lib/supabase', () => ({
+  supabase: { storage: { from: () => ({ getPublicUrl: (path: string) => ({ data: { publicUrl: `https://media.test/${path}` } }) }) } },
+}))
 
 const ENTITIES: Record<string, string> = { '&#x27;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' }
 
@@ -50,6 +53,26 @@ const textOf = async (tree: ReactElement) => plain(await markupOf(tree))
 /** The section headings (h2) in order, as text. */
 const headings = (html: string) => [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map(([, inner]) => plain(inner).trim())
 
+/**
+ * The markup without what the phone keeps mounted out of sight
+ * (`data-out-of-sight`): the home's sections during the takeover, and a game
+ * held behind the main card.
+ */
+function inSight(html: string): string {
+  let out = html
+  for (let start = out.search(/<div[^>]*data-out-of-sight=""/); start >= 0; start = out.search(/<div[^>]*data-out-of-sight=""/)) {
+    const tags = /<\/?div\b[^>]*>/g
+    tags.lastIndex = start
+    let depth = 0
+    for (let tag = tags.exec(out); tag; tag = tags.exec(out)) {
+      depth += tag[0].startsWith('</') ? -1 : 1
+      if (depth === 0) break
+    }
+    out = out.slice(0, start) + out.slice(tags.lastIndex)
+  }
+  return out
+}
+
 /** The gold buttons (Button's default variant: the one next step on a screen), as text. */
 const goldButtons = (html: string) =>
   [...html.matchAll(/<button data-slot="button" data-variant="default"[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
@@ -59,17 +82,18 @@ async function phone(scene: FixtureScene | Snapshot, url = '/play/HURRA30', reca
   return plain(await phoneMarkup(scene, url, recap))
 }
 
-async function phoneMarkup(scene: FixtureScene | Snapshot, url = '/play/HURRA30', recap: RecapDoc | null = fixtureRecapDoc()): Promise<string> {
+async function phoneMarkup(
+  scene: FixtureScene | Snapshot,
+  url = '/play/HURRA30',
+  recap: RecapDoc | null = fixtureRecapDoc(),
+  player = { id: FIXTURE_PLAYER_ID, name: 'Sofie' },
+): Promise<string> {
   const lobby = fixtureSnapshot('lobby', 'phone')
-  const home = createElement(PhoneHome, {
-    party: lobby.session!,
-    player: { id: FIXTURE_PLAYER_ID, name: 'Sofie' },
-    fixtureRecap: recap,
-  })
+  const home = createElement(PhoneHome, { party: lobby.session!, player, fixtureRecap: recap })
   const live = createElement(LiveSessionProvider, {
     sessionId: FIXTURE_SESSION_ID,
     screen: 'phone',
-    playerId: FIXTURE_PLAYER_ID,
+    playerId: player.id,
     fixture: typeof scene === 'string' ? fixtureSnapshot(scene, 'phone') : scene,
     children: home,
   })
@@ -205,19 +229,19 @@ describe('the phone home', () => {
     expect(text).toContain('Waiting for the next game')
   })
 
-  it('several games: the stage game is main, then each background game in its own section, oldest start first', async () => {
+  it('several games: the stage game fills the phone; the peek has each background game in its own section, oldest start first', async () => {
     const snapshot = fixtureSnapshot('background', 'phone')
-    const html = await phoneMarkup(snapshot)
+    const html = await phoneMarkup(snapshot, '/play/HURRA30?fixture=background&peek=1')
     const text = plain(html)
     expect(text).toContain('Quiz Question 3 of 10')
     // Sofie has answered the open question.
     expect(text).toContain('Locked in')
-    // Each game running underneath has its own section, headed by its tab: the
-    // quiz on the main card, then Last one standing (started first), then the darts.
-    expect(headings(html)).toEqual(['Quiz', 'Last one standing', 'Darts'])
-    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Last one standing'))
-    expect(text.indexOf('Last one standing')).toBeLessThan(text.indexOf('Darts'))
-    expect(text.indexOf('Darts')).toBeLessThan(text.indexOf('Standings'))
+    // The peek (opened from Standings): your place, the standings right under it, then each game running
+    // underneath in its own section, headed by its tab: Last one standing (started first), then the darts.
+    expect(headings(html)).toEqual(['Quiz', 'Birthday party', 'Last one standing', 'Darts'])
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Standings You'))
+    expect(text.indexOf('Standings You')).toBeLessThan(text.indexOf('Last one standing Who is left'))
+    expect(text.indexOf('Last one standing Who is left')).toBeLessThan(text.indexOf('Darts'))
     // The hunt's section: where Sofie stands, how many are left and the latest knockout at its time.
     const hunt = snapshot.games.find((g) => g.game_type === 'elimination')!
     const [latest] = (hunt.public_state as { feed: { at: number }[] }).feed
@@ -308,6 +332,146 @@ describe('the phone home', () => {
     expect(text).toContain('Finished lately')
     expect(text).toContain('Bo won Last one standing')
     expect(text).not.toContain('Waiting for the next game')
+  })
+})
+
+// The takeover (docs/identity.md, The phone; phoneFocus in running.ts): while a
+// stage game holds the TV, the phone shows that game alone under a slim header
+// with Standings, the bar at its foot with a background game's secret, and the
+// rest of the home mounted out of sight until the peek opens it.
+describe('the takeover', () => {
+  /** What the phone shows: the markup without what it keeps out of sight. */
+  const seen = async (scene: FixtureScene | Snapshot, url?: string) => {
+    const html = inSight(await phoneMarkup(scene, url))
+    return { html, text: plain(html) }
+  }
+  /** The home's sections, none of which shows in the takeover. */
+  const HOME = ['On the TV Now', 'On the TV Next', 'Sofie , tonight', 'Who is left', 'Your secret task', 'Finished lately', 'Standings You']
+
+  it('the quiz between questions, with the hunt beside it: the quiz alone, My task beside Show my code', async () => {
+    const { html, text } = await seen('background-reveal')
+    expect(text).toContain('Birthday party Standings')
+    expect(text).toContain('Quiz Question 3 of 10')
+    expect(text).toContain('You got it.')
+    for (const part of HOME) expect(text, part).not.toContain(part)
+    expect(headings(html)).toEqual(['Quiz'])
+    // The task one tap away, face down: the bar's quiet card, then the gold step.
+    expect(text).toContain('My task Show my code S9F4X')
+    expect(html).toContain('aria-pressed="false" data-bar-secret=""')
+    expect(goldButtons(html)).toEqual(['Show my code S9F4X'])
+    // Standings opens the peek: quiet, never gold.
+    expect(html).toMatch(/data-variant="secondary"[^>]*aria-haspopup="dialog" aria-expanded="false" data-peek-control=""/)
+    // Still mounted out of sight: the hunt's section, so a scan the guest has open stays on top.
+    expect(plain(await phoneMarkup('background-reveal'))).toContain('Got someone? Scan their code')
+  })
+
+  it('a timed question: the bar and the task step aside, so no gold covers the answers', async () => {
+    const { html, text } = await seen('background')
+    expect(text).toContain('The question is on the TV.')
+    expect(text).not.toContain('My task')
+    expect(text).not.toContain('Show my code')
+    expect(goldButtons(html)).toEqual([])
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('fusion asking: the picker and its Lock in, nothing else', async () => {
+    const { html, text } = await seen('fusion-asking')
+    expect(text).toContain('Who is fused? Picture 4 of 12')
+    expect(text).toContain('Who is in it?')
+    expect(goldButtons(html)).toEqual(['Lock in'])
+    expect(text).not.toContain('My task')
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('Lydspor while a song plays: the song to name, and the task beside Show my code', async () => {
+    const { html, text } = await seen('soundtrack-playing')
+    expect(text).toContain('Lydspor Song 5 of 8')
+    expect(text).toContain('Name song 5 . Close spelling counts.')
+    expect(text).toContain('My task Show my code S9F4X')
+    expect(goldButtons(html)).toEqual(['Show my code S9F4X'])
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('an in-person round on the TV: the round and your code, with the bar', async () => {
+    const { html, text } = await seen('in-person')
+    expect(text).toContain('Darts On the TV')
+    expect(text).toContain('When you score, show your code to the host.')
+    expect(text).toContain('My task Show my code S9F4X')
+    expect(headings(html)).toEqual(['Darts'])
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('a stage game with nothing beside it: no task on the bar', async () => {
+    const { text } = await seen('quiz-reveal')
+    expect(text).toContain('Standings')
+    expect(text).not.toContain('My task')
+    expect(text).toContain('Show my code S9F4X')
+  })
+
+  it('a finished stage game: its result alone while the TV shows its final screen', async () => {
+    const { html, text } = await seen('fusion-final')
+    expect(text).toContain('Emil had the sharpest eye')
+    expect(text).toContain('Waiting for the next game')
+    expect(text).toContain('My task Show my code S9F4X')
+    expect(headings(html)).toEqual(['Who is fused?'])
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('between games, the TV on the standings: the home as always, no Standings button and no task on the bar', async () => {
+    const { html, text } = await seen('between')
+    expect(text).toContain('Quiz Finished at')
+    expect(text).toContain('Waiting for the next game')
+    expect(text).toContain('Sofie , tonight')
+    expect(text).toContain('On the TV Now The night so far')
+    expect(text).toContain('Next Who is fused?')
+    expect(text).toContain('Your secret task')
+    expect(text).toContain('Standings You')
+    expect(html).not.toContain('data-peek-control')
+    expect(html).not.toContain('data-out-of-sight')
+    expect(text).not.toContain('My task')
+    expect(goldButtons(html)).toEqual(['Show my code S9F4X'])
+    // The order of the home: the result, your place, On the TV, the hunt, then the standings.
+    expect(headings(html)).toEqual(['Quiz', 'On the TV', 'Last one standing'])
+    expect(text.indexOf('Who is left')).toBeLessThan(text.indexOf('Standings You'))
+  })
+
+  it('a guest who joins mid-game lands in the takeover, not dealt into the hunt: no task', async () => {
+    const s = fixtureSnapshot('background-reveal', 'phone')
+    const wilma = { id: 'f1c7a000-0000-4000-8000-000000009001', name: 'Wilma', code: 'W7L4A', profile: {}, created_at: FIXTURE_NOW, joined_at: FIXTURE_NOW }
+    const joined: Snapshot = {
+      ...s,
+      players: [...s.players, wilma],
+      standings: [...s.standings, { player_id: wilma.id, name: wilma.name, code: wilma.code, points: 0, profile: {} }],
+      me: { player_id: wilma.id, views: {}, answers: {} },
+    }
+    const html = inSight(await phoneMarkup(joined, undefined, null, { id: wilma.id, name: wilma.name }))
+    const text = plain(html)
+    expect(text).toContain('Quiz Question 3 of 10')
+    expect(text).toContain('Standings')
+    expect(text).not.toContain('My task')
+    expect(text).toContain('Show my code W7L4A')
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('the peek: the home as a sheet over the game, your place then the standings, Back to the game, and the game out of reach', async () => {
+    const html = await phoneMarkup('background-reveal', '/play/HURRA30?fixture=background-reveal&peek=1')
+    const text = plain(inSight(html))
+    expect(html).toMatch(/<div data-peek="" role="dialog" aria-labelledby="[^"]+"/)
+    expect(text).toContain('Birthday party Back to the game')
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Standings You'))
+    expect(text.indexOf('Standings You')).toBeLessThan(text.indexOf('Last one standing Who is left'))
+    // The game under it is inert while it is open, and Standings says it is open.
+    expect(html).toMatch(/<div inert="">\s*<header/)
+    expect(html).toContain('aria-expanded="true" data-peek-control=""')
+    // Still one gold step: Show my code, with the task beside it.
+    expect(goldButtons(html)).toEqual(['Show my code S9F4X'])
+    expect(text).toContain('My task Show my code')
+  })
+
+  it('no peek on the home, even when asked for', async () => {
+    const html = await phoneMarkup('between', '/play/HURRA30?fixture=between&peek=1')
+    expect(html).not.toContain('data-peek=""')
+    expect(html).not.toContain('Back to the game')
   })
 })
 
