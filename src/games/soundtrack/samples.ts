@@ -216,6 +216,7 @@ export function soundtrackSample(scene: SoundtrackScene, cast: SampleCast, now: 
       round: 1,
       session: { id: 'sample', name: 'Birthday party', data: {} },
       players,
+      guests: players.map((p) => ({ id: p.id, name: p.name, joined: true })),
       scoreboard: {},
       config,
       now: at,
