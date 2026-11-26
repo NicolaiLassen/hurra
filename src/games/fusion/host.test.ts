@@ -16,26 +16,23 @@ function scene(name: FusionStageScene, patch: (state: FusionState) => FusionStat
 }
 
 describe('the host’s steps', () => {
-  it('in the lobby: start the showing, or skip it for the wall', () => {
+  it('in the lobby: ask the first picture (no showing), or show the wall of placeholders first', () => {
     const { steps, pub } = scene('fusion-lobby')
     expect(steps()).toEqual({
-      main: { label: 'Start the showing', icon: 'play', action: { type: 'show' } },
-      extra: [{ label: 'Skip the showing: go to the wall', icon: 'wall', action: { type: 'wall', from: 'lobby' } }],
-      line: 'Start when the room is looking at the TV. Each picture shows for 6 s, then all of them.',
+      main: { label: 'Ask #1', icon: 'ask', action: { type: 'ask', n: 1 } },
+      extra: [{ label: 'Show the wall first', icon: 'wall', action: { type: 'wall', from: 'lobby' } }],
+      line: 'Ask when the room is looking at the TV: it picks the picture with a little suspense, then the guessing starts.',
       confirm: crownConfirm(12),
     })
     expect(PHASE_CHIP[pub.phase]).toBe('Ready')
-    expect(headline(pub, FIXTURE_NOW)).toBe('12 pictures')
+    expect(headline(pub)).toBe('12 pictures')
   })
 
-  it('in the showing: skip to the wall, which follows by itself', () => {
-    const { steps, pub } = scene('fusion-showing')
-    expect(steps().main).toEqual({ label: 'Skip to the wall', icon: 'wall', action: { type: 'wall', from: 'showing' } })
-    expect(steps().extra).toEqual([])
-    // 12 pictures of 6 s, started 15 s ago.
-    expect(steps().line).toBe('The wall follows by itself in 57 s.')
-    expect(steps(pub.showing!.endsAt).line).toBe('The wall is coming up.')
-    expect(headline(pub, FIXTURE_NOW)).toBe('Showing 3 of 12')
+  it('in the lobby with no picture’s people typed yet: the wall only, and what to do', () => {
+    const { steps } = scene('fusion-lobby', (s) => ({ ...s, key: {} }))
+    expect(steps().main).toBeNull()
+    expect(steps().extra.map((step) => step.label)).toEqual(['Show the wall first'])
+    expect(steps().line).toBe('No picture has its two people yet. Type them with Show who, then ask.')
   })
 
   it('on the wall: ask the next picture with its people set, crowning early in the menu behind a confirm', () => {
@@ -50,7 +47,7 @@ describe('the host’s steps', () => {
       cancel: 'Keep going',
       action: 'Crown now',
     })
-    expect(headline(pub, FIXTURE_NOW)).toBe('3 of 12 revealed')
+    expect(headline(pub)).toBe('3 of 12 revealed')
   })
 
   it('skips a picture without its people for the next one that has them', () => {
@@ -76,24 +73,30 @@ describe('the host’s steps', () => {
     expect(crownConfirm(1).description).toBe("1 picture hasn't been asked. It stays secret, and nobody scores on it.")
   })
 
-  it('while a picture is asked: Reveal now, closing its guess first, with the exact count of who has locked in', () => {
-    const { steps, pub, state, players } = scene('fusion-asking')
+  it('while a picture is asked: Reveal now, closing its guess first, with the count of who has locked in, everyone counting', () => {
+    const { steps, pub, players } = scene('fusion-asking')
     const { main, extra, line, confirm } = steps()
     expect(main).toEqual({ label: 'Reveal now', icon: 'reveal', action: { type: 'reveal', n: 4 }, close: ['p4'] })
     expect(extra).toEqual([])
     expect(confirm).toBeNull()
-    // 12 guests, 2 of them in #4.
-    expect(mayVote(state, 4, players)).toBe(10)
-    expect(line).toBe("7 of 10 have locked in. It reveals by itself when time's up.")
-    expect(steps(FIXTURE_NOW, players, { p4: 10 }).line).toBe('Everyone has locked in. Reveal now.')
+    // 12 guests, the 2 in #4 among them: everyone guesses every picture.
+    expect(mayVote(players)).toBe(12)
+    expect(line).toBe("7 of 12 have locked in. It reveals by itself when time's up.")
+    expect(steps(FIXTURE_NOW, players, { p4: 12 }).line).toBe('Everyone has locked in. Reveal now.')
     expect(steps(pub.current!.endsAt).line).toBe("Time's up. Tap Reveal now if the reveal doesn't come.")
     expect(PHASE_CHIP[pub.phase]).toBe('Guessing')
-    expect(headline(pub, FIXTURE_NOW)).toBe('Picture 4 of 12: #4')
+    expect(headline(pub)).toBe('Picture 4 of 12: #4')
+  })
+
+  it('while the TV shows which picture it is: the guessing starts in a moment', () => {
+    const { steps, pub } = scene('fusion-hop')
+    expect(steps(pub.current!.openedAt + 1_000).line).toBe('The TV is picking the picture. The guessing starts in a moment.')
+    expect(steps(pub.current!.startsAt).line).toBe("0 of 12 have locked in. It reveals by itself when time's up.")
   })
 
   it('counts the guess of a picture asked out of order by its place in the guessing', () => {
     const { pub, steps } = scene('fusion-asking-you')
-    expect(headline(pub, FIXTURE_NOW)).toBe('Picture 4 of 12: #6')
+    expect(headline(pub)).toBe('Picture 4 of 12: #6')
     expect(steps().main?.action).toEqual({ type: 'reveal', n: 6 })
   })
 
@@ -117,6 +120,6 @@ describe('the host’s steps', () => {
     const none = { main: null, extra: [], line: null, confirm: null }
     expect(hostSteps({ ...pub, phase: 'done' }, null, {}, [], FIXTURE_NOW)).toEqual(none)
     expect(hostSteps(pub, { phase: 'locked' } as unknown as FusionState, {}, [], FIXTURE_NOW)).toEqual(none)
-    expect(headline({ ...pub, phase: 'done' }, FIXTURE_NOW)).toBe('Participant fusion is over')
+    expect(headline({ ...pub, phase: 'done' })).toBe('Participant fusion is over')
   })
 })

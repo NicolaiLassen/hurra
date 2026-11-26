@@ -2,9 +2,7 @@ import FinalScreen from '@/components/tv/FinalScreen'
 import WinnerMoment from '@/components/tv/WinnerMoment'
 import type { FusionGame } from '@/games/fusion/logic'
 import { bestDisguise, plural, readPublic, type FusionPublicPicture, type FusionReveal } from '@/games/fusion/shapes'
-import { nameOf } from '@/games/fusion/tvLook'
 import type { TvViewProps } from '@/games/types'
-import type { Player } from '@/lib/types'
 
 /**
  * The TV's final screen for Participant fusion: the winner's screen
@@ -28,7 +26,7 @@ export default function FinalTvView(props: TvViewProps<FusionGame>) {
       title={game.title}
       winners={winners}
       deck={deck}
-      last={pub ? lastLine(pub.pictures, players) : null}
+      last={pub ? lastLine(pub.pictures) : null}
       scores={scores}
       gamePoints={gamePoints}
     />
@@ -41,17 +39,17 @@ type Revealed = FusionPublicPicture & { revealed: FusionReveal }
  * The best disguise at its reveal's time, else the last picture revealed;
  * nothing for a round from before the update, whose reveals kept no time.
  */
-function lastLine(pictures: readonly FusionPublicPicture[], players: readonly Player[]) {
+function lastLine(pictures: readonly FusionPublicPicture[]) {
   const disguise = bestDisguise(pictures)
   const latest = pictures
     .filter((p): p is Revealed => p.revealed !== null)
     .sort((a, b) => b.revealed.step - a.revealed.step)[0]
   const picture = disguise ?? latest
   if (!picture || picture.revealed.at === null) return null
-  const { people, names, both, voters } = picture.revealed
+  const { names, both, voters } = picture.revealed
   const pair = (
     <>
-      <strong>{nameOf(players, people[0], names[0])}</strong> and <strong>{nameOf(players, people[1], names[1])}</strong>
+      <strong>{names[0]}</strong> and <strong>{names[1]}</strong>
     </>
   )
   const text = disguise ? (

@@ -14,7 +14,6 @@ const songs: SoundtrackSong[] = SAMPLE_SONGS.map((song, i) => ({
   caption: song.caption,
   startAt: song.startAt,
   note: i === 0 ? 'The night the boat broke down.' : '',
-  inPhoto: [],
 }))
 const config = { songs, storyteller: 'Ida', lastCallSeconds: 60 }
 // Each sample start, read as clock time "HH:MM", is the minute it stands for.

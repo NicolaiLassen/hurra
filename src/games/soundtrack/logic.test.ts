@@ -1,8 +1,8 @@
 // Lydspor's rules (.design/lydspor/spec.md, sections 5 to 8 and 11): the
 // settings, the deal, the prompts, the last call and the lock, the review of
-// typed answers, reveals, the host's Accept, scoring with the guard, the own
-// average and the payout, sit out, guests who leave or join late, double taps
-// and races, and what never reaches the room. Every song, singer, caption and
+// typed answers, reveals, the host's Accept, scoring with the guard and the
+// payout, sit out by name, guests who leave or join late, double taps and
+// races, and what never reaches the room. Every song, singer, caption and
 // answer here is invented.
 import { describe, expect, it } from 'vitest'
 import { botExample, checkGameContract, type ContractExample } from '../core/contract'
@@ -41,7 +41,6 @@ function settings(overrides: Record<string, unknown> = {}, songOverrides: Record
       photo: `test/lydspor/song-${i + 1}.jpg`,
       startAt: 40,
       note: '',
-      inPhoto: [],
       ...songOverrides[i],
     })),
     extraPhotos: [
@@ -108,9 +107,22 @@ describe('settings', () => {
       caption: 'The harbour, 2009',
       startAt: 40,
       note: '',
-      inPhoto: [],
     })
     expect(game.defaultConfig).toMatchObject({ songs: [], extraPhotos: [] })
+  })
+
+  it('reads settings saved with who was in each photo, and ignores it: everyone scores every song', () => {
+    const config = parse(settings({}, [{ inPhoto: Array.from({ length: 11 }, (_, i) => `p${i}`) }]))
+    expect(config.songs[0]).not.toHaveProperty('inPhoto')
+    expect(checkConfig(settings({}, [{ inPhoto: ['p1'] }])).problems).toEqual([])
+  })
+
+  it("keeps Doesn't play this game as typed names, each once whatever its case, accents or spaces", () => {
+    expect(parse(settings({ sitOut: [' Ana  Maria ', 'ana maria', 'Søren', 'soren', '', 7, 'Bo'] })).sitOut).toEqual(['Ana Maria', 'Søren', 'Bo'])
+    expect(() => parse(settings({ sitOut: ['x'.repeat(41)] }))).toThrow(new GameError("A name under Doesn't play this game is at most 40 characters"))
+    expect(() => parse(settings({ sitOut: Array.from({ length: 201 }, (_, i) => `Guest ${i}`) }))).toThrow(
+      new GameError("Doesn't play this game takes at most 200 names"),
+    )
   })
 
   it('trims texts, drops empty extra rows and takes numbers from a form', () => {
@@ -131,7 +143,7 @@ describe('settings', () => {
     expect(() => parse(settings({}, [{ title: `${title}b` }]))).toThrow('Song 1: the title is at most 60 characters')
   })
 
-  const twelve = Array.from({ length: 13 }, (_, i) => ({ ...SONGS[0], title: `Song number ${i + 1}`, photo: `test/s${i}.jpg`, inPhoto: [] }))
+  const twelve = Array.from({ length: 13 }, (_, i) => ({ ...SONGS[0], title: `Song number ${i + 1}`, photo: `test/s${i}.jpg` }))
   it.each([
     [{ songs: [] }, [], 'Add at least one song in the settings'],
     [{ songs: twelve }, [], 'Lydspor takes at most 12 songs'],
@@ -149,7 +161,6 @@ describe('settings', () => {
     [{}, [{ caption: '' }], 'Song 1 needs a caption'],
     [{}, [{ caption: 'x'.repeat(31) }], 'Song 1: the caption is at most 30 characters'],
     [{}, [{ note: 'x'.repeat(141) }], 'Song 1: the story note is at most 140 characters'],
-    [{}, [{ inPhoto: Array.from({ length: 11 }, (_, i) => `p${i}`) }], 'Song 1: at most 10 people in its photo'],
     [{ extraPhotos: [] }, [], "Add at least 2 extra photos, so the last song's photo isn't free"],
     [{ extraPhotos: Array.from({ length: 5 }, (_, i) => ({ photo: `test/e${i}.jpg`, caption: 'x' })) }, [], 'Lydspor takes at most 4 extra photos'],
     [{ extraPhotos: [{ photo: 'test/e.jpg', caption: '' }, { photo: 'test/f.jpg', caption: 'x' }] }, [], 'Extra photo 1 needs a caption'],
@@ -198,12 +209,12 @@ describe('settings', () => {
   it("takes the bot's settings", () => {
     const config = parse(bot.settings!(['a', 'b', 'c']))
     expect(config.songs).toHaveLength(3)
-    expect(config.songs[0].inPhoto).toEqual(['b'])
+    expect(config.sitOut).toEqual([])
     expect(checkConfig(bot.settings!(['a', 'b'])).problems).toEqual([])
   })
 
   it('knows eight songs for a rehearsal of the night, and counts its right answers and one-letter slips on each', () => {
-    const { config, problems } = checkConfig(botSettings(['a', 'b'], 8))
+    const { config, problems } = checkConfig(botSettings(8))
     expect(problems).toEqual([])
     expect(config.songs).toHaveLength(8)
     expect(config.extraPhotos).toHaveLength(4)
@@ -227,7 +238,9 @@ describe('the deal and the prompts', () => {
     const { p } = startParty()
     const state = stateOf(p)
     expect([...state.wall].sort()).toEqual([0, 1, 2, 3, 4])
-    expect(state).toMatchObject({ phase: 'lobby', playedAt: [], picks: null, review: null, revealed: 0, credits: null })
+    expect(state).toMatchObject({ phase: 'lobby', playedAt: [], picks: null, review: null, revealed: 0, sitOut: [] })
+    expect(state).not.toHaveProperty('credits')
+    expect(state).not.toHaveProperty('inPhoto')
     expect(p.promptsOf(GAME)).toEqual([])
     expect(p.feed).toEqual([])
     expect(pub(p).wall.map((w) => w.path).sort()).toEqual(
@@ -523,10 +536,10 @@ describe('reveals', () => {
       // Guests with any answer at the lock: ids[3] typed only song 2's title, and still counts.
       scoring: 4,
     })
-    expect(viewOf(p, ids[0]).songs).toEqual([{ n: 1, points: 4, inPhoto: false, event: 'right', title: 'exact', singer: 'exact' }])
-    expect(viewOf(p, ids[1]).songs).toEqual([{ n: 1, points: 2, inPhoto: false, event: 'wrong', title: 'typo', singer: 'exact' }])
-    expect(viewOf(p, ids[2]).songs).toEqual([{ n: 1, points: 0, inPhoto: false, event: 'none', title: 'close', singer: 'wrong' }])
-    expect(viewOf(p, ids[3]).songs).toEqual([{ n: 1, points: 0, inPhoto: false, event: 'none', title: 'none', singer: 'none' }])
+    expect(viewOf(p, ids[0]).songs).toEqual([{ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact' }])
+    expect(viewOf(p, ids[1]).songs).toEqual([{ n: 1, points: 2, event: 'wrong', title: 'typo', singer: 'exact' }])
+    expect(viewOf(p, ids[2]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'close', singer: 'wrong' }])
+    expect(viewOf(p, ids[3]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none' }])
     expect(viewOf(p, ids[0])).toMatchObject({ points: 4, rank: 1 })
     expect(viewOf(p, ids[1])).toMatchObject({ points: 2, rank: 2 })
     expect(viewOf(p, ids[2])).toMatchObject({ points: 0, rank: null })
@@ -677,36 +690,35 @@ describe('scoring', () => {
     expect(viewOf(p, ids[0]).songs.map((s) => s.singer)).toEqual(['exact', 'exact'])
   })
 
-  it('scores a guest in a photo as their own average at the crown, and leaves them out of that song', () => {
-    const party = startParty(6)
+  it('scores a guest in a song\'s photo like everyone else: no own average, and the step that marked them is gone', () => {
+    // Settings saved when a song's photo named who was in it: read, and ignored.
+    const party = startParty(6, {}, [{ inPhoto: ['f1c7a000-0000-4000-8000-000000000001'] }])
     const { p, ids } = party
-    hostAct(p, { type: 'setInPhoto', index: 0, playerIds: [ids[0]] })
-    expect(hostAct(p, { type: 'setInPhoto', index: 0, playerIds: [ids[0]] }).kind).toBe('skip')
+    expect(hostAct(p, { type: 'setInPhoto', index: 0, playerIds: [ids[0]] })).toMatchObject({ kind: 'refuse', message: 'Unknown Lydspor step' })
     playAll(p)
-    // In the photo of song 1: their answers there are ignored.
     answer(p, 1, ids[0], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
     answer(p, 2, ids[0], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
     answer(p, 3, ids[0], 'Old Oak', 'Night Harbour', extraPhoto(p))
     answer(p, 1, ids[1], 'Paper Lanterns', null, null)
     lockNow(p)
     reveal(p, 0)
-    expect(pub(p).reveal).toMatchObject({ counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
-    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 0, inPhoto: true, event: 'right', title: 'exact', singer: 'exact' })
+    expect(pub(p).reveal).toMatchObject({ counts: { event: 1, title: 2, singer: 1 }, scoring: 2 })
+    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact' })
     reveal(p, 1)
-    expect(viewOf(p, ids[0])).toMatchObject({ points: 4, credit: 0 })
+    expect(viewOf(p, ids[0])).toMatchObject({ points: 8, rank: 1 })
     reveal(p, 2)
-    // Every song played is revealed: the own average counts now, on the phone and in the last top 5, as the crown will.
-    expect(viewOf(p, ids[0])).toMatchObject({ points: 4 + 1 + 3, credit: 3, rank: 1 })
+    // Song 3: "Old Oak" counts for the title (an extra answer), the singer and the photo are wrong.
+    expect(viewOf(p, ids[0])).toMatchObject({ points: 9, rank: 1 })
+    expect(viewOf(p, ids[0])).not.toHaveProperty('credit')
     hostAct(p, { type: 'standings', after: 3 })
     expect(pub(p).top).toEqual([
-      { playerId: ids[0], points: 8, credit: 3, rank: 1, gained: 5 },
-      { playerId: ids[1], points: 1, credit: 0, rank: 2, gained: 1 },
+      { playerId: ids[0], points: 9, rank: 1, gained: 9 },
+      { playerId: ids[1], points: 1, rank: 2, gained: 1 },
     ])
     hostAct(p, { type: 'crown' })
-    // Earned 5 over the 2 songs played: round(5 / 2 * 1) = 3 for the song in the photo.
-    expect(stateOf(p).credits).toEqual({ [ids[0]]: 3, [ids[1]]: 0 })
-    expect(viewOf(p, ids[0]).final).toEqual({ points: 8, credit: 3, place: 1, paid: Math.round((8 * 20) / 12) })
-    expect(p.game(GAME).scores).toEqual({ [ids[0]]: 13, [ids[1]]: 2 })
+    expect(stateOf(p)).not.toHaveProperty('credits')
+    expect(viewOf(p, ids[0]).final).toEqual({ points: 9, place: 1, paid: Math.round((9 * 20) / 12) })
+    expect(p.game(GAME).scores).toEqual({ [ids[0]]: 15, [ids[1]]: 2 })
     expect(p.game(GAME).winners).toEqual([ids[0]])
   })
 
@@ -757,13 +769,13 @@ describe('scoring', () => {
     expect(hostAct(p, { type: 'standings', after: 0 }).kind).toBe('skip')
     expect(hostAct(p, { type: 'standings', after: 1 }).kind).toBe('commit')
     expect(hostAct(p, { type: 'standings', after: 1 }).kind).toBe('skip')
-    expect(pub(p).top).toEqual([{ playerId: ids[0], points: 1, credit: 0, rank: 1, gained: 1 }])
+    expect(pub(p).top).toEqual([{ playerId: ids[0], points: 1, rank: 1, gained: 1 }])
     reveal(p, 1)
     reveal(p, 2)
     hostAct(p, { type: 'standings', after: 3 })
     expect(pub(p).top).toEqual([
-      { playerId: ids[0], points: 3, credit: 0, rank: 1, gained: 2 },
-      { playerId: ids[1], points: 2, credit: 0, rank: 2, gained: 2 },
+      { playerId: ids[0], points: 3, rank: 1, gained: 2 },
+      { playerId: ids[1], points: 2, rank: 2, gained: 2 },
     ])
   })
 })
@@ -808,8 +820,10 @@ describe('sitting out', () => {
   it('leaves them out of every count, ranking and payout, and their phone shows nothing to answer', () => {
     const { p, ids } = startParty(6, { sitOut: [] })
     expect(pub(p).playing).toBe(6)
-    expect(hostAct(p, { type: 'sitOut', playerIds: [ids[5], ids[4]] }).kind).toBe('commit')
-    expect(hostAct(p, { type: 'sitOut', playerIds: [ids[4], ids[5]] }).kind).toBe('skip')
+    // Typed names: case, accents and spaces never matter.
+    expect(hostAct(p, { type: 'sitOut', names: ['Guest 6', 'guest 5'] }).kind).toBe('commit')
+    expect(stateOf(p).sitOut).toEqual(['Guest 6', 'guest 5'])
+    expect(hostAct(p, { type: 'sitOut', names: ['GUEST 5', ' Guest  6 '] }).kind).toBe('skip')
     expect(pub(p).playing).toBe(4)
     playAll(p, 1)
     answer(p, 1, ids[5], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
@@ -817,21 +831,46 @@ describe('sitting out', () => {
     lockNow(p)
     reveal(p, 0)
     expect(pub(p).reveal).toMatchObject({ counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
-    expect(viewOf(p, ids[5])).toEqual({ sittingOut: true, mine: null, songs: [], points: 0, credit: 0, rank: null, final: null })
+    expect(viewOf(p, ids[5])).toEqual({ sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null })
     expect(pub(p).top.map((row) => row.playerId)).toEqual([ids[0]])
     // Taken off the list, they count from then on: their locked answers score.
-    hostAct(p, { type: 'sitOut', playerIds: [ids[4]] })
+    hostAct(p, { type: 'sitOut', names: ['Guest 5'] })
     expect(pub(p).reveal).toMatchObject({ counts: { event: 1, title: 2, singer: 1 }, scoring: 2 })
     hostAct(p, { type: 'crown' })
     expect(Object.keys(p.game(GAME).scores).sort()).toEqual([ids[0], ids[5]].sort())
-    expect(hostAct(p, { type: 'sitOut', playerIds: [] })).toMatchObject({ kind: 'refuse', code: 'not_running' })
+    expect(hostAct(p, { type: 'sitOut', names: [] })).toMatchObject({ kind: 'refuse', code: 'not_running' })
   })
 
-  it('starts from the settings list', () => {
+  it("starts from the settings list as names: a guest's id saved before names becomes their name, and an id on no list is dropped", () => {
+    const p = simulateParty({ games: [new SoundtrackGame()], players: 4 })
+    const ids = p.players.map((pl) => pl.id)
+    const gone = 'f1c7a000-0000-4000-8000-000000009999'
+    p.addGame(GAME, 'soundtrack', 'Lydspor', settings({ sitOut: [ids[0], ' guest 2', 'Quentin', gone] }))
+    expect(p.send(p.hostUser, { type: 'start', gameId: GAME }).kind).toBe('commit')
+    expect(stateOf(p).sitOut).toEqual(['Guest 1', 'guest 2', 'Quentin'])
+    expect(viewOf(p, ids[0]).sittingOut).toBe(true)
+    expect(viewOf(p, ids[1]).sittingOut).toBe(true)
+    expect(viewOf(p, ids[2]).sittingOut).toBe(false)
+    // A name nobody joined with changes nothing.
+    expect(pub(p).playing).toBe(2)
+    // A guest who joins later with that name sits out from then on.
+    const quentin = p.addPlayer('Quentin')
+    p.sync(GAME)
+    expect(viewOf(p, quentin.id)).toMatchObject({ sittingOut: true, songs: [] })
+    expect(pub(p).playing).toBe(2)
+    // A host page from before names sends ids: they still work, saved as names.
+    expect(hostAct(p, { type: 'sitOut', playerIds: [ids[2]] }).kind).toBe('commit')
+    expect(stateOf(p).sitOut).toEqual(['Guest 3'])
+    expect(pub(p).playing).toBe(4)
+  })
+
+  it('reads a round saved with ids in its sit out list: the player with that id sits out', () => {
     const { p, ids } = startParty(4)
-    hostAct(p, { type: 'sitOut', playerIds: [ids[0]] })
-    expect(stateOf(p).sitOut).toEqual([ids[0]])
-    expect(parse(settings({ sitOut: ['x', 'x', 'y'] })).sitOut).toEqual(['x', 'y'])
+    const saved = { ...stateOf(p), sitOut: [ids[3]] }
+    const info = testInfo(parse(settings()), ids, { players: p.players.map((pl) => ({ id: pl.id, name: pl.name, profile: {} })) })
+    expect(game.playerView(saved, ids[3], info).sittingOut).toBe(true)
+    expect(game.playerView(saved, ids[2], info).sittingOut).toBe(false)
+    expect(game.publicState(saved, info).playing).toBe(3)
   })
 })
 
@@ -857,7 +896,7 @@ describe('guests leaving and joining late', () => {
     // Someone who joins after the lock has no answers: their phone shows each revealed song as no answer.
     const later = p.addPlayer('After the lock')
     p.sync(GAME)
-    expect(viewOf(p, later.id).songs).toEqual([{ n: 1, points: 0, inPhoto: false, event: 'none', title: 'none', singer: 'none' }])
+    expect(viewOf(p, later.id).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none' }])
     hostAct(p, { type: 'crown' })
     expect(Object.keys(p.game(GAME).scores)).toEqual([late.id])
   })
@@ -883,9 +922,10 @@ describe('a guest who leaves after the lock', () => {
   })
 })
 
-// The guest list (docs/guest-list.md, 9.3): "Doesn't play this game" and who is
-// in a photo may name guests the host listed who haven't joined. Only the
-// guests here answer and score; a name freed and taken again starts with nothing.
+// The guest list (docs/guest-list.md, 9.3): "Doesn't play this game" is typed
+// names, which may be of guests the host listed who haven't joined, and was
+// their ids before names. Only the guests here answer and score; a name freed
+// and taken again starts with nothing.
 
 describe('guests on the list who are not here', () => {
   /** A party of `players` with Zelda, Ulrik, Quentin and Ximena listed and not joined, Lydspor set up from `make`. */
@@ -903,38 +943,38 @@ describe('guests on the list who are not here', () => {
     return { p, ids, listed }
   }
 
-  it('sits a listed guest out from the moment they join, puts one in a photo once they join, and lets the ones who never come change nothing', () => {
+  it('sits a listed guest out by name from the moment they join, reads ids saved before names, and lets the ones who never come change nothing', () => {
+    // Saved before names: the listed guests' ids, and who was in each photo (ignored now).
     const { p, ids, listed } = listedParty(4, (g, ids) =>
       settings({ sitOut: [g.ulrik, g.ximena] }, [{ inPhoto: [g.zelda] }, { inPhoto: [g.quentin, ids[0]] }]),
     )
-    expect(stateOf(p).sitOut).toEqual([listed.ulrik, listed.ximena])
-    expect(stateOf(p).inPhoto).toEqual([[listed.zelda], [listed.quentin, ids[0]], []])
+    expect(stateOf(p).sitOut).toEqual(['Ulrik', 'Ximena'])
+    expect(stateOf(p)).not.toHaveProperty('inPhoto')
     // Only the guests here count: nobody listed is in the room's numbers.
     expect(pub(p).playing).toBe(4)
     playAll(p, 2)
-    p.claimGuest(listed.zelda) // in song 1's photo
-    p.claimGuest(listed.ximena) // sits out
+    p.claimGuest(listed.zelda)
+    p.claimGuest(listed.ximena) // sits out, by her name
     p.sync(GAME)
     expect(pub(p).playing).toBe(5)
     expect(viewOf(p, listed.ximena)).toMatchObject({ sittingOut: true, songs: [] })
     expect(viewOf(p, listed.zelda)).toMatchObject({ sittingOut: false, mine: null })
-    answer(p, 1, listed.zelda, 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1)) // her own photo: scores nothing on it
+    answer(p, 1, listed.zelda, 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1)) // her own photo: scores like anyone's
     answer(p, 2, listed.zelda, 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
     answer(p, 1, listed.ximena, 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1)) // sits out: scores nothing
     answer(p, 1, ids[1], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
     answer(p, 2, ids[1], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
-    answer(p, 2, ids[0], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2)) // in song 2's photo
+    answer(p, 2, ids[0], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
     lockNow(p)
     reveal(p, 0)
-    expect(pub(p).reveal).toMatchObject({ n: 1, counts: { event: 1, title: 1, singer: 1 }, scoring: 2 })
-    expect(viewOf(p, listed.zelda).songs[0]).toMatchObject({ inPhoto: true, points: 0 })
+    expect(pub(p).reveal).toMatchObject({ n: 1, counts: { event: 2, title: 2, singer: 2 }, scoring: 3 })
+    expect(viewOf(p, listed.zelda).songs[0]).toMatchObject({ points: 4 })
     reveal(p, 1)
-    // Quentin never came; Ana (ids[0]) is in song 2's photo with him: the song still counts as hers.
-    expect(pub(p).reveal).toMatchObject({ n: 2, counts: { event: 2, title: 2, singer: 2 }, scoring: 2 })
-    expect(viewOf(p, ids[0]).songs[1]).toMatchObject({ inPhoto: true, points: 0 })
+    expect(pub(p).reveal).toMatchObject({ n: 2, counts: { event: 3, title: 3, singer: 3 }, scoring: 3 })
+    expect(viewOf(p, ids[0]).songs[1]).toMatchObject({ points: 4 })
     hostAct(p, { type: 'crown' })
     const scores = p.game(GAME).scores
-    expect(Object.keys(scores).sort()).toEqual([ids[1], listed.zelda].sort())
+    expect(Object.keys(scores).sort()).toEqual([ids[0], ids[1], listed.zelda].sort())
     for (const id of [listed.ulrik, listed.quentin, listed.ximena]) expect(scores).not.toHaveProperty(id)
     // Nothing about a listed guest reaches the room: not in the public state, not a view of their own.
     const room = JSON.stringify(pub(p))
@@ -942,6 +982,7 @@ describe('guests on the list who are not here', () => {
       expect(room).not.toContain(id)
       expect(p.game(GAME).views).not.toHaveProperty(id)
     }
+    expect(room).not.toContain('Ulrik')
   })
 
   it('gives a freed name taken again nothing from the round: no picks, no review rows, no points', () => {
@@ -949,7 +990,7 @@ describe('guests on the list who are not here', () => {
     const ids = p.players.map((pl) => pl.id)
     const zelda = p.listGuest('Zelda')
     p.claimGuest(zelda.id)
-    p.addGame(GAME, 'soundtrack', 'Lydspor', settings({ sitOut: [] }, [{ inPhoto: [zelda.id] }]))
+    p.addGame(GAME, 'soundtrack', 'Lydspor', settings({ sitOut: ['Bodil'] }))
     p.send(p.hostUser, { type: 'start', gameId: GAME })
     playAll(p)
     answer(p, 2, zelda.id, 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
@@ -969,8 +1010,8 @@ describe('guests on the list who are not here', () => {
     // A row only she typed went with her: Coldwave, and all of song 3.
     expect(review[1].singer).toEqual([])
     expect(review[2]).toEqual({ title: [], singer: [] })
-    // The listed guest is still in song 1's photo: the id names her, not the phone.
-    expect(stateOf(p).inPhoto[0]).toEqual([zelda.id])
+    // Who sits out is names: freeing and taking a name changes nothing in it.
+    expect(stateOf(p).sitOut).toEqual(['Bodil'])
     reveal(p, 0)
     reveal(p, 1)
     expect(pub(p).reveal).toMatchObject({ n: 2, counts: { event: 0, title: 1, singer: 0 }, scoring: 1 })
@@ -981,11 +1022,9 @@ describe('guests on the list who are not here', () => {
     expect(p.game(GAME).winners).toEqual([ids[0]])
   })
 
-  it("drops a leaver's picks, review rows, top 5 points and own average, and keeps who sits out and who is in a photo", () => {
+  it("drops a leaver's picks, review rows and top 5 points, and keeps who sits out", () => {
     const { p, ids } = lockedParty(
       (p, ids) => {
-        // In song 2's photo, so her own average comes at the crown.
-        hostAct(p, { type: 'setInPhoto', index: 1, playerIds: [ids[0]] })
         answer(p, 1, ids[0], 'Paper Lanterns', 'Mira Holm', rightPhoto(p, 1))
         answer(p, 1, ids[1], 'Paper Lantern', 'Mira', rightPhoto(p, 1))
         answer(p, 2, ids[1], 'Seven Ferries', 'Coldwave', rightPhoto(p, 2))
@@ -999,28 +1038,24 @@ describe('guests on the list who are not here', () => {
     hostAct(p, { type: 'crown' })
     const done = stateOf(p)
     expect(done.shownTop).toHaveProperty(ids[0])
-    expect(done.credits).toHaveProperty(ids[0])
-    const sat = { ...done, sitOut: [ids[0]] }
+    const sat = { ...done, sitOut: ['Guest 1'] }
     const left = game.onPlayerLeave(sat, ids[0])
     expect(left.picks).not.toHaveProperty(ids[0])
     expect(left.shownTop).not.toHaveProperty(ids[0])
-    expect(left.credits).not.toHaveProperty(ids[0])
     const rows = left.review!.flatMap((song) => [...song.title, ...song.singer])
     expect(rows.flatMap((row) => row.players)).not.toContain(ids[0])
     expect(rows.every((row) => row.players.length > 0)).toBe(true)
     // "Paper Lanterns" and "Mira Holm" were only hers; "Paper Lantern" and "Mira" stay with Bo.
     expect(left.review![0].title.map((row) => row.text)).toEqual(['Paper Lantern'])
-    expect(left.sitOut).toEqual([ids[0]])
-    expect(left.inPhoto).toEqual(done.inPhoto)
+    expect(left.sitOut).toEqual(['Guest 1'])
     // Someone with nothing in the round changes nothing.
     expect(game.onPlayerLeave(done, 'never-here')).toBe(done)
   })
 })
 
 describe('secrets', () => {
-  it('never puts an unrevealed title, singer or caption, a typed answer or who is in a photo in public', () => {
-    const { p, ids } = startParty(6, {}, [{ inPhoto: [] }])
-    hostAct(p, { type: 'setInPhoto', index: 1, playerIds: [ids[5]] })
+  it('never puts an unrevealed title, singer or caption, a typed answer or who sits out in public', () => {
+    const { p, ids } = startParty(6, { sitOut: ['Bodil Sørensen'] }, [{ inPhoto: ['f1c7a000-0000-4000-8000-000000000001'] }])
     const secret = (from: number) => SONGS.slice(from).flatMap((s) => [s.title, s.singer, s.caption, ...s.alsoTitles, ...s.alsoSingers])
     const typed = ['Papir Lanterner', 'Sevn Ferries', 'Holm Mira', 'Old Oack']
     const check = (revealed: number) => {
@@ -1028,6 +1063,7 @@ describe('secrets', () => {
       for (const word of secret(revealed)) expect(text, word).not.toContain(word)
       for (const word of typed) expect(text, word).not.toContain(word)
       expect(text).not.toContain('inPhoto')
+      expect(text).not.toContain('Bodil')
       expect(text).not.toContain('also')
       // Phones see their own answers only.
       for (const id of ids.slice(1)) {
@@ -1065,10 +1101,13 @@ describe('host actions from the page', () => {
     for (const input of [null, {}, { type: 'play' }, { type: 'play', index: -1 }, { type: 'accept', index: 0, part: 'event', key: 'x', accepted: true }]) {
       expect(() => game.parseHostAction(input)).toThrow(GameError)
     }
-    expect(() => game.parseHostAction({ type: 'setInPhoto', index: 0, playerIds: Array.from({ length: 11 }, (_, i) => `p${i}`) })).toThrow(
-      'At most 10 people in a photo',
-    )
-    expect(game.parseHostAction({ type: 'sitOut', playerIds: ['a', 'a', 'b'] })).toEqual({ type: 'sitOut', playerIds: ['a', 'b'] })
+    // Who is in a photo is no step any more.
+    expect(() => game.parseHostAction({ type: 'setInPhoto', index: 0, playerIds: ['p1'] })).toThrow('Unknown Lydspor step')
+    // Names, each once whatever their case and spaces; a host page from before names sends ids, read the same way.
+    expect(game.parseHostAction({ type: 'sitOut', names: ['Ana', ' ana ', 'Bo  Holm'] })).toEqual({ type: 'sitOut', names: ['Ana', 'Bo Holm'] })
+    expect(game.parseHostAction({ type: 'sitOut', playerIds: ['a', 'a', 'b'] })).toEqual({ type: 'sitOut', names: ['a', 'b'] })
+    expect(() => game.parseHostAction({ type: 'sitOut', names: ['x'.repeat(41)] })).toThrow('Names are at most 40 characters')
+    expect(() => game.parseHostAction({ type: 'sitOut', names: [7] })).toThrow('Unknown Lydspor step')
     expect(game.parseHostAction({ type: 'accept', index: 2, part: 'singer', key: 'miraholm', accepted: false })).toEqual({
       type: 'accept',
       index: 2,
@@ -1078,9 +1117,9 @@ describe('host actions from the page', () => {
     })
   })
 
-  it('refuses who is in a photo for a song that is not there', () => {
+  it('refuses who is in a photo, the step that is gone, for any song', () => {
     const { p } = startParty()
-    expect(hostAct(p, { type: 'setInPhoto', index: 5, playerIds: [] })).toMatchObject({ kind: 'refuse', message: 'There is no such song' })
+    expect(hostAct(p, { type: 'setInPhoto', index: 5, playerIds: [] })).toMatchObject({ kind: 'refuse', message: 'Unknown Lydspor step' })
   })
 })
 
@@ -1112,11 +1151,10 @@ describe('recap', () => {
 
 describe('the contract', () => {
   it('keeps its contract over an example with typed answers, a swap, a join, a leave and an accept', () => {
-    const roster = simulateParty({ games: [game], players: 4 }).players.map((pl) => pl.id)
     const text = (n: number, part: TypedPart, player: number, value: string) =>
       ({ kind: 'answer', player, key: promptKey(n, part), answer: { text: value } satisfies AnswerPayload }) as const
     const example: ContractExample = {
-      config: settings({}, [{ inPhoto: [roster[1]] }]),
+      config: settings({ sitOut: ['Guest 2'] }),
       players: 4,
       steps: [
         { kind: 'host', action: { type: 'play', index: 0 } },
@@ -1142,7 +1180,7 @@ describe('the contract', () => {
         { kind: 'host', action: { type: 'accept', index: 0, part: 'title', key: 'papirlanterner', accepted: true } },
         { kind: 'host', action: { type: 'standings', after: 1 } },
         { kind: 'host', action: { type: 'reveal', index: 1 } },
-        { kind: 'host', action: { type: 'setInPhoto', index: 2, playerIds: [roster[2]] } },
+        { kind: 'host', action: { type: 'sitOut', names: ['guest 2', 'Guest 3'] } },
         { kind: 'host', action: { type: 'reveal', index: 2 } },
         { kind: 'host', action: { type: 'crown' } },
       ],
@@ -1206,9 +1244,9 @@ describe('the contract', () => {
     expect(accepts).toBeGreaterThan(0)
     expect(final.winners.length).toBeGreaterThan(0)
     expect(Math.max(...Object.values(final.scores))).toBeLessThanOrEqual(20)
-    // Every guest typed and placed something; the photo guest's song is their own average.
+    // Every guest typed and placed something, and everyone who scored is paid.
     expect(Object.keys(stateOf(p).picks!)).toHaveLength(24)
-    expect(stateOf(p).credits![ids[1]]).toBeGreaterThanOrEqual(0)
+    expect(Object.keys(final.scores).every((id) => ids.includes(id))).toBe(true)
   })
 })
 

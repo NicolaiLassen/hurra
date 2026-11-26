@@ -19,7 +19,7 @@ import {
 } from './shapes'
 
 /** Which icon a step wears; the view maps it to Phosphor's. */
-export type StepIcon = 'play' | 'wall' | 'ask' | 'reveal' | 'crown'
+export type StepIcon = 'wall' | 'ask' | 'reveal' | 'crown'
 
 /** What a step asks before it goes. */
 export type HostConfirm = { title: string; description: string; cancel: string; action: string }
@@ -50,21 +50,18 @@ const NONE: HostSteps = { main: null, extra: [], line: null, confirm: null }
 /** The phase as a word on a chip. */
 export const PHASE_CHIP: Record<FusionPhase, string> = {
   lobby: 'Ready',
-  showing: 'Showing',
   wall: 'The wall',
   asking: 'Guessing',
   reveal: 'Revealed',
   done: 'Over',
 }
 
-/** The title line beside the chip: "12 pictures", "Showing 3 of 12", "4 of 12 revealed", "Picture 5 of 12: #5". */
-export function headline(pub: FusionPublicState, now: number): string {
+/** The title line beside the chip: "12 pictures", "4 of 12 revealed", "Picture 5 of 12: #5". */
+export function headline(pub: FusionPublicState): string {
   const total = pub.pictures.length
   switch (pub.phase) {
     case 'lobby':
       return plural(total, 'picture')
-    case 'showing':
-      return strapWords(pub, now)
     case 'wall':
       return revealedCount(pub) > 0 ? strapWords(pub) : plural(total, 'picture')
     case 'asking':
@@ -87,13 +84,12 @@ export function nextToAsk(pub: FusionPublicState, state: Pick<FusionState, 'key'
   return unasked(pub).find((p) => state?.key?.[p.n] !== undefined) ?? null
 }
 
-/** Whether a picture can be asked from this phase: lobby, showing, wall or reveal. */
-export const canAsk = (phase: FusionPhase) => phase === 'lobby' || phase === 'showing' || phase === 'wall' || phase === 'reveal'
+/** Whether a picture can be asked from this phase: lobby, wall or reveal. */
+export const canAsk = (phase: FusionPhase) => phase === 'lobby' || phase === 'wall' || phase === 'reveal'
 
-/** Everyone in the party who may lock in on the picture being asked: all but the two in it. Exact, for the host only. */
-export function mayVote(state: Pick<FusionState, 'key'> | null, n: number, players: readonly { id: PlayerId }[]): number {
-  const inIt: readonly PlayerId[] = state?.key?.[n] ?? []
-  return players.filter((p) => !inIt.includes(p.id)).length
+/** Everyone in the party may lock in on the picture being asked, the two in it too. */
+export function mayVote(players: readonly { id: PlayerId }[]): number {
+  return players.length
 }
 
 /** The crown's confirmation, when it leaves `left` pictures unasked. */
@@ -138,19 +134,15 @@ export function hostSteps(
   })
 
   switch (pub.phase) {
-    case 'lobby':
+    case 'lobby': {
+      const main = ask('Ask ')
+      const wall: HostStep = { label: 'Show the wall first', icon: 'wall', action: { type: 'wall', from: 'lobby' } }
       return {
-        main: { label: 'Start the showing', icon: 'play', action: { type: 'show' } },
-        extra: [{ label: 'Skip the showing: go to the wall', icon: 'wall', action: { type: 'wall', from: 'lobby' } }],
-        line: `Start when the room is looking at the TV. Each picture shows for ${pub.rules.showSeconds} s, then all of them.`,
-        confirm,
-      }
-    case 'showing': {
-      const wallIn = pub.showing ? secondsTo(pub.showing.endsAt, now) : 0
-      return {
-        main: { label: 'Skip to the wall', icon: 'wall', action: { type: 'wall', from: 'showing' } },
-        extra: [],
-        line: wallIn > 0 ? `The wall follows by itself in ${wallIn} s.` : 'The wall is coming up.',
+        main,
+        extra: [wall],
+        line: main
+          ? 'Ask when the room is looking at the TV: it picks the picture with a little suspense, then the guessing starts.'
+          : "No picture has its two people yet. Type them with Show who, then ask.",
         confirm,
       }
     }
@@ -178,16 +170,18 @@ export function hostSteps(
       const current = pub.current!
       const key = current.key || pictureKey(current.n)
       const locked = tallies[key] ?? 0
-      const voters = mayVote(state, current.n, players)
+      const voters = mayVote(players)
       return {
         main: { label: 'Reveal now', icon: 'reveal', action: { type: 'reveal', n: current.n }, close: [key] },
         extra: [],
         line:
-          now >= current.endsAt
-            ? "Time's up. Tap Reveal now if the reveal doesn't come."
-            : voters > 0 && locked >= voters
-              ? 'Everyone has locked in. Reveal now.'
-              : `${locked} of ${voters} have locked in. It reveals by itself when time's up.`,
+          now < current.startsAt
+            ? 'The TV is picking the picture. The guessing starts in a moment.'
+            : now >= current.endsAt
+              ? "Time's up. Tap Reveal now if the reveal doesn't come."
+              : voters > 0 && locked >= voters
+                ? 'Everyone has locked in. Reveal now.'
+                : `${locked} of ${voters} have locked in. It reveals by itself when time's up.`,
         confirm: null,
       }
     }

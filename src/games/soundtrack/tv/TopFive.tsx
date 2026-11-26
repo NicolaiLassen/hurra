@@ -14,16 +14,15 @@ const EASE_OUT = [0.22, 1, 0.36, 1] as const
  * Lydspor's top 5 after every few reveals, in the standings' style (spec
  * section 9): solid raised rows, the leader's rank and points gold and
  * everyone else's paper, the points since the last top 5 on an overlay chip.
- * After the last reveal the points count each own average, as the crown
- * will, with "+3 own photo" on its own chip; and "These had no song" beside
- * it: the photos that fit no song, with their captions.
+ * After the last reveal, "These had no song" beside it: the photos that fit
+ * no song, with their captions.
  */
 export default function TopFive({ pub, players, mediaUrl }: { pub: SoundtrackPublicState; players: Player[]; mediaUrl: TvViewProps['mediaUrl'] }) {
   const reduce = useReducedMotion()
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? 'A guest'
   const extras = pub.extras && pub.extras.length > 0 ? pub.extras : null
   // At the first top 5 every gain is the whole score: the chips would only repeat it.
-  const gains = pub.top.some((row) => row.gained !== row.points - row.credit)
+  const gains = pub.top.some((row) => row.gained !== row.points)
 
   return (
     <div className="flex min-h-0 flex-1 gap-[4.5%] short:gap-[4%]">
@@ -58,12 +57,6 @@ export default function TopFive({ pub, players, mediaUrl }: { pub: SoundtrackPub
                   {gains && row.gained > 0 && (
                     <span className="shrink-0 rounded-chip bg-overlay px-3.5 py-1 tv-num text-tv-field text-paper-2 short:text-tv-tab low:px-2.5 low:py-0.5 low:text-tv-floor">
                       +{row.gained}
-                    </span>
-                  )}
-                  {/* After the last reveal: the own average for a photo they are in, counted as the crown will. */}
-                  {row.credit > 0 && (
-                    <span className="shrink-0 rounded-chip bg-overlay px-3.5 py-1 text-tv-field font-bold whitespace-nowrap text-paper-2 short:text-tv-tab low:px-2.5 low:py-0.5 low:text-tv-floor">
-                      <span className="tv-num">+{row.credit}</span> own photo
                     </span>
                   )}
                   <span

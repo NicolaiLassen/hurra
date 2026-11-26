@@ -45,8 +45,8 @@ const PIP_TILTS = ['-rotate-3', 'rotate-2', '-rotate-1', 'rotate-3', '-rotate-2'
 
 /**
  * Tilted paper squares, `filled` of `total` filled and the rest a `rule`
- * outline, shrinking to fit one row (the quiz's pips): the showing's pictures,
- * or the guests who have locked in. Counts only, never names.
+ * outline, shrinking to fit one row (the quiz's pips): the guests who have
+ * locked in. Counts only, never names.
  */
 export function Pips({ filled, total, label, className }: { filled: number; total: number; label: string; className?: string }) {
   const pips = Math.max(total, filled)

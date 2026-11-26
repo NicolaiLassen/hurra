@@ -42,13 +42,13 @@ describe("the host's review of a revealed song", () => {
   })
 
   it('keeps in each row only the guests it can score for, and drops a row with none left', () => {
-    const [sofie, freja] = ['p3', 'p7']
-    // Sofie sits out now, and Freja is in the photo: the close title counts for one guest only, the close singer for nobody.
-    const state: SoundtrackState = { ...sample.state, sitOut: [...sample.state.sitOut, sofie], inPhoto: sample.state.inPhoto.map((ids, i) => (i === 0 ? [...ids, freja] : ids)) }
+    const sofie = 'p3'
+    // Sofie and Freja sit out now, by name as the host typed them: the close title counts for one guest only, the close singer for nobody.
+    const state: SoundtrackState = { ...sample.state, sitOut: [...sample.state.sitOut, ' sofie', 'FREJA'] }
     const changed = songReview(state, sample.config, cast.players, 0)!
     expect(changed.title.close.find((row) => row.text === 'Papir Lanterner')!.players).toEqual(['p9'])
     expect(changed.singer.close.map((row) => row.text)).not.toContain('Myra Holmes')
-    expect(scoringOn(state, cast.players, 0).has(sofie)).toBe(false)
+    expect(scoringOn(state, cast.players).has(sofie)).toBe(false)
     expect(changed.of).toBe(review.of - 2)
   })
 

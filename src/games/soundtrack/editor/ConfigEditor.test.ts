@@ -64,23 +64,24 @@ describe("Lydspor's settings editor", () => {
     expect(gold(html)).toBe(0)
   })
 
-  it('names guests on the list who have not joined in a photo and among those who sit out, marked not here yet', async () => {
+  it("takes typed names for who sits out, shows an id saved before names as its guest's name, and asks nothing about who is in a photo", async () => {
     const host = fixtureSnapshot('lobby', 'host')
     const guests = guestsOf(host)
-    const zelda = guests.find((g) => g.name === FIXTURE_EXPECTED_NAMES[0])!
     const ulrik = guests.find((g) => g.name === FIXTURE_EXPECTED_NAMES[3])!
     const ana = guests.find((g) => g.name === 'Ana')!
-    expect([zelda.joined, ulrik.joined, ana.joined]).toEqual([false, false, true])
+    expect([ulrik.joined, ana.joined]).toEqual([false, true])
     const settings = sampleSettings({ players: host.players })
-    settings.songs[0] = { ...settings.songs[0], inPhoto: [ana.id, zelda.id] }
-    settings.sitOut = [ulrik.id]
+    // Saved before 26 November: who was in song 1's photo (ignored now), and Ulrik by his id.
+    settings.songs[0] = { ...settings.songs[0], ...{ inPhoto: [ana.id] } }
+    settings.sitOut = [ulrik.id, 'Ana', 'Bodil']
     const shown = text(await render(ConfigEditor as ComponentType<never>, editorProps(settings)))
-    // Each chip: the token (which names its guest too), the name and the mark; Ana joined, so none on hers.
-    expect(shown).toContain("Who's in this photo Ana Ana Zelda Zelda (not here yet) Add someone")
-    expect(shown).toContain("Doesn't play this game Ulrik Ulrik (not here yet) Add someone")
+    // Each chip: the token (which names its guest too), the name and how it stands: Ana joined, Ulrik is listed, Bodil nowhere yet.
+    expect(shown).toContain("Doesn't play this game Ulrik Ulrik (not here yet) Ana Ana Bodil Bodil (not on the list) Add someone")
+    expect(shown).not.toContain("Who's in this photo")
+    expect(shown).not.toContain('own average')
     expect(shown).not.toContain('A guest who left')
-    // With nobody on the list yet, the pickers say how to get names in.
-    const empty = text(await render(ConfigEditor as ComponentType<never>, { ...editorProps(settings), guests: [] }))
-    expect(empty).toContain('Add guests to the guest list, or wait for them to join.')
+    // With nobody on the list and nobody here yet, names can still be typed: each is on no list, and an old id names nobody.
+    const empty = text(await render(ConfigEditor as ComponentType<never>, { ...editorProps(settings), guests: [], players: [] }))
+    expect(empty).toContain("Doesn't play this game A guest who left Ana Ana (not on the list) Bodil Bodil (not on the list) Add someone")
   })
 })

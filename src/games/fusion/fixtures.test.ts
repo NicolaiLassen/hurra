@@ -3,7 +3,7 @@
 // readers. Here, beside the game, so the core's tests never import a game.
 import { describe, expect, it } from 'vitest'
 import { readPublic, readView, type FusionPublicState } from '@/games/fusion/shapes'
-import { FIXTURE_EXPECTED_NAMES, FIXTURE_NOW, fixtureSnapshot, FUSION_STAGE_SCENES, type FusionStageScene } from '@/lib/fixtures'
+import { FIXTURE_NOW, fixtureSnapshot, FUSION_STAGE_SCENES, type FusionStageScene } from '@/lib/fixtures'
 import { backgroundGames, phoneLayout, tvScene } from '@/lib/stage'
 
 describe('Participant fusion on the stage', () => {
@@ -24,14 +24,18 @@ describe('Participant fusion on the stage', () => {
     }
   })
 
-  it('names the guests on the list who have not joined, by id and name only, on every screen', () => {
+  it('offers the names to guess with each picture’s guess, everyone here and the names in the pictures, and lists no one expected', () => {
     for (const scene of FUSION_STAGE_SCENES) {
-      for (const screen of ['phone', 'tv', 'host'] as const) {
-        const { pub } = fusionOf(scene, screen)
-        expect(pub.expected.map((g) => g.name), scene).toEqual([...FIXTURE_EXPECTED_NAMES])
-        for (const guest of pub.expected) expect(Object.keys(guest)).toEqual(['id', 'name'])
-      }
+      for (const screen of ['phone', 'tv', 'host'] as const) expect(fusionOf(scene, screen).pub, scene).not.toHaveProperty('expected')
     }
+    const { s, game } = fusionOf('fusion-asking', 'phone')
+    const spec = s.prompts.find((p) => p.game_id === game.id && p.key === 'p4')!.spec
+    expect(spec).toMatchObject({ kind: 'choice', min: 2, max: 2, final: true })
+    const options = (spec as unknown as { options: string[] }).options
+    // Zelda is on the guest list and in #3; Tilde on no list, in #7; Quentin, listed in no picture, is not offered.
+    expect(options).toEqual(expect.arrayContaining(['Ana', 'Sofie', 'Zelda', 'Tilde']))
+    expect(options).not.toContain('Quentin')
+    expect(new Set(options).size).toBe(options.length)
   })
 
   it('keeps who is in a picture off the TV and the phones until its reveal', () => {
@@ -41,13 +45,30 @@ describe('Participant fusion on the stage', () => {
         const { s, pub, game } = fusionOf(scene, screen)
         expect(s.states).toBeNull()
         for (const picture of pub.pictures) {
-          if (picture.revealed) expect(picture.revealed.people, scene).toEqual(state.key[picture.n])
+          if (picture.revealed) expect(picture.revealed.names, scene).toEqual(state.key[picture.n])
           else expect(JSON.stringify(picture), scene).not.toMatch(/people|names/)
         }
-        // A view says only whether its own guest is in the picture.
-        if (screen === 'phone') expect(Object.keys(s.me!.views[game.id] as object)).toEqual(['points', 'rank', 'hits', 'inPicture'])
+        // A view says nothing about who is in a picture: points, place and hits.
+        if (screen === 'phone') expect(Object.keys(s.me!.views[game.id] as object)).toEqual(['points', 'rank', 'hits'])
       }
     }
+  })
+
+  it("keeps each picture's image off the TV and the phones until it is asked: placeholders till then", () => {
+    for (const scene of FUSION_STAGE_SCENES) {
+      for (const screen of ['phone', 'tv'] as const) {
+        const { s, pub } = fusionOf(scene, screen)
+        for (const picture of pub.pictures) {
+          const asked = picture.revealed !== null || pub.current?.n === picture.n
+          expect(picture.asked, `${scene} #${picture.n}`).toBe(asked)
+          expect(picture.image, `${scene} #${picture.n}`).toBe(asked ? `fixture/fusion-${picture.n}.jpg` : null)
+        }
+        const unasked = pub.pictures.filter((p) => !p.asked).map((p) => `fixture/fusion-${p.n}.jpg`)
+        const text = JSON.stringify(s)
+        for (const path of unasked) expect(text, scene).not.toContain(`"${path}"`)
+      }
+    }
+    expect(fusionOf('fusion-start').pub.pictures.every((p) => !p.asked)).toBe(true)
   })
 
   it("keeps the two people's own photos off the TV and the phones until their picture's reveal", () => {
@@ -79,12 +100,14 @@ describe('Participant fusion on the stage', () => {
     expect(phoneLayout(fixtureSnapshot('fusion-final', 'phone'), FIXTURE_NOW).main.kind).toBe('result')
   })
 
-  it('has 2, 12 and 40 pictures, each with a sample image', () => {
-    for (const [scene, count] of [['fusion-wall-2', 2], ['fusion-wall', 12], ['fusion-wall-40', 40]] as const) {
+  it('has 2, 8, 12 and 40 pictures, each with a sample image in the settings, shown once asked', () => {
+    for (const [scene, count] of [['fusion-wall-2', 2], ['fusion-wall-8', 8], ['fusion-wall', 12], ['fusion-wall-40', 40]] as const) {
       const { pub } = fusionOf(scene)
       expect(pub.pictures).toHaveLength(count)
-      expect(pub.pictures.every((p) => p.image === `fixture/fusion-${p.n}.jpg`)).toBe(true)
-      expect(hostState(scene).config.pictures).toHaveLength(count)
+      expect(pub.pictures.filter((p) => p.asked).every((p) => p.image === `fixture/fusion-${p.n}.jpg`)).toBe(true)
+      const settings = hostState(scene).config.pictures as { image: string }[]
+      expect(settings).toHaveLength(count)
+      expect(settings.every((p, i) => p.image === `fixture/fusion-${i + 1}.jpg`)).toBe(true)
     }
   })
 
@@ -98,41 +121,47 @@ describe('Participant fusion on the stage', () => {
 
     // The lobby, a minute in; two of the party's 12 still wait for their people.
     const lobby = at('fusion-lobby')
-    expect(lobby.pub).toMatchObject({ phase: 'lobby', showing: null, current: null, top: [] })
+    expect(lobby.pub).toMatchObject({ phase: 'lobby', current: null, top: [] })
     expect(lobby.s.session!.spotlight_at).toBe(FIXTURE_NOW - 60_000)
     expect(Object.keys(hostState('fusion-lobby').state.key)).toHaveLength(10)
 
-    // The showing on its third picture (its second of two), the wall due at its end.
-    for (const [scene, onShow] of [['fusion-showing', 2], ['fusion-showing-2', 1], ['fusion-showing-40', 2]] as const) {
-      const { pub, game } = at(scene)
-      expect(Math.floor((FIXTURE_NOW - pub.showing!.startedAt) / 6000), scene).toBe(onShow)
-      expect(game.wake_at).toBe(pub.showing!.endsAt)
+    // The first wall, before any picture is asked: every one a placeholder.
+    for (const [scene, count] of [['fusion-start', 12], ['fusion-start-2', 2], ['fusion-start-8', 8]] as const) {
+      const { pub } = at(scene)
+      expect(pub, scene).toMatchObject({ phase: 'wall', current: null })
+      expect(pub.pictures.filter((p) => !p.asked)).toHaveLength(count)
     }
 
     // The wall: 3 revealed (1 of 2, 15 of 40); Sofie got both on #1, one on #2, none on #3.
     expect(revealed(at('fusion-wall').pub)).toEqual([1, 2, 3])
     expect(revealed(at('fusion-wall-2').pub)).toEqual([1])
+    expect(revealed(at('fusion-wall-8').pub)).toEqual([1, 2, 3])
     expect(revealed(at('fusion-wall-40').pub)).toHaveLength(15)
-    expect(sofie('fusion-wall').view).toMatchObject({ points: 4, hits: { 1: 2, 2: 1, 3: 0 }, inPicture: false })
+    expect(sofie('fusion-wall').view).toEqual({ points: 4, rank: expect.any(Number), hits: { 1: 2, 2: 1, 3: 0 } })
+
+    // The suspense: #4 asked 3 s after the scene's clock starts, its countdown after the TV's suspense.
+    for (const [scene, n] of [['fusion-hop', 4], ['fusion-hop-2', 2], ['fusion-hop-8', 4]] as const) {
+      const { pub } = at(scene)
+      expect(pub.current, scene).toMatchObject({ n, openedAt: FIXTURE_NOW + 3_000, startsAt: FIXTURE_NOW + 5_800, endsAt: FIXTURE_NOW + 35_800 })
+      expect(sofie(scene).tallies).toEqual({})
+    }
 
     // Asking: #4 (#2, #16), 18 s left, 7 locked in, Sofie not yet.
     for (const [scene, n] of [['fusion-asking', 4], ['fusion-asking-2', 2], ['fusion-asking-40', 16]] as const) {
       const { pub, game } = at(scene)
       expect(pub.current, scene).toMatchObject({ n, key: `p${n}`, endsAt: FIXTURE_NOW + 18_000, revealedAt: null })
+      expect(pub.current!.startsAt - pub.current!.openedAt).toBe(2_800)
       expect(pub.current!.step).toBe(revealed(pub).length + 1)
       expect(game.wake_at).toBe(FIXTURE_NOW + 18_000 + 1250)
       expect(sofie(scene).tallies).toEqual({ [`p${n}`]: 7 })
       expect(sofie(scene).answers[`p${n}`]).toBeUndefined()
-      expect(sofie(scene).view.inPicture).toBe(false)
     }
-    const locked = sofie('fusion-asking-locked')
-    const { s } = fusionOf('fusion-asking-locked', 'phone')
-    const name = (id: string) => s.players.find((p) => p.id === id)?.name
-    expect((locked.answers.p4 as { choice: string[] }).choice.map(name).sort()).toEqual(['Bo', 'Maja'])
+    // A lock is two names.
+    expect((sofie('fusion-asking-locked').answers.p4 as { choice: string[] }).choice).toEqual(['Bo', 'Maja'])
 
-    // #6 asked out of order, as picture 4 of 12: Sofie is in it.
+    // #6 asked out of order, as picture 4 of 12: Sofie is in it, and guesses like anyone.
     expect(at('fusion-asking-you').pub.current).toMatchObject({ n: 6, step: 4 })
-    expect(sofie('fusion-asking-you').view.inPicture).toBe(true)
+    expect(sofie('fusion-asking-you').view).not.toHaveProperty('inPicture')
 
     // The reveal: #4, 1.5 s ago; Sofie got both (+3). The wall follows 10 s after it.
     const reveal = at('fusion-reveal')

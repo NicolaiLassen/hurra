@@ -7,7 +7,7 @@ import { canonicalJson } from '../core/runtime'
 import { simulateParty, type FakeParty } from '../core/simulate'
 import { answersOf, jsonbRoundTrip, seededRandom, testInfo } from '../core/testing'
 import { bot, BOT_PICTURES } from './bot'
-import { FusionGame, readState, type FusionConfig, type FusionState } from './logic'
+import { FusionGame, guessNames, readState, type FusionConfig, type FusionState } from './logic'
 import {
   GRACE_MS,
   LEGACY_MESSAGE,
@@ -15,7 +15,8 @@ import {
   readPublic,
   readView,
   REVEAL_HOLD_MS,
-  VOTE_SPEC,
+  SUSPENSE_MS,
+  voteSpec,
   WAKE_MARGIN_MS,
   type FusionPlayerView,
   type FusionPublicState,
@@ -33,10 +34,14 @@ const config = (overrides: Partial<FusionConfig> = {}): FusionConfig => ({
   pointsPerPerson: 1,
   bonusForBoth: 0,
   seconds: 30,
-  showSeconds: 6,
   ...overrides,
 })
+/** The test party: each guest's name is their id (testInfo), so a picture's names here are also these. */
 const PLAYERS = ['ana', 'bo', 'cy', 'dee', 'eve', 'fin']
+/** What a guess offers the test party: everyone here, and every name in the pictures (here all of them guests). */
+const SPEC = voteSpec(['ana', 'bo', 'cy', 'dee', 'eve', 'fin'])
+/** From the ask to the end of the countdown: the TV's suspense, then 30 s. */
+const ASKED_MS = SUSPENSE_MS + 30_000
 type Overrides = Parameters<typeof testInfo<FusionConfig>>[2]
 
 /** Runs a hook with a fresh context; returns the new state and what it did. */
@@ -59,9 +64,9 @@ const wake = (state: FusionState, overrides: Overrides = {}, cfg = config()) => 
 /** A prompt as game_load hands it over: open, or closed with its locks in info.answers. */
 const prompt = (n: number, openedAt: number, closedAt: number | null = null): Prompt => ({
   key: pictureKey(n),
-  spec: VOTE_SPEC,
+  spec: SPEC,
   openedAt,
-  closesAt: openedAt + 30_000 + GRACE_MS,
+  closesAt: openedAt + ASKED_MS + GRACE_MS,
   closedAt,
   revealedAt: null,
 })
@@ -72,10 +77,10 @@ function asked(n: number, from: FusionState = start().result, at = 10_000, cfg =
 }
 
 /** The info for a reveal of picture n asked at `openedAt`: its prompt closed, with these locks. */
-function closedWith(n: number, openedAt: number, locks: [PlayerId, [PlayerId, PlayerId]][], now = openedAt + 31_250): Overrides {
+function closedWith(n: number, openedAt: number, locks: [PlayerId, [string, string]][], now = openedAt + ASKED_MS + GRACE_MS + WAKE_MARGIN_MS): Overrides {
   return {
     now,
-    prompts: { [pictureKey(n)]: prompt(n, openedAt, openedAt + 31_000) },
+    prompts: { [pictureKey(n)]: prompt(n, openedAt, openedAt + ASKED_MS + GRACE_MS) },
     answers: {
       [pictureKey(n)]: answersOf(
         openedAt,
@@ -85,8 +90,8 @@ function closedWith(n: number, openedAt: number, locks: [PlayerId, [PlayerId, Pl
   }
 }
 
-/** Picture n asked at 10 s and revealed by Reveal now with these locks. */
-function revealed(n: number, locks: [PlayerId, [PlayerId, PlayerId]][], from: FusionState = start().result, cfg = config()) {
+/** Picture n asked at 10 s and revealed by Reveal now with these locks: each two names. */
+function revealed(n: number, locks: [PlayerId, [string, string]][], from: FusionState = start().result, cfg = config()) {
   const state = asked(n, from, 10_000, cfg)
   return host(state, { type: 'reveal', n }, closedWith(n, 10_000, locks, 20_000), cfg)
 }
@@ -97,32 +102,32 @@ const view = (state: FusionState, id: PlayerId, players = PLAYERS, cfg = config(
 describe('settings', () => {
   const parse = (input: Record<string, unknown>) => game.parseConfig({ ...game.defaultConfig, ...input })
 
-  it('ships the defaults: a point a person, no bonus, 30 s to guess and 6 s a picture in the showing', () => {
-    expect(jsonbRoundTrip(game.defaultConfig)).toEqual({ pictures: [], pointsPerPerson: 1, bonusForBoth: 0, seconds: 30, showSeconds: 6 })
+  it('ships the defaults: a point a person, no bonus and 30 s to guess; no showing', () => {
+    expect(jsonbRoundTrip(game.defaultConfig)).toEqual({ pictures: [], pointsPerPerson: 1, bonusForBoth: 0, seconds: 30 })
     expect(game.presentation).toBe('stage')
   })
 
-  it('fills blank labels with the picture number and keeps images, people and times', () => {
+  it('fills blank labels with the picture number and keeps images, typed names (cleaned) and times', () => {
     const parsed = parse({
-      pictures: [{ label: '  ' }, { label: ' Viking ', image: 's/g/abc-1.jpg', people: ['a', 'b'] }, {}],
+      pictures: [{ label: '  ' }, { label: ' Viking ', image: 's/g/abc-1.jpg', people: [' Ana  Maria ', 'Bo'] }, {}],
       pointsPerPerson: 2,
       bonusForBoth: 1,
       seconds: 45,
+      // From settings saved while the round opened with a showing: no longer read.
       showSeconds: 3,
     })
     expect(parsed).toEqual({
-      pictures: [{ label: '#1' }, { label: 'Viking', image: 's/g/abc-1.jpg', people: ['a', 'b'] }, { label: '#3' }],
+      pictures: [{ label: '#1' }, { label: 'Viking', image: 's/g/abc-1.jpg', people: ['Ana Maria', 'Bo'] }, { label: '#3' }],
       pointsPerPerson: 2,
       bonusForBoth: 1,
       seconds: 45,
-      showSeconds: 3,
     })
   })
 
-  it('starts settings saved before the times existed with the defaults', () => {
+  it('starts settings saved before the times existed with the defaults, and ignores the old showing time', () => {
     // The engine merges defaultConfig under the saved settings.
-    const old = { pictures: [{ label: '#1' }], pointsPerPerson: 1, bonusForBoth: 0 }
-    expect(game.parseConfig({ ...game.defaultConfig, ...old })).toMatchObject({ seconds: 30, showSeconds: 6 })
+    const old = { pictures: [{ label: '#1' }], pointsPerPerson: 1, bonusForBoth: 0, showSeconds: 99 }
+    expect(game.parseConfig({ ...game.defaultConfig, ...old })).toEqual({ pictures: [{ label: '#1' }], pointsPerPerson: 1, bonusForBoth: 0, seconds: 30 })
   })
 
   it('treats cleared people and images as none', () => {
@@ -161,11 +166,14 @@ describe('settings', () => {
     [{ pictures: [{ label: 'x'.repeat(21) }] }, 'labels are at most 20 characters'],
     [{ pictures: [{ label: 7 }] }, "label that isn't text"],
     [{ pictures: [null] }, "isn't valid"],
-    [{ pictures: [{ people: ['a'] }] }, 'pick the second person'],
-    [{ pictures: [{ people: ['a', ''] }] }, 'pick the second person'],
-    [{ pictures: [{ people: ['a', 'a'] }] }, 'pick two different people'],
-    [{ pictures: [{ people: ['a', 'b', 'c'] }] }, 'pick two people, or nobody'],
-    [{ pictures: [{ people: [1, 2] }] }, 'pick two people, or nobody'],
+    [{ pictures: [{ people: ['a'] }] }, 'type the second name, or clear the first'],
+    [{ pictures: [{ people: ['a', '  '] }] }, 'type the second name, or clear the first'],
+    [{ pictures: [{ people: ['a', 'a'] }] }, 'type two different names'],
+    // Case, accents and spaces never matter: these are one name.
+    [{ pictures: [{ people: ['Ana Maria', 'anamaría'] }] }, 'type two different names'],
+    [{ pictures: [{ people: ['Ana', 'x'.repeat(41)] }] }, 'names are at most 40 characters'],
+    [{ pictures: [{ people: ['a', 'b', 'c'] }] }, 'type two names, or none'],
+    [{ pictures: [{ people: [1, 2] }] }, 'type two names, or none'],
     [{ pictures: [{ image: '../secret.jpg' }] }, "that image isn't valid"],
     [{ pictures: [{ image: 'https://example.com/x.jpg' }] }, "that image isn't valid"],
     [{ pictures: [{ image: 's/g/x.png' }] }, "that image isn't valid"],
@@ -182,17 +190,15 @@ describe('settings', () => {
     [{ pictures: [{}], seconds: 91 }, 'The time to guess must be 10 to 90 seconds'],
     [{ pictures: [{}], seconds: 20.5 }, 'The time to guess must be 10 to 90 seconds'],
     [{ pictures: [{}], seconds: '30' }, 'The time to guess must be 10 to 90 seconds'],
-    [{ pictures: [{}], showSeconds: 2 }, 'The showing must be 3 to 20 seconds a picture'],
-    [{ pictures: [{}], showSeconds: 21 }, 'The showing must be 3 to 20 seconds a picture'],
-    [{ pictures: [{}], showSeconds: null }, 'The showing must be 3 to 20 seconds a picture'],
   ])('refuses %j', (input, message) => {
     expect(() => parse(input)).toThrow(GameError)
     expect(() => parse(input)).toThrow(message)
   })
 
-  it('takes the edges of each range', () => {
-    expect(parse({ pictures: [{}], seconds: 10, showSeconds: 20 })).toMatchObject({ seconds: 10, showSeconds: 20 })
-    expect(parse({ pictures: [{}], seconds: 90, showSeconds: 3 })).toMatchObject({ seconds: 90, showSeconds: 3 })
+  it('takes the edges of each range, and an old showing time of any value', () => {
+    expect(parse({ pictures: [{}], seconds: 10, showSeconds: 2 })).toMatchObject({ seconds: 10 })
+    expect(parse({ pictures: [{}], seconds: 90, showSeconds: null })).toMatchObject({ seconds: 90 })
+    expect(parse({ pictures: [{}], seconds: 90 })).not.toHaveProperty('showSeconds')
   })
 
   it('counts label length in code points, as Postgres does', () => {
@@ -206,11 +212,9 @@ describe('setup', () => {
     expect(state).toEqual({
       phase: 'lobby',
       key: { 1: ['ana', 'bo'], 2: ['cy', 'dee'] },
-      names: { ana: 'ana', bo: 'bo', cy: 'cy', dee: 'dee' },
       revealed: [],
       results: {},
       totals: {},
-      showStartedAt: null,
       current: null,
       openedAt: null,
       endsAt: null,
@@ -218,13 +222,32 @@ describe('setup', () => {
     })
     expect(effects.prompts.open).toEqual([])
     expect(effects.announcements).toEqual([])
-    expect(game.wakeAt(state, testInfo(config(), PLAYERS))).toBeNull()
+    expect(game.wakeAt(state)).toBeNull()
   })
 
-  it('refuses a preset key with someone who is no longer on the guest list', () => {
-    expect(() => start(config(), ['ana', 'cy', 'dee', 'eve'])).toThrow(
-      "#1 names someone who isn't on the guest list any more. Pick again in the settings.",
-    )
+  it('keeps typed names whoever has joined: a picture may be of someone nobody joined as', () => {
+    // 'bo' isn't here: the key is names, not guests, and starts all the same.
+    expect(start(config(), ['ana', 'cy', 'dee', 'eve']).result.key).toEqual({ 1: ['ana', 'bo'], 2: ['cy', 'dee'] })
+  })
+
+  it("turns settings saved with guests' ids into their names, and refuses only an id on no list any more", () => {
+    const id = (n: number) => `f1c7a000-0000-4000-8000-${String(n).padStart(12, '0')}`
+    const players = [
+      { id: id(1), name: 'Ana', profile: {} },
+      { id: id(2), name: 'Bo', profile: {} },
+    ]
+    const guests = [...players.map((p) => ({ id: p.id, name: p.name, joined: true })), { id: id(3), name: 'Zelda', joined: false }]
+    const cfg = config({ pictures: [{ label: '#1', people: [id(1), id(3)] }, { label: '#2', people: [id(2), 'Tilde'] }] })
+    const { ctx } = createGameContext(testInfo(cfg, [], { players, guests }), seededRandom())
+    // The state holds names only: no guest's id.
+    expect(game.setup(ctx).key).toEqual({ 1: ['Ana', 'Zelda'], 2: ['Bo', 'Tilde'] })
+    const gone = config({ pictures: [{ label: '#1', people: [id(1), id(9)] }] })
+    const { ctx: later } = createGameContext(testInfo(gone, [], { players, guests }), seededRandom())
+    expect(() => game.setup(later)).toThrow("#1 names someone who isn't on the guest list any more. Type their name in the settings.")
+    // An old id and the same name typed are one person.
+    const twice = config({ pictures: [{ label: '#1', people: [id(1), 'ana'] }] })
+    const { ctx: same } = createGameContext(testInfo(twice, [], { players, guests }), seededRandom())
+    expect(() => game.setup(same)).toThrow('#1: type two different names')
   })
 
   it('takes no moves from phones: guesses are prompts', () => {
@@ -232,41 +255,28 @@ describe('setup', () => {
   })
 })
 
-describe('the showing', () => {
-  it('starts from the lobby, and wakes for the wall when every picture has had its seconds', () => {
-    const { result: state, effects } = host(start().result, { type: 'show' }, { now: 5_000 })
-    expect(state).toMatchObject({ phase: 'showing', showStartedAt: 5_000 })
-    expect(effects.announcements).toEqual([])
-    const info = testInfo(config(), PLAYERS)
-    expect(game.wakeAt(state, info)).toBe(5_000 + 3 * 6_000)
-    expect(pub(state)).toMatchObject({ phase: 'showing', showing: { startedAt: 5_000, endsAt: 23_000 }, current: null })
-    const walled = wake(state, { now: 23_000 }).result
-    expect(walled.phase).toBe('wall')
-    expect(game.wakeAt(walled, info)).toBeNull()
+describe('no showing', () => {
+  it('has no showing any more: the host starts with the first picture', () => {
+    expect(() => game.parseHostAction({ type: 'show' })).toThrow('Unknown host action')
+    expect(() => game.parseHostAction({ type: 'wall', from: 'showing' })).toThrow('Unknown host action')
   })
 
-  it('takes its seconds from the round’s settings, and the defaults for settings saved before them', () => {
-    const cfg = config({ showSeconds: 3 })
-    const state = host(start(cfg).result, { type: 'show' }, { now: 0 }, cfg).result
-    expect(game.wakeAt(state, testInfo(cfg, PLAYERS))).toBe(9_000)
-    const old = { pictures: config().pictures, pointsPerPerson: 1, bonusForBoth: 0 } as FusionConfig
-    expect(game.wakeAt(state, testInfo(old, PLAYERS))).toBe(18_000)
-  })
-
-  it('does nothing a second time, or once it has moved on', () => {
-    const showing = host(start().result, { type: 'show' }).result
-    expect(host(showing, { type: 'show' }).result).toBe(showing)
-    const wall = host(showing, { type: 'wall', from: 'showing' }).result
-    expect(host(wall, { type: 'show' }).result).toBe(wall)
+  it('reads a save from the showing as the wall, which waits for the host', () => {
+    const old = { ...start().result, phase: 'showing', showStartedAt: 5_000 } as unknown as FusionState
+    const state = readState(old)
+    expect(state.phase).toBe('wall')
+    expect(state).not.toHaveProperty('showStartedAt')
+    expect(game.wakeAt(old)).toBeNull()
+    expect(pub(old).phase).toBe('wall')
+    // And the host goes on from it as from the wall.
+    expect(asked(1, old)).toMatchObject({ phase: 'asking', current: 1 })
   })
 })
 
 describe('the wall', () => {
-  it('comes from the lobby, the showing or a reveal, each by name', () => {
+  it('comes from the lobby or a reveal, each by name', () => {
     const lobby = start().result
     expect(host(lobby, { type: 'wall', from: 'lobby' }).result.phase).toBe('wall')
-    const showing = host(lobby, { type: 'show' }).result
-    expect(host(showing, { type: 'wall', from: 'showing' }).result.phase).toBe('wall')
     const reveal = revealed(1, [['cy', ['ana', 'bo']]]).result
     const back = host(reveal, { type: 'wall', from: 'reveal', n: 1 }).result
     expect(back).toMatchObject({ phase: 'wall', current: null, revealedAt: null, revealed: [1] })
@@ -275,47 +285,68 @@ describe('the wall', () => {
 
   it('skips a stale step: the phase it names has passed, or the reveal was another picture', () => {
     const lobby = start().result
-    expect(host(lobby, { type: 'wall', from: 'showing' }).result).toBe(lobby)
-    const showing = host(lobby, { type: 'show' }).result
-    expect(host(showing, { type: 'wall', from: 'lobby' }).result).toBe(showing)
+    const wall = host(lobby, { type: 'wall', from: 'lobby' }).result
+    expect(host(wall, { type: 'wall', from: 'lobby' }).result).toBe(wall)
     const reveal = revealed(1, []).result
     expect(host(reveal, { type: 'wall', from: 'reveal', n: 2 }).result).toBe(reveal)
-    expect(host(reveal, { type: 'wall', from: 'showing' }).result).toBe(reveal)
+    expect(host(reveal, { type: 'wall', from: 'lobby' }).result).toBe(reveal)
     const asking = asked(2)
     expect(host(asking, { type: 'wall', from: 'reveal', n: 2 }).result).toBe(asking)
   })
 
   it('comes back by itself 10 s after a reveal', () => {
     const reveal = revealed(1, []).result
-    expect(game.wakeAt(reveal, testInfo(config(), PLAYERS))).toBe(20_000 + REVEAL_HOLD_MS)
+    expect(game.wakeAt(reveal)).toBe(20_000 + REVEAL_HOLD_MS)
     expect(wake(reveal, { now: 30_000 }).result).toMatchObject({ phase: 'wall', current: null })
   })
 })
 
 describe('asking a picture', () => {
-  it('opens its guess with a deadline and nothing about the answer, and counts down', () => {
+  it('opens its guess after the suspense with its whole countdown, offering names and nothing about the answer', () => {
     const { result: state, effects } = host(start().result, { type: 'ask', n: 1 }, { now: 10_000 })
-    expect(effects.prompts.open).toEqual([{ key: 'p1', spec: VOTE_SPEC, closes_at: 10_000 + 30_000 + GRACE_MS }])
-    // Anyone on the guest list, so a guess can name a guest who never came.
-    expect(VOTE_SPEC).toEqual({ kind: 'choice', options: 'guests', min: 2, max: 2, exclude_self: true, final: true })
-    expect(JSON.stringify(effects.prompts)).not.toMatch(/ana|bo/)
+    // The TV shows which picture it is first: the countdown starts once that is over, so nobody loses guessing time.
+    const endsAt = 10_000 + SUSPENSE_MS + 30_000
+    expect(effects.prompts.open).toEqual([{ key: 'p1', spec: SPEC, closes_at: endsAt + GRACE_MS }])
+    // Two names out of everyone here and every name in the pictures, the same list whatever picture is asked.
+    expect(SPEC).toEqual({ kind: 'choice', options: ['ana', 'bo', 'cy', 'dee', 'eve', 'fin'], min: 2, max: 2, final: true })
+    expect(host(start().result, { type: 'ask', n: 2 }).effects.prompts.open[0].spec).toEqual(SPEC)
     expect(effects.announcements).toEqual([])
-    expect(state).toMatchObject({ phase: 'asking', current: 1, openedAt: 10_000, endsAt: 40_000, revealedAt: null, showStartedAt: null })
-    expect(game.wakeAt(state, testInfo(config(), PLAYERS))).toBe(40_000 + GRACE_MS + WAKE_MARGIN_MS)
-    expect(pub(state).current).toEqual({ n: 1, step: 1, key: 'p1', openedAt: 10_000, endsAt: 40_000, revealedAt: null })
+    expect(state).toMatchObject({ phase: 'asking', current: 1, openedAt: 10_000, endsAt, revealedAt: null })
+    expect(game.wakeAt(state)).toBe(endsAt + GRACE_MS + WAKE_MARGIN_MS)
+    expect(pub(state).current).toEqual({ n: 1, step: 1, key: 'p1', openedAt: 10_000, startsAt: 10_000 + SUSPENSE_MS, endsAt, revealedAt: null })
+  })
+
+  it('offers everyone here and every name in the pictures, each once whatever its spelling, A to Z', () => {
+    const cfg = config({ pictures: [{ label: '#1', people: ['Zelda', 'ANA'] }, { label: '#2', people: ['Åse', 'Tilde'] }] })
+    const players = [
+      { id: 'p1', name: 'Ana', profile: {} },
+      { id: 'p2', name: 'Bo', profile: {} },
+      { id: 'p3', name: 'Ørn', profile: {} },
+    ]
+    const state = run((ctx) => game.setup(ctx), { players }, cfg).result
+    // Ana as she joined; the Danish order puts Æ, Ø and Å after Z.
+    expect(guessNames(state, { players })).toEqual(['Ana', 'Bo', 'Tilde', 'Zelda', 'Ørn', 'Åse'])
+    const { effects } = run((ctx) => game.handleHostAction(state, { type: 'ask', n: 1 }, ctx), { players }, cfg)
+    expect(effects.prompts.open[0].spec).toEqual(voteSpec(['Ana', 'Bo', 'Tilde', 'Zelda', 'Ørn', 'Åse']))
   })
 
   it('takes the round’s own seconds', () => {
     const cfg = config({ seconds: 12 })
     const { result, effects } = host(start(cfg).result, { type: 'ask', n: 2 }, { now: 0 }, cfg)
-    expect(result.endsAt).toBe(12_000)
-    expect(effects.prompts.open[0].closes_at).toBe(13_000)
+    expect(result.endsAt).toBe(SUSPENSE_MS + 12_000)
+    expect(effects.prompts.open[0].closes_at).toBe(SUSPENSE_MS + 13_000)
+    expect(pub(result, PLAYERS, cfg).current).toMatchObject({ startsAt: SUSPENSE_MS, endsAt: SUSPENSE_MS + 12_000 })
   })
 
-  it('works from the lobby, the showing, the wall and a reveal, in any order', () => {
+  it('reads a picture asked before the suspense with its countdown from the ask', () => {
+    const old = { ...asked(1), endsAt: 10_000 + 30_000 }
+    expect(pub(old).current).toMatchObject({ openedAt: 10_000, startsAt: 10_000, endsAt: 40_000 })
+  })
+
+  it('works from the lobby, the wall and a reveal, in any order', () => {
     const lobby = start().result
-    const fromShowing = host(host(lobby, { type: 'show' }).result, { type: 'ask', n: 2 }).result
-    expect(fromShowing).toMatchObject({ phase: 'asking', current: 2, showStartedAt: null })
+    const fromLobby = host(lobby, { type: 'ask', n: 2 }).result
+    expect(fromLobby).toMatchObject({ phase: 'asking', current: 2 })
     const wall = host(lobby, { type: 'wall', from: 'lobby' }).result
     expect(host(wall, { type: 'ask', n: 2 }).result).toMatchObject({ phase: 'asking', current: 2 })
     expect(asked(1, lobby).current).toBe(1)
@@ -344,30 +375,50 @@ describe('asking a picture', () => {
     expect(() => host(start().result, { type: 'ask', n: 41 })).toThrow('There is no such picture')
   })
 
-  it('takes a key set on the night, then asks it', () => {
-    const keyed = host(start().result, { type: 'setKey', n: 3, people: ['eve', 'fin'] }).result
-    expect(host(keyed, { type: 'ask', n: 3 }).result.current).toBe(3)
+  it('takes a key typed on the night, then asks it, offering its names too', () => {
+    const keyed = host(start().result, { type: 'setKey', n: 3, people: ['eve', 'Quentin'] }).result
+    const { result, effects } = host(keyed, { type: 'ask', n: 3 })
+    expect(result.current).toBe(3)
+    expect(effects.prompts.open[0].spec).toEqual(voteSpec(['ana', 'bo', 'cy', 'dee', 'eve', 'fin', 'Quentin']))
   })
 })
 
 describe('the reveal', () => {
-  it('scores a point per right person, and nothing for the people in the picture, even with a crafted lock', () => {
+  it('scores a point per right person for everyone who locked in, the two in the picture too', () => {
     const { result, effects } = revealed(1, [
       ['cy', ['ana', 'bo']], // both
       ['dee', ['ana', 'eve']], // one
       ['eve', ['cy', 'dee']], // none
-      ['ana', ['bo', 'cy']], // in the picture: counts for nothing
-      ['bo', ['ana', 'cy']], // in the picture too
+      ['ana', ['bo', 'cy']], // in the picture: knows herself, names Bo: one
+      ['bo', ['ana', 'bo']], // a crafted lock with his own name: it counts for nothing, Ana for one
     ])
-    expect(result.results[1]).toEqual({ both: 1, one: 1, none: 1, voters: 3, hits: { cy: 2, dee: 1, eve: 0 }, at: 20_000 })
-    expect(result.totals).toEqual({ cy: 2, dee: 1 })
+    expect(result.results[1]).toEqual({ both: 1, one: 3, none: 1, voters: 5, hits: { cy: 2, dee: 1, eve: 0, ana: 1, bo: 1 }, at: 20_000 })
+    expect(result.totals).toEqual({ cy: 2, dee: 1, ana: 1, bo: 1 })
     expect(result).toMatchObject({ phase: 'reveal', current: 1, revealed: [1], revealedAt: 20_000 })
     expect(effects.prompts.reveal).toEqual(['p1'])
     // No announcement: the TV and the phones show the reveal themselves.
     expect(effects.announcements).toEqual([])
     expect(effects.records).toEqual([
-      { type: 'revealed', data: { n: 1, label: '#1', people: ['ana', 'bo'], both: 1, one: 1, none: 1, voters: 3 }, about: ['ana', 'bo'] },
+      { type: 'revealed', data: { n: 1, label: '#1', people: ['ana', 'bo'], both: 1, one: 3, none: 1, voters: 5 }, about: ['ana', 'bo'] },
     ])
+  })
+
+  it('matches names whatever their case, accents and spaces', () => {
+    const cfg = config({ pictures: [{ label: '#1', people: ['Ana María', 'Bo'] }] })
+    const players = [
+      { id: 'p1', name: 'Cy', profile: {} },
+      { id: 'p2', name: 'Ana Maria', profile: {} },
+    ]
+    const lobby = run((ctx) => game.setup(ctx), { players }, cfg).result
+    const asking = run((ctx) => game.handleHostAction(lobby, { type: 'ask', n: 1 }, ctx), { players, now: 10_000 }, cfg).result
+    const reveal = run(
+      (ctx) => game.handleHostAction(asking, { type: 'reveal', n: 1 }, ctx),
+      { ...closedWith(1, 10_000, [['p1', ['anamaria', ' BO ']]]), players },
+      cfg,
+    )
+    expect(reveal.result.results[1].hits).toEqual({ p1: 2 })
+    // The log's people who joined: Ana Maria, by her name.
+    expect(reveal.effects.records[0].about).toEqual(['p2'])
   })
 
   it('adds the bonus for getting both, and points per person as configured', () => {
@@ -377,10 +428,10 @@ describe('the reveal', () => {
   })
 
   it('gives the same result by Reveal now and by the timer', () => {
-    const locks: [PlayerId, [PlayerId, PlayerId]][] = [['cy', ['ana', 'bo']], ['dee', ['ana', 'eve']]]
+    const locks: [PlayerId, [string, string]][] = [['cy', ['ana', 'bo']], ['dee', ['ana', 'eve']]]
     const asking = asked(1)
-    const byHost = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, locks, 41_250))
-    const byTimer = wake(asking, closedWith(1, 10_000, locks, 41_250))
+    const byHost = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, locks))
+    const byTimer = wake(asking, closedWith(1, 10_000, locks))
     expect(byTimer.result).toEqual(byHost.result)
     expect(byTimer.effects).toEqual(byHost.effects)
   })
@@ -399,18 +450,19 @@ describe('the reveal', () => {
 
   it('without locks when the timer comes, closes the guess and changes nothing, so Reveal now still works', () => {
     const asking = asked(1)
-    const { result, effects } = wake(asking, { now: 41_250, prompts: { p1: prompt(1, 10_000) }, answers: {} })
+    const due = 10_000 + ASKED_MS + GRACE_MS + WAKE_MARGIN_MS
+    const { result, effects } = wake(asking, { now: due, prompts: { p1: prompt(1, 10_000) }, answers: {} })
     expect(result).toBe(asking)
     expect(effects.prompts.close).toEqual(['p1'])
     expect(effects.records).toEqual([])
     // Already closed: nothing to do at all.
-    expect(wake(asking, { now: 41_250, prompts: { p1: prompt(1, 10_000, 41_000) }, answers: {} }).effects.prompts.close).toEqual([])
+    expect(wake(asking, { now: due, prompts: { p1: prompt(1, 10_000, due - 250) }, answers: {} }).effects.prompts.close).toEqual([])
     expect(host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, [])).result.phase).toBe('reveal')
   })
 
-  it('still names someone in the picture who has left the party', () => {
+  it('still names someone in the picture who has left the party: the key is names', () => {
     const asking = asked(1)
-    const players = ['bo', 'cy', 'dee', 'eve', 'fin'].map((id) => ({ id, name: id.toUpperCase(), profile: {} }))
+    const players = ['bo', 'cy', 'dee', 'eve', 'fin'].map((id) => ({ id, name: id, profile: {} }))
     const { result, effects } = host(asking, { type: 'reveal', n: 1 }, { ...closedWith(1, 10_000, [['cy', ['ana', 'bo']]]), players })
     expect(effects.records[0].about).toEqual(['bo'])
     expect(pub(result, ['bo', 'cy']).pictures[0].revealed?.names).toEqual(['ana', 'bo'])
@@ -428,18 +480,30 @@ describe('the reveal', () => {
 
 describe('setKey', () => {
   it('sets or changes who is in a picture, kept secret from the room', () => {
-    const { result: state, effects } = host(start().result, { type: 'setKey', n: 3, people: ['eve', 'fin'] })
-    expect(state.key[3]).toEqual(['eve', 'fin'])
-    expect(state.names).toMatchObject({ eve: 'eve', fin: 'fin' })
+    const { result: state, effects } = host(start().result, { type: 'setKey', n: 3, people: [' eve ', 'Quentin'] })
+    // Typed names, cleaned, whoever has joined.
+    expect(state.key[3]).toEqual(['eve', 'Quentin'])
     expect(effects.announcements).toEqual([])
+    expect(JSON.stringify(pub(state))).not.toContain('Quentin')
     const changed = host(state, { type: 'setKey', n: 1, people: ['cy', 'fin'] }).result
     expect(changed.key[1]).toEqual(['cy', 'fin'])
-    expect(changed.names).not.toHaveProperty('ana')
   })
 
-  it('changes nothing when the same two are set again, in either order', () => {
+  it('changes nothing when the same two are set again, in either order; a new spelling is a change', () => {
     const state = start().result
     expect(host(state, { type: 'setKey', n: 1, people: ['bo', 'ana'] }).result).toBe(state)
+    expect(host(state, { type: 'setKey', n: 1, people: ['Ana', 'bo'] }).result.key[1]).toEqual(['Ana', 'bo'])
+  })
+
+  it("takes a guest's id from a host page from before names as that guest's name", () => {
+    const players = [
+      { id: 'f1c7a000-0000-4000-8000-000000000001', name: 'Ana', profile: {} },
+      { id: 'f1c7a000-0000-4000-8000-000000000002', name: 'Bo', profile: {} },
+    ]
+    const state = run((ctx) => game.setup(ctx), { players }).result
+    const people = players.map((p) => p.id)
+    const keyed = run((ctx) => game.handleHostAction(state, game.parseHostAction({ type: 'setKey', n: 3, people }), ctx), { players }).result
+    expect(keyed.key[3]).toEqual(['Ana', 'Bo'])
   })
 
   it("takes the same two the other way round when the picture has their own photos: the order says whose photo is whose", () => {
@@ -460,9 +524,11 @@ describe('setKey', () => {
 
   it.each([
     [{ type: 'setKey', n: 4, people: ['ana', 'bo'] }, 'There is no picture #4'],
-    [{ type: 'setKey', n: 1, people: ['ana', 'ana'] }, 'Pick two different people'],
-    [{ type: 'setKey', n: 1, people: ['ana', 'zed'] }, 'Pick two people on the guest list'],
-    [{ type: 'setKey', n: 1, people: ['ana'] }, 'Pick the two people in the picture'],
+    [{ type: 'setKey', n: 1, people: ['ana', 'ANA'] }, 'Type two different names'],
+    [{ type: 'setKey', n: 1, people: ['ana', 'f1c7a000-0000-4000-8000-000000000099'] }, 'Type the two names in the picture'],
+    [{ type: 'setKey', n: 1, people: ['ana', 'z'.repeat(41)] }, 'Names are at most 40 characters'],
+    [{ type: 'setKey', n: 1, people: ['ana', '  '] }, 'Type the two names in the picture'],
+    [{ type: 'setKey', n: 1, people: ['ana'] }, 'Type the two names in the picture'],
     [{ type: 'setKey', n: 0, people: ['ana', 'bo'] }, 'There is no such picture'],
     [{ type: 'setKey', n: '1', people: ['ana', 'bo'] }, 'There is no such picture'],
   ])('refuses %j', (action, message) => {
@@ -473,14 +539,13 @@ describe('setKey', () => {
 describe('finish', () => {
   it('crowns the face detective from any phase but a picture being asked', () => {
     const lobby = start().result
-    const showing = host(lobby, { type: 'show' }).result
     const wall = host(lobby, { type: 'wall', from: 'lobby' }).result
     const reveal = revealed(1, [['cy', ['ana', 'bo']]]).result
-    for (const state of [lobby, showing, wall, reveal]) {
+    for (const state of [lobby, wall, reveal]) {
       const { result } = host(state, { type: 'finish' })
-      expect(result).toMatchObject({ phase: 'done', current: null, showStartedAt: null })
+      expect(result).toMatchObject({ phase: 'done', current: null })
       expect(game.isFinished(result)).toBe(true)
-      expect(game.wakeAt(result, testInfo(config(), PLAYERS))).toBeNull()
+      expect(game.wakeAt(result)).toBeNull()
     }
     expect(() => host(asked(1), { type: 'finish' })).toThrow('Reveal #1 first')
   })
@@ -536,31 +601,56 @@ describe('onEnd', () => {
 })
 
 describe('what the room sees', () => {
-  it('never shows who is in a picture before its reveal, in any phase, to the room or another guest', () => {
+  it('never shows who is in a picture before its reveal, in any phase, to the room or any guest', () => {
     const lobby = start().result
-    const showing = host(lobby, { type: 'show' }, { now: 1_000 }).result
-    const wall = host(showing, { type: 'wall', from: 'showing' }).result
+    const wall = host(lobby, { type: 'wall', from: 'lobby' }).result
     const asking = asked(1, wall)
     const reveal = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, [['eve', ['ana', 'bo']]], 20_000)).result
     const back = host(reveal, { type: 'wall', from: 'reveal', n: 1 }).result
     const asking2 = asked(2, back, 50_000)
     const done = host(back, { type: 'finish' }).result
-    for (const [name, state] of Object.entries({ lobby, showing, wall, asking, reveal, back, asking2, done })) {
+    for (const [name, state] of Object.entries({ lobby, wall, asking, reveal, back, asking2, done })) {
       const room = canonicalJson(pub(state))
       // #2 (cy and dee) is never revealed; #1 (ana and bo) only from its reveal.
       expect(room, name).not.toMatch(/"(cy|dee)"/)
-      if (state.revealed.includes(1)) expect(room, name).toMatch(/"people":\["ana","bo"\]/)
+      if (state.revealed.includes(1)) expect(room, name).toMatch(/"names":\["ana","bo"\]/)
       else expect(room, name).not.toMatch(/"(ana|bo)"/)
-      for (const id of ['eve', 'fin', 'stranger']) {
+      // No guest's view says anything about a picture's people, the two in it included.
+      for (const id of [...PLAYERS, 'stranger']) {
         expect(canonicalJson(view(state, id)), `${name} ${id}`).not.toMatch(/"(ana|bo|cy|dee)"/)
-        expect(view(state, id).inPicture).toBe(false)
+        expect(view(state, id)).not.toHaveProperty('inPicture')
       }
     }
-    // Only the two in the picture being asked or revealed know they are in it.
-    expect(['ana', 'bo', 'cy', 'dee'].filter((id) => view(asking, id).inPicture)).toEqual(['ana', 'bo'])
-    expect(['ana', 'bo', 'cy', 'dee'].filter((id) => view(reveal, id).inPicture)).toEqual(['ana', 'bo'])
-    expect(['ana', 'bo', 'cy', 'dee'].filter((id) => view(asking2, id).inPicture)).toEqual(['cy', 'dee'])
-    expect(['ana', 'bo', 'cy', 'dee'].filter((id) => view(back, id).inPicture)).toEqual([])
+  })
+
+  it("keeps each picture's image secret until it is asked: the wall shows a placeholder till then", () => {
+    const cfg = config({
+      pictures: [
+        { label: '#1', image: 's/g/one.jpg', people: ['ana', 'bo'] },
+        { label: '#2', image: 's/g/two.jpg', people: ['cy', 'dee'] },
+        { label: 'The viking', image: 's/g/three.jpg' },
+      ],
+    })
+    const lobby = start(cfg).result
+    const wall = host(lobby, { type: 'wall', from: 'lobby' }, {}, cfg).result
+    const asking = asked(1, wall, 10_000, cfg)
+    const reveal = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, [['eve', ['ana', 'bo']]], 20_000), cfg).result
+    const back = host(reveal, { type: 'wall', from: 'reveal', n: 1 }, {}, cfg).result
+    const asking2 = asked(2, back, 50_000, cfg)
+    const ended = run((ctx) => game.onEnd(asking2, ctx, 'host'), {}, cfg).result
+    const seen = (state: FusionState) => pub(state, PLAYERS, cfg).pictures.map((p) => [p.asked, p.image])
+    expect(seen(lobby)).toEqual([[false, null], [false, null], [false, null]])
+    expect(seen(wall)).toEqual([[false, null], [false, null], [false, null]])
+    // Asked: its image reaches the room now, while the TV's suspense runs.
+    expect(seen(asking)).toEqual([[true, 's/g/one.jpg'], [false, null], [false, null]])
+    expect(seen(back)).toEqual([[true, 's/g/one.jpg'], [false, null], [false, null]])
+    expect(seen(asking2)).toEqual([[true, 's/g/one.jpg'], [true, 's/g/two.jpg'], [false, null]])
+    // Ended while #2 was asked: it stays unscored and secret, its image too.
+    expect(seen(ended)).toEqual([[true, 's/g/one.jpg'], [false, null], [false, null]])
+    // Never in a guest's view or a prompt.
+    for (const state of [lobby, wall, asking, reveal]) for (const id of PLAYERS) expect(canonicalJson(view(state, id, PLAYERS, cfg))).not.toContain('.jpg')
+    const { effects } = run((ctx) => game.handleHostAction(wall, game.parseHostAction({ type: 'ask', n: 1 }), ctx), { now: 10_000 }, cfg)
+    expect(canonicalJson(effects)).not.toContain('.jpg')
   })
 
   it("keeps the two people's own photos secret until their picture is revealed, then shows them in the people's order", () => {
@@ -572,14 +662,13 @@ describe('what the room sees', () => {
       ],
     })
     const lobby = start(cfg).result
-    const showing = host(lobby, { type: 'show' }, { now: 1_000 }, cfg).result
-    const wall = host(showing, { type: 'wall', from: 'showing' }, {}, cfg).result
+    const wall = host(lobby, { type: 'wall', from: 'lobby' }, {}, cfg).result
     const asking = asked(1, wall, 10_000, cfg)
     const reveal = host(asking, { type: 'reveal', n: 1 }, closedWith(1, 10_000, [['eve', ['ana', 'bo']]], 20_000), cfg).result
     const back = host(reveal, { type: 'wall', from: 'reveal', n: 1 }, {}, cfg).result
     const asking2 = asked(2, back, 50_000, cfg)
     const done = host(back, { type: 'finish' }, {}, cfg).result
-    for (const [name, state] of Object.entries({ lobby, showing, wall, asking, reveal, back, asking2, done })) {
+    for (const [name, state] of Object.entries({ lobby, wall, asking, reveal, back, asking2, done })) {
       const room = canonicalJson(pub(state, PLAYERS, cfg))
       // #2's photo never shows: it is never revealed. #1's only from its reveal.
       expect(room, name).not.toContain('orig-cy')
@@ -600,41 +689,51 @@ describe('what the room sees', () => {
     const cfg = config({ pictures: [{ label: '#1', image: 's/g/a.jpg', people: ['ana', 'bo'] }, { label: '#2' }], bonusForBoth: 2, seconds: 20 })
     const state = { ...start(cfg).result, totals: { eve: 1, cy: 3, dee: 3, gone: 9 } }
     const room = pub(state, PLAYERS, cfg)
+    // Not asked yet: no image, whatever the settings hold.
     expect(room.pictures).toEqual([
-      { n: 1, key: 'p1', label: '#1', image: 's/g/a.jpg', revealed: null },
-      { n: 2, key: 'p2', label: '#2', image: null, revealed: null },
+      { n: 1, key: 'p1', label: '#1', asked: false, image: null, revealed: null },
+      { n: 2, key: 'p2', label: '#2', asked: false, image: null, revealed: null },
     ])
-    expect(room.rules).toEqual({ seconds: 20, showSeconds: 6, perPerson: 1, bothBonus: 2 })
+    expect(room.rules).toEqual({ seconds: 20, perPerson: 1, bothBonus: 2 })
     expect(room.top).toEqual([
       { playerId: 'cy', points: 3, rank: 1 },
       { playerId: 'dee', points: 3, rank: 1 },
       { playerId: 'eve', points: 1, rank: 3 },
     ])
-    expect(room).toMatchObject({ phase: 'lobby', showing: null, current: null })
+    expect(room).toMatchObject({ phase: 'lobby', current: null })
+    expect(room).not.toHaveProperty('expected')
     expect(readPublic(jsonbRoundTrip(room))).toEqual(room)
   })
 
   it('gives each guest their points, their place and how they did on each revealed picture', () => {
-    const reveal = revealed(1, [['cy', ['ana', 'bo']], ['eve', ['cy', 'dee']]]).result
-    expect(view(reveal, 'cy')).toEqual<FusionPlayerView>({ points: 2, rank: 1, hits: { 1: 2 }, inPicture: false })
-    expect(view(reveal, 'eve')).toEqual({ points: 0, rank: null, hits: { 1: 0 }, inPicture: false })
-    expect(view(reveal, 'ana')).toEqual({ points: 0, rank: null, hits: {}, inPicture: true })
-    expect(view(reveal, 'stranger')).toEqual({ points: 0, rank: null, hits: {}, inPicture: false })
-    expect(game.scores(reveal)).toEqual({ cy: 2 })
+    const reveal = revealed(1, [['cy', ['ana', 'bo']], ['eve', ['cy', 'dee']], ['ana', ['bo', 'eve']]]).result
+    expect(view(reveal, 'cy')).toEqual<FusionPlayerView>({ points: 2, rank: 1, hits: { 1: 2 } })
+    expect(view(reveal, 'eve')).toEqual({ points: 0, rank: null, hits: { 1: 0 } })
+    // In the picture, and scoring on it like anyone.
+    expect(view(reveal, 'ana')).toEqual({ points: 1, rank: 2, hits: { 1: 1 } })
+    expect(view(reveal, 'stranger')).toEqual({ points: 0, rank: null, hits: {} })
+    expect(game.scores(reveal)).toEqual({ cy: 2, ana: 1 })
     const info = testInfo(config(), PLAYERS)
     expect(canonicalJson(game.publicState(jsonbRoundTrip(reveal), info))).toBe(canonicalJson(game.publicState(reveal, info)))
     expect(pub(reveal).pictures[0].revealed).toEqual({
-      people: ['ana', 'bo'],
       names: ['ana', 'bo'],
       both: 1,
-      one: 0,
+      one: 1,
       none: 1,
-      voters: 2,
+      voters: 3,
       originals: [null, null],
       step: 1,
       at: 20_000,
     })
-    expect(pub(reveal).current).toEqual({ n: 1, step: 1, key: 'p1', openedAt: 10_000, endsAt: 40_000, revealedAt: 20_000 })
+    expect(pub(reveal).current).toEqual({
+      n: 1,
+      step: 1,
+      key: 'p1',
+      openedAt: 10_000,
+      startsAt: 10_000 + SUSPENSE_MS,
+      endsAt: 10_000 + ASKED_MS,
+      revealedAt: 20_000,
+    })
   })
 })
 
@@ -653,13 +752,17 @@ describe('host actions from untrusted input', () => {
     { type: 'wall' },
     { type: 'wall', from: 'asking' },
     { type: 'wall', from: 'reveal' },
+    { type: 'wall', from: 'showing' },
+    { type: 'show' },
     { type: 'setKey', n: 1, people: 'ab' },
+    { type: 'setKey', n: 1, people: ['ana', ''] },
+    { type: 'setKey', n: 1, people: ['ana', 7] },
   ])('refuses %j', (input) => {
     expect(() => game.parseHostAction(input)).toThrow(GameError)
   })
 
   it('keeps only what it knows', () => {
-    expect(game.parseHostAction({ type: 'show', extra: 1 })).toEqual({ type: 'show' })
+    expect(game.parseHostAction({ type: 'finish', extra: 1 })).toEqual({ type: 'finish' })
     expect(game.parseHostAction({ type: 'wall', from: 'lobby', n: 3 })).toEqual({ type: 'wall', from: 'lobby' })
     expect(game.parseHostAction({ type: 'wall', from: 'reveal', n: 3 })).toEqual({ type: 'wall', from: 'reveal', n: 3 })
     expect(game.parseHostAction({ type: 'ask', n: 2, people: ['x'] })).toEqual({ type: 'ask', n: 2 })
@@ -685,27 +788,28 @@ describe('a round of the background version', () => {
     for (const phase of ['voting', 'locked'] as const) {
       const state = legacy(phase)
       const info = testInfo(oldConfig, PLAYERS)
-      expect(game.wakeAt(state, info)).toBeNull()
+      expect(game.wakeAt(state)).toBeNull()
       const room = game.publicState(state, info)
-      expect(room).toMatchObject({ phase: 'lobby', showing: null, current: null, rules: { seconds: 30, showSeconds: 6 } })
+      expect(room).toMatchObject({ phase: 'lobby', current: null, rules: { seconds: 30 } })
       expect(readPublic(jsonbRoundTrip(room))).toEqual(room)
-      expect(game.playerView(state, 'ana', info)).toMatchObject({ inPicture: false })
-      for (const action of [{ type: 'show' }, { type: 'ask', n: 2 }, { type: 'finish' }, { type: 'setKey', n: 2, people: ['eve', 'fin'] }]) {
+      expect(game.playerView(state, 'ana', info)).toEqual({ points: 0, rank: null, hits: {} })
+      for (const action of [{ type: 'wall', from: 'lobby' }, { type: 'ask', n: 2 }, { type: 'finish' }, { type: 'setKey', n: 2, people: ['eve', 'fin'] }]) {
         expect(() => host(state, action, {}, oldConfig)).toThrow(LEGACY_MESSAGE)
       }
       expect(wake(state, {}, oldConfig).result).toBe(state)
     }
-    expect(game.publicState(legacy('locked'), testInfo(oldConfig, PLAYERS)).pictures[0].revealed).toMatchObject({ people: ['ana', 'bo'], step: 1, at: null })
+    // Its key read as the names it kept: ids then, names now.
+    expect(game.publicState(legacy('locked'), testInfo(oldConfig, PLAYERS)).pictures[0].revealed).toMatchObject({ names: ['ana', 'bo'], step: 1, at: null })
     expect(game.publicState(legacy('locked'), testInfo(oldConfig, PLAYERS)).top).toEqual([{ playerId: 'cy', points: 2, rank: 1 }])
   })
 
   it('ends: the host’s End announces the leader, the points so far stand', () => {
     const { result, effects } = run((ctx) => game.onEnd(legacy('locked'), ctx, 'host'), {}, oldConfig)
-    expect(result).toMatchObject({ phase: 'done', revealed: [1], totals: { cy: 2 }, current: null, showStartedAt: null })
+    expect(result).toMatchObject({ phase: 'done', revealed: [1], totals: { cy: 2 }, current: null })
     expect(game.isFinished(result)).toBe(true)
     expect(effects.announcements[0]).toMatchObject({ detail: 'cy had the sharpest eye with 2 points' })
     expect(game.winners(result, testInfo(oldConfig, PLAYERS))).toEqual(['cy'])
-    expect(readState(legacy('voting'))).toMatchObject({ showStartedAt: null, current: null, openedAt: null, endsAt: null, revealedAt: null })
+    expect(readState(legacy('voting'))).toMatchObject({ current: null, openedAt: null, endsAt: null, revealedAt: null })
   })
 
   it('still makes its recap once finished', () => {
@@ -727,19 +831,33 @@ describe('a round of the background version', () => {
     }
     expect(game.recap(round).map((h) => h.title)).toEqual(['Sharpest eye: cy'])
   })
+
+  it("reads a stage save from before names, whose key held guests' ids, as the names it kept", () => {
+    const old = {
+      ...start().result,
+      key: { 1: ['id-a', 'id-b'] },
+      names: { 'id-a': 'Ana', 'id-b': 'Bo' },
+      showStartedAt: null,
+    } as unknown as FusionState
+    const state = readState(old)
+    expect(state.key).toEqual({ 1: ['Ana', 'Bo'] })
+    expect(state).not.toHaveProperty('names')
+  })
 })
 
 // Whole rounds through the in-memory party: the real step(), game_load and
 // game_commit rules, submit_answer's checks, and the timers' syncs.
 
+/** A party of `players` guests: their ids, and their names ("Guest 1" on), which pictures and guesses use. */
 function party(players = 8) {
   const p = simulateParty({ games: [new FusionGame()], players })
   const ids = p.players.map((pl) => pl.id)
-  return { p, ids }
+  const names = p.players.map((pl) => pl.name)
+  return { p, ids, names }
 }
 
 function startParty(p: FakeParty, settings: Record<string, unknown>) {
-  p.addGame(GAME, 'fusion', 'Who is fused?', { seconds: 30, showSeconds: 6, ...settings })
+  p.addGame(GAME, 'fusion', 'Who is fused?', { seconds: 30, ...settings })
   const started = p.send(p.hostUser, { type: 'start', gameId: GAME })
   expect(started.kind).toBe('commit')
   return started
@@ -747,8 +865,9 @@ function startParty(p: FakeParty, settings: Record<string, unknown>) {
 
 const hostAct = (p: FakeParty, action: unknown, close?: string[]) =>
   p.send(p.hostUser, { type: 'host-action', gameId: GAME, action, close })
-const lock = (p: FakeParty, n: number, voter: PlayerId, choice: PlayerId[], afterMs?: number) =>
-  p.submit(GAME, pictureKey(n), voter, { choice }, afterMs)
+/** A lock of two names (or one, to be refused); `intoCountdown` is ms into the countdown, which starts after the suspense. */
+const lock = (p: FakeParty, n: number, voter: PlayerId, choice: string[], intoCountdown?: number) =>
+  p.submit(GAME, pictureKey(n), voter, { choice }, intoCountdown === undefined ? undefined : SUSPENSE_MS + intoCountdown)
 const roomOf = (p: FakeParty) => readPublic(p.game(GAME).publicState)!
 const stateOf = (p: FakeParty) => p.stateOf(GAME)!.state as FusionState
 const recapOf = (p: FakeParty) => p.recapRounds(GAME)[0] as RecapRound<FusionState, FusionConfig>
@@ -761,49 +880,46 @@ function wakeUp(p: FakeParty, extra = 0) {
 }
 
 describe('a round in the party', () => {
-  it('takes the TV, shows the pictures, then asks them one by one with locks on the phones', () => {
-    const { p, ids } = party()
-    const [a, b, c, d, e, f, g] = ids
-    startParty(p, { pictures: [{ people: [a, b] }, { people: [c, d] }], pointsPerPerson: 1, bonusForBoth: 1 })
+  it('takes the TV, then asks the pictures one by one, everyone locking in two names on their phones', () => {
+    const { p, ids, names } = party()
+    const [a, , , , e, f, g] = ids
+    const [A, B, C, D] = names
+    startParty(p, { pictures: [{ people: [A, B] }, { people: [C, D] }], pointsPerPerson: 1, bonusForBoth: 1 })
     expect(p.spotlight).toBe(GAME) // a stage game takes the TV
     expect(p.promptsOf(GAME)).toEqual([])
     expect(roomOf(p).phase).toBe('lobby')
 
-    expect(hostAct(p, { type: 'show' }).kind).toBe('commit')
-    expect(roomOf(p).phase).toBe('showing')
-    expect(wakeUp(p).kind).toBe('commit')
-    expect(roomOf(p).phase).toBe('wall')
-
+    // From the lobby straight to the first picture: no showing.
     expect(hostAct(p, { type: 'ask', n: 1 }).kind).toBe('commit')
     expect(p.promptsOf(GAME).map((x) => x.key)).toEqual(['p1'])
-    lock(p, 1, e, [a, b])
-    lock(p, 1, f, [a, c])
-    expect(() => lock(p, 1, f, [a, b])).toThrow('You already answered') // the first lock counts
-    lock(p, 1, a, [b, c]) // in the picture: the database takes it, the reveal ignores it
-    expect(() => lock(p, 1, g, [g, a])).toThrow('That is not one of the options') // not yourself
-    expect(() => lock(p, 1, g, [a])).toThrow('Pick 2')
+    lock(p, 1, e, [A, B])
+    lock(p, 1, f, [A, C])
+    expect(() => lock(p, 1, f, [A, B])).toThrow('You already answered') // the first lock counts
+    lock(p, 1, a, [B, C]) // in the picture: she guesses too, and scores
+    expect(() => lock(p, 1, g, ['Nobody', A])).toThrow('That is not one of the options') // only the names offered
+    expect(() => lock(p, 1, g, [A])).toThrow('Pick 2')
     expect(p.talliesOf(GAME)).toEqual({ p1: 3 })
-    expect(canonicalJson(p.game(GAME).publicState)).not.toContain(a)
+    expect(canonicalJson(p.game(GAME).publicState)).not.toContain(`"${A}"`)
 
     // Reveal now, as the host page sends it.
     expect(hostAct(p, { type: 'reveal', n: 1 }, ['p1']).kind).toBe('commit')
     expect(hostAct(p, { type: 'reveal', n: 1 }, ['p1']).kind).toBe('skip') // a double tap
-    expect(roomOf(p).pictures[0].revealed).toMatchObject({ people: [a, b], names: ['Guest 1', 'Guest 2'], both: 1, one: 1, none: 0, voters: 2, step: 1 })
+    expect(roomOf(p).pictures[0].revealed).toMatchObject({ names: ['Guest 1', 'Guest 2'], both: 1, one: 2, none: 0, voters: 3, step: 1 })
     expect(roomOf(p).pictures[1].revealed).toBeNull()
-    expect(p.game(GAME).scores).toEqual({ [e]: 3, [f]: 1 })
-    expect(readView(p.game(GAME).views[e])).toEqual({ points: 3, rank: 1, hits: { 1: 2 }, inPicture: false })
-    expect(readView(p.game(GAME).views[a])).toMatchObject({ hits: {}, inPicture: true })
+    expect(p.game(GAME).scores).toEqual({ [e]: 3, [f]: 1, [a]: 1 })
+    expect(readView(p.game(GAME).views[e])).toEqual({ points: 3, rank: 1, hits: { 1: 2 } })
+    expect(readView(p.game(GAME).views[a])).toEqual({ points: 1, rank: 2, hits: { 1: 1 } })
     expect(p.feed).toEqual([])
 
     // The wall comes back by itself; then #2, revealed by the timer.
     expect(wakeUp(p).kind).toBe('commit')
     expect(roomOf(p)).toMatchObject({ phase: 'wall', current: null })
     expect(hostAct(p, { type: 'ask', n: 2 }).kind).toBe('commit')
-    lock(p, 2, e, [c, d], 29_900) // at 29.9 s
-    expect(() => lock(p, 2, g, [c, d], 31_000)).toThrow('Too late, answers are closed')
+    lock(p, 2, e, [C, D], 29_900) // 29.9 s into the countdown
+    expect(() => lock(p, 2, g, [C, D], 31_000)).toThrow('Too late, answers are closed')
     expect(wakeUp(p).kind).toBe('commit')
     expect(roomOf(p)).toMatchObject({ phase: 'reveal', current: { n: 2, step: 2 } })
-    expect(p.game(GAME).scores).toEqual({ [e]: 6, [f]: 1 })
+    expect(p.game(GAME).scores).toEqual({ [e]: 6, [f]: 1, [a]: 1 })
 
     expect(hostAct(p, { type: 'finish' }).kind).toBe('commit')
     expect(p.game(GAME)).toMatchObject({ status: 'finished', finishedBy: 'game', winners: [e] })
@@ -811,21 +927,30 @@ describe('a round in the party', () => {
     expect(p.feed.filter((item) => item.interrupt).map((item) => item.message)).toEqual(['Guest 5 has the sharpest eye'])
   })
 
-  it('sets the key on the night and still keeps it secret', () => {
+  it('starts settings saved with guests’ ids, as their names', () => {
     const { p, ids } = party(5)
-    startParty(p, { pictures: [{}], pointsPerPerson: 1, bonusForBoth: 0 })
-    expect(hostAct(p, { type: 'ask', n: 1 })).toMatchObject({ kind: 'refuse', message: 'Set who is in #1 first' })
-    expect(hostAct(p, { type: 'setKey', n: 1, people: [ids[0], ids[1]] }).kind).toBe('commit')
-    expect(stateOf(p).key).toEqual({ 1: [ids[0], ids[1]] })
-    expect(canonicalJson(p.game(GAME).publicState)).not.toContain(ids[0])
-    expect(canonicalJson(Object.values(p.game(GAME).views))).not.toContain(ids[1])
-    expect(hostAct(p, { type: 'setKey', n: 1, people: [ids[1], ids[0]] }).kind).toBe('skip')
+    startParty(p, { pictures: [{ people: [ids[0], ids[1]] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    expect(stateOf(p).key).toEqual({ 1: ['Guest 1', 'Guest 2'] })
+    expect(canonicalJson(p.stateOf(GAME)!.state)).not.toContain(ids[0])
   })
 
-  it("keeps the two people's own photos off every phone and the TV until their picture's reveal", () => {
-    const { p, ids } = party(6)
-    const [a, b, c, d, e, f] = ids
+  it('types the key on the night and still keeps it secret', () => {
+    const { p, names } = party(5)
+    startParty(p, { pictures: [{}], pointsPerPerson: 1, bonusForBoth: 0 })
+    expect(hostAct(p, { type: 'ask', n: 1 })).toMatchObject({ kind: 'refuse', message: 'Set who is in #1 first' })
+    expect(hostAct(p, { type: 'setKey', n: 1, people: [names[0], 'Quentin'] }).kind).toBe('commit')
+    expect(stateOf(p).key).toEqual({ 1: [names[0], 'Quentin'] })
+    expect(canonicalJson(p.game(GAME).publicState)).not.toContain('Quentin')
+    expect(canonicalJson(Object.values(p.game(GAME).views))).not.toContain('Quentin')
+    expect(hostAct(p, { type: 'setKey', n: 1, people: ['Quentin', names[0]] }).kind).toBe('skip')
+  })
+
+  it("keeps each picture's image off every phone and the TV until it is asked, and the own photos until its reveal", () => {
+    const { p, ids, names } = party(6)
+    const [a, , , , e, f] = ids
+    const [A, B, C, D] = names
     const photos = { a: 's/g/secret-a.jpg', b: 's/g/secret-b.jpg', c: 's/g/secret-c.jpg' }
+    const images = { one: 's/g/fused-one.jpg', two: 's/g/fused-two.jpg' }
     // Everything a phone or the TV reads: the public state, the views, the prompts, the feed, the party's data and players, the tallies.
     const screens = () =>
       canonicalJson({
@@ -838,84 +963,85 @@ describe('a round in the party', () => {
         tallies: p.talliesOf(GAME),
         pings: p.pings,
       })
-    const seen = () => Object.entries(photos).filter(([, path]) => screens().includes(path)).map(([who]) => who)
+    const seen = (paths: Record<string, string>) => Object.entries(paths).filter(([, path]) => screens().includes(path)).map(([who]) => who)
     startParty(p, {
       pictures: [
-        { people: [a, b], originals: [photos.a, photos.b] },
-        { people: [c, d], originals: [photos.c, null] },
+        { image: images.one, people: [A, B], originals: [photos.a, photos.b] },
+        { image: images.two, people: [C, D], originals: [photos.c, null] },
       ],
       pointsPerPerson: 1,
       bonusForBoth: 0,
     })
-    expect(seen()).toEqual([])
-    hostAct(p, { type: 'show' })
-    expect(seen()).toEqual([])
-    wakeUp(p)
+    expect(seen(photos)).toEqual([])
+    expect(seen(images)).toEqual([])
+    hostAct(p, { type: 'wall', from: 'lobby' })
+    expect(seen(images)).toEqual([])
     hostAct(p, { type: 'ask', n: 1 })
-    lock(p, 1, e, [a, b])
-    lock(p, 1, f, [a, c])
-    lock(p, 1, a, [c, d]) // in the picture: kept, never told
-    expect(seen()).toEqual([])
+    // Asked: its image reaches the room now (the TV loads it during the suspense), and only its.
+    expect(seen(images)).toEqual(['one'])
+    lock(p, 1, e, [A, B])
+    lock(p, 1, f, [A, C])
+    lock(p, 1, a, [C, D])
+    expect(seen(photos)).toEqual([])
     // The reveal hands the TV #1's two photos, in the people's order, and nobody else's.
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
-    expect(seen()).toEqual(['a', 'b'])
+    expect(seen(photos)).toEqual(['a', 'b'])
     expect(roomOf(p).pictures[0].revealed?.originals).toEqual([photos.a, photos.b])
     expect(canonicalJson(p.game(GAME).views)).not.toContain('secret-')
     wakeUp(p)
+    expect(seen(images)).toEqual(['one'])
     hostAct(p, { type: 'ask', n: 2 })
-    expect(seen()).toEqual(['a', 'b'])
+    expect(seen(images)).toEqual(['one', 'two'])
+    expect(seen(photos)).toEqual(['a', 'b'])
     hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
-    expect(seen()).toEqual(['a', 'b', 'c'])
+    expect(seen(photos)).toEqual(['a', 'b', 'c'])
     expect(roomOf(p).pictures[1].revealed?.originals).toEqual([photos.c, null])
   })
 
   it('handles a guest who joins late and locks in, and one who leaves', () => {
-    const { p, ids } = party(5)
-    startParty(p, { pictures: [{ people: [ids[0], ids[1]] }, { people: [ids[2], ids[3]] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    const { p, ids, names } = party(5)
+    startParty(p, { pictures: [{ people: [names[0], names[1]] }, { people: [names[2], names[3]] }], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
     const late = p.addPlayer('Late')
     p.sync(GAME)
-    expect(readView(p.game(GAME).views[late.id])).toEqual({ points: 0, rank: null, hits: {}, inPicture: false })
-    lock(p, 1, late.id, [ids[0], ids[1]]) // a late guest can lock in
-    lock(p, 1, ids[4], [ids[0], ids[1]])
+    expect(readView(p.game(GAME).views[late.id])).toEqual({ points: 0, rank: null, hits: {} })
+    lock(p, 1, late.id, [names[0], names[1]]) // a late guest can lock in
+    lock(p, 1, ids[4], [names[0], names[1]])
     p.removePlayer(ids[4]) // removed before the reveal: their lock goes with them
     p.sync(GAME)
     p.removePlayer(ids[1]) // someone in picture 1 leaves; the print still shows them
     p.sync(GAME)
     expect(hostAct(p, { type: 'reveal', n: 1 }, ['p1']).kind).toBe('commit')
-    expect(roomOf(p).pictures[0].revealed).toMatchObject({ people: [ids[0], ids[1]], names: ['Guest 1', 'Guest 2'], both: 1, voters: 1 })
+    expect(roomOf(p).pictures[0].revealed).toMatchObject({ names: ['Guest 1', 'Guest 2'], both: 1, voters: 1 })
     expect(p.game(GAME).scores).toEqual({ [late.id]: 2 })
   })
 
   it('ends by the host while a picture is asked: the crown from the points so far, that picture secret', () => {
-    const { p, ids } = party(6)
-    startParty(p, { pictures: [{ people: [ids[0], ids[1]] }, { people: [ids[2], ids[3]] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    const { p, ids, names } = party(6)
+    startParty(p, { pictures: [{ people: [names[0], names[1]] }, { people: [names[2], names[3]] }], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
-    lock(p, 1, ids[4], [ids[0], ids[1]])
+    lock(p, 1, ids[4], [names[0], names[1]])
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
     hostAct(p, { type: 'wall', from: 'reveal', n: 1 })
     hostAct(p, { type: 'ask', n: 2 })
-    lock(p, 2, ids[5], [ids[2], ids[3]])
+    lock(p, 2, ids[5], [names[2], names[3]])
     expect(p.send(p.hostUser, { type: 'end', gameId: GAME }).kind).toBe('commit')
     expect(p.game(GAME)).toMatchObject({ status: 'finished', finishedBy: 'host', winners: [ids[4]], scores: { [ids[4]]: 2 } })
     expect(p.promptsOf(GAME).find((x) => x.key === 'p2')).toMatchObject({ revealedAt: null })
     expect(p.promptsOf(GAME).find((x) => x.key === 'p2')!.closedAt).not.toBeNull()
     expect(roomOf(p).phase).toBe('done')
-    expect(canonicalJson(p.game(GAME).publicState)).not.toContain(ids[2])
+    expect(roomOf(p).pictures[1]).toMatchObject({ asked: false, revealed: null })
   })
 
   it('keeps its contract over a hand-written round with a join and a leave', () => {
-    const roster = simulateParty({ games: [game], players: 6 }).players.map((pl) => pl.id)
+    const roster = simulateParty({ games: [game], players: 6 }).players.map((pl) => pl.name)
     const choice = (x: number, y: number) => ({ choice: [roster[x], roster[y]].sort() })
     const example: ContractExample = {
-      config: { pictures: [{ people: [roster[0], roster[1]] }, { label: 'Viking' }, {}], pointsPerPerson: 1, bonusForBoth: 1, seconds: 10, showSeconds: 3 },
+      config: { pictures: [{ people: [roster[0], roster[1]] }, { label: 'Viking' }, {}], pointsPerPerson: 1, bonusForBoth: 1, seconds: 10 },
       players: 6,
       steps: [
-        { kind: 'host', action: { type: 'show' } },
-        { kind: 'host', action: { type: 'show' } },
-        { kind: 'tick', ms: 9_000 },
-        { kind: 'sync' },
-        { kind: 'host', action: { type: 'wall', from: 'showing' } },
+        { kind: 'host', action: { type: 'wall', from: 'lobby' } },
+        { kind: 'host', action: { type: 'wall', from: 'lobby' } },
         { kind: 'host', action: { type: 'ask', n: 2 } },
         { kind: 'host', action: { type: 'ask', n: 1 } },
         { kind: 'answer', player: 2, key: 'p1', answer: choice(0, 1) },
@@ -924,7 +1050,7 @@ describe('a round in the party', () => {
         { kind: 'join' },
         { kind: 'answer', player: 6, key: 'p1', answer: choice(0, 1) },
         { kind: 'host', action: { type: 'ask', n: 1 } },
-        { kind: 'host', action: { type: 'setKey', n: 2, people: [roster[2], roster[3]] } },
+        { kind: 'host', action: { type: 'setKey', n: 2, people: [roster[2], 'Tilde'] } },
         { kind: 'tick', ms: 5_000 },
         { kind: 'sync' },
         { kind: 'tick', ms: 7_000 },
@@ -949,8 +1075,8 @@ describe('a round in the party', () => {
     if ('refused' in result) throw new Error(result.refused)
     const { steps } = result.example
     const hostSteps = steps.flatMap((s) => (s.kind === 'host' ? [(s.action as { type: string }).type] : []))
-    // It starts the showing, asks all four (Reveal now once everyone has locked in) and crowns the detective by itself: no End needed.
-    expect(hostSteps[0]).toBe('show')
+    // It asks the first picture from the lobby, all four (Reveal now once everyone has locked in), and crowns the detective by itself: no End needed.
+    expect(hostSteps[0]).toBe('ask')
     expect(hostSteps.filter((type) => type === 'ask')).toHaveLength(BOT_PICTURES)
     expect(hostSteps.at(-1)).toBe('finish')
     expect(steps.some((s) => s.kind === 'end')).toBe(false)
@@ -962,22 +1088,23 @@ describe('a round in the party', () => {
 describe('races, the quiz’s way', () => {
   /** A party at picture #1 asked, with one lock in. */
   function asking() {
-    const { p, ids } = party(6)
-    startParty(p, { pictures: [{ people: [ids[0], ids[1]] }, { people: [ids[2], ids[3]] }, { people: [ids[4], ids[5]] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    const { p, ids, names } = party(6)
+    const pair = (x: number, y: number) => ({ people: [names[x], names[y]] })
+    startParty(p, { pictures: [pair(0, 1), pair(2, 3), pair(4, 5)], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
-    lock(p, 1, ids[2], [ids[0], ids[1]])
-    return { p, ids }
+    lock(p, 1, ids[2], [names[0], names[1]])
+    return { p, ids, names }
   }
   /** The same, revealed. */
   function revealing() {
-    const { p, ids } = asking()
+    const { p, ids, names } = asking()
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
-    return { p, ids }
+    return { p, ids, names }
   }
 
   it('the countdown ends as the host taps Reveal now: the host first, then the timer is skipped', () => {
     const { p } = asking()
-    p.tick(31_250)
+    p.tick(SUSPENSE_MS + 31_250)
     expect(hostAct(p, { type: 'reveal', n: 1 }, ['p1']).kind).toBe('commit')
     expect(p.sync(GAME).kind).toBe('skip')
     expect(roomOf(p).pictures[0].revealed).toMatchObject({ both: 1, voters: 1 })
@@ -1012,12 +1139,11 @@ describe('races, the quiz’s way', () => {
     expect(roomOf(askFirst.p)).toMatchObject({ phase: 'asking', current: { n: 2 } })
   })
 
-  it('the showing ends as the host taps Skip to the wall: the second is skipped', () => {
-    const { p, ids } = party(4)
-    startParty(p, { pictures: [{ people: [ids[0], ids[1]] }], pointsPerPerson: 1, bonusForBoth: 0 })
-    hostAct(p, { type: 'show' })
-    expect(wakeUp(p).kind).toBe('commit')
-    expect(hostAct(p, { type: 'wall', from: 'showing' }).kind).toBe('skip')
+  it('the lobby’s Show the wall first as the host asks #1: the ask applies either way, the wall step is skipped', () => {
+    const { p, names } = party(4)
+    startParty(p, { pictures: [{ people: [names[0], names[1]] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    expect(hostAct(p, { type: 'ask', n: 1 }).kind).toBe('commit')
+    expect(hostAct(p, { type: 'wall', from: 'lobby' }).kind).toBe('skip')
   })
 
   it('a double tap on Ask: the second is skipped', () => {
@@ -1035,24 +1161,30 @@ describe('races, the quiz’s way', () => {
 
   it('a sync before the wake time finds nothing due', () => {
     const { p } = asking()
-    p.tick(20_000)
+    p.tick(SUSPENSE_MS + 20_000)
     expect(p.sync(GAME).kind).toBe('skip')
     expect(roomOf(p).phase).toBe('asking')
   })
 
-  it('a lock at 29.9 s counts; one past the grace second is refused; a second lock is refused', () => {
-    const { p, ids } = asking()
-    lock(p, 1, ids[3], [ids[0], ids[5]], 29_900)
-    lock(p, 1, ids[4], [ids[0], ids[1]], 30_999)
-    expect(() => lock(p, 1, ids[5], [ids[0], ids[1]], 31_000)).toThrow('Too late, answers are closed')
-    expect(() => lock(p, 1, ids[2], [ids[0], ids[5]])).toThrow('You already answered')
+  it('a lock at 29.9 s of the countdown counts; one past the grace second is refused; a second lock is refused', () => {
+    const { p, ids, names } = asking()
+    lock(p, 1, ids[3], [names[0], names[5]], 29_900)
+    lock(p, 1, ids[4], [names[0], names[1]], 30_999)
+    expect(() => lock(p, 1, ids[5], [names[0], names[1]], 31_000)).toThrow('Too late, answers are closed')
+    expect(() => lock(p, 1, ids[2], [names[0], names[5]])).toThrow('You already answered')
     expect(wakeUp(p).kind).toBe('commit')
     expect(roomOf(p).pictures[0].revealed).toMatchObject({ both: 2, one: 1, voters: 3 })
+  })
+
+  it('a lock during the suspense counts too: the guess is open from the ask, the phone shows its picker once the picture is in', () => {
+    const { p, ids, names } = asking()
+    lock(p, 1, ids[3], [names[0], names[1]], -SUSPENSE_MS + 500)
+    expect(p.talliesOf(GAME)).toEqual({ p1: 2 })
   })
 })
 
 describe('the bot', () => {
-  it('makes four pictures from pairs of the first eight players, 10 s to guess and a 3 s showing', () => {
+  it('makes four pictures from pairs of the first eight players, 10 s to guess: ids, as settings from before names, read as names at the start', () => {
     const ids = Array.from({ length: 10 }, (_, i) => `p${i}`)
     expect(bot.settings!(ids)).toEqual({
       pictures: [
@@ -1064,23 +1196,32 @@ describe('the bot', () => {
       pointsPerPerson: 1,
       bonusForBoth: 1,
       seconds: 10,
-      showSeconds: 3,
     })
     expect(game.parseConfig({ ...game.defaultConfig, ...bot.settings!(['a', 'b', 'c']) }).pictures).toHaveLength(4)
     expect(game.parseConfig({ ...game.defaultConfig, ...bot.settings!(['solo']) }).pictures[0]).toEqual({ label: '#1' })
+    const { p, ids: party6 } = party(6)
+    startParty(p, bot.settings!(party6))
+    expect(stateOf(p).key[1]).toEqual(['Guest 1', 'Guest 2'])
   })
 
-  it('locks in only while a picture is asked, never on a picture it is in, and only once', () => {
-    const { p, ids } = party(6)
+  it('locks in on every picture asked once it is in on the TV, the two in it too, with two names offered but its own, and only once', () => {
+    const { p, ids, names } = party(6)
     startParty(p, bot.settings!(ids))
     const random = () => 0 // always now
     expect(bot.move(botSight(p, GAME, ids[4], random))).toBeNull() // the lobby
     hostAct(p, { type: 'ask', n: 1 })
-    expect(bot.move(botSight(p, GAME, ids[0], random))).toBeNull() // in #1
+    expect(bot.move(botSight(p, GAME, ids[4], random))).toBeNull() // the TV's suspense: no picker yet
+    p.tick(SUSPENSE_MS)
+    const inIt = bot.move(botSight(p, GAME, ids[0], random)) // in #1: guesses all the same
+    expect(inIt).toMatchObject({ kind: 'answer', key: 'p1' })
     const move = bot.move(botSight(p, GAME, ids[4], random))
     expect(move).toMatchObject({ kind: 'answer', key: 'p1' })
-    if (move?.kind !== 'answer') throw new Error('No lock')
-    expect((move.answer as { choice: string[] }).choice).not.toContain(ids[4])
+    if (move?.kind !== 'answer' || inIt?.kind !== 'answer') throw new Error('No lock')
+    const picked = (move.answer as { choice: string[] }).choice
+    expect(picked).toHaveLength(2)
+    expect(picked).not.toContain(names[4])
+    expect(picked.every((name) => names.includes(name))).toBe(true)
+    expect((inIt.answer as { choice: string[] }).choice).not.toContain(names[0])
     p.submit(GAME, move.key, ids[4], move.answer)
     expect(bot.move(botSight(p, GAME, ids[4], random))).toBeNull() // locked in already
     p.tick(10_000)
@@ -1091,6 +1232,7 @@ describe('the bot', () => {
     const { p, ids } = party(6)
     startParty(p, bot.settings!(ids))
     hostAct(p, { type: 'ask', n: 1 })
+    p.tick(SUSPENSE_MS)
     // 10 s left: a chance of one in ten each second.
     expect(bot.move(botSight(p, GAME, ids[4], () => 0.2))).toBeNull()
     expect(bot.move(botSight(p, GAME, ids[4], () => 0.05))).not.toBeNull()
@@ -1098,25 +1240,19 @@ describe('the bot', () => {
     expect(bot.move(botSight(p, GAME, ids[4], () => 0.99))).not.toBeNull()
   })
 
-  it('runs the host’s steps: show, the wall by the timer, ask after a pause, Reveal now when everyone is in, crown', () => {
-    const { p, ids } = party(4)
-    startParty(p, { ...bot.settings!(ids), pictures: [{ label: '#1', people: [ids[0], ids[1]] }, { label: '#2' }] })
+  it('runs the host’s steps: ask the first from the lobby, Reveal now when everyone is in, the wall, ask after a pause, crown', () => {
+    const { p, ids, names } = party(4)
+    startParty(p, { ...bot.settings!(ids), pictures: [{ label: '#1', people: [names[0], names[1]] }, { label: '#2' }] })
     const next = () => bot.hostMove!(hostBotSight(p, GAME, () => 0.5) as HostBotSight)
-    expect(next()).toEqual({ action: { type: 'show' } })
-    hostAct(p, { type: 'show' })
-    expect(next()).toBeNull() // the showing runs: 2 pictures of 3 s
-    p.tick(6_000 + 4_000)
-    expect(next()).toBeNull() // the timer is due, not yet overdue
-    p.tick(1_000)
-    expect(next()).toEqual({ action: { type: 'wall', from: 'showing' } })
-    hostAct(p, { type: 'wall', from: 'showing' })
-    // The wall was due 5 s ago, longer than its pause: on to the first picture.
+    // No showing: straight to the first picture.
     expect(next()).toEqual({ action: { type: 'ask', n: 1 } })
     hostAct(p, { type: 'ask', n: 1 })
     expect(next()).toBeNull()
-    lock(p, 1, ids[2], [ids[0], ids[1]])
-    lock(p, 1, ids[3], [ids[0], ids[2]])
-    // Everyone who may vote (not the two in it) has locked in.
+    lock(p, 1, ids[2], [names[0], names[1]])
+    lock(p, 1, ids[3], [names[0], names[2]])
+    lock(p, 1, ids[0], [names[1], names[3]])
+    expect(next()).toBeNull() // one still to lock in: the two in it guess too
+    lock(p, 1, ids[1], [names[0], names[2]])
     expect(next()).toEqual({ action: { type: 'reveal', n: 1 }, close: ['p1'] })
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
     expect(next()).toBeNull() // the reveal holds the TV
@@ -1124,7 +1260,7 @@ describe('the bot', () => {
     expect(next()).toEqual({ action: { type: 'wall', from: 'reveal', n: 1 } })
     // As it should be: the timer brings the wall, and the host waits a moment on it.
     const timely = party(4)
-    startParty(timely.p, { ...bot.settings!(timely.ids), pictures: [{ label: '#1', people: [timely.ids[0], timely.ids[1]] }, { label: '#2' }] })
+    startParty(timely.p, { ...bot.settings!(timely.ids), pictures: [{ label: '#1', people: [timely.names[0], timely.names[1]] }, { label: '#2' }] })
     hostAct(timely.p, { type: 'ask', n: 1 })
     hostAct(timely.p, { type: 'reveal', n: 1 }, ['p1'])
     expect(wakeUp(timely.p).kind).toBe('commit')
@@ -1136,12 +1272,12 @@ describe('the bot', () => {
     expect(later()).toMatchObject({ action: { type: 'setKey', n: 2 } })
 
     p.sync(GAME)
-    // #2 has nobody set: the host sets it first, then asks it.
-    expect(next()).toEqual({ action: { type: 'setKey', n: 2, people: [ids[0], ids[1]] } })
-    hostAct(p, { type: 'setKey', n: 2, people: [ids[0], ids[1]] })
+    // #2 has nobody set: the host types two names first, then asks it.
+    expect(next()).toEqual({ action: { type: 'setKey', n: 2, people: [names[0], names[1]] } })
+    hostAct(p, { type: 'setKey', n: 2, people: [names[0], names[1]] })
     expect(next()).toEqual({ action: { type: 'ask', n: 2 } })
     hostAct(p, { type: 'ask', n: 2 })
-    p.tick(10_000 + GRACE_MS + WAKE_MARGIN_MS + 5_000)
+    p.tick(SUSPENSE_MS + 10_000 + GRACE_MS + WAKE_MARGIN_MS + 5_000)
     expect(next()).toEqual({ action: { type: 'reveal', n: 2 }, close: ['p2'] })
     hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
     hostAct(p, { type: 'wall', from: 'reveal', n: 2 })
@@ -1177,28 +1313,29 @@ describe('the bot', () => {
     expect(final.winners.length).toBeGreaterThan(0)
     const room = roomOf(p) as FusionPublicState
     expect(room.pictures.every((x) => x.revealed !== null)).toBe(true)
-    // Everyone locked in on every picture but the two in it.
-    expect(room.pictures.map((x) => x.revealed!.voters)).toEqual([43, 43, 43, 43])
+    // Everyone locked in on every picture, the two in it too.
+    expect(room.pictures.map((x) => x.revealed!.voters)).toEqual([45, 45, 45, 45])
     expect(stateOf(p).phase).toBe('done')
   })
 })
 
 describe('recap', () => {
   function finishedRound(reveal: number[]) {
-    const { p, ids } = party(8)
-    const [a, b, c, d, e, f, g] = ids
+    const { p, ids, names } = party(8)
+    const [A, B, C, D, E, F, G] = names
+    const [, , c, , e, f, g] = ids
     startParty(p, {
-      pictures: [{ people: [a, b] }, { label: 'Viking', people: [c, d] }, { people: [e, f] }],
+      pictures: [{ people: [A, B] }, { label: 'Viking', people: [C, D] }, { people: [E, F] }],
       pointsPerPerson: 1,
       bonusForBoth: 0,
     })
-    const locks: Record<number, [PlayerId, PlayerId[]][]> = {
-      1: [e, f, g].map((voter) => [voter, [a, b]]),
+    const locks: Record<number, [PlayerId, string[]][]> = {
+      1: [e, f, g].map((voter) => [voter, [A, B]]),
       2: [
-        [e, [c, d]],
-        [f, [a, g]],
-        [g, [a, b]],
-        [c, [d, e]], // in the picture: doesn't count
+        [e, [C, D]],
+        [f, [A, G]],
+        [g, [A, B]],
+        [c, [D, E]], // in the picture: names the other one, and scores it
       ],
     }
     for (const n of reveal) {
@@ -1224,12 +1361,29 @@ describe('recap', () => {
       expect.objectContaining({ title: 'Sharpest eye: Guest 5', detail: '4 points', players: [ids[4]], weight: 'headline' }),
       expect.objectContaining({
         title: 'Best disguise: Viking fooled the room',
-        detail: 'Only 1 of 3 saw Guest 3 and Guest 4',
+        detail: 'Only 1 of 4 saw Guest 3 and Guest 4',
         players: [ids[2], ids[3]],
         at: expect.any(Number),
       }),
       expect.objectContaining({ title: 'Perfect eye: Guest 5', players: [ids[4]] }),
     ])
+  })
+
+  it('counts a perfect eye on a picture you are in as the other one right: your own name is never offered', () => {
+    const { p, ids, names } = party(4)
+    const [A, B, C, D] = names
+    startParty(p, { pictures: [{ people: [A, B] }, { people: [C, D] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    hostAct(p, { type: 'ask', n: 1 })
+    lock(p, 1, ids[0], [B, C]) // in it: Bo is everything she could get
+    lock(p, 1, ids[2], [A, B])
+    hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
+    hostAct(p, { type: 'ask', n: 2 })
+    lock(p, 2, ids[0], [C, D])
+    lock(p, 2, ids[2], [D, A]) // in it: Dee, everything he could get
+    hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
+    hostAct(p, { type: 'finish' })
+    const perfect = game.recap(recapOf(p)).find((h) => h.title.startsWith('Perfect eye'))
+    expect(perfect).toMatchObject({ title: 'Perfect eye: Guest 1 and Guest 3', players: [ids[0], ids[2]] })
   })
 
   it('never names the people of a picture the host did not reveal', () => {
@@ -1242,22 +1396,26 @@ describe('recap', () => {
   })
 })
 
-// The guest list (docs/guest-list.md, 9.2): a picture may be of a guest the
-// host listed who hasn't joined, or never comes. Zelda and Quentin are on the
-// list and haven't joined; only the guests here guess and score.
+// Names, not the guest list (docs/engine-v2.md, 8.4): who is in a picture is
+// two typed names. The list only helps spell them; a picture may be of a
+// guest the host listed who never joins (Zelda), or of a name on no list at
+// all (Tilde), and a guess names them like anyone. Settings saved with ids
+// still start, as names.
 
-describe('guests on the list who are not here', () => {
+describe('names, not the guest list', () => {
   const GUESTS = [
     ...PLAYERS.map((id) => ({ id, name: id, joined: true })),
-    { id: 'zelda', name: 'Zelda', joined: false },
-    { id: 'quentin', name: 'Quentin', joined: false },
+    { id: 'f1c7a000-0000-4000-8000-000000000001', name: 'Zelda', joined: false },
+    { id: 'f1c7a000-0000-4000-8000-000000000002', name: 'Quentin', joined: false },
   ]
+  const ZELDA_ID = GUESTS[6].id
   const listed = (overrides: Overrides = {}): Overrides => ({ guests: GUESTS, ...overrides })
   const withZelda = (overrides: Partial<FusionConfig> = {}) =>
     config({
       pictures: [
-        { label: '#1', people: ['ana', 'zelda'], originals: ['s/g/ana.jpg', 's/g/zelda.jpg'] },
-        { label: '#2', people: ['cy', 'dee'] },
+        // Zelda by her id, as settings saved before names held her.
+        { label: '#1', people: ['ana', ZELDA_ID], originals: ['s/g/ana.jpg', 's/g/zelda.jpg'] },
+        { label: '#2', people: ['cy', 'Tilde'] },
         { label: 'The viking' },
       ],
       ...overrides,
@@ -1267,69 +1425,54 @@ describe('guests on the list who are not here', () => {
     host(state, action, listed(overrides), cfg)
   const pubListed = (state: FusionState, cfg = withZelda()) => game.publicState(state, testInfo(cfg, PLAYERS, { guests: GUESTS }))
 
-  it('starts with a picture of a guest who has not joined, and keeps their name from the list', () => {
+  it('starts with a picture of a guest who has not joined, and one of a name on no list, all as names', () => {
     const { result: state } = startListed()
-    expect(state.key).toEqual({ 1: ['ana', 'zelda'], 2: ['cy', 'dee'] })
-    expect(state.names).toEqual({ ana: 'ana', zelda: 'Zelda', cy: 'cy', dee: 'dee' })
+    expect(state.key).toEqual({ 1: ['ana', 'Zelda'], 2: ['cy', 'Tilde'] })
+    expect(canonicalJson(state)).not.toContain(ZELDA_ID)
   })
 
-  it('refuses only someone in neither list: removed from the guest list since', () => {
-    const cfg = withZelda({ pictures: [{ label: '#1', people: ['ana', 'ulrik'] }] })
+  it('refuses only an id on no list any more: removed from the guest list since', () => {
+    const cfg = withZelda({ pictures: [{ label: '#1', people: ['ana', 'f1c7a000-0000-4000-8000-000000000099'] }] })
     expect(() => run((ctx) => game.setup(ctx), listed(), cfg)).toThrow(
-      "#1 names someone who isn't on the guest list any more. Pick again in the settings.",
+      "#1 names someone who isn't on the guest list any more. Type their name in the settings.",
     )
   })
 
-  it('sets a key on the night with a guest who has not joined (Show who), keeping their name', () => {
+  it('types a key on the night with any name (Show who)', () => {
     const state = startListed().result
-    const changed = hostListed(state, { type: 'setKey', n: 3, people: ['quentin', 'eve'] }).result
-    expect(changed.key[3]).toEqual(['quentin', 'eve'])
-    expect(changed.names).toMatchObject({ quentin: 'Quentin', eve: 'eve', zelda: 'Zelda' })
-    expect(() => hostListed(state, { type: 'setKey', n: 3, people: ['quentin', 'ulrik'] })).toThrow('Pick two people on the guest list')
+    const changed = hostListed(state, { type: 'setKey', n: 3, people: ['Quentin', 'Viggo'] }).result
+    expect(changed.key[3]).toEqual(['Quentin', 'Viggo'])
   })
 
-  it('gives the room every expected guest by id and name, the same whatever the pictures, and nothing about the key', () => {
+  it('gives the room no list of who is expected: the names to guess come with each picture’s guess', () => {
     const state = startListed().result
     const room = pubListed(state)
-    expect(room.expected).toEqual([
-      { id: 'zelda', name: 'Zelda' },
-      { id: 'quentin', name: 'Quentin' },
-    ])
-    // The same list with no picture of anyone expected: being listed says nothing about the pictures.
-    const plain = config()
-    expect(game.publicState(run((ctx) => game.setup(ctx), listed(), plain).result, testInfo(plain, PLAYERS, { guests: GUESTS })).expected).toEqual(
-      room.expected,
-    )
+    expect(room).not.toHaveProperty('expected')
     for (const picture of room.pictures) expect(picture.revealed).toBeNull()
-    expect(canonicalJson(room.pictures)).not.toMatch(/zelda|Zelda|ana/)
-    // A guest who joined since is a guest here, not expected.
-    const joined = GUESTS.map((g) => (g.id === 'zelda' ? { ...g, joined: true } : g))
-    expect(game.publicState(state, testInfo(withZelda(), [...PLAYERS, 'zelda'], { guests: joined })).expected).toEqual([
-      { id: 'quentin', name: 'Quentin' },
-    ])
-    // A round saved before the guest list reads as nobody expected.
-    expect(readPublic({ ...room, expected: undefined })!.expected).toEqual([])
+    expect(canonicalJson(room)).not.toMatch(/Zelda|Tilde|ana|Quentin/)
+    // The guess offers everyone here and every name in the pictures; a listed guest in no picture is not among them.
+    expect(guessNames(state, testInfo(withZelda(), PLAYERS))).toEqual(['ana', 'bo', 'cy', 'dee', 'eve', 'fin', 'Tilde', 'Zelda'])
   })
 
-  it('asks and reveals a picture of a guest who never came, with their name and own photo; only guests here score', () => {
+  it('asks and reveals a picture of a guest who never came, with her name and own photo; everyone here scores', () => {
     const asking = hostListed(startListed().result, { type: 'ask', n: 1 }, { now: 10_000 }).result
     const locks = closedWith(1, 10_000, [
-      ['bo', ['ana', 'zelda']],
+      ['bo', ['ana', 'Zelda']],
       ['cy', ['ana', 'eve']],
+      ['ana', ['Zelda', 'bo']], // in it: names Zelda, and scores
       ['zelda', ['ana', 'bo']], // a lock from someone not here (crafted): counts for nothing
     ], 20_000)
     const { result: revealedState, effects } = hostListed(asking, { type: 'reveal', n: 1 }, locks)
-    expect(revealedState.totals).toEqual({ bo: 2, cy: 1 })
-    expect(revealedState.results[1]).toMatchObject({ both: 1, one: 1, none: 0, voters: 2 })
+    expect(revealedState.totals).toEqual({ bo: 2, cy: 1, ana: 1 })
+    expect(revealedState.results[1]).toMatchObject({ both: 1, one: 2, none: 0, voters: 3 })
     // The log's about names only the guest here.
     expect(effects.records[0]).toMatchObject({ type: 'revealed', about: ['ana'] })
     expect(pubListed(revealedState).pictures[0].revealed).toMatchObject({
-      people: ['ana', 'zelda'],
       names: ['ana', 'Zelda'],
       originals: ['s/g/ana.jpg', 's/g/zelda.jpg'],
-      voters: 2,
+      voters: 3,
     })
-    // Read by a room that doesn't have Zelda on the list any more: the key kept her name.
+    // Read by a room that doesn't have Zelda on the list any more: the key is her name.
     expect(pub(revealedState, PLAYERS, withZelda()).pictures[0].revealed?.names).toEqual(['ana', 'Zelda'])
   })
 
@@ -1341,8 +1484,7 @@ describe('guests on the list who are not here', () => {
     expect(left.results[1].hits).toEqual({ dee: 1, eve: 2 })
     expect(left.results[1]).toMatchObject({ both: 2, one: 1, none: 0, voters: 3 })
     expect(left.key).toEqual(reveal.key)
-    expect(left.names).toEqual(reveal.names)
-    // Someone in the picture who leaves keeps the key and names: they name the guest in the picture.
+    // Someone in the picture who leaves keeps the key: it names the people in the picture.
     const inIt = game.onPlayerLeave(reveal, 'ana')
     expect(inIt).toBe(reveal)
     // Someone with nothing in the round changes nothing.
@@ -1350,14 +1492,14 @@ describe('guests on the list who are not here', () => {
   })
 
   it('names a guest who never came in the recap from the key, and leaves them out of its people', () => {
-    const { p, ids } = party(6)
+    const { p, ids, names } = party(6)
     const [a, b, c, d] = ids
-    const zelda = p.listGuest('Zelda')
-    startParty(p, { pictures: [{ people: [a, zelda.id] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    const [A, B, C, D] = names
+    startParty(p, { pictures: [{ people: [A, 'Zelda'] }], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
-    lock(p, 1, b, [a, c])
-    lock(p, 1, c, [a, d])
-    lock(p, 1, d, [b, c])
+    lock(p, 1, b, [A, C])
+    lock(p, 1, c, [A, D])
+    lock(p, 1, d, [B, C])
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
     hostAct(p, { type: 'finish' })
     const disguise = game.recap(recapOf(p)).find((h) => h.title.startsWith('Best disguise'))
@@ -1365,17 +1507,19 @@ describe('guests on the list who are not here', () => {
   })
 })
 
-describe('a party where a picture is of a guest who never came', () => {
-  it('asks it, takes guesses that name them, reveals it with their name and own photo, and scores only the guests here', () => {
-    const { p, ids } = party(6)
-    const [a, b, c, d, e, f] = ids
+describe('a party where a picture is of someone who never came', () => {
+  it('asks it, takes guesses that name her, reveals it with her name and own photo, and scores everyone here', () => {
+    const { p, ids, names } = party(6)
+    const [a, , , d, e, f] = ids
+    const [A, B, C] = names
     const zelda = p.listGuest('Zelda') // listed, never joins
-    const quentin = p.listGuest('Quentin') // listed, never joins, in no picture
+    p.listGuest('Quentin') // listed, never joins, in no picture
     const photo = 's/g/secret-zelda.jpg'
     startParty(p, {
       pictures: [
+        // Zelda by her id, as settings saved before names held her; Tilde typed, on no list.
         { people: [a, zelda.id], originals: [null, photo] },
-        { people: [b, c] },
+        { people: [B, 'Tilde'] },
       ],
       pointsPerPerson: 1,
       bonusForBoth: 1,
@@ -1391,84 +1535,80 @@ describe('a party where a picture is of a guest who never came', () => {
         players: p.players,
         tallies: p.talliesOf(GAME),
       })
-    // The expected guests reach the room as ids and names only, the same whatever the pictures.
-    expect(roomOf(p).expected).toEqual([
-      { id: zelda.id, name: 'Zelda' },
-      { id: quentin.id, name: 'Quentin' },
-    ])
     expect(screens()).not.toContain(photo)
+    expect(screens()).not.toContain(zelda.id)
     expect(p.players.map((pl) => pl.id)).not.toContain(zelda.id)
 
-    hostAct(p, { type: 'show' })
-    wakeUp(p)
     expect(hostAct(p, { type: 'ask', n: 1 }).kind).toBe('commit')
-    expect(p.promptsOf(GAME)[0].spec).toEqual(VOTE_SPEC)
-    lock(p, 1, d, [a, zelda.id]) // both right, naming a guest who never came
-    lock(p, 1, e, [a, quentin.id]) // one right
-    lock(p, 1, f, [b, c]) // none
-    lock(p, 1, a, [b, c]) // in the picture: the database takes it, the reveal ignores it
-    expect(() => lock(p, 1, b, [a, 'not-on-the-list'])).toThrow('That is not one of the options')
-    expect(() => p.submit(GAME, 'p1', zelda.id, { choice: [a, b] })).toThrow() // not here: no phone can answer for her
-    // Before the reveal: no key, no photo, nothing but the list's names.
+    // The names to guess: everyone here and every name in the pictures, never the listed Quentin, in no picture.
+    expect(p.promptsOf(GAME)[0].spec).toEqual(voteSpec([...names, 'Tilde', 'Zelda']))
+    lock(p, 1, d, [A, 'Zelda']) // both right, naming someone who never came
+    lock(p, 1, e, [A, 'Tilde']) // one right
+    lock(p, 1, f, [B, C]) // none
+    lock(p, 1, a, ['Zelda', B]) // in the picture: Zelda is right
+    expect(() => lock(p, 1, ids[1], [A, 'Quentin'])).toThrow('That is not one of the options')
+    expect(() => p.submit(GAME, 'p1', zelda.id, { choice: [A, B] })).toThrow() // not here: no phone can answer for her
+    // Before the reveal: no key, no photo.
     expect(screens()).not.toContain(photo)
-    expect(canonicalJson(roomOf(p).pictures)).not.toContain(zelda.id)
-    expect(canonicalJson(p.game(GAME).views)).not.toContain(zelda.id)
+    expect(canonicalJson(roomOf(p).pictures)).not.toContain('Zelda')
+    expect(canonicalJson(p.game(GAME).views)).not.toContain('Zelda')
 
     expect(hostAct(p, { type: 'reveal', n: 1 }, ['p1']).kind).toBe('commit')
     expect(roomOf(p).pictures[0].revealed).toMatchObject({
-      people: [a, zelda.id],
       names: ['Guest 1', 'Zelda'],
       originals: [null, photo],
       both: 1,
-      one: 1,
+      one: 2,
       none: 1,
-      voters: 3,
+      voters: 4,
     })
-    expect(p.game(GAME).scores).toEqual({ [d]: 3, [e]: 1 })
+    expect(p.game(GAME).scores).toEqual({ [d]: 3, [e]: 1, [a]: 1 })
     expect(readView(p.game(GAME).views[d])).toMatchObject({ points: 3, hits: { 1: 2 } })
-    expect(readView(p.game(GAME).views[a])).toMatchObject({ points: 0, hits: {} })
+    expect(readView(p.game(GAME).views[a])).toMatchObject({ points: 1, hits: { 1: 1 } })
     expect(p.game(GAME).views).not.toHaveProperty(zelda.id)
 
     wakeUp(p)
     hostAct(p, { type: 'ask', n: 2 })
-    lock(p, 2, d, [b, c])
+    lock(p, 2, d, [B, 'Tilde'])
     hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
+    expect(roomOf(p).pictures[1].revealed).toMatchObject({ names: ['Guest 2', 'Tilde'], both: 1 })
     expect(hostAct(p, { type: 'finish' }).kind).toBe('commit')
-    expect(p.game(GAME)).toMatchObject({ status: 'finished', winners: [d], scores: { [d]: 6, [e]: 1 } })
+    expect(p.game(GAME)).toMatchObject({ status: 'finished', winners: [d], scores: { [d]: 6, [e]: 1, [a]: 1 } })
     expect(p.game(GAME).scores).not.toHaveProperty(zelda.id)
   })
 
-  it('lets a guest in a picture who arrives mid-round guess the others, never scoring on their own', () => {
-    const { p, ids } = party(5)
-    const [a, b, c, d] = ids
+  it('lets a guest in a picture who arrives mid-round guess it and score like anyone, matched by her name', () => {
+    const { p, ids, names } = party(5)
+    const [, , , d] = ids
+    const [A, B, C] = names
     const zelda = p.listGuest('Zelda')
-    startParty(p, { pictures: [{ people: [a, zelda.id] }, { people: [b, c] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    startParty(p, { pictures: [{ people: [A, 'zelda'] }, { people: [B, C] }], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
     p.claimGuest(zelda.id) // she arrives while her own picture is asked
     p.sync(GAME)
-    expect(readView(p.game(GAME).views[zelda.id])).toMatchObject({ inPicture: true })
-    expect(roomOf(p).expected).toEqual([])
-    lock(p, 1, zelda.id, [a, b]) // the database takes it, the reveal ignores it
-    lock(p, 1, d, [a, zelda.id])
+    expect(readView(p.game(GAME).views[zelda.id])).toEqual({ points: 0, rank: null, hits: {} })
+    lock(p, 1, zelda.id, [A, B]) // she knows herself: Ana is right
+    lock(p, 1, d, [A, 'zelda'])
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
-    expect(roomOf(p).pictures[0].revealed).toMatchObject({ names: ['Guest 1', 'Zelda'], voters: 1, both: 1 })
-    expect(p.game(GAME).scores).toEqual({ [d]: 2 })
+    expect(roomOf(p).pictures[0].revealed).toMatchObject({ names: ['Guest 1', 'zelda'], voters: 2, both: 1, one: 1 })
+    expect(p.game(GAME).scores).toEqual({ [d]: 2, [zelda.id]: 1 })
     wakeUp(p)
     hostAct(p, { type: 'ask', n: 2 })
-    lock(p, 2, zelda.id, [b, c])
+    lock(p, 2, zelda.id, [B, C])
     hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
-    expect(p.game(GAME).scores).toEqual({ [d]: 2, [zelda.id]: 2 })
+    expect(p.game(GAME).scores).toEqual({ [d]: 2, [zelda.id]: 3 })
   })
 
-  it('gives a freed name taken again nothing from the round, and the picture still names the listed guest', () => {
-    const { p, ids } = party(5)
-    const [a, b, c, d] = ids
+  it('gives a freed name taken again nothing from the round, and the picture still names the person by name', () => {
+    const { p, ids, names } = party(5)
+    const [, , , d] = ids
+    const [A, B, C] = names
     const zelda = p.listGuest('Zelda')
     p.claimGuest(zelda.id)
-    startParty(p, { pictures: [{ people: [a, b] }, { people: [c, zelda.id] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    startParty(p, { pictures: [{ people: [A, B] }, { people: [C, 'Zelda'] }], pointsPerPerson: 1, bonusForBoth: 0 })
     hostAct(p, { type: 'ask', n: 1 })
-    lock(p, 1, zelda.id, [a, b])
-    lock(p, 1, d, [a, c])
+    lock(p, 1, zelda.id, [A, B])
+    lock(p, 1, d, [A, C])
     hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
     expect(p.game(GAME).scores).toEqual({ [zelda.id]: 2, [d]: 1 })
     p.tick(1000)
@@ -1476,22 +1616,20 @@ describe('a party where a picture is of a guest who never came', () => {
     p.sync(GAME)
     expect(p.game(GAME).scores).toEqual({ [d]: 1 })
     expect(stateOf(p).results[1].hits).toEqual({ [d]: 1 })
-    expect(roomOf(p).expected).toEqual([{ id: zelda.id, name: 'Zelda' }])
     p.tick(1000)
     p.claimGuest(zelda.id) // the real Zelda takes her name
     p.sync(GAME)
     expect(p.game(GAME).scores).toEqual({ [d]: 1 })
-    expect(readView(p.game(GAME).views[zelda.id])).toEqual({ points: 0, rank: null, hits: {}, inPicture: false })
+    expect(readView(p.game(GAME).views[zelda.id])).toEqual({ points: 0, rank: null, hits: {} })
     expect(stateOf(p).totals).not.toHaveProperty(zelda.id)
     // The room still saw what it saw, and her own picture still names her.
     expect(roomOf(p).pictures[0].revealed).toMatchObject({ both: 1, one: 1, voters: 2 })
-    expect(stateOf(p).key[2]).toEqual([c, zelda.id])
-    expect(stateOf(p).names[zelda.id]).toBe('Zelda')
+    expect(stateOf(p).key[2]).toEqual([C, 'Zelda'])
     wakeUp(p)
     hostAct(p, { type: 'ask', n: 2 })
-    lock(p, 2, d, [c, zelda.id])
+    lock(p, 2, d, [C, 'Zelda'])
     hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
-    expect(roomOf(p).pictures[1].revealed).toMatchObject({ people: [c, zelda.id], names: ['Guest 3', 'Zelda'] })
+    expect(roomOf(p).pictures[1].revealed).toMatchObject({ names: ['Guest 3', 'Zelda'] })
     expect(p.game(GAME).scores).toEqual({ [d]: 3 })
   })
 })

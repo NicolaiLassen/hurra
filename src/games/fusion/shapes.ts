@@ -2,18 +2,22 @@
 // 8.4): the public state, the player view, the host actions, the constants,
 // and the readers every screen reads saved JSON through.
 //
+// Who is in a picture is two typed names, never a guest's id: the guest list
+// only helps the host spell them (docs/engine-v2.md, 8.4, Config). A guess is
+// two names, and a name is right when it folds to one of the picture's
+// (nameKey: case, accents and spaces never matter).
+//
 // Bundled into the Netlify function with logic.ts: relative imports only, no
 // React, no browser globals.
 import type { PlayerId, PromptSpec } from '../core/Game'
+import { nameKey } from '../core/names'
 
-export type FusionPhase = 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done'
+export type FusionPhase = 'lobby' | 'wall' | 'asking' | 'reveal' | 'done'
 
 /** How the round is timed and scored, from the settings it started with. */
 export type FusionRules = {
-  /** Seconds to guess each picture: its countdown. */
+  /** Seconds to guess each picture: its countdown, which starts once the picture is in (SUSPENSE_MS). */
   seconds: number
-  /** Seconds each picture shows in the showing. */
-  showSeconds: number
   /** Points for each of a picture's two people a guest got right. */
   perPerson: number
   /** Extra points for getting both. */
@@ -22,18 +26,17 @@ export type FusionRules = {
 
 /** A revealed picture: who is in it and how the room did. */
 export type FusionReveal = {
-  people: [PlayerId, PlayerId]
-  /** Their names when it was revealed, for anyone who has left since. */
+  /** The two people's names, as the settings (or Show who) typed them. */
   names: [string, string]
-  /** Of the voters (guests who locked in and aren't in it): how many got both, one, none. */
+  /** Of the voters (guests here who locked in): how many got both, one, none. */
   both: number
   one: number
   none: number
   voters: number
   /**
-   * The two people's own photos, in the order of `people`: a game-media path
+   * The two people's own photos, in the order of `names`: a game-media path
    * (the full image; its thumbnail sits beside it), or null where the host
-   * added none. Secret like the key: here only once the picture is revealed.
+   * added none. Secret like the names: here only once the picture is revealed.
    */
   originals: [string | null, string | null]
   /** Its place in the guessing: 1 for the first picture asked. */
@@ -49,7 +52,14 @@ export type FusionPublicPicture = {
   key: string
   /** What the print says: "#3" unless the host named it. */
   label: string
-  /** A game-media path (the full image; its thumbnail sits beside it), or null: screens show the label instead. */
+  /** Asked already (being guessed, or revealed): until then the wall shows a placeholder. */
+  asked: boolean
+  /**
+   * A game-media path (the full image; its thumbnail sits beside it), only
+   * once the picture is asked: before that no screen knows what it looks
+   * like. Null for a picture not asked yet, and for one without an image
+   * (screens show its label instead).
+   */
   image: string | null
   /** Set once it is revealed, never before. */
   revealed: FusionReveal | null
@@ -62,8 +72,11 @@ export type FusionCurrent = {
   step: number
   /** Its prompt key. */
   key: string
-  /** When it was asked, and when its countdown ends (database clock). Locks are taken until endsAt + GRACE_MS. */
+  /** When it was asked (database clock): the TV's suspense starts here. */
   openedAt: number
+  /** When its countdown starts: once the TV has shown which picture it is (openedAt + SUSPENSE_MS). */
+  startsAt: number
+  /** When its countdown ends. Locks are taken until endsAt + GRACE_MS. */
   endsAt: number
   /** Set in the reveal phase; null while it is asked. */
   revealedAt: number | null
@@ -72,36 +85,16 @@ export type FusionCurrent = {
 /** A face detective in the top 5: ties share a rank (1, 2, 2, 4). */
 export type FusionTopRow = { playerId: PlayerId; points: number; rank: number }
 
-/**
- * A guest on the host's guest list who hasn't joined: a picture may be of
- * them, so a guess may name them (docs/guest-list.md, 9.2). Their id and name
- * only, nothing else about them.
- */
-export type FusionGuest = { id: PlayerId; name: string }
-
-/** What everyone sees. Never who is in a picture before its reveal. */
+/** What everyone sees. Never who is in a picture before its reveal, nor a picture's image before it is asked. */
 export type FusionPublicState = {
   phase: FusionPhase
   /** Every picture, in the settings' order. */
   pictures: FusionPublicPicture[]
   rules: FusionRules
-  /**
-   * The showing while it runs: picture i (from 0) is on from
-   * startedAt + i * rules.showSeconds * 1000, and the wall follows at endsAt.
-   * Null in every other phase.
-   */
-  showing: { startedAt: number; endsAt: number } | null
   /** Set in asking and reveal; null in every other phase. */
   current: FusionCurrent | null
   /** The top 5 face detectives still in the party, most points first. */
   top: FusionTopRow[]
-  /**
-   * Everyone on the guest list who hasn't joined, in the order the host added
-   * them: the phone's picker lists them after the guests here. Every one of
-   * them, whether a picture is of them or not, so the list says nothing about
-   * the key. Empty in saves from before the guest list.
-   */
-  expected: FusionGuest[]
 }
 
 /** What one guest sees. Their own lock comes from myAnswers. */
@@ -110,10 +103,8 @@ export type FusionPlayerView = {
   points: number
   /** Their place among the face detectives; null until they score. */
   rank: number | null
-  /** For each revealed picture they locked in on and aren't in, by picture number: how many of its two they got (0 to 2). */
+  /** For each revealed picture they locked in on, by picture number: how many of its two they got (0 to 2). */
   hits: Record<string, number>
-  /** They are in the picture being guessed or just revealed: they don't vote on it. */
-  inPicture: boolean
 }
 
 /**
@@ -123,15 +114,15 @@ export type FusionPlayerView = {
  * nothing. `reveal` is sent with close: [pictureKey(n)].
  */
 export type FusionHostAction =
-  | { type: 'show' }
-  | { type: 'wall'; from: 'lobby' | 'showing' }
+  | { type: 'wall'; from: 'lobby' }
   | { type: 'wall'; from: 'reveal'; n: number }
   | { type: 'ask'; n: number }
   | { type: 'reveal'; n: number }
-  | { type: 'setKey'; n: number; people: [PlayerId, PlayerId] }
+  /** Who is in picture n, as two typed names (the first beside the first own photo). */
+  | { type: 'setKey'; n: number; people: [string, string] }
   | { type: 'finish' }
 
-export const PHASES: readonly FusionPhase[] = ['lobby', 'showing', 'wall', 'asking', 'reveal', 'done']
+export const PHASES: readonly FusionPhase[] = ['lobby', 'wall', 'asking', 'reveal', 'done']
 
 export const MAX_PICTURES = 40
 export const MAX_LABEL_LENGTH = 20
@@ -139,9 +130,13 @@ export const MAX_POINTS = 10
 export const DEFAULT_SECONDS = 30
 export const MIN_SECONDS = 10
 export const MAX_SECONDS = 90
-export const DEFAULT_SHOW_SECONDS = 6
-export const MIN_SHOW_SECONDS = 3
-export const MAX_SHOW_SECONDS = 20
+/**
+ * From the ask to the countdown: the TV's suspense (the highlight hops across
+ * the pictures still to come, lands on the one asked, it grows to the middle
+ * and its face flips in). The countdown starts after it, so nobody loses
+ * guessing time to it.
+ */
+export const SUSPENSE_MS = 2800
 /** Locks are taken this long past the countdown, for taps still on their way. */
 export const GRACE_MS = 1000
 /** The timer reveals this long after the deadline, so game_load has closed the prompt (the quiz's reason). */
@@ -157,11 +152,24 @@ export const pictureKey = (n: number) => `p${n}`
 export const defaultLabel = (n: number) => `#${n}`
 
 /**
- * Each picture's guess: two other guests, and the first lock counts. Anyone on
- * the guest list, so a guess can name a guest who never came (only guests here
- * answer). Public: never anything about the answer.
+ * A picture's guess: two of `names`, and the first lock counts. The names are
+ * everyone who has joined and every name in the pictures, each once, so a
+ * guess can name someone who never came; public, and the same whichever
+ * picture is asked, so it says nothing about the answer. The phone leaves the
+ * guest's own name out.
  */
-export const VOTE_SPEC: PromptSpec = { kind: 'choice', options: 'guests', min: 2, max: 2, exclude_self: true, final: true }
+export const voteSpec = (names: readonly string[]): PromptSpec => ({ kind: 'choice', options: [...names], min: 2, max: 2, final: true })
+
+/**
+ * How many of a picture's two people a guess names, 0 to 2: a pick counts
+ * when it folds to one of their names. A pick of the voter's own name counts
+ * for nothing (their phone never offers it).
+ */
+export function countHits(picks: readonly string[], people: readonly [string, string], voter: string | null = null): number {
+  const own = voter === null ? '' : nameKey(voter)
+  const picked = new Set(picks.map(nameKey).filter((key) => key !== '' && key !== own))
+  return people.filter((name) => picked.has(nameKey(name))).length
+}
 
 /** What the host hears for a round started with the background version. */
 export const LEGACY_MESSAGE = 'This round started before the update. End it, then restart it.'
@@ -188,12 +196,15 @@ export function readPublic(raw: unknown): FusionPublicState | null {
   const pictures: FusionPublicPicture[] = raw.pictures.map((item, i) => {
     const p = isObject(item) ? item : {}
     const n = isWhole(p.n, 1) ? p.n : i + 1
+    const revealed = readReveal(p.revealed)
     return {
       n,
       key: typeof p.key === 'string' ? p.key : pictureKey(n),
       label: typeof p.label === 'string' ? p.label : defaultLabel(n),
+      // Saves from before the placeholders had no `asked`: a revealed picture was asked; the current one is set below.
+      asked: p.asked === true || revealed !== null,
       image: typeof p.image === 'string' && p.image !== '' ? p.image : null,
-      revealed: readReveal(p.revealed),
+      revealed,
     }
   })
 
@@ -206,44 +217,30 @@ export function readPublic(raw: unknown): FusionPublicState | null {
   for (const picture of unstepped) picture.revealed!.step = next++
 
   const rules = readRules(raw.rules, raw.scoring)
-  let phase: FusionPhase = PHASES.includes(raw.phase as FusionPhase) ? (raw.phase as FusionPhase) : 'lobby'
-
-  let showing: FusionPublicState['showing'] = null
-  if (phase === 'showing') {
-    const s = isObject(raw.showing) ? raw.showing : {}
-    if (isFiniteNumber(s.startedAt) && isFiniteNumber(s.endsAt)) showing = { startedAt: s.startedAt, endsAt: s.endsAt }
-    else phase = 'wall'
-  }
+  // The showing (before 26 November) reads as the wall: it is no longer part of the round.
+  let phase: FusionPhase = PHASES.includes(raw.phase as FusionPhase) ? (raw.phase as FusionPhase) : raw.phase === 'showing' ? 'wall' : 'lobby'
 
   let current: FusionCurrent | null = null
   if (phase === 'asking' || phase === 'reveal') {
     current = readCurrent(raw.current, pictures, phase)
     if (!current) phase = 'wall'
+    else {
+      const picture = pictures.find((p) => p.n === current!.n)
+      if (picture) picture.asked = true
+    }
   }
 
-  return { phase, pictures, rules, showing, current, top: readTop(raw.top), expected: readGuests(raw.expected) }
-}
-
-/** The expected guests a save carries: well formed ones, each id once. */
-function readGuests(raw: unknown): FusionGuest[] {
-  if (!Array.isArray(raw)) return []
-  const seen = new Set<string>()
-  const guests: FusionGuest[] = []
-  for (const item of raw) {
-    if (!isObject(item) || typeof item.id !== 'string' || item.id === '' || typeof item.name !== 'string' || seen.has(item.id)) continue
-    seen.add(item.id)
-    guests.push({ id: item.id, name: item.name })
-  }
-  return guests
+  return { phase, pictures, rules, current, top: readTop(raw.top) }
 }
 
 /** Null-at-times last when ordering by time. */
 const order = (at: number | null) => (at === null ? Number.MAX_SAFE_INTEGER : at)
 
 function readReveal(raw: unknown): FusionReveal | null {
-  if (!isObject(raw) || !isPair(raw.people)) return null
+  if (!isObject(raw)) return null
+  // Saves from before names kept the people as ids beside their names: the names are what the room saw.
+  if (!isPair(raw.names) && !isPair(raw.people)) return null
   return {
-    people: [raw.people[0], raw.people[1]],
     names: isPair(raw.names) ? [raw.names[0], raw.names[1]] : ['A guest', 'A guest'],
     both: count(raw.both),
     one: count(raw.one),
@@ -266,7 +263,6 @@ function readRules(raw: unknown, scoring: unknown): FusionRules {
   const r = isObject(raw) ? raw : isObject(scoring) ? scoring : {}
   return {
     seconds: isFiniteNumber(r.seconds) ? r.seconds : DEFAULT_SECONDS,
-    showSeconds: isFiniteNumber(r.showSeconds) ? r.showSeconds : DEFAULT_SHOW_SECONDS,
     perPerson: isFiniteNumber(r.perPerson) ? r.perPerson : 1,
     bothBonus: isFiniteNumber(r.bothBonus) ? r.bothBonus : 0,
   }
@@ -283,6 +279,8 @@ function readCurrent(raw: unknown, pictures: readonly FusionPublicPicture[], pha
     step: isWhole(raw.step, 1) ? raw.step : Math.max(1, fallbackStep),
     key: typeof raw.key === 'string' ? raw.key : picture.key,
     openedAt: raw.openedAt,
+    // Saves from before the suspense counted down from the ask.
+    startsAt: isFiniteNumber(raw.startsAt) ? raw.startsAt : raw.openedAt,
     endsAt: raw.endsAt,
     revealedAt: isFiniteNumber(raw.revealedAt) ? raw.revealedAt : null,
   }
@@ -313,7 +311,6 @@ export function readView(raw: unknown): FusionPlayerView | null {
     points: isFiniteNumber(raw.points) ? raw.points : 0,
     rank: isWhole(raw.rank, 1) ? raw.rank : null,
     hits,
-    inPicture: raw.inPicture === true,
   }
 }
 
@@ -324,29 +321,17 @@ export function isLegacyState(state: unknown): boolean {
 
 // Words and numbers --------------------------------------------------------------
 
-/** The showing's picture on show at `now` (0-based, clamped to the last), or null outside the showing. */
-export function showingIndex(pub: FusionPublicState, now: number): number | null {
-  if (pub.phase !== 'showing' || !pub.showing) return null
-  const each = Math.max(1, pub.rules.showSeconds * 1000)
-  const index = Math.floor((now - pub.showing.startedAt) / each)
-  return Math.min(Math.max(0, pub.pictures.length - 1), Math.max(0, index))
-}
-
-/** The strap's words (TV, and the phone's strap): see 6.1. Without `now`, the showing says its length. */
-export function strapWords(pub: FusionPublicState | null, now?: number): string {
+/** The strap's words (TV, and the phone's strap): see 6.1. */
+export function strapWords(pub: FusionPublicState | null): string {
   if (!pub) return 'Getting ready'
   const total = pub.pictures.length
   switch (pub.phase) {
     case 'lobby':
       return `${plural(total, 'picture')}, starting soon`
-    case 'showing': {
-      const index = now === undefined ? null : showingIndex(pub, now)
-      return index === null ? `Showing ${plural(total, 'picture')}` : `Showing ${index + 1} of ${total}`
-    }
     case 'wall': {
       const revealed = revealedCount(pub)
       if (revealed > 0) return `${revealed} of ${total} revealed`
-      return total === 1 ? '1 picture' : `All ${total} pictures`
+      return total === 1 ? '1 picture' : `${total} pictures`
     }
     case 'asking':
     case 'reveal':
@@ -396,9 +381,9 @@ export function bestDisguise(
   return best && best.revealed.both / best.revealed.voters < 0.5 ? best : null
 }
 
-/** The TV's lock-in total: max(locked, guests - 2, 0). Never the exact count of who may vote. */
+/** The TV's lock-in total: everyone here, or more once more have locked in. */
 export function lockedTotal(locked: number, guests: number): number {
-  return Math.max(locked, guests - 2, 0)
+  return Math.max(locked, guests, 0)
 }
 
 /** How many pictures are revealed. */

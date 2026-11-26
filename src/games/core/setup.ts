@@ -4,7 +4,7 @@
 
 /**
  * Whether a game's settings are ready to play, in one line for its row in the
- * host's Games panel: "8 pictures, all with their people", "6 of 8 songs
+ * host's Games panel: "8 pictures, all with two names", "6 of 8 songs
  * ready: 2 need a photo". Not ready makes Set up the row's next step instead
  * of Start; the host can still start a game its own check lets through.
  */

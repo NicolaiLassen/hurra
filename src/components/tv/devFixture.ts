@@ -4,7 +4,8 @@
 // arrives a moment after the page opens. The game data here is sample JSON
 // for screens only, like the fixtures it builds on; nothing outside dev reads it.
 //
-// ?fixture=<scene>   a FixtureScene, or recap, standings, between, pong, pong-final, pong-over, empty, hunt, hunt-ended,
+// ?fixture=<scene>   a FixtureScene, or recap, standings, standings-zero (nobody has scored yet), between, pong, pong-final,
+//                    pong-over, empty, hunt, hunt-ended,
 //                    quiz-lobby (before the first question), quiz-final (the quiz's podium),
 //                    fusion-final (Who is fused?'s podium)
 // &players=8|24|45   the party's size (trimmed, or padded with more guests)
@@ -12,7 +13,9 @@
 // &later=<seconds>   the clock moved on (a final screen's 3 minutes run out)
 // &news=banner|ticker|interrupt|stage|points   arrives 1.5 s after the page opens
 // &then=<scene>      the party 1.5 s after the page opens is in that fixture scene instead, its games' start times kept, so a
-//                    game on the stage moves on from one phase to the next (a transition to look at)
+//                    game on the stage moves on from one phase to the next (a transition to look at); with &news, the news
+//                    comes first and the party moves on 2 s after it, that scene's game taking the stage just then (its
+//                    title card shows), so news from one scene meets the next (news over a game taking the stage)
 // &host=1            a host's own browser: "Host preview"
 // &band=2            a round of darts runs underneath too, so the band has a second line (the stage's least room)
 // &band=0            nothing runs underneath the stage game and joining is closed: an empty band (the stage's most room)
@@ -27,6 +30,7 @@ import type { FeedItem, Player, ScoreRow, SessionGame, Snapshot } from '@/lib/ty
 export const TV_SCENES = [
   'recap',
   'standings',
+  'standings-zero',
   'between',
   'pong',
   'pong-final',
@@ -46,6 +50,8 @@ export type DevTv = {
   snapshot: Snapshot
   /** The snapshot a moment later, with the news in it. */
   later?: Snapshot
+  /** With both news and then: the party 2 s after the news, in the `then` scene, its game fresh on the stage. */
+  after?: Snapshot
   /** What the TV shows once the pairing screen's sample code (TV2026) is typed. */
   paired: Snapshot
   partyName: string
@@ -74,6 +80,7 @@ export function devTv(search: URLSearchParams): DevTv | null {
   const news = search.get('news') as News | null
   let snapshot = build(scene as FixtureScene | TvOnlyScene)
   if (size !== null && Number.isInteger(size) && size >= 0 && scene !== 'empty') snapshot = resize(snapshot, size)
+  if (scene === 'standings-zero') snapshot = zeroed(snapshot)
   if (scene === 'final' || scene === 'pong-final') snapshot = withPodiumGains(snapshot)
   if (search.get('fresh') === '1' && snapshot.session) {
     snapshot = { ...snapshot, session: { ...snapshot.session, spotlight_at: snapshot.now - 500 } }
@@ -89,17 +96,23 @@ export function devTv(search: URLSearchParams): DevTv | null {
   if (Number.isFinite(later) && later > 0) snapshot = { ...snapshot, now: snapshot.now + later * 1000 }
   const then = search.get('then')
   let next: Snapshot | undefined
-  if (news && NEWS.includes(news)) next = withNews(snapshot, news)
-  else if (isFixtureScene(then) || TV_SCENES.includes(then as TvOnlyScene)) {
-    let moved = build(then as FixtureScene | TvOnlyScene)
-    if (size !== null && Number.isInteger(size) && size >= 0 && then !== 'empty') moved = resize(moved, size)
+  let after: Snapshot | undefined
+  const thenScene = isFixtureScene(then) || TV_SCENES.includes(then as TvOnlyScene) ? (then as FixtureScene | TvOnlyScene) : null
+  const moveOn = (scene: FixtureScene | TvOnlyScene) => {
+    let moved = build(scene)
+    if (size !== null && Number.isInteger(size) && size >= 0 && scene !== 'empty') moved = resize(moved, size)
     if (twoLines) moved = withSecondLine(moved)
     if (noLines) moved = withoutLines(moved)
-    next = keepStarts(snapshot, moved)
+    return moved
   }
+  if (news && NEWS.includes(news)) {
+    next = withNews(snapshot, news)
+    if (thenScene) after = takesStage(next, moveOn(thenScene), AFTER_NEWS_MS)
+  } else if (thenScene) next = keepStarts(snapshot, moveOn(thenScene))
   return {
     snapshot,
     later: next,
+    after,
     paired: resize(fixtureSnapshot('lobby', 'tv'), size !== null && Number.isInteger(size) && size > 0 ? size : 12),
     partyName: 'Birthday party',
     recap: scene === 'recap' ? fixtureRecapDoc() : undefined,
@@ -116,6 +129,9 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
     case 'standings':
       // The final screen's 3 minutes are over: back to the standings, "Last game: Bo won ...".
       return { ...fixtureSnapshot('final', 'tv'), now: FIXTURE_NOW + 4 * MIN }
+    case 'standings-zero':
+      // The party before any game has given points: every guest level on 0.
+      return zeroed(fixtureSnapshot('lobby', 'tv'))
     case 'between': {
       // Three games running, none on the stage: the strip beside the podium.
       const s = fixtureSnapshot('background', 'tv')
@@ -204,6 +220,12 @@ function build(scene: FixtureScene | TvOnlyScene): Snapshot {
   }
 }
 
+/** Nobody has scored yet: every guest on 0, in A to Z as the standings sort a tie, and no game has given points. */
+function zeroed(s: Snapshot): Snapshot {
+  const standings = s.standings.map((row) => ({ ...row, points: 0 })).sort((a, b) => a.name.localeCompare(b.name))
+  return { ...s, standings, game_points: {} }
+}
+
 /** A round of darts live underneath, beside what already runs: the band's second line. */
 function withSecondLine(s: Snapshot): Snapshot {
   if (!s.session || s.games.some((g) => g.title === 'Darts')) return s
@@ -230,6 +252,20 @@ function withoutLines(s: Snapshot): Snapshot {
   if (!s.session) return s
   const stage = s.session.spotlight_game_id
   return { ...s, session: { ...s.session, status: 'closed' }, games: s.games.filter((g) => g.id === stage || g.status !== 'active') }
+}
+
+/** With both news and then, the party moves on this long after the news arrives. */
+export const AFTER_NEWS_MS = 2000
+
+/**
+ * `next` as it reads `ms` after `first`: its clock moved on, and its stage game
+ * taking the stage just then (so its title card shows), with `first`'s feed,
+ * so the news that arrived stays the newest and nothing reads as new again.
+ */
+function takesStage(first: Snapshot, next: Snapshot, ms: number): Snapshot {
+  const now = first.now + ms
+  const session = next.session ? { ...next.session, spotlight_at: now - 200 } : next.session
+  return { ...next, now, session, feed: first.feed }
 }
 
 /** `next` with the games' start times (and the stage's) of `first`, so a screen keyed on them stays mounted. */

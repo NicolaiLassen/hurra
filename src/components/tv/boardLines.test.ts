@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aheadLine, commentary, saidText, wonLine } from '@/components/tv/boardLines'
+import { aheadLine, commentary, hasLeader, saidText, wonLine } from '@/components/tv/boardLines'
 import { clockTime } from '@/components/tv/clock'
 import type { SessionGame } from '@/lib/types'
 
@@ -81,5 +81,20 @@ describe('commentary', () => {
     expect(saidText(commentary({ title: 'Darts' }, {}, { bo: 3 }, rows)!)).toBe('Darts gave Bo 3 points.')
     expect(saidText(commentary({ title: 'Darts' }, {}, { bo: 1, ana: 1 }, rows)!)).toBe('Darts gave Bo and Ana 1 point each.')
     expect(commentary({ title: 'Darts' }, {}, {}, rows)).toBeNull()
+  })
+})
+
+describe('hasLeader', () => {
+  const row = (name: string, points: number) => ({ player_id: name.toLowerCase(), name, points })
+
+  it('has no leader before anyone has scored, however many are level on 0', () => {
+    expect(hasLeader([])).toBe(false)
+    expect(hasLeader([row('Ana', 0)])).toBe(false)
+    expect(hasLeader([row('Ana', 0), row('Bo', 0), row('Mads', 0)])).toBe(false)
+  })
+
+  it('has a leader once anyone has a point', () => {
+    expect(hasLeader([row('Bo', 1), row('Ana', 0)])).toBe(true)
+    expect(hasLeader([row('Ana', 3), row('Bo', 3)])).toBe(true)
   })
 })

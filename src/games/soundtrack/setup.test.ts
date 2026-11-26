@@ -51,6 +51,19 @@ describe('Lydspor’s readiness', () => {
     expect(soundtrackSetup(two)).toEqual({ ready: true, line: '2 songs ready' })
   })
 
+  it('takes who sits out as typed names, a name nobody joins with and an old id alike, and never holds the game back for it', () => {
+    expect(soundtrackSetup({ ...sample(), sitOut: ['Zelda', 'p1', '00000000-0000-4000-8000-000000000000'] })).toEqual({
+      ready: true,
+      line: '8 songs and 4 extra photos ready',
+    })
+    expect(soundtrackSetup({ ...sample(), sitOut: [] }).ready).toBe(true)
+  })
+
+  it('reads songs saved with who is in their photo, which no longer counts', () => {
+    const old = withSongs(() => ({ inPhoto: ['p1'] }) as unknown as Partial<SoundtrackSong>)
+    expect(soundtrackSetup(old)).toEqual({ ready: true, line: '8 songs and 4 extra photos ready' })
+  })
+
   it('says when there are no songs, and reads settings with fields missing', () => {
     expect(soundtrackSetup({ ...sample(), songs: [] })).toEqual({ ready: false, line: 'No songs yet' })
     expect(soundtrackSetup({} as SoundtrackConfig)).toEqual({ ready: false, line: 'No songs yet' })

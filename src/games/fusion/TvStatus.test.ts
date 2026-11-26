@@ -11,17 +11,22 @@ import type { Player, SessionGame } from '@/lib/types'
 
 const NOW = 1_000_000
 const players: Player[] = ['Mads', 'Ida', 'Ana', 'Bo'].map((name, i) => ({ id: `p${i}`, name, code: `C${i}`, profile: {}, created_at: 0 }))
-const REVEAL: FusionReveal = { people: ['p0', 'p1'], names: ['Mads', 'Ida'], both: 9, one: 6, none: 6, voters: 21, originals: [null, null], step: 1, at: NOW - 5000 }
+const REVEAL: FusionReveal = { names: ['Mads', 'Ida'], both: 9, one: 6, none: 6, voters: 21, originals: [null, null], step: 1, at: NOW - 5000 }
 
-const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicPicture => ({ n, key: `p${n}`, label: `#${n}`, image: null, revealed })
+const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicPicture => ({
+  n,
+  key: `p${n}`,
+  label: `#${n}`,
+  asked: revealed !== null,
+  image: null,
+  revealed,
+})
 const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({
   phase: 'lobby',
   pictures: Array.from({ length: 12 }, (_, i) => picture(i + 1)),
-  rules: { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 },
-  showing: null,
+  rules: { seconds: 30, perPerson: 1, bothBonus: 1 },
   current: null,
   top: [],
-  expected: [],
   ...patch,
 })
 const withRevealed = (count: number) => Array.from({ length: 12 }, (_, i) => picture(i + 1, i < count ? { ...REVEAL, step: i + 1 } : null))
@@ -54,10 +59,14 @@ async function text(variant: TvStatusVariant, publicState: unknown, extra: { tal
 describe("fusion's strap words", () => {
   it.each([
     ['12 pictures, starting soon', state()],
-    ['Showing 3 of 12', state({ phase: 'showing', showing: { startedAt: NOW - 15_000, endsAt: NOW + 57_000 } })],
-    ['All 12 pictures', state({ phase: 'wall' })],
+    ['12 pictures', state({ phase: 'wall' })],
+    // A save from the showing, before 26 November, reads as the wall.
+    ['12 pictures', { ...state(), phase: 'showing', showing: { startedAt: NOW - 15_000, endsAt: NOW + 57_000 } }],
     ['4 of 12 revealed', state({ phase: 'wall', pictures: withRevealed(4) })],
-    ['Picture 4 of 12', state({ phase: 'asking', pictures: withRevealed(3), current: { n: 6, step: 4, key: 'p6', openedAt: NOW, endsAt: NOW + 30_000, revealedAt: null } })],
+    [
+      'Picture 4 of 12',
+      state({ phase: 'asking', pictures: withRevealed(3), current: { n: 6, step: 4, key: 'p6', openedAt: NOW, startsAt: NOW + 2_800, endsAt: NOW + 32_800, revealedAt: null } }),
+    ],
     ['Final result', state({ phase: 'done' })],
     ['Getting ready', null],
     // The background version's locked round reads as the lobby.
@@ -72,16 +81,20 @@ describe("fusion's strap words", () => {
 })
 
 describe("fusion's band line and card", () => {
-  const asking = state({ phase: 'asking', pictures: withRevealed(3), current: { n: 4, step: 4, key: 'p4', openedAt: NOW, endsAt: NOW + 30_000, revealedAt: null } })
+  const asking = state({
+    phase: 'asking',
+    pictures: withRevealed(3),
+    current: { n: 4, step: 4, key: 'p4', openedAt: NOW, startsAt: NOW + 2_800, endsAt: NOW + 32_800, revealedAt: null },
+  })
   const revealed = state({
     phase: 'reveal',
     pictures: withRevealed(4),
-    current: { n: 4, step: 4, key: 'p4', openedAt: NOW - 40_000, endsAt: NOW - 10_000, revealedAt: NOW - 8000 },
+    current: { n: 4, step: 4, key: 'p4', openedAt: NOW - 42_800, startsAt: NOW - 40_000, endsAt: NOW - 10_000, revealedAt: NOW - 8000 },
   })
 
   it.each([
     ['band', 'Who is fused? Starting soon', state()],
-    ['band', 'Who is fused? Showing 3 of 12', state({ phase: 'showing', showing: { startedAt: NOW - 15_000, endsAt: NOW + 57_000 } })],
+    ['band', 'Who is fused? 12 pictures', state({ phase: 'wall' })],
     ['band', 'Who is fused? 4 of 12 revealed', state({ phase: 'wall', pictures: withRevealed(4) })],
     ['band', 'Who is fused? 14 have locked in on #4', asking],
     ['band', 'Who is fused? #4 was Mads and Ida', revealed],

@@ -1,7 +1,8 @@
 import { CheckIcon } from '@phosphor-icons/react'
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import Avatar from '@/components/Avatar'
-import type { AnswerPayload, PlayerId } from '@/games/core/Game'
+import type { AnswerPayload } from '@/games/core/Game'
+import { sameName } from '@/games/core/names'
 import type { FusionGame } from '@/games/fusion/logic'
 import { isLockedIn, lockedPick, NO_LOCK, sendLock, type LockState, type Pick2 } from '@/games/fusion/lock'
 import { LabelChip, NameChip, PictureImage } from '@/games/fusion/parts'
@@ -16,24 +17,24 @@ import {
   outcomePoints,
   pickLine,
   placeParts,
-  showingWords,
   timeUpWords,
+  waitWords,
   wallWords,
   type Words,
 } from '@/games/fusion/phoneLines'
-import { AskHeader, GuestPicker, GuessRow, LockBar, MomentCard, PlaceLine, TwoTokens } from '@/games/fusion/phoneParts'
+import { AskHeader, GuessRow, LockBar, MomentCard, NamePicker, PlaceLine, TwoNames } from '@/games/fusion/phoneParts'
 import {
   countsLine,
   readPublic,
   readView,
   revealedCount,
-  showingIndex,
+  type FusionCurrent,
   type FusionPlayerView,
   type FusionPublicPicture,
   type FusionPublicState,
   type FusionReveal,
 } from '@/games/fusion/shapes'
-import { choiceOf, nameOf, shortNames, stillExpected, togglePick, type Pickable } from '@/games/fusion/view'
+import { choiceOf, guessOptions, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
 import type { PlayerViewProps } from '@/games/types'
 import { useMomentSoundAt, useServerTime } from '@/lib/gameClock'
 import { usePlayerPhoto } from '@/lib/photoIndex'
@@ -41,14 +42,15 @@ import type { Player, PromptState, SessionGame, SubmitResult } from '@/lib/types
 import { cn } from '@/lib/utils'
 
 // Participant fusion on a guest's phone (spec 6.3; docs/identity.md,
-// Participant fusion on a phone). The TV is the show: the lobby and the
-// showing send eyes there; the wall says what comes next and how you are
-// doing; while a picture is asked, pick its two guests and lock in, the
-// screen's one gold step (Show my code steps aside for the timed prompt). The
-// two in it get the same picker, told "This one is you." and that their lock
-// won't count, so a glance from the next seat can't tell; the reveal says what
-// you got. The phone draws the strap above it ("Picture 4 of 12", phoneStrap
-// in index.ts).
+// Participant fusion on a phone). The TV is the show: the lobby sends eyes
+// there; the wall says what comes next and how you are doing; while a picture
+// is asked, first "Look at the TV." while the TV shows which picture it is,
+// then pick its two names and lock in, the screen's one gold step (Show my
+// code steps aside for the timed prompt). Names only while picking: no
+// photos, no tokens. Everyone guesses every picture, the two in it too (their
+// own name is never offered); the reveal says what you got, with the two
+// people's own photos. The phone draws the strap above it ("Picture 4 of 12",
+// phoneStrap in index.ts).
 
 /** The reveal's sound plays only this soon after the reveal: a phone opened later stays quiet. */
 const FRESH_MS = 15_000
@@ -79,22 +81,18 @@ export default function PlayerView({
   switch (pub.phase) {
     case 'lobby':
       return <Said words={lobbyWords(onStage, pub.rules)} />
-    case 'showing':
-      return <Showing pub={pub} serverNow={serverNow} />
     case 'wall':
-      return <Wall pub={pub} view={view} player={player} players={players} myAnswers={myAnswers} onStage={onStage} mediaUrl={mediaUrl} />
+      return <Wall pub={pub} view={view} player={player} myAnswers={myAnswers} onStage={onStage} mediaUrl={mediaUrl} />
     case 'asking':
       return current && pub.current ? (
         <Asking
           key={pub.current.key}
           picture={current}
-          endsAt={pub.current.endsAt}
+          current={pub.current}
           prompt={prompts.find((p) => p.key === pub.current!.key)}
           saved={myAnswers[pub.current.key]}
-          inPicture={view?.inPicture === true}
           player={player}
           players={players}
-          expected={stillExpected(pub.expected, players)}
           onStage={onStage}
           submit={submit}
           serverNow={serverNow}
@@ -112,7 +110,7 @@ export default function PlayerView({
           view={view}
           mine={choiceOf(myAnswers[pub.current.key])}
           player={player}
-          players={[...players, ...stillExpected(pub.expected, players)]}
+          players={players}
           serverNow={serverNow}
           mediaUrl={mediaUrl}
         />
@@ -127,7 +125,7 @@ export default function PlayerView({
   }
 }
 
-/** A head, a line under it and the reading text: the lobby's, the showing's, the wall's. */
+/** A head, a line under it and the reading text: the lobby's, the wall's. */
 function Said({ words, children }: { words: Words; children?: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-4">
@@ -141,19 +139,11 @@ function Said({ words, children }: { words: Words; children?: ReactNode }) {
   )
 }
 
-/** The showing: look at the TV, and which picture is on, by the database clock. */
-function Showing({ pub, serverNow }: { pub: FusionPublicState; serverNow: () => number }) {
-  const now = useServerTime(serverNow, 500)
-  const index = showingIndex(pub, now)
-  return <Said words={showingWords(index === null ? null : (pub.pictures[index]?.label ?? null))} />
-}
-
 /** The wall, between pictures: what comes next, your place, and your guesses so far, newest first. */
 function Wall({
   pub,
   view,
   player,
-  players,
   myAnswers,
   onStage,
   mediaUrl,
@@ -161,7 +151,6 @@ function Wall({
   pub: FusionPublicState
   view: FusionPlayerView | null
   player: Player
-  players: Player[]
   myAnswers: Readonly<Record<string, AnswerPayload>>
   onStage: boolean
   mediaUrl: PlayerViewProps['mediaUrl']
@@ -180,9 +169,9 @@ function Wall({
           </h3>
           <ul className="grid grid-cols-1 gap-2">
             {revealed.map((picture) => {
-              const outcome = outcomeFor(picture, player.id, view, choiceOf(myAnswers[picture.key]))
+              const outcome = outcomeFor(picture, player.name, view, choiceOf(myAnswers[picture.key]))
               const points = outcomePoints(outcome, pub.rules)
-              const who = picture.revealed.people.map((id, i) => (id === player.id ? 'You' : nameOf(players, id, picture.revealed.names[i])))
+              const who = picture.revealed.names.map((name) => (sameName(name, player.name) ? 'You' : name))
               return (
                 <GuessRow
                   key={picture.n}
@@ -202,57 +191,55 @@ function Wall({
 }
 
 /**
- * A picture being guessed. A voter picks two guests and locks in: the lock
- * shows at once (Sending), then locked in; a refusal brings the picker back
- * with the picks and the server's words. The two in the picture pick and lock
- * in the same way, but their lock never leaves the phone: nothing they send
- * could count, and the TV's count already leaves them out. Guests on the list
- * who haven't joined can be picked too: a picture may be of one of them.
+ * A picture being guessed. While the TV shows which picture it is (until the
+ * countdown starts), "Look at the TV."; then pick two names and lock in: the
+ * lock shows at once (Sending), then locked in; a refusal brings the picker
+ * back with the picks and the server's words. The names are the ones the
+ * guess offers (everyone who has joined and every name in the pictures), never
+ * this guest's own; names only, no photos. The two in the picture pick like
+ * anyone, and score like anyone.
  */
 function Asking({
   picture,
-  endsAt,
+  current,
   prompt,
   saved,
-  inPicture,
   player,
   players,
-  expected,
   onStage,
   submit,
   serverNow,
   mediaUrl,
 }: {
   picture: FusionPublicPicture
-  endsAt: number
+  current: FusionCurrent
   prompt: PromptState | undefined
   saved: AnswerPayload | undefined
-  inPicture: boolean
   player: Player
   players: Player[]
-  /** Guests on the list who haven't joined (none of them in `players`). */
-  expected: readonly Pickable[]
   onStage: boolean
   submit: (key: string, answer: AnswerPayload) => Promise<SubmitResult>
   serverNow: () => number
   mediaUrl: PlayerViewProps['mediaUrl']
 }) {
-  const [pick, setPick] = useState<PlayerId[]>([])
+  const [pick, setPick] = useState<string[]>([])
   const [lock, setLock] = useState<LockState>(NO_LOCK)
-  // Everyone a guess can name: the guests here, then those on the list who aren't.
-  const pickable = useMemo<Pickable[]>(() => [...players, ...expected], [players, expected])
-  const names = useMemo(() => shortNames(pickable), [pickable])
+  const names = useMemo(() => guessOptions(prompt?.spec, players, player.name), [prompt?.spec, players, player.name])
+  const short = useMemo(() => shortNames(names), [names])
   const lockedIn = isLockedIn(saved, lock)
   const sending = lock.kind === 'sending'
   const now = useServerTime(serverNow, 250, !lockedIn)
   // Time's up by the database clock, a closed prompt, or the database saying so.
-  const over = now >= endsAt || (prompt?.closed_at ?? null) !== null || (lock.kind === 'refused' && lock.closed)
+  const over = now >= current.endsAt || (prompt?.closed_at ?? null) !== null || (lock.kind === 'refused' && lock.closed)
   const view = askingCase({ lockedIn, sending, over })
   // A second tap before the first one's render can't send twice.
   const inFlight = useRef(false)
-  const nameFor = (id: PlayerId) => names.get(id) ?? nameOf(pickable, id)
+  const nameFor = (name: string) => shortName(short, name)
 
-  const header = <AskHeader picture={picture} endsAt={endsAt} closed={over} serverNow={serverNow} mediaUrl={mediaUrl} />
+  // The TV is still showing which picture it is: the picture and the picker come once it is in.
+  if (view === 'picking' && now < current.startsAt && !sending) return <Said words={waitWords(onStage)} />
+
+  const header = <AskHeader picture={picture} endsAt={current.endsAt} closed={over} serverNow={serverNow} mediaUrl={mediaUrl} />
 
   if (view === 'locked') {
     // Locked in means a lock to show: this tap's, or the one read back.
@@ -263,13 +250,13 @@ function Asking({
       <div className="grid grid-cols-1 gap-5">
         {header}
         <MomentCard head={words.head} line={words.line}>
-          <TwoTokens people={two} players={pickable} names={twoNames} />
+          <TwoNames names={two} />
         </MomentCard>
       </div>
     )
   }
   if (view === 'timeUp') {
-    const words = timeUpWords(lock.kind === 'refused' && lock.closed ? lock.message : null, inPicture)
+    const words = timeUpWords(lock.kind === 'refused' && lock.closed ? lock.message : null)
     return (
       <div className="grid grid-cols-1 gap-5">
         {header}
@@ -278,8 +265,8 @@ function Asking({
     )
   }
 
-  // A guest removed from the party or the list since they were picked can't be locked in on: they drop out of the picks.
-  const picks = pick.filter((id) => pickable.some((p) => p.id === id))
+  // A name no longer offered (a prompt from before names, the guests changed) drops out of the picks.
+  const picks = pick.filter((name) => names.some((offered) => sameName(offered, name)))
   const shown = sending ? lock.pick : picks
   const shownNames = shown.map(nameFor)
   const canRetry = lock.kind !== 'refused' || lock.retry
@@ -287,8 +274,6 @@ function Asking({
 
   function lockIn() {
     if (!canLock || inFlight.current) return
-    // In the picture: locked in on this phone only, the same card as everyone's.
-    if (inPicture) return setLock({ kind: 'locked', pick: [picks[0], picks[1]] })
     inFlight.current = true
     void sendLock(picture.key, [picks[0], picks[1]], submit, setLock).finally(() => {
       inFlight.current = false
@@ -298,24 +283,22 @@ function Asking({
   return (
     <div className="grid grid-cols-1 gap-4">
       {header}
-      {/* Two lines kept for it, so the guests stay put as it changes. */}
+      {/* Two lines kept for it, so the names stay put as it changes. */}
       <p role="status" className="min-h-[2lh] text-[1.0625rem] leading-snug text-paper-2">
-        {pickLine(shownNames, lock, inPicture)}
+        {pickLine(shownNames, lock)}
       </p>
-      <GuestPicker
-        players={players}
-        expected={expected}
-        meId={player.id}
+      <NamePicker
         names={names}
+        short={short}
         pick={shown}
         busy={sending || !canRetry}
-        onToggle={(id) => {
-          setPick((current) => togglePick(current.filter((p) => pickable.some((guest) => guest.id === p)), id))
+        onToggle={(name) => {
+          setPick((current) => togglePick(current, name))
           // A new pick after a refusal starts afresh.
           if (lock.kind === 'refused') setLock(NO_LOCK)
         }}
       />
-      <LockBar pick={shown} players={pickable} names={shownNames} sending={sending} canLock={canLock} onLock={lockIn} />
+      <LockBar names={shownNames} sending={sending} canLock={canLock} onLock={lockIn} />
     </div>
   )
 }
@@ -350,20 +333,18 @@ function Revealed({
   view: FusionPlayerView | null
   mine: Pick2 | null
   player: Player
-  /** The guests here, then those on the list who aren't: a guess may name either. */
-  players: readonly Pickable[]
+  players: readonly Player[]
   serverNow: () => number
   mediaUrl: PlayerViewProps['mediaUrl']
 }) {
   const id = useId()
-  const outcome = outcomeFor(picture, player.id, view, mine)
+  const outcome = outcomeFor(picture, player.name, view, mine)
   const points = outcomePoints(outcome, pub.rules)
-  const people = picture.revealed.people
-  const names = people.map((who, i) => nameOf(players, who, picture.revealed.names[i]))
+  const names = picture.revealed.names
   // When the reveal reached this phone: its sound follows 2 s later, only while fresh.
   const [arrived] = useState(serverNow)
   const fresh = revealedAt !== null && arrived - revealedAt < FRESH_MS
-  const moment = fresh && outcome !== 'you' ? `hurra:fusion:${game.id}:${game.started_at ?? 0}:${picture.key}:result` : null
+  const moment = fresh ? `hurra:fusion:${game.id}:${game.started_at ?? 0}:${picture.key}:result` : null
   useMomentSoundAt(moment, points > 0 ? 'coin' : 'sad', arrived + SOUND_AFTER_MS, serverNow)
 
   return (
@@ -392,13 +373,13 @@ function Revealed({
           It was
         </h3>
         <ul aria-label={`${picture.label} was ${names[0]} and ${names[1]}`} className="grid grid-cols-2 gap-3 pb-5">
-          {people.map((who, i) => (
+          {names.map((name, i) => (
             <RevealPerson
-              key={who}
+              key={`${i}:${name}`}
               slot={i === 0 ? 0 : 1}
-              id={who}
-              name={names[i]}
-              you={who === player.id}
+              name={name}
+              players={players}
+              you={sameName(name, player.name)}
               path={picture.revealed.originals[i]}
               fresh={fresh}
               mediaUrl={mediaUrl}
@@ -408,19 +389,19 @@ function Revealed({
         <p className="text-[1.0625rem] leading-snug text-paper-2">{countsLine(picture.revealed)}</p>
       </section>
 
-      {mine && outcome !== 'you' && (
+      {mine && (
         <section aria-labelledby={`${id}-guess`} className="grid grid-cols-1 gap-2">
           <h3 id={`${id}-guess`} className="text-sm font-bold text-paper-2">
             Your guess
           </h3>
           <ul className="grid grid-cols-1 gap-2">
             {mine.map((pick) => {
-              const right = people.includes(pick)
-              const name = nameOf(players, pick)
+              const right = !sameName(pick, player.name) && names.some((name) => sameName(name, pick))
+              const guest = playerNamed(players, pick)
               return (
                 <li key={pick} className={cn('flex min-h-14 items-center gap-3 rounded-phone py-2 pr-4 pl-2', right ? 'bg-paper text-ink' : 'bg-overlay')}>
-                  <Avatar name={name} playerId={pick} className="size-10 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate font-bold">{name}</span>
+                  <Avatar name={pick} playerId={guest?.id} src={guest ? undefined : null} className="size-10 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate font-bold">{pick}</span>
                   {right ? (
                     <span className="flex shrink-0 items-center gap-1 font-bold">
                       <CheckIcon weight="bold" aria-hidden className="size-5" />
@@ -443,29 +424,32 @@ function Revealed({
 
 /**
  * One of the two in the revealed picture, a square half the card wide: their
- * own photo from the settings, else their profile photo, else their token
- * (whose slate names them already, so it gets no chip), named on a tilted
- * paper chip across its foot as on the TV ("You" for this phone's guest).
- * Fresh, each comes in from its side, the first, then the second.
+ * own photo from the settings, else the profile photo of the guest with their
+ * name, else a token (whose slate names them already, so it gets no chip),
+ * named on a tilted paper chip across its foot as on the TV ("You" for this
+ * phone's guest). Fresh, each comes in from its side, the first, then the
+ * second.
  */
 function RevealPerson({
   slot,
-  id,
   name,
+  players,
   you,
   path,
   fresh,
   mediaUrl,
 }: {
   slot: 0 | 1
-  id: PlayerId
   name: string
+  players: readonly Player[]
   you: boolean
   path: string | null
   fresh: boolean
   mediaUrl: PlayerViewProps['mediaUrl']
 }) {
-  const photo = usePlayerPhoto(id, name)
+  // The guest here with this name, if anyone joined with it: their profile photo and token.
+  const id = playerNamed(players, name)?.id
+  const photo = usePlayerPhoto(id, id === undefined ? undefined : name)
   const first = firstName(name)
   const named = path !== null || photo !== null
   return (
@@ -487,7 +471,7 @@ function RevealPerson({
           labelClassName="text-[18cqw]"
         />
       ) : (
-        <Avatar name={name} playerId={id} className="size-full" />
+        <Avatar name={name} playerId={id} src={id === undefined ? null : undefined} className="size-full" />
       )}
       {named && (
         <span className="absolute inset-x-0 bottom-0 flex translate-y-1/2 justify-center px-[6%]">

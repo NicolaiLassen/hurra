@@ -1,24 +1,26 @@
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import Avatar from '@/components/Avatar'
 import { SOUNDS } from '@/games/core/sounds'
 import type { FusionGame } from '@/games/fusion/logic'
-import { LabelChip } from '@/games/fusion/parts'
+import { LabelChip, Placeholder } from '@/games/fusion/parts'
 import {
   lockedTotal,
   readPublic,
   scoringLine,
-  showingIndex,
+  SUSPENSE_MS,
   type FusionCurrent,
   type FusionPublicPicture,
   type FusionPublicState,
   type FusionReveal,
 } from '@/games/fusion/shapes'
 import { ARRIVE_MS, arriveIn, LEADERS_FROM_PX, revealOriginals, SIDE_SHARE, type OriginalStatus } from '@/games/fusion/reveal'
-import { EASE_OUT, firstName, FRESH_MS, momentId, nameOf } from '@/games/fusion/tvLook'
+import { beatAt, FLIP_AT, FLIP_MS, hopPath, hopPathFrom, litAt, playsSuspense, tickTimes, type Beat, type Hop } from '@/games/fusion/suspense'
+import { EASE_OUT, firstName, FRESH_MS, momentId } from '@/games/fusion/tvLook'
 import { Countdown, Leaders, NameChip, PictureImage, Pips } from '@/games/fusion/tvParts'
 import { useOriginals } from '@/games/fusion/useOriginals'
 import { usePictures, type PictureCache } from '@/games/fusion/usePictures'
+import { playerNamed } from '@/games/fusion/view'
 import { TILE_CHIP_SIZE, TILE_NAME_SIZE, wallChipFace, wallImageSize, wallLayout, type ChipFace, type WallLayout } from '@/games/fusion/wall'
 import type { TvViewProps } from '@/games/types'
 import { useMomentSound, useMomentSoundAt, useServerTime } from '@/lib/gameClock'
@@ -33,8 +35,6 @@ import { cn } from '@/lib/utils'
  * switch spec risk 1 asks for, should the move stutter on the TV laptop.
  */
 const SHARED_LAYOUT = true
-/** One picture of the showing crossfades into the next over this long. */
-const CROSSFADE_S = 0.6
 /** The picture's move between a tile and the frame. */
 const MORPH_S = 0.5
 /** The tick-tock's length: it starts this long before time runs out, so its bell lands on zero. */
@@ -46,67 +46,86 @@ type MediaUrl = TvViewProps['mediaUrl']
 
 /** The label chip beside the frame: a letter chip at the question's size. */
 const COLUMN_CHIP = 'self-start text-tv-question short:text-tv-answer low:text-tv-name'
-/** The frame's big words: "Look closely.", "Who is in it?". */
+/** The frame's big words: "Who is in it?". */
 const COLUMN_HEAD = 'font-extrabold tracking-[-0.01em] leading-[1.08] text-paper text-tv-question short:text-tv-answer low:text-tv-name'
 /** The line under them. */
 const COLUMN_LINE = 'text-tv-body text-paper-2 short:text-tv-tab low:text-tv-floor'
 
 /**
+ * Where the TV is with the picture asked: playing the suspense (`live`), at
+ * which beat, and which placeholder the highlight is on; else the end, the
+ * picture in the frame beside its countdown.
+ */
+type Suspense = { live: boolean; beat: Beat; lit: number | null; path: readonly Hop[]; from: number }
+
+const SETTLED: Suspense = { live: false, beat: 'in', lit: null, path: [], from: 0 }
+
+/**
  * Participant fusion on the TV stage (docs/identity.md, Participant fusion on
- * the TV): the lobby; the showing, each picture large in the frame and
- * crossfading into the next; the wall, every picture at once; a picture asked,
- * in the frame with "Who is in it?", the countdown and the lock-in pips; its
- * reveal, the picture in the middle with the two people's own photos sliding
- * in beside it, each named on a paper chip, and how many got both. The strap above
- * says where the round is ("Showing 3 of 12", "Picture 4 of 12"), so the stage
- * never repeats it. It draws every moment itself, so its announcements only
- * sound here.
+ * the TV): the lobby; the wall, every picture at once, the ones not asked yet
+ * as placeholders; a picture asked: the suspense (a highlight hops across the
+ * placeholders, lands on the one asked, it grows to the middle, its "?"
+ * pulses and its face flips in), then the picture in the frame with "Who is
+ * in it?", the countdown and the lock-in pips; its reveal, the picture in the
+ * middle with the two people's own photos sliding in beside it, each named on
+ * a paper chip, and how many got both. The strap above says where the round
+ * is ("Picture 4 of 12"), so the stage never repeats it. It draws every moment
+ * itself, so its announcements only sound here.
  */
 export default function TvView({ game, players, publicState, tallies, serverNow, mediaUrl }: TvViewProps<FusionGame>) {
   const pub = readPublic(publicState)
-  const cache = usePictures(pub, mediaUrl, serverNow)
+  const cache = usePictures(pub, mediaUrl)
   // The two people's own photos load from the render that first brings the reveal: no sooner is still secret.
   const originals = useOriginals(revealOriginals(pub), mediaUrl)
   const [ref, box] = useElementSize<HTMLDivElement>()
   const reduce = useReducedMotion() ?? false
   const morph = SHARED_LAYOUT && !reduce
+  const suspense = useSuspense(pub, serverNow, reduce)
+  useSuspenseSounds(game, pub, suspense, serverNow)
 
-  // The picture on show in the showing, by the database clock, so the TV and every phone agree to the frame.
-  const now = useServerTime(serverNow, 200, pub?.phase === 'showing')
-  const index = pub ? showingIndex(pub, now) : null
   // The picture in the frame last: back on the wall, its tile takes it back.
-  const inFrame =
-    pub?.phase === 'showing' && index !== null ? (pub.pictures[index]?.n ?? null) : pub?.phase === 'asking' || pub?.phase === 'reveal' ? (pub.current?.n ?? null) : null
+  const inFrame = pub?.phase === 'asking' || pub?.phase === 'reveal' ? (pub.current?.n ?? null) : null
   const [framed, setFramed] = useState<number | null>(null)
   if (inFrame !== null && inFrame !== framed) setFramed(inFrame)
 
-  // Which view is up, and the one before it: a picture asked from the wall grows out of its tile; from anywhere else it fades in.
-  const view: View = !pub || pub.phase === 'lobby' ? 'lobby' : pub.phase === 'wall' || pub.phase === 'done' ? 'wall' : 'frame'
+  // Which view is up, and the one before it: a picture asked grows out of its tile on the wall, where the highlight landed.
+  const hopping = pub?.phase === 'asking' && suspense.live && suspense.beat === 'hop' && !reduce
+  const view: View =
+    !pub || (pub.phase === 'lobby' && !hopping) ? 'lobby' : pub.phase === 'wall' || pub.phase === 'done' || hopping ? 'wall' : 'frame'
   const [views, setViews] = useState<{ now: View; before: View | null }>({ now: view, before: null })
   if (views.now !== view) setViews({ now: view, before: views.now })
 
   if (!pub) return <p className="m-auto text-tv-name text-paper-2 short:text-tv-band low:text-tv-field">Getting the pictures ready</p>
 
   return (
-    <div ref={ref} data-fusion-phase={pub.phase} className="relative min-h-0 flex-1">
+    <div ref={ref} data-fusion-phase={pub.phase} data-fusion-beat={pub.phase === 'asking' ? suspense.beat : undefined} className="relative min-h-0 flex-1">
       {box.width > 0 && box.height > 0 && (
         <LayoutGroup id={`fusion-${game.id}`}>
           {/*
             The view that goes fades out over the one that comes, which brings its own parts in; the picture moves between them.
             No initial={false} here: motion would hand it to every part mounted later inside the first view, so a TV opened
-            mid-showing would cut each picture and a reveal would land all at once. The wrapper has no entrance of its own.
+            mid-round would cut each picture and a reveal would land all at once. The wrapper has no entrance of its own.
           */}
           <AnimatePresence>
             <motion.div key={view} className="absolute inset-0" exit={{ opacity: 0 }} transition={{ duration: 0.25, ease: EASE_OUT }}>
               {view === 'lobby' ? (
-                <Lobby pub={pub} cache={cache} />
+                <Lobby pub={pub} />
               ) : view === 'wall' ? (
-                <Wall pub={pub} players={players} box={box} cache={cache} mediaUrl={mediaUrl} morph={morph} returning={framed} />
+                <Wall
+                  pub={pub}
+                  players={players}
+                  box={box}
+                  cache={cache}
+                  mediaUrl={mediaUrl}
+                  morph={morph}
+                  returning={pub.phase === 'asking' ? null : framed}
+                  lit={hopping ? suspense.lit : null}
+                  asking={pub.phase === 'asking' ? (pub.current?.n ?? null) : null}
+                />
               ) : (
                 <FramePhase
                   game={game}
                   pub={pub}
-                  index={index ?? 0}
                   players={players}
                   locked={pub.current ? (tallies[pub.current.key] ?? 0) : 0}
                   box={box}
@@ -114,7 +133,9 @@ export default function TvView({ game, players, publicState, tallies, serverNow,
                   serverNow={serverNow}
                   mediaUrl={mediaUrl}
                   morph={morph}
+                  reduce={reduce}
                   fromWall={views.before === 'wall'}
+                  suspense={suspense}
                   originals={originals}
                 />
               )}
@@ -126,8 +147,57 @@ export default function TvView({ game, players, publicState, tallies, serverNow,
   )
 }
 
-/** Before the showing: what the game is and how it scores, in words only, and the pictures loading at the foot. */
-function Lobby({ pub, cache }: { pub: FusionPublicState; cache: PictureCache }) {
+/**
+ * The suspense of the picture asked, by the database clock: whether this TV
+ * plays it (it was up as the ask came in, or opened right as it did; a TV
+ * that opens in the middle shows the end), its beat, and where the highlight
+ * is. The clock ticks fast only while it plays. With reduced motion there are
+ * no hops: the frame fades in with the placeholder and the face fades in.
+ */
+function useSuspense(pub: FusionPublicState | null, serverNow: () => number, reduce: boolean): Suspense {
+  const asking = pub?.phase === 'asking' && pub.current ? pub.current : null
+  const key = asking ? `${asking.key}:${asking.openedAt}` : null
+  // What the TV showed before this render: a TV that was up as the ask came in saw it happen.
+  const [seen, setSeen] = useState<{ key: string | null; mounted: boolean; live: boolean; from: number }>(() => {
+    const from = asking ? serverNow() - asking.openedAt : 0
+    return { key, mounted: true, live: asking !== null && playsSuspense(from, false), from }
+  })
+  if (seen.key !== key) {
+    const from = asking ? serverNow() - asking.openedAt : 0
+    setSeen({ key, mounted: true, live: asking !== null && playsSuspense(from, true), from })
+  }
+  const live = asking !== null && seen.key === key && seen.live
+  // Fast only while it plays: the countdown after it has its own clock.
+  const now = useServerTime(serverNow, 50, live && serverNow() - asking.openedAt < SUSPENSE_MS)
+  if (!asking || !live) return SETTLED
+  const elapsed = now - asking.openedAt
+  if (elapsed >= SUSPENSE_MS) return { ...SETTLED, live: true }
+  // The pictures still to come, the one asked among them, in the wall's order.
+  const candidates = pub!.pictures.filter((p) => p.revealed === null).map((p) => p.n)
+  const path = reduce ? [] : hopPathFrom(hopPath(candidates, asking.n), Math.max(0, seen.from))
+  return { live: true, beat: beatAt(elapsed), lit: reduce ? null : litAt(path, elapsed), path, from: seen.from }
+}
+
+/**
+ * The suspense's sounds, each once and only on a TV that plays it: a soft
+ * tick (the pop) on the hops that tickTimes picks, and the whoosh as the face
+ * flips in.
+ */
+function useSuspenseSounds(game: SessionGame, pub: FusionPublicState | null, suspense: Suspense, serverNow: () => number) {
+  const current = pub?.phase === 'asking' ? pub.current : null
+  const ticks = current && suspense.live ? tickTimes(suspense.path) : []
+  const at = current?.openedAt ?? 0
+  const id = (moment: string) => (current && suspense.live ? momentId(game, current.key, moment) : null)
+  // At most four ticks: the hops' rule leaves two or three on a full wall.
+  useMomentSoundAt(ticks.length > 0 ? id('tick-0') : null, 'pop', at + (ticks[0] ?? 0), serverNow)
+  useMomentSoundAt(ticks.length > 1 ? id('tick-1') : null, 'pop', at + (ticks[1] ?? 0), serverNow)
+  useMomentSoundAt(ticks.length > 2 ? id('tick-2') : null, 'pop', at + (ticks[2] ?? 0), serverNow)
+  useMomentSoundAt(ticks.length > 3 ? id('tick-3') : null, 'pop', at + (ticks[3] ?? 0), serverNow)
+  useMomentSoundAt(id('asked'), 'whoosh', at + FLIP_AT, serverNow)
+}
+
+/** Before the first picture: what the game is and how it scores, in words only. */
+function Lobby({ pub }: { pub: FusionPublicState }) {
   const total = pub.pictures.length
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -136,27 +206,24 @@ function Lobby({ pub, cache }: { pub: FusionPublicState; cache: PictureCache }) 
         {/* The strap already counts the pictures ("12 pictures, starting soon"): the stage asks the question. */}
         <p className="text-tv-name font-semibold text-paper short:text-tv-band low:text-tv-field">{total === 1 ? 'Who is in it?' : 'Who is in each picture?'}</p>
         <p className="max-w-[72rem] text-tv-body text-balance text-paper-2 short:text-tv-tab low:text-tv-floor">
-          Each picture shows here first. Then you guess them one by one on your phone: {scoringLine(pub.rules)}
+          {total === 1 ? 'The picture comes up here' : 'The pictures come up here one at a time, and nobody knows which is next'}. Guess who is in it on your phone:{' '}
+          {scoringLine(pub.rules)}
         </p>
       </div>
-      {cache.total > 0 && cache.warmed < cache.total && (
-        <p className="shrink-0 text-tv-floor text-paper-3">
-          Getting the pictures ready: <span className="tv-num">{cache.warmed} of {cache.total}</span>
-        </p>
-      )}
     </div>
   )
 }
 
 /**
  * The frame on the left at the stage's full height, and the column beside it:
- * the showing, a picture asked, its reveal. One frame through all three, so
- * the picture never jumps between them.
+ * a picture asked, its reveal. While the suspense plays, the frame stands in
+ * the middle on its own, the placeholder's "?" pulses and the face flips in;
+ * then it moves to its place and the column comes in. One frame through all
+ * of it, so the picture never jumps.
  */
 function FramePhase({
   game,
   pub,
-  index,
   players,
   locked,
   box,
@@ -164,12 +231,13 @@ function FramePhase({
   serverNow,
   mediaUrl,
   morph,
+  reduce,
   fromWall,
+  suspense,
   originals,
 }: {
   game: SessionGame
   pub: FusionPublicState
-  index: number
   players: Player[]
   locked: number
   box: Box
@@ -177,22 +245,23 @@ function FramePhase({
   serverNow: () => number
   mediaUrl: MediaUrl
   morph: boolean
+  reduce: boolean
   /** The wall was up before: the picture moves out of its tile. */
   fromWall: boolean
+  suspense: Suspense
   /** The two people's own photos of the picture revealed now, as they load. */
   originals: [OriginalStatus, OriginalStatus]
 }) {
   const current = pub.current
-  const showing = pub.phase === 'showing' || !current
-  const picture = showing ? pub.pictures[index] : pub.pictures.find((p) => p.n === current.n)
+  const picture = current ? pub.pictures.find((p) => p.n === current.n) : undefined
   // The picture this frame showed asked: its reveal moves it to the middle rather than fading it in.
   const [asked, setAsked] = useState<number | null>(pub.phase === 'asking' ? (current?.n ?? null) : null)
   if (pub.phase === 'asking' && current && asked !== current.n) setAsked(current.n)
-  if (!picture) return null
+  // The shape the frame keeps through the suspense: the image comes in during it, and the frame never jumps.
+  const [shape] = useState(() => cache.frameAspect)
+  if (!picture || !current) return null
 
-  // The pictures' own shape (portrait or square), in the frame and in the reveal.
-  const aspect = cache.frameAspect
-  if (pub.phase === 'reveal' && current && picture.revealed) {
+  if (pub.phase === 'reveal' && picture.revealed) {
     return (
       <RevealStage
         key={current.n}
@@ -203,7 +272,7 @@ function FramePhase({
         reveal={picture.revealed}
         players={players}
         box={box}
-        aspect={aspect}
+        aspect={cache.frameAspect}
         serverNow={serverNow}
         mediaUrl={mediaUrl}
         morph={morph}
@@ -212,123 +281,146 @@ function FramePhase({
       />
     )
   }
+  const aspect = suspense.live ? shape : cache.frameAspect
   // The frame at the stage's full height, at most half its width.
   const width = Math.floor(Math.min(box.width / 2, box.height * aspect))
   const height = Math.floor(Math.min(box.height, width / aspect))
-
-  let column: ReactNode
-  if (showing) column = <ShowingColumn game={game} pub={pub} index={index} serverNow={serverNow} />
-  else if (pub.phase === 'asking') {
-    column = <AskingColumn key={current.n} game={game} current={current} picture={picture} locked={locked} guests={players.length} serverNow={serverNow} />
-  }
+  const settled = suspense.beat === 'in'
+  // The face flips in at its beat once its image is in (or has failed, or there is none): the placeholder holds till then.
+  const imageIn = picture.image === null || cache.ready(picture.image)
+  const before = suspense.beat === 'hop' || suspense.beat === 'grow' || suspense.beat === 'pulse'
+  const face = suspense.live && (before || !imageIn) ? 'placeholder' : 'picture'
 
   return (
-    <div className="absolute inset-0 flex gap-16 short:gap-12 low:gap-10">
+    <div className={cn('absolute inset-0 flex gap-16 short:gap-12 low:gap-10', !settled && 'justify-center')}>
       <div className="relative shrink-0" style={{ width, height }}>
-        <Frame pub={pub} n={picture.n} mediaUrl={mediaUrl} morph={morph} entering={showing ? 'slow' : morph && fromWall ? 'moves' : 'quick'} />
+        <Frame
+          pub={pub}
+          n={picture.n}
+          mediaUrl={mediaUrl}
+          morph={morph}
+          reduce={reduce}
+          entering={morph && fromWall ? 'moves' : 'quick'}
+          face={face}
+          pulse={suspense.live && suspense.beat === 'pulse'}
+          flips={suspense.live}
+        />
       </div>
       {/* Inset a little, so the tilted label chip's corners stay inside the stage. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-2">{column}</div>
+      {settled && (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+          <AskingColumn key={current.n} game={game} current={current} picture={picture} locked={locked} guests={players.length} serverNow={serverNow} />
+        </div>
+      )}
     </div>
   )
 }
 
 /**
  * The picture in the frame: `raised`, the image whole inside it (the raised
- * surface shows round a picture of another shape). A new picture crossfades
- * in over the one before, which stays underneath until it is covered, so the
- * frame never blinks. It carries the picture's layout id, so a picture asked
- * from the wall grows out of its tile and goes back into it after the reveal.
+ * surface shows round a picture of another shape). It carries the picture's
+ * layout id, so a picture asked from the wall grows out of its tile and goes
+ * back into it after the reveal. While the suspense plays it shows the
+ * placeholder, whose "?" pulses once, then the face flips in (a fade with
+ * reduced motion).
  */
 function Frame({
   pub,
   n,
   mediaUrl,
   morph,
+  reduce = false,
   entering,
+  face = 'picture',
+  pulse = false,
+  flips = false,
 }: {
   pub: FusionPublicState
   n: number
   mediaUrl: MediaUrl
   morph: boolean
-  /** How the frame appears: out of its wall tile, or fading in, slowly into the showing and quickly otherwise. */
-  entering: 'moves' | 'slow' | 'quick'
+  reduce?: boolean
+  /** How the frame appears: out of its wall tile, or fading in. */
+  entering: 'moves' | 'quick'
+  /** What it shows: the placeholder until the face flips in. */
+  face?: 'placeholder' | 'picture'
+  /** The placeholder's "?" pulses once. */
+  pulse?: boolean
+  /** The face flips in here (the suspense plays), rather than standing there from the start. */
+  flips?: boolean
 }) {
-  const [layers, setLayers] = useState<{ under: number | null; top: number }>({ under: null, top: n })
-  if (layers.top !== n) setLayers({ under: layers.top, top: n })
-  useEffect(() => {
-    if (layers.under === null) return
-    const timer = setTimeout(() => setLayers((l) => (l.under === null ? l : { ...l, under: null })), CROSSFADE_S * 1000 + 100)
-    return () => clearTimeout(timer)
-  }, [layers])
-
-  const shown = layers.under === null ? [layers.top] : [layers.under, layers.top]
+  const picture = pub.pictures.find((p) => p.n === n)
+  if (!picture) return null
+  const image = <PictureImage picture={picture} mediaUrl={mediaUrl} size="full" fit="contain" className="size-full" labelClassName="text-[24cqw]" />
   return (
     <motion.div
       layoutId={morph ? pictureLayoutId(n) : undefined}
       layoutCrossfade={false}
       initial={entering === 'moves' ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: entering === 'slow' ? CROSSFADE_S : 0.3, ease: EASE_OUT, layout: { duration: MORPH_S, ease: EASE_OUT } }}
+      transition={{ duration: 0.3, ease: EASE_OUT, layout: { duration: MORPH_S, ease: EASE_OUT } }}
       className="absolute inset-0 overflow-hidden bg-raised"
       style={{ borderRadius: 6 }}
     >
-      {shown.map((m) => {
-        const picture = pub.pictures.find((p) => p.n === m)
-        if (!picture) return null
-        const fadesIn = layers.under !== null && m === layers.top
-        return (
-          <motion.div
-            key={m}
-            className="absolute inset-0"
-            initial={fadesIn ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            transition={{ duration: CROSSFADE_S, ease: EASE_OUT }}
-          >
-            <PictureImage picture={picture} mediaUrl={mediaUrl} size="full" fit="contain" className="size-full" labelClassName="text-[24cqw]" />
+      {!flips ? (
+        image
+      ) : reduce ? (
+        // A calm fade: the face comes in over the placeholder.
+        <>
+          <Placeholder label={picture.label} className="absolute inset-0" />
+          <motion.div className="absolute inset-0" initial={false} animate={{ opacity: face === 'picture' ? 1 : 0 }} transition={{ duration: FLIP_MS / 1000, ease: EASE_OUT }}>
+            {image}
           </motion.div>
-        )
-      })}
+        </>
+      ) : (
+        <div className="absolute inset-0" style={{ perspective: 2400 }}>
+          <motion.div
+            className="absolute inset-0"
+            style={{ transformStyle: 'preserve-3d' }}
+            initial={false}
+            animate={{ rotateY: face === 'picture' ? 180 : 0 }}
+            transition={{ duration: FLIP_MS / 1000, ease: EASE_OUT }}
+          >
+            <div className="absolute inset-0 [backface-visibility:hidden]">
+              <PulsingPlaceholder label={picture.label} pulse={pulse} />
+            </div>
+            <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]">{image}</div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
+  )
+}
+
+/** The frame's placeholder, its "?" pulsing once at its beat. */
+function PulsingPlaceholder({ label, pulse }: { label: string; pulse: boolean }) {
+  return (
+    <Placeholder
+      label={label}
+      className="absolute inset-0"
+      mark={(mark) => (
+        <motion.g
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+          initial={false}
+          animate={pulse ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+        >
+          {mark}
+        </motion.g>
+      )}
+    />
   )
 }
 
 const pictureLayoutId = (n: number) => `fusion-picture-${n}`
 
 /**
- * The showing's column: the label of the picture on show (landing like a tab
- * with each new picture), "Look closely.", and a pip per picture at its foot.
- * One whoosh as the first picture appears; the crossfades are silent.
- */
-function ShowingColumn({ game, pub, index, serverNow }: { game: SessionGame; pub: FusionPublicState; index: number; serverNow: () => number }) {
-  const picture = pub.pictures[index]
-  const total = pub.pictures.length
-  const startedAt = pub.showing?.startedAt ?? null
-  // Fresh: the showing began within the last 15 s by the database clock, read once as the column opens.
-  const [fresh] = useState(() => startedAt !== null && serverNow() - startedAt < FRESH_MS)
-  useMomentSound(fresh ? momentId(game, 'showing', String(startedAt)) : null, 'whoosh')
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.2 }}
-      className="flex min-h-0 flex-1 flex-col"
-    >
-      <LabelChip key={picture.n} label={picture.label} className={cn(COLUMN_CHIP, 'animate-tab-land motion-reduce:animate-none')} />
-      <h2 className={cn(COLUMN_HEAD, 'mt-8 short:mt-6 low:mt-4')}>Look closely.</h2>
-      <p className={cn(COLUMN_LINE, 'mt-4 short:mt-3 low:mt-2')}>You guess after the showing.</p>
-      <Pips filled={index + 1} total={total} label={`Picture ${index + 1} of ${total}`} className="mt-auto pt-6" />
-    </motion.div>
-  )
-}
-
-/**
  * A picture asked: its label, "Who is in it?" and how to answer, the quiz's
  * countdown beside them, and the lock-in pips at the foot. The pips' total is
- * the guests less two (spec decision 7), so they never tell the room that
- * someone in the picture has left. A whoosh as it is asked, and the tick-tock
- * over the countdown's last moments, its bell landing as time runs out; an
- * early reveal unmounts this column first, which cancels it.
+ * everyone here: everyone guesses every picture. The tick-tock over the
+ * countdown's last moments, its bell landing as time runs out; an early
+ * reveal unmounts this column first, which cancels it. The countdown starts
+ * at `startsAt`, once the suspense is over: until then it holds the full time.
  */
 function AskingColumn({
   game,
@@ -346,10 +438,9 @@ function AskingColumn({
   serverNow: () => number
 }) {
   const now = useServerTime(serverNow, 250)
-  const [fresh] = useState(() => serverNow() - current.openedAt < FRESH_MS)
-  useMomentSound(fresh ? momentId(game, current.key, 'asked') : null, 'whoosh')
   useMomentSoundAt(momentId(game, current.key, 'time'), 'ticktock', current.endsAt - TICKTOCK_MS, serverNow)
   const total = lockedTotal(locked, guests)
+  const left = current.endsAt - Math.max(now, current.startsAt)
 
   return (
     <motion.div
@@ -364,7 +455,7 @@ function AskingColumn({
           <h2 className={cn(COLUMN_HEAD, 'mt-8 short:mt-6 low:mt-4')}>Who is in it?</h2>
           <p className={cn(COLUMN_LINE, 'mt-4 short:mt-3 low:mt-2')}>{now < current.endsAt ? 'Pick two on your phone and lock in.' : 'The answer is coming.'}</p>
         </div>
-        <Countdown left={current.endsAt - now} />
+        <Countdown left={left} />
       </div>
       <div className="mt-auto grid shrink-0 gap-4 pt-6 short:gap-3">
         <Pips filled={locked} total={total} label={`${locked} of ${total} have locked in`} />
@@ -425,7 +516,7 @@ function RevealStage({
   useMomentSound(fresh ? momentId(game, current.key, 'reveal') : null, 'gotcha')
   const scored = pub.top.filter((row) => row.points > 0)
   const leaders = scored.length > 0 && box.height >= LEADERS_FROM_PX
-  const names = reveal.people.map((id, i) => nameOf(players, id, reveal.names[i]))
+  const names = reveal.names
   const arrived = [useArrival(originals[0], ARRIVE_MS[0]), useArrival(originals[1], ARRIVE_MS[1])]
   const both = arrived[0] && arrived[1]
 
@@ -445,7 +536,7 @@ function RevealStage({
     <div className="absolute inset-0 flex flex-col gap-6 pb-2 short:gap-5 short:pb-1.5 low:gap-4 low:pb-1">
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <ol aria-label={`${picture.label} was ${names[0]} and ${names[1]}`} className="absolute inset-0 flex items-center justify-center gap-(--g)" style={sizes}>
-          <Person slot={0} id={reveal.people[0]} name={names[0]} path={reveal.originals[0]} status={originals[0]} arrived={arrived[0]} mediaUrl={mediaUrl} />
+          <Person slot={0} name={names[0]} players={players} path={reveal.originals[0]} status={originals[0]} arrived={arrived[0]} mediaUrl={mediaUrl} />
           <li data-reveal-part="picture" className="@container relative shrink-0" style={{ width: 'calc(var(--fh) * var(--a))', height: 'var(--fh)' }}>
             <Frame pub={pub} n={picture.n} mediaUrl={mediaUrl} morph={morph} entering={moves ? 'moves' : 'quick'} />
             {picture.image !== null && (
@@ -460,7 +551,7 @@ function RevealStage({
               </motion.span>
             )}
           </li>
-          <Person slot={1} id={reveal.people[1]} name={names[1]} path={reveal.originals[1]} status={originals[1]} arrived={arrived[1]} mediaUrl={mediaUrl} />
+          <Person slot={1} name={names[1]} players={players} path={reveal.originals[1]} status={originals[1]} arrived={arrived[1]} mediaUrl={mediaUrl} />
         </ol>
       </div>
       {/* Always laid out, so the pictures never move when the words come in. */}
@@ -500,28 +591,31 @@ function useArrival(status: OriginalStatus, beat: number): boolean {
 
 /**
  * One of the two in the picture, a square beside it: their own photo, else
- * their profile photo, else their token (whose slate says the name already,
- * so it gets no chip), sliding in from its side once `arrived`, then named on
- * a tilted paper chip across its foot. Its place is laid out from the start.
+ * the profile photo of the guest with their name, else a token (whose slate
+ * says the name already, so it gets no chip), sliding in from its side once
+ * `arrived`, then named on a tilted paper chip across its foot. Its place is
+ * laid out from the start.
  */
 function Person({
   slot,
-  id,
   name,
+  players,
   path,
   status,
   arrived,
   mediaUrl,
 }: {
   slot: 0 | 1
-  id: string
   name: string
+  players: readonly Player[]
   path: string | null
   status: OriginalStatus
   arrived: boolean
   mediaUrl: MediaUrl
 }) {
-  const photo = usePlayerPhoto(id, name)
+  // The guest here with this name, if anyone joined with it: their profile photo and token.
+  const id = playerNamed(players, name)?.id
+  const photo = usePlayerPhoto(id, id === undefined ? undefined : name)
   const own = path !== null && status !== 'failed'
   const named = own || photo !== null
   return (
@@ -543,7 +637,7 @@ function Person({
               className="size-full rounded-tile"
             />
           ) : (
-            <Avatar name={name} playerId={id} className="size-full" />
+            <Avatar name={name} playerId={id} src={id === undefined ? null : undefined} className="size-full" />
           )}
           {named && (
             <span className="absolute inset-x-0 bottom-0 flex translate-y-1/2 justify-center px-[6%]">
@@ -581,10 +675,12 @@ function Counts({ reveal }: { reveal: FusionReveal }) {
 
 /**
  * Every picture at once, as big as the stage allows (wall.ts lays them out),
- * each with its label chip; revealed ones carry their two first names on a
- * solid band (or their tokens, on tiles too small for 28 px text). The
- * pictures hang one after the other as the wall appears; the one that was in
- * the frame moves back into its tile, and its names wipe in.
+ * each with its label chip: a picture not asked yet as a placeholder (a drawn
+ * head and shoulders with a "?"), lit while the suspense's highlight is on it;
+ * revealed ones carry their two first names on paper chips (or their tokens,
+ * on tiles too small for 28 px text). The pictures hang one after the other
+ * as the wall appears; the one that was in the frame moves back into its
+ * tile, and its names wipe in.
  */
 function Wall({
   pub,
@@ -594,6 +690,8 @@ function Wall({
   mediaUrl,
   morph,
   returning,
+  lit,
+  asking,
 }: {
   pub: FusionPublicState
   players: Player[]
@@ -602,14 +700,19 @@ function Wall({
   mediaUrl: MediaUrl
   morph: boolean
   returning: number | null
+  /** The placeholder the suspense's highlight is on. */
+  lit: number | null
+  /** The picture being asked while the highlight hops: it stays a placeholder until it grows to the middle. */
+  asking: number | null
 }) {
   const layout = wallLayout(pub.pictures.length, box.width, box.height, cache.wallAspect)
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
   const size = wallImageSize(Math.max(layout.tileWidth, layout.tileHeight), dpr)
-  // The hanging takes at most about half a second, whatever the count.
-  const stagger = Math.min(0.04, 0.5 / Math.max(1, pub.pictures.length))
+  // The hanging takes at most about half a second, whatever the count; the wall the suspense hops on is up at once.
+  const stagger = asking !== null ? 0 : Math.min(0.04, 0.5 / Math.max(1, pub.pictures.length))
+  // Every label on the wall in one face; placeholders carry theirs as pictures do.
   const face = wallChipFace(
-    pub.pictures.filter((p) => p.image !== null).map((p) => p.label),
+    pub.pictures.filter((p) => p.image !== null || !p.asked || p.n === asking).map((p) => p.label),
     layout.tileWidth,
   )
   return (
@@ -629,6 +732,8 @@ function Wall({
           mediaUrl={mediaUrl}
           morph={morph}
           returning={picture.n === returning}
+          hidden={!picture.asked || picture.n === asking}
+          lit={picture.n === lit}
           delay={picture.n === returning ? 0 : i * stagger}
         />
       ))}
@@ -645,6 +750,8 @@ function Tile({
   mediaUrl,
   morph,
   returning,
+  hidden,
+  lit,
   delay,
 }: {
   picture: FusionPublicPicture
@@ -657,10 +764,16 @@ function Tile({
   morph: boolean
   /** It was in the frame last: it moves back in, and its names wipe in after. */
   returning: boolean
+  /** Not asked yet (or being asked, before its face flips in): its placeholder. */
+  hidden: boolean
+  /** The suspense's highlight is on it. */
+  lit: boolean
   delay: number
 }) {
   const revealed = picture.revealed
   const moves = morph && returning
+  // A placeholder carries its label chip; an asked picture without an image shows its label large instead.
+  const chip = hidden || picture.image !== null
   return (
     <li className="@container relative">
       <motion.div
@@ -672,7 +785,11 @@ function Tile({
         className="absolute inset-0 overflow-hidden bg-raised"
         style={{ borderRadius: 6 }}
       >
-        <PictureImage picture={picture} mediaUrl={mediaUrl} size={size} fit="cover" className="size-full" labelClassName="text-[24cqw]" />
+        {hidden ? (
+          <Placeholder label={picture.label} lit={lit} className="size-full" />
+        ) : (
+          <PictureImage picture={picture} mediaUrl={mediaUrl} size={size} fit="cover" className="size-full" labelClassName="text-[24cqw]" />
+        )}
       </motion.div>
       {/* Over the picture, not moving with it: they come in once it has landed. */}
       <motion.div
@@ -681,28 +798,30 @@ function Tile({
         transition={{ duration: 0.3, ease: EASE_OUT, delay: moves ? MORPH_S * 0.9 : delay }}
         className="pointer-events-none absolute inset-0"
       >
-        {picture.image !== null && (
+        {chip && (
           <span className="absolute top-[5cqw] left-[5cqw] flex max-w-[90cqw]" style={{ fontSize: TILE_CHIP_SIZE }}>
             {/* A letter chip, every one on the wall in the condensed face where the wide one would cut a label short. */}
             <span
               className={cn(
                 'inline-block max-w-full -rotate-2 truncate rounded-chip bg-paper py-[0.12em] leading-none text-ink',
                 face === 'wide' ? 'wide px-[0.3em]' : 'tv-num px-[0.24em]',
+                // On a lit placeholder (paper) the chip stands on ink, so it doesn't vanish into it.
+                lit && 'bg-ink text-paper',
               )}
             >
               {picture.label}
             </span>
           </span>
         )}
-        {revealed && <NameBand reveal={revealed} players={players} mode={layout.mode} wipe={returning} />}
+        {revealed && !hidden && <NameBand reveal={revealed} players={players} mode={layout.mode} wipe={returning} />}
       </motion.div>
     </li>
   )
 }
 
-/** A revealed tile's band: solid ground across the picture's bottom, the two first names one per line, or their tokens. */
+/** A revealed tile's names: the two first names on paper chips at the picture's foot, or their tokens. */
 function NameBand({ reveal, players, mode, wipe }: { reveal: FusionReveal; players: Player[]; mode: WallLayout['mode']; wipe: boolean }) {
-  const names = reveal.people.map((id, i) => nameOf(players, id, reveal.names[i]))
+  const names = reveal.names
   return (
     <div
       aria-label={`${names[0]} and ${names[1]}`}
@@ -712,12 +831,13 @@ function NameBand({ reveal, players, mode, wipe }: { reveal: FusionReveal; playe
       )}
     >
       {mode === 'names' ? (
-        names.map((name, i) => <NameChip key={reveal.people[i]} name={firstName(name)} first={i === 0} style={{ fontSize: TILE_NAME_SIZE }} />)
+        names.map((name, i) => <NameChip key={i} name={firstName(name)} first={i === 0} style={{ fontSize: TILE_NAME_SIZE }} />)
       ) : (
         <div className="flex gap-[5cqw]">
-          {reveal.people.map((id, i) => (
-            <Avatar key={id} name={names[i]} playerId={id} className="size-[34cqw]" />
-          ))}
+          {names.map((name, i) => {
+            const id = playerNamed(players, name)?.id
+            return <Avatar key={i} name={name} playerId={id} src={id === undefined ? null : undefined} className="size-[34cqw]" />
+          })}
         </div>
       )}
     </div>

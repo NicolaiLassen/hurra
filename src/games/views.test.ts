@@ -145,15 +145,33 @@ describe('fusion settings editor', () => {
     media: { upload: async () => 'media/x.jpg', url: (path: string) => path },
   })
 
-  it('renders pictures that name a guest still expected, before anyone joined', async () => {
+  it('shows settings saved with guests’ ids as their names, a guest still expected included, before anyone joined', async () => {
     expect(zelda.joined).toBe(false)
-    // The pickers fill their menus in a browser only, so the names listed can't be read from static HTML.
     for (const players of [host.players, []]) {
       const html = await render(component(fusion.ConfigEditor), { ...props([ana.id, zelda.id]), players })
-      expect(html).toContain('Who is in it, each with their own photo?')
+      expect(html).toContain('Who is in it? Type each name beside their own photo.')
       expect(html).toContain('aria-label="First person in picture 1"')
-      expect(html).not.toContain('Pick two different people')
-      expect(html).not.toContain('Pick the second person')
+      expect(html).toContain('value="Ana"')
+      expect(html).toContain('value="Zelda"')
+      expect(html).toContain('On the guest list, not here yet')
+      expect(html).not.toContain('Type two different names')
+      expect(html).not.toContain('Type the second name')
     }
+  })
+
+  it('takes typed names, with the guest list and the guests here as suggestions, and says where each name stands', async () => {
+    const html = await render(component(fusion.ConfigEditor), props(['Ana', 'Tilde']))
+    expect(html).toContain('value="Ana"')
+    expect(html).toContain('value="Tilde"')
+    // A name nobody is on the list as: shown, so the host can check the spelling, and kept all the same.
+    expect(html).toContain('Nobody here or on the guest list by this name: check the spelling')
+    expect(html).toContain('>Here<')
+    // The suggestions: everyone here and on the list, once each.
+    for (const name of ['Ana', 'Bo', FIXTURE_EXPECTED_NAMES[0]]) expect(html).toContain(`<option value="${name}">`)
+    // No showing any more: only the time to guess.
+    expect(html).not.toContain('Seconds each picture shows first')
+    expect(html).toContain('Seconds to guess each picture')
+    // The same name twice is a problem the host sees as they type.
+    expect(await render(component(fusion.ConfigEditor), props(['Ana', ' ana ']))).toContain('Type two different names')
   })
 })

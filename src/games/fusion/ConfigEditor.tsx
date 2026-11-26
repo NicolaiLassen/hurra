@@ -1,48 +1,38 @@
 import { ImageIcon, PlusIcon, TrashIcon, UploadSimpleIcon, UserIcon, WarningIcon, XIcon } from '@phosphor-icons/react'
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { GameGuest, PlayerId } from '@/games/core/Game'
+import type { GameGuest } from '@/games/core/Game'
+import { nameKey } from '@/games/core/names'
 import type { FusionConfig, FusionGame, FusionPicture } from '@/games/fusion/logic'
-import {
-  DEFAULT_SECONDS,
-  DEFAULT_SHOW_SECONDS,
-  defaultLabel,
-  MAX_LABEL_LENGTH,
-  MAX_PICTURES,
-  MAX_POINTS,
-  MAX_SECONDS,
-  MAX_SHOW_SECONDS,
-  MIN_SECONDS,
-  MIN_SHOW_SECONDS,
-} from '@/games/fusion/shapes'
+import { NameField } from '@/games/fusion/NameField'
+import { nameStatus, peopleNames, suggestedNames } from '@/games/fusion/people'
+import { DEFAULT_SECONDS, defaultLabel, MAX_LABEL_LENGTH, MAX_PICTURES, MAX_POINTS, MAX_SECONDS, MIN_SECONDS } from '@/games/fusion/shapes'
 import type { ConfigEditorProps } from '@/games/types'
-import { sortNames } from '@/lib/guestList'
 import { toast } from '@/lib/toast'
+import type { Player } from '@/lib/types'
 import { cn } from '@/lib/utils'
-
-/** The Select's value for "nobody picked yet": Radix keeps empty values for clearing. */
-const NOBODY = 'nobody'
 
 /** What an upload fills: the fused picture's image, or the own photo of its first or second person. */
 type Slot = 'image' | 0 | 1
 
 /**
  * Fusion's settings (hosts only): the numbered pictures, each with an optional
- * label, image and the two people in it, each person with their own photo
- * (secret until the reveal), the timing and the points. Who is in a picture
- * can also wait until the night (Show who in the live game). The people come
- * from the whole guest list, so the host can set the pictures before anyone
- * joins (docs/guest-list.md, section 9.2).
+ * label, image and the two people in it, each a typed name beside their own
+ * photo (secret until the reveal), the timing and the points. Who is in a
+ * picture can also wait until the night (Show who in the live game). The
+ * names are plain text, not tied to the guest list: the list and the guests
+ * who joined only suggest the spelling, so the host can set the pictures
+ * before anyone joins, and for someone who never will.
  */
-export default function ConfigEditor({ config, onChange, guests, media }: ConfigEditorProps<FusionGame>) {
+export default function ConfigEditor({ config, onChange, guests, players, media }: ConfigEditorProps<FusionGame>) {
   const pictures: FusionPicture[] = Array.isArray(config.pictures) ? config.pictures : []
   // Uploads by picture index and slot ("3:image", "3:0"). Adding and removing pictures waits for them, so an index stays put.
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [count, setCount] = useState('12')
   const busy = Object.values(uploading).some(Boolean)
+  const suggestions = useMemo(() => suggestedNames(guests, players), [guests, players])
 
   // An upload takes a while: when it lands, it patches the settings as they are
   // then, so a label typed meanwhile isn't lost.
@@ -127,6 +117,8 @@ export default function ConfigEditor({ config, onChange, guests, media }: Config
               n={index + 1}
               picture={picture}
               guests={guests}
+              players={players}
+              suggestions={suggestions}
               uploading={(slot) => uploading[`${index}:${slot}`] === true}
               busy={busy}
               thumbOf={(path) => media.url(path, 'thumb')}
@@ -138,12 +130,14 @@ export default function ConfigEditor({ config, onChange, guests, media }: Config
         </ol>
         <p className="text-xs text-paper-2">
           The numbers here are the numbers on the prints: removing a picture renumbers the ones after it. Who is in each
-          picture is optional now; you can set it on the night with Show who.
+          picture is optional now; you can type it on the night with Show who.
         </p>
         <p className="text-xs text-paper-2">
-          Each person's own photo is optional and stays secret until the picture is revealed: then the TV shows the two photos
-          beside it. Pick each person beside their own photo. Without one, the TV shows the guest's profile photo, or their
-          token.
+          Type each name the way the guest joins with it: the guest list suggests it, and case, accents and spaces don't
+          matter. A name nobody joins with still works. Each person's own photo is optional and stays secret until the picture
+          is revealed: then the TV shows the two photos beside it, so type each name beside their own photo. Without one, the TV
+          shows the profile photo of the guest with that name, or a token. The pictures stay hidden on the TV until each one
+          is asked.
         </p>
       </div>
       <Rules config={config} change={change} />
@@ -155,6 +149,8 @@ function PictureRow({
   n,
   picture,
   guests,
+  players,
+  suggestions,
   uploading,
   busy,
   thumbOf,
@@ -165,6 +161,8 @@ function PictureRow({
   n: number
   picture: FusionPicture
   guests: readonly GameGuest[]
+  players: readonly Player[]
+  suggestions: readonly string[]
   uploading: (slot: Slot) => boolean
   busy: boolean
   thumbOf: (path: string) => string
@@ -172,15 +170,20 @@ function PictureRow({
   onUpload: (slot: Slot, file: File) => void
   onRemove: () => void
 }) {
-  const people = picture.people ?? ['', '']
+  const people = peopleNames(picture.people, guests, players)
   const originals = picture.originals ?? [null, null]
-  const chosen = people.filter((id) => id !== '').length
+  const chosen = people.filter((name) => name.trim() !== '').length
   const problem =
-    chosen === 1 ? 'Pick the second person, or clear both' : chosen === 2 && people[0] === people[1] ? 'Pick two different people' : null
+    chosen === 1
+      ? 'Type the second name, or clear both'
+      : chosen === 2 && nameKey(people[0]) === nameKey(people[1])
+        ? 'Type two different names'
+        : null
   const imageUploading = uploading('image')
 
-  function setPerson(slot: 0 | 1, id: string) {
-    const next: [PlayerId, PlayerId] = slot === 0 ? [id, people[1]] : [people[0], id]
+  // Both saved as names from the first edit on: an id kept from before names becomes its guest's name.
+  function setPerson(slot: 0 | 1, name: string) {
+    const next: [string, string] = slot === 0 ? [name, people[1]] : [people[0], name]
     onChange({ people: next[0] === '' && next[1] === '' ? undefined : next })
   }
 
@@ -235,7 +238,7 @@ function PictureRow({
           {!picture.image && !imageUploading && <p className="text-xs text-paper-2">No image: the TV shows its label instead.</p>}
         </div>
 
-        <p className="text-sm text-paper-2">Who is in it, each with their own photo?</p>
+        <p className="text-sm text-paper-2">Who is in it? Type each name beside their own photo.</p>
         {/* minmax(0, 1fr) tracks, so a narrow phone shrinks the slots instead of pushing them past the card. */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {([0, 1] as const).map((slot) => {
@@ -243,7 +246,7 @@ function PictureRow({
             const original = originals[slot]
             const busySlot = uploading(slot)
             return (
-              <div key={slot} className="flex min-w-0 items-center gap-2" role="group" aria-label={`The ${ordinal} person in picture ${n}`}>
+              <div key={slot} className="flex min-w-0 items-start gap-2" role="group" aria-label={`The ${ordinal} person in picture ${n}`}>
                 <div className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-chip bg-overlay text-paper-3">
                   {original ? (
                     <img
@@ -259,12 +262,13 @@ function PictureRow({
                   {busySlot && <span className="absolute inset-0 bg-overlay" />}
                 </div>
                 <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5">
-                  <PersonSelect
-                    className="w-full max-w-56"
+                  <NameField
+                    className="w-full max-w-64"
                     value={people[slot]}
-                    guests={guests}
+                    suggestions={suggestions}
+                    status={nameStatus(people[slot], guests, players)}
                     label={slot === 0 ? `First person in picture ${n}` : `Second person in picture ${n}`}
-                    onChange={(id) => setPerson(slot, id)}
+                    onChange={(name) => setPerson(slot, name)}
                   />
                   <div className="flex flex-wrap items-center gap-1">
                     <FileButton
@@ -328,69 +332,17 @@ function FileButton({
   )
 }
 
-function PersonSelect({
-  value,
-  guests,
-  label,
-  className,
-  onChange,
-}: {
-  value: PlayerId
-  guests: readonly GameGuest[]
-  label: string
-  className?: string
-  onChange: (id: PlayerId) => void
-}) {
-  const sorted = sortNames(guests)
-  // Someone picked earlier who has left the party and the list still shows, so the host sees why the start is refused.
-  const missing = value !== '' && !guests.some((g) => g.id === value)
-  return (
-    <Select value={value === '' ? NOBODY : value} onValueChange={(id) => onChange(id === NOBODY ? '' : id)}>
-      <SelectTrigger size="sm" className={cn('w-48', className)} aria-label={label}>
-        <SelectValue placeholder="Nobody yet" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NOBODY}>Nobody yet</SelectItem>
-        {missing && (
-          <SelectItem value={value} disabled>
-            Someone who left
-          </SelectItem>
-        )}
-        {sorted.map((g) => (
-          <SelectItem key={g.id} value={g.id}>
-            {g.name}
-            {/* A guest on the list who hasn't joined yet. */}
-            {!g.joined && (
-              <>
-                {' '}
-                <span className="text-paper-3">(not here yet)</span>
-              </>
-            )}
-          </SelectItem>
-        ))}
-        {guests.length === 0 && (
-          <SelectItem value="none-listed" disabled>
-            Add guests to the guest list, or wait for them to join
-          </SelectItem>
-        )}
-      </SelectContent>
-    </Select>
-  )
-}
-
-/** The timing and the points: how long each picture shows and is guessed, and what a right guess scores. */
+/** The timing and the points: how long each picture is guessed, and what a right guess scores. */
 function Rules({ config, change }: { config: FusionConfig; change: (patch: Partial<FusionConfig>) => void }) {
   const seconds = config.seconds ?? DEFAULT_SECONDS
-  const showSeconds = config.showSeconds ?? DEFAULT_SHOW_SECONDS
   const perPerson = config.pointsPerPerson ?? 1
   const bonus = config.bonusForBoth ?? 0
   const secondsOk = Number.isInteger(seconds) && seconds >= MIN_SECONDS && seconds <= MAX_SECONDS
-  const showOk = Number.isInteger(showSeconds) && showSeconds >= MIN_SHOW_SECONDS && showSeconds <= MAX_SHOW_SECONDS
   return (
     <div className="grid gap-5 sm:grid-cols-2">
       <section className="grid content-start gap-2">
         <h3 className="text-sm font-extrabold">Timing</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:max-w-56">
           <NumberField
             id="fusion-seconds"
             label="Seconds to guess each picture"
@@ -399,25 +351,17 @@ function Rules({ config, change }: { config: FusionConfig; change: (patch: Parti
             value={seconds}
             onChange={(value) => change({ seconds: value })}
           />
-          <NumberField
-            id="fusion-show-seconds"
-            label="Seconds each picture shows first"
-            min={MIN_SHOW_SECONDS}
-            max={MAX_SHOW_SECONDS}
-            value={showSeconds}
-            onChange={(value) => change({ showSeconds: value })}
-          />
         </div>
         {!secondsOk && <Problem>The time to guess must be {MIN_SECONDS} to {MAX_SECONDS} seconds</Problem>}
-        {!showOk && <Problem>The showing must be {MIN_SHOW_SECONDS} to {MAX_SHOW_SECONDS} seconds a picture</Problem>}
         <p className="text-xs text-paper-2">
-          The TV shows each picture for {showSeconds} s, then all of them. Then you ask them one by one: guests have {seconds} s
-          to pick two and lock in.
+          You ask the pictures one by one. The TV shows which one comes up with a few seconds of suspense, then guests have{' '}
+          {seconds} s to pick two names and lock in.
         </p>
       </section>
       <section className="grid content-start gap-2">
         <h3 className="text-sm font-extrabold">Points</h3>
-        <div className="grid grid-cols-2 gap-3">
+        {/* Bottom aligned, so the two fields line up when one label takes two lines. */}
+        <div className="grid grid-cols-2 items-end gap-3">
           <NumberField
             id="fusion-points-person"
             label="Points per right person"
@@ -436,8 +380,8 @@ function Rules({ config, change }: { config: FusionConfig; change: (patch: Parti
           />
         </div>
         <p className="text-xs text-paper-2">
-          A guest who gets both people of a picture right scores {2 * perPerson + bonus}. Nobody scores on a picture they are
-          in.
+          A guest who gets both people of a picture right scores {2 * perPerson + bonus}. Everyone guesses every picture, the two
+          in it too; their own name is never offered.
         </p>
       </section>
     </div>

@@ -2,14 +2,19 @@
 
 Before the party the host adds every guest's name in the control room, one at
 a time or as a pasted list. A guest who joins taps their name under "Who are
-you?" instead of typing it. Game settings can name guests who have not joined
-yet, so the host sets up fusion's pictures (and the photo and song game's
-photos and "Doesn't play this game") at home. Everywhere guests play, only
-guests who have joined count: a name on the list that never joined never
-appears on the TV, on a phone, in a game, in the standings or in the recap,
-with one exception by design: Participant fusion, where a picture may be of
-them, so phones can name them in a guess and the reveal shows their name
-(9.2).
+you?" instead of typing it. Everywhere guests play, only guests who have
+joined count: a name on the list that never joined never appears on the TV,
+on a phone, in a game, in the standings or in the recap.
+
+**Changed on 26 November (branch `fusion/surprise`):** the owner wants the
+list "just as a list so it makes it easier, but not tied to the state". It
+stays the join helper and the attendance list. Participant fusion's pictures
+and Lydspor's "Doesn't play this game" now take typed names, with the list
+and the guests here only as suggestions so the spelling matches; no game
+keeps a guest's id for who is in a picture or who sits out. A fusion picture
+may still be of someone who never joins: their name is simply typed (9.2,
+9.3). Settings saved with ids before that still start, as those guests'
+names. The rest of this page describes the list as built.
 
 Why, in the owner's words about Participant fusion's "Who is in it?" picker,
 which listed only guests who had joined: "I need to add my guests beforehand,
@@ -514,8 +519,12 @@ as one.
   yet"** for an empty party.
 - While the host has listed nobody (an empty list, or only guests who typed
   their names), the line under the count: **"Add the guests you invited.
-  When they join, they tap their name instead of typing it, and you can name
-  them in a game's settings before they arrive."** A listed name is one
+  When they join, they tap their name instead of typing it, and this list
+  shows who is here. Games that name people take typed names, with these
+  names as suggestions."** (Changed with the `fusion/surprise` merge, 26
+  Nov: it said the list could name guests in a game's settings before they
+  arrive; the games take typed names now, and the confirms below no longer
+  say a removal changes any settings.) A listed name is one
   still expected, or taken later than its row was made (`wasListed`); a
   typed join's row is made and joined at the same moment.
 - From 9 names, a search, **"Find a guest"** (no match: **"Nobody called
@@ -543,9 +552,9 @@ as one.
 - Under the rows, from 2 not here yet and not on an archived party, the
   ghost **"Remove everyone not here yet…"** (`UsersThreeIcon`): a paste that
   went wrong is undone in one step. Its confirm: **"Remove everyone not here
-  yet?"**, **"The 18 names nobody has taken yet leave the guest list, and
-  game settings that name them lose those picks. Guests who are here
-  stay."**, the destructive **"Remove 18 names"**; toast **"Removed 18
+  yet?"**, **"The 18 names nobody has taken yet leave the guest list.
+  Guests who are here stay, and names typed in a game's settings stay as
+  they are."**, the destructive **"Remove 18 names"**; toast **"Removed 18
   names from the list"**. One delete of the party's rows with `joined_at`
   null (`removeExpectedGuests`), so a guest who joins meanwhile stays; each
   row is logged as `guest.removed`.
@@ -598,13 +607,13 @@ On the answer:
 ### 7.3 Rename an expected guest
 
 The rename dialog: **"Rename Zelda"**, **"The name they tap when they join,
-and the name in the games' settings."**, at most 40 characters. A taken name
+and the one games suggest in their settings."**, at most 40 characters. A taken name
 says `Someone is already called "X"`. Logged as `guest.renamed`.
 
 ### 7.4 Remove from the list
 
 A confirm: **"Remove Zelda from the guest list?"**, **"Zelda can still join by
-typing a name. Game settings that name Zelda lose that pick."**, the
+typing a name. Names typed in a game's settings stay as they are."**, the
 destructive **"Remove"**; toast **"Removed Zelda from the list"**. It deletes
 the row only while nobody has taken it; a guest who joined a moment before
 stays, with **"That name isn't waiting on the list any more. If they just
@@ -643,11 +652,10 @@ The confirm:
 ### 7.6 Remove (a guest who is here)
 
 Every joined guest is also their place on the guest list, so the Remove on a Here row
-takes them off the list and out of the settings that name them. Its confirm
-(`removePlayerDescription`) says so: **"Remove Ana?"**, **"Their points go with
-them, and the games running now carry on without them. Ana also leaves the
-guest list, and game settings that name Ana lose that pick. Took the wrong
-name? Free the name instead: it stays on the list. On a new phone? Move them
+takes them off the list; the names typed in a game's settings stay as they
+are. Its confirm (`removePlayerDescription`) says so: **"Remove Ana?"**,
+**"Their points go with them, and the games running now carry on without
+them. Ana also leaves the guest list. Took the wrong name? Free the name instead: it stays on the list. On a new phone? Move them
 instead: their points stay."** The "Took the wrong name?" sentence and a
 `secondary` **"Free the name instead"** (which opens 7.5) appear only for a
 name that was on the list before this guest took it. On a database without
@@ -688,11 +696,14 @@ count and list joined guests, as before.
 | Someone typed another spelling of a listed name (Ulle for Ulrik) | Free the name on Ulle and choose "Free and take off the list" (the phone goes back to Who are you?, where they tap Ulrik). |
 | A paste added rubbish | Remove everyone still expected, then paste again. |
 | A guest on the list isn't coming | Remove from the list, or leave the name: a guest who never joins appears nowhere. |
-| Someone left the party | Remove, as before. It also takes them off the guest list and out of settings that name them; the confirm says so and offers Free the name for a listed name. |
+| Someone left the party | Remove, as before. It also takes them off the guest list (names typed in game settings stay); the confirm says so and offers Free the name for a listed name. |
 
 **Remove an expected guest:** the row is deleted, `guest.removed`, a stage
 ping. Settings that named the id now name nobody (fusion's editor shows
-"Someone who left").
+"Someone who left"). Since `fusion/surprise` (26 Nov) the games' settings
+hold typed names, which stay; only settings saved with ids before then lose
+the person ("A guest who left" in fusion's editor, and the start asks for
+the name).
 
 **Remove a joined guest:** as before; the log row also carries `from_user`.
 
@@ -742,6 +753,16 @@ lydspor/game), and for any new game.
 
 ### 9.2 Participant fusion (fusion/stage)
 
+**Superseded on 26 November (`fusion/surprise`):** who is in a picture is two
+typed names, not guest ids; the vote is two names out of everyone who has
+joined and every name in the pictures (an array of `options`, not
+`'guests'`); the public state's `expected` is gone; everyone guesses and
+scores, the two in the picture too. Old settings with ids are read as names
+at the start ("#3 names someone who isn't on the guest list any more. Type
+their name in the settings." only for an id on no list). See
+[engine-v2.md, 8.4](engine-v2.md#84-participant-fusion-new). What follows is
+the guest-list version, as it was applied:
+
 **Applied on `party/integration` (26 Nov),** on fusion as the stage show with
 the two people's own photos. What it does, as built: setup and `setKey`
 accept anyone in `info.guests`; `state.names` comes from the list; the vote is
@@ -789,6 +810,14 @@ and `fusion.integration.test.ts`. The plan it followed:
   scores lack the id and the picture still names the guest.
 
 ### 9.3 The photo and song game (lydspor/game)
+
+**Changed again on 26 November (`fusion/surprise`):** Lydspor no longer reads
+who is in a photo (no own average), and `sitOut` is typed names matched by
+`nameKey`, not ids; the guest list only suggests the spelling. Old id-based
+settings are read as names at setup. A freed name taken again sits out only
+if the name is on the list. `onPlayerLeave` drops `picks`, review rows and
+`shownTop` (there are no `credits` any more). What follows is the guest-list
+version, as it was applied:
 
 **Applied on `party/integration` (26 Nov).** Lydspor's logic never checked
 `sitOut` or `inPhoto` against the players, so it starts with expected guests
@@ -945,9 +974,10 @@ optional. A screen test that renders a `HostView` or a `ConfigEditor` passes
 - `GamesPanel` passes `guests={guestsOf(snapshot)}` to `GameSettings`, which
   hands it to the game's `ConfigEditor` next to `players`.
 - `LiveGameCard` passes the same to the game's `HostView`.
-- [src/games/fusion/ConfigEditor.tsx](../src/games/fusion/ConfigEditor.tsx),
-  the one game file changed here: "Who is in it?" lists `guests` in place of
-  `players`, sorted with `sortNames`, an expected guest as **"Zelda (not here
+- [src/games/fusion/ConfigEditor.tsx](../src/games/fusion/ConfigEditor.tsx)
+  (superseded on 26 November: two name fields with the list as suggestions,
+  each saying where the typed name stands), as first changed here: "Who is in
+  it?" lists `guests` in place of `players`, sorted with `sortNames`, an expected guest as **"Zelda (not here
   yet)"** (the mark in paper-3, in the menu and on the chosen value); "Someone
   who left" for a saved id no longer on the list; with nobody on the list,
   **"Add guests to the guest list, or wait for them to join"** (disabled).

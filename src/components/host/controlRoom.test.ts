@@ -217,7 +217,11 @@ describe('the guests', () => {
     expect(presenceLine({ here: 0, expected: 4, total: 4, listed: 4 })).toBe('0 of 4 here')
     expect(presenceLine({ here: 24, expected: 0, total: 24, listed: 20 })).toBe('All 24 here')
     expect(presenceLine({ here: 5, expected: 0, total: 5, listed: 0 })).toBe('5 here')
-    expect(guestListLine({ listed: 0 })).toMatch(/^Add the guests you invited\./)
+    // The list helps guests join and shows who is here; games take typed names, with the list as suggestions.
+    expect(guestListLine({ listed: 0 })).toBe(
+      'Add the guests you invited. When they join, they tap their name instead of typing it, and this list shows who is here. ' +
+        'Games that name people take typed names, with these names as suggestions.',
+    )
     expect(guestListLine({ listed: 3 })).toBeNull()
   })
 
@@ -298,7 +302,7 @@ describe('the guests', () => {
   it('builds the Remove confirm: the guest list and settings lose them, and Free the name for a wrong name', () => {
     const lead = 'Their points go with them, and the games running now carry on without them.'
     const move = 'On a new phone? Move them instead: their points stay.'
-    const list = 'Ana also leaves the guest list, and game settings that name Ana lose that pick.'
+    const list = 'Ana also leaves the guest list.'
     expect(removePlayerDescription({ name: 'Ana', listed: true, canFree: true })).toBe(
       `${lead} ${list} Took the wrong name? Free the name instead: it stays on the list. ${move}`,
     )
@@ -331,7 +335,7 @@ describe('the games’ settings in the control room', () => {
     const text = await roomWithSettings('setup', html)
     expect(text).toContain('12 tasks for 16 guests, so some get the same task')
     expect(text).toContain('Not ready: 6 of 8 songs ready: 2 need a photo')
-    expect(text).toContain('Not ready: 6 of 8 pictures ready: 2 need both their people')
+    expect(text).toContain('Not ready: 6 of 8 pictures ready: 2 need two names')
     expect(text).toContain('Ready: 10 questions ready, 20 s each')
     expect(text).toContain('Nothing to set up')
     expect(text.split(' Set up ').length - 1).toBe(2)
@@ -349,6 +353,9 @@ describe('the games’ settings in the control room', () => {
 
   it('starts the first game with its gold Start once everything is set up and a TV is paired', async () => {
     const raw = await roomWithSettings('setup-ready', markup)
+    // Fusion's #7 is of Tilde, who is on no list: counted, as the editor flags it, but never holding the game back.
+    const text = await roomWithSettings('setup-ready', html)
+    expect(text).toContain('Ready: 8 pictures, all with two names. 1 name matches nobody here or on the guest list. Own photos (optional): 14 of 16')
     expect(goldButtons(raw)).toBe(2) // the split Start's two halves
     expect(raw).not.toContain('aria-label="Set up')
     expect(raw).toMatch(/aria-label="Start Last one standing"[^]*?data-variant="default"/)
@@ -365,7 +372,7 @@ describe('the games’ settings in the control room', () => {
     const text = await roomWithSettings('setup', (node) => html(node, at))
     expect(text).toContain('Who is fused?')
     expect(text).toContain('Participant fusion settings')
-    expect(text).toContain('6 of 8 pictures ready: 2 need both their people')
+    expect(text).toContain('6 of 8 pictures ready: 2 need two names')
     expect(text).toContain('Cancel')
     expect(text).toContain('Pictures (8)')
     expect(raw).toContain('aria-label="Back to the room"')
@@ -427,6 +434,26 @@ describe('the games’ settings in the control room', () => {
     const onTv = await roomWithSettings('in-person', markup)
     expect(goldSteps(onTv)).toEqual(['Scan a player'])
     expect(scanLink(onTv, 'in-person')).toContain('data-variant="default"')
+  })
+
+  it('gives fusion on the TV one gold step at each step of its round: Ask #1 from the lobby, never a showing', async () => {
+    const goldSteps = (raw: string) =>
+      [...raw.matchAll(/<(button|a)\b(?![^>]*disabled="")[^>]*data-variant="default"[^>]*>([^]*?)<\/\1>/g)].map((m) => m[2].replace(/<[^>]+>/g, '').trim())
+    const steps: Partial<Record<FixtureScene, string[]>> = {
+      'fusion-lobby': ['Ask #1'],
+      'fusion-start': ['Ask #1'],
+      'fusion-wall': ['Ask #4'],
+      'fusion-hop': ['Reveal now'],
+      'fusion-asking': ['Reveal now'],
+      'fusion-reveal': ['Back to the wall'],
+      'fusion-crown': ['Crown the face detective'],
+    }
+    for (const [scene, gold] of Object.entries(steps) as [FixtureScene, string[]][]) {
+      const raw = await roomWithSettings(scene, markup)
+      expect(goldSteps(raw), scene).toEqual(gold)
+    }
+    const lobby = await roomWithSettings('fusion-lobby', html)
+    expect(lobby).not.toMatch(/Start the showing|Skip to the wall/)
   })
 })
 

@@ -143,15 +143,20 @@ describe('the phone home', () => {
     expect(await phone('quiz-leaderboard')).toContain('Quiz After question 3 of 10')
   })
 
-  it('Participant fusion on the stage: the lobby and the showing send eyes to the TV', async () => {
+  it('Participant fusion on the stage: the lobby and the suspense of a picture asked send eyes to the TV', async () => {
     const lobby = await phone('fusion-lobby')
     expect(lobby).toContain('Who is fused? On the TV')
     expect(lobby).toContain('Two guests, one face. Watch the TV.')
     expect(lobby).toContain('1 point for each right person, plus 1 for both.')
-    const showing = await phone('fusion-showing')
-    // The strap without the clock; the picture on show by the database clock (2.5 pictures in).
-    expect(showing).toContain('Who is fused? Showing 12 pictures')
-    expect(showing).toContain('Look at the TV. Now showing #3.')
+    const start = await phone('fusion-start')
+    expect(start).toContain('Who is fused? 12 pictures')
+    expect(start).toContain('The guessing starts soon. Watch the TV.')
+    // A picture asked, while the TV shows which one it is: no picture and no picker yet.
+    const hop = await phoneMarkup('fusion-hop')
+    expect(plain(hop)).toContain('Who is fused? Picture 4 of 12')
+    expect(plain(hop)).toContain('Look at the TV. The next picture is on its way. Then pick the two in it.')
+    expect(hop).not.toContain('data-name-tile')
+    expect(hop).not.toContain('fixture/fusion-4')
   })
 
   it('fusion on the wall: what comes next, your place and your guesses, newest first', async () => {
@@ -159,35 +164,43 @@ describe('the phone home', () => {
     expect(wall).toContain('Who is fused? 3 of 12 revealed')
     expect(wall).toContain('The next picture is coming up. Watch the TV.')
     expect(wall).toContain('You have 4 points, 1st of the face detectives so far.')
-    expect(wall).toContain('Your guesses #3 Ana and Noah Not this time. #2 Freja and Oscar You got one of the two (+1). #1 Mads and Ida You got both (+3).')
+    // #3 is of Zelda, on the guest list, who never joined: her name comes from the picture.
+    expect(wall).toContain('Your guesses #3 Ana and Zelda Not this time. #2 Freja and Oscar You got one of the two (+1). #1 Mads and Ida You got both (+3).')
     expect(await phone('fusion-crown')).toContain('That was the last picture. The face detective is crowned soon.')
   })
 
-  it('fusion while a picture is asked: everyone but you to pick from, two picked, then Lock in', async () => {
+  it('fusion while a picture is asked: names only to pick from, never your own, two picked, then Lock in', async () => {
     const html = await phoneMarkup('fusion-asking')
     const text = plain(html)
     expect(text).toContain('Who is fused? Picture 4 of 12')
     expect(text).toContain('#4 Who is in it? 18 s left')
-    expect(text).toContain('Pick two guests, then lock in. Only your first lock counts.')
-    // Everyone in the party but Sofie, by name, then the four on the guest list who haven't joined,
-    // under "Not here yet" (a picture may be of one of them); 15 guests, so no search.
-    // Each tile: the token (which names its guest too) and the first name.
-    const tiles = [...html.matchAll(/data-guest-tile=""[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim().split(' ').at(-1))
-    expect(tiles).toEqual(['Ana', 'Bo', 'Clara', 'Emil', 'Freja', 'Ida', 'Lars', 'Mads', 'Maja', 'Noah', 'Oscar', 'Quentin', 'Ulrik', 'Ximena', 'Zelda'])
-    expect(text).toContain('Oscar Not here yet Q')
-    expect(text).not.toContain('Find a guest')
+    expect(text).toContain('Pick two names, then lock in. Only your first lock counts.')
+    // The names the guess offers, A to Z, Sofie's own left out: everyone here, and the names in the pictures
+    // nobody joined with (Tilde, Zelda). Quentin, on the guest list in no picture, is not one. 13 names: no search.
+    const tiles = [...html.matchAll(/data-name-tile=""[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
+    expect(tiles).toEqual(['Ana', 'Bo', 'Clara', 'Emil', 'Freja', 'Ida', 'Lars', 'Mads', 'Maja', 'Noah', 'Oscar', 'Tilde', 'Zelda'])
+    // Names only: no token and no photo on a tile.
+    const picker = html.slice(html.indexOf('aria-label="Names"'), html.indexOf('data-lock-bar'))
+    expect(picker).not.toMatch(/<img|data-avatar|data-slot="avatar"/)
+    expect(text).not.toContain('Not here yet')
+    expect(text).not.toContain('Find a name')
     expect(text).toContain('Pick two Lock in')
     // Who is in it is nowhere on the phone before its reveal.
     expect(text).not.toMatch(/Bo and Maja|Maja and Bo/)
   })
 
-  it('fusion asked: locked in, and the two in the picture get the same picker, told it won\'t count', async () => {
+  it('fusion asked: locked in, by name; the two in the picture get the same picker and words as anyone, without their own name', async () => {
     const locked = await phone('fusion-asking-locked')
     expect(locked).toContain('Locked in: Bo and Maja. The answer comes up on the TV.')
-    const you = await phone('fusion-asking-you')
+    const youHtml = await phoneMarkup('fusion-asking-you')
+    const you = plain(youHtml)
     expect(you).toContain('#6 Who is in it?')
-    expect(you).toContain("This one is you. Keep a straight face and pick any two: it won't count.")
+    expect(you).not.toContain('This one is you')
+    expect(you).toContain('Pick two names, then lock in.')
     expect(you).toContain('Pick two Lock in')
+    const tiles = [...youHtml.matchAll(/data-name-tile=""[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
+    expect(tiles).not.toContain('Sofie')
+    expect(tiles).toContain('Emil')
   })
 
   it('fusion revealed: what you got, who it was, your two picks and your place', async () => {
@@ -195,7 +208,8 @@ describe('the phone home', () => {
     expect(both).toContain('Who is fused? Picture 4 of 12')
     // Your result first, then the picture with its label chip, the two people on their own photos named on
     // paper chips, how the room did, and your picks (tokens name their guests too, so those names read twice).
-    expect(both).toContain('You got both. +3 points #4 It was Bo Maja 3 of 8 got both, 3 got one. Your guess Bo Bo Right Maja Maja Right')
+    // 9 voters: Bo and Maja, in it, guessed too.
+    expect(both).toContain('You got both. +3 points #4 It was Bo Maja 3 of 9 got both, 4 got one. Your guess Bo Bo Right Maja Maja Right')
     expect(both).toContain('You have 7 points, 1st of the face detectives so far.')
     expect(await phone('fusion-reveal-one')).toContain('You got one of the two. +1 point')
     expect(await phone('fusion-reveal-one')).toContain('Not in it')
@@ -203,9 +217,11 @@ describe('the phone home', () => {
     const missed = await phone('fusion-reveal-missed')
     expect(missed).toContain('No guess this time.')
     expect(missed).not.toContain('Your guess')
+    // Sofie is in #6: she guessed like anyone (Emil right, and one not in it). She has no own photo there, so her token names her.
     const you = await phone('fusion-reveal-you')
-    expect(you).toContain('That was you.')
+    expect(you).toContain('You got one of the two. +1 point')
     expect(you).toContain('#6 It was Emil Sofie')
+    expect(you).toContain('Your guess Emil Emil Right Noah Noah Not in it')
     for (const scene of ['fusion-reveal', 'fusion-reveal-one', 'fusion-reveal-none', 'fusion-reveal-missed', 'fusion-reveal-you'] as const) {
       expect(await phone(scene), scene).not.toContain('!')
     }
@@ -214,7 +230,8 @@ describe('the phone home', () => {
   it('fusion over: the result card; a round from before the update reads as the lobby', async () => {
     const final = await phone('fusion-final')
     expect(final).toContain('Emil had the sharpest eye')
-    expect(final).toContain('You scored 13 points')
+    // 14: Sofie scored on #6, the picture she is in, like anyone.
+    expect(final).toContain('You scored 14 points')
     const legacy = await phone('fusion-legacy')
     expect(legacy).toContain('Who is fused? On the TV')
     expect(legacy).toContain('Two guests, one face. Watch the TV.')
@@ -251,17 +268,18 @@ describe('the phone home', () => {
   })
 
   it("has one gold step at most: Show my code, never a game's button or a Live chip", async () => {
-    const fusion = ['fusion-lobby', 'fusion-showing', 'fusion-wall', 'fusion-reveal', 'fusion-reveal-you', 'fusion-crown', 'fusion-final', 'fusion-legacy'] as const
+    const fusion = ['fusion-lobby', 'fusion-start', 'fusion-wall', 'fusion-reveal', 'fusion-reveal-you', 'fusion-crown', 'fusion-final', 'fusion-legacy'] as const
     for (const scene of ['lobby', 'quiz-reveal', 'quiz-leaderboard', 'final', ...fusion] as const) {
       const html = await phoneMarkup(scene)
       expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
       expect(html, scene).not.toMatch(/data-slot="badge" data-variant="default"/)
     }
     // While a fusion picture is asked, Lock in is the one gold step and Show my code steps aside,
-    // for the two in the picture too (their lock stays on the phone); once locked in, nothing is gold.
+    // for the two in the picture too; once locked in, and while the TV shows which picture it is, nothing is gold.
     expect(goldButtons(await phoneMarkup('fusion-asking'))).toEqual(['Lock in'])
     expect(goldButtons(await phoneMarkup('fusion-asking-you'))).toEqual(['Lock in'])
     expect(goldButtons(await phoneMarkup('fusion-asking-locked'))).toEqual([])
+    expect(goldButtons(await phoneMarkup('fusion-hop'))).toEqual([])
     // While the quiz's timed question is open, the code bar steps aside: no gold button at all,
     // and the hunt's Scan stays outlined.
     const background = await phoneMarkup('background')
@@ -381,6 +399,43 @@ describe('the takeover', () => {
     expect(goldButtons(html)).toEqual(['Lock in'])
     expect(text).not.toContain('My task')
     for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('fusion while the TV picks the picture: "Look at the TV." alone, the bar and the task stepping aside as for the countdown', async () => {
+    const { html, text } = await seen('fusion-hop')
+    expect(text).toContain('Who is fused? Picture 4 of 12')
+    expect(text).toContain('Look at the TV. The next picture is on its way. Then pick the two in it.')
+    expect(headings(html)).toEqual(['Who is fused?'])
+    expect(text).not.toContain('My task')
+    expect(text).not.toContain('Show my code')
+    expect(goldButtons(html)).toEqual([])
+    expect(html).not.toContain('data-name-tile')
+    for (const part of HOME) expect(text, part).not.toContain(part)
+  })
+
+  it('fusion asking: the names-only picker whole, every name and the Lock in bar', async () => {
+    const { html } = await seen('fusion-asking')
+    const tiles = [...html.matchAll(/data-name-tile=""[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim())
+    expect(tiles).toEqual(['Ana', 'Bo', 'Clara', 'Emil', 'Freja', 'Ida', 'Lars', 'Mads', 'Maja', 'Noah', 'Oscar', 'Tilde', 'Zelda'])
+    expect(html).toContain('data-lock-bar=""')
+    expect(html).not.toContain('data-code-bar=""')
+  })
+
+  it('fusion between pictures, on the wall and at a reveal: the game alone, with the task one tap away', async () => {
+    for (const scene of ['fusion-start', 'fusion-wall', 'fusion-reveal', 'fusion-reveal-you'] as const) {
+      const { html, text } = await seen(scene)
+      expect(headings(html), scene).toEqual(['Who is fused?'])
+      expect(text, scene).toContain('My task Show my code S9F4X')
+      expect(goldButtons(html), scene).toEqual(['Show my code S9F4X'])
+      for (const part of HOME) expect(text, `${scene}: ${part}`).not.toContain(part)
+    }
+    // The reveal whole: the picture, the two people on their own photos, how the room did, your picks and your place.
+    const { html, text } = await seen('fusion-reveal')
+    expect(html).toContain('role="img" aria-label="Picture #4"')
+    expect(html).toContain('role="img" aria-label="Bo&#x27;s own photo"')
+    expect(html).toContain('role="img" aria-label="Maja&#x27;s own photo"')
+    expect(text).toContain('You got both. +3 points #4 It was Bo Maja 3 of 9 got both, 4 got one. Your guess Bo Bo Right Maja Maja Right')
+    expect(text).toContain('You have 7 points, 1st of the face detectives so far.')
   })
 
   it('Lydspor while a song plays: the song to name, and the task beside Show my code', async () => {

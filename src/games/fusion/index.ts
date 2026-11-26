@@ -11,12 +11,13 @@ import TvStatus from '@/games/fusion/TvStatus'
 import { defineGameModule, lazyScreen, type ProfileBadge } from '@/games/types'
 
 // Participant fusion (docs/engine-v2.md, 8.4): portraits that fuse two guests,
-// a stage game. Each picture shows on the TV, then all of them, then the host
-// asks them one by one and every phone picks the two and locks in.
+// a stage game. The host asks the pictures one by one; the TV shows which one
+// comes up with a little suspense (the rest stay placeholders), and every
+// phone picks the two names in it and locks in.
 export const fusion = defineGameModule({
   logic: new FusionGame(),
   name: 'Participant fusion',
-  description: 'Two guests fused into one portrait. Each picture shows on the TV, then you guess them one by one on your phone.',
+  description: 'Two guests fused into one portrait. The pictures come up on the TV one at a time, and you guess who is in each on your phone.',
   icon: DetectiveIcon,
   PlayerView,
   PlayerCard,
@@ -27,11 +28,11 @@ export const fusion = defineGameModule({
   FinalTvView: lazyScreen(() => import('@/games/fusion/FinalTvView')),
   TvStatus,
   ConfigEditor,
-  // "8 pictures, all with their people", or what is left: "6 of 8 pictures ready: 2 need both their people".
+  // "8 pictures, all with two names", or what is left: "6 of 8 pictures ready: 2 need two names", and how many typed names match nobody.
   setupStatus: fusionSetup,
   // The TV view plays each moment itself, so its announcements only bring their sound there.
   stageBanners: 'sound-only',
-  // "Showing 12 pictures", "4 of 12 revealed", "Picture 4 of 12"; the phone's own words in the lobby and once done.
+  // "12 pictures", "4 of 12 revealed", "Picture 4 of 12"; the phone's own words in the lobby and once done.
   phoneStrap: (publicState) => {
     const pub = readPublic(publicState)
     return pub && pub.phase !== 'lobby' && pub.phase !== 'done' ? strapWords(pub) : null

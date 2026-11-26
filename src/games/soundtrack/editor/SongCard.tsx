@@ -1,24 +1,21 @@
 import { ArrowDownIcon, ArrowUpIcon, TrashIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { GameGuest } from '@/games/core/Game'
-import { MAX_CAPTION, MAX_IN_PHOTO, MAX_NOTE } from '../logic'
+import { MAX_CAPTION, MAX_NOTE } from '../logic'
 import { MAX_TYPED, type SoundtrackSong } from '../types'
-import PeopleField from '../host/PeopleField'
 import { AlsoList, Field, Issues, PhotoPicker, StartField } from './parts'
 import type { Issue } from './settings'
 
 /**
  * One song in the settings (spec section 12): its photo, title and singer as
  * the reveal shows them, the other answers that count, its caption, where
- * the hook starts in Spotify, a story note for the cue card and who is in
- * the photo, with the game's problems and warnings about it underneath.
+ * the hook starts in Spotify and a story note for the cue card, with the
+ * game's problems and warnings about it underneath.
  */
 export default function SongCard({
   n,
   song,
   count,
-  guests,
   photoUrl,
   uploading,
   busy,
@@ -33,7 +30,6 @@ export default function SongCard({
   song: SoundtrackSong
   /** Songs in the list, for Move down. */
   count: number
-  guests: readonly GameGuest[]
   photoUrl: string | null
   uploading: boolean
   /** An upload is running somewhere: the list keeps its order until it lands. */
@@ -130,18 +126,6 @@ export default function SongCard({
             />
           </Field>
 
-          <div className="grid grid-cols-1 gap-1.5">
-            <p className="text-sm font-medium">Who's in this photo</p>
-            <PeopleField
-              label={`Who's in song ${n}'s photo`}
-              guests={guests}
-              value={song.inPhoto}
-              max={MAX_IN_PHOTO}
-              empty="Nobody marked"
-              onChange={(inPhoto) => onChange({ inPhoto })}
-            />
-            <p className="text-sm text-paper-2">They score nothing on this song; it counts as their own average.</p>
-          </div>
         </div>
       </div>
 

@@ -1577,7 +1577,8 @@ and a required `GameInfo.guests`: everyone on the party's guest list, joined or
 still expected, for names and settings only; `info.players` stays the guests
 who joined, and only they play. A choice prompt's `options` may also be
 `'guests'`: every name on the list, joined or not, so a vote can name a guest
-who never came. `onPlayerLeave` also runs for an id the host freed and someone
+who never came (fusion used it until 26 November; its votes are names now, an
+array of `options`). `onPlayerLeave` also runs for an id the host freed and someone
 took again (3.3). What each game must do with expected guests is
 docs/guest-list.md, section 9.
 
@@ -2795,10 +2796,12 @@ Lands in phase 0, so PHONE, TV, HOST and the game views build against real
 shapes from day 1 and switch to live data later. `background` has two
 games running underneath (Last one standing and a round of darts in person)
 beside a quiz on the stage, so the TV's band has two lines; `final` is a finished game inside its 3 minutes; `removed` has
-`member: false`. **Changed on 25 November:** Participant fusion on the stage
+`member: false`. **Changed on 25 and 26 November:** Participant fusion on the stage
 has a scene per step (`FUSION_STAGE_SCENES`), each with 12 pictures and some
-with 2 or 40 as well: `fusion-lobby`, `fusion-showing`, `fusion-wall`,
-`fusion-asking` (each with `-2` and `-40`), `fusion-asking-locked` (Sofie has
+with 2, 8 or 40 as well: `fusion-lobby`, `fusion-start` (the first wall, all
+placeholders), `fusion-wall`, `fusion-hop` (the suspense, asked 3 s after the
+scene's clock starts), `fusion-asking` (with `-2`, `-8` and `-40` where
+captured), `fusion-asking-locked` (Sofie has
 locked in), `fusion-asking-you` (Sofie is in the picture asked),
 `fusion-reveal` (and `-2`, `-40`), `fusion-reveal-plain` (the reveal of a
 picture without its people's own photos), `fusion-crown` (every picture revealed)
@@ -3010,7 +3013,10 @@ gains the optional `setupStatus(config, guests): { ready, line }`, whether a
 game's settings are ready to play, in one line for its row in the host's
 Games panel. `config` is the saved settings over `defaultConfig`. Every game
 has one, built from its own check: fusion (each picture's image and two
-people, own photos optional), Lydspor (`checkConfig`), Last one standing
+typed names, how many names match nobody here or on the guest list, as the
+editor flags them, which never makes it not ready, and own photos optional),
+Lydspor (`checkConfig`; who sits out is typed names and never changes it),
+Last one standing
 (`parseConfig`), the quiz (`checkQuizConfig`), and the in-person round, which
 is simply ready. The words they count with are in `src/games/core/setup.ts`.
 The core calls it through `setupStatusOf` in `src/games/registry.ts`, which
@@ -3881,137 +3887,156 @@ no purple backdrop, no circular countdown, no music. Instead:
 
 **Changed on 25 November: a stage game.** Fusion was a vote through the
 evening in the background, revealed on the TV at the end. The owner asked for
-it to take over the screen instead: each picture large, one at a time, then
-all of them at once, then the pictures guessed one by one, every phone picking
-two guests and locking in, a bit like the quiz. This section describes the
-stage round; the background version's rules are in git history (this
-section at `9f73557`). The design and its decisions are in
+it to take over the screen instead. The background version's rules are in git
+history (this section at `9f73557`); the stage design is in
 `.design/fusion-stage/spec.md`.
 
+**Changed again on 26 November, after the owner played the demo (branch
+`fusion/surprise`).** In the owner's words: "Instead of showing every picture
+at the start, just start with the first picture; the other pictures are not
+shown yet, just placeholders with a drawn silhouette of a person with a ?
+over it", "so there is some suspense: who will the next one be", "when the
+users pick they should not see people's images, just names", the guest list
+"just as a list so it makes it easier, but not tied to the state", and "they
+can still vote on their own picture, we do not need to be this strict". So:
+no showing; a picture's image stays off every phone and the TV until it is
+asked, and the TV plays a little suspense when it is; who is in a picture is
+two typed names, never guest ids; phones pick from names only; everyone
+guesses every picture and scores on it, the two in it too. This section
+describes that round.
+
 **The idea**: before the party, an image model fuses two guests' faces into
-one portrait per print. On the night the TV shows every picture, one at a
-time (the showing), then all of them at once (the wall). Then the host asks
-the pictures one by one: the TV shows the picture large with a countdown, and
-each phone picks the two guests in it and locks in. The reveal shows who it
-was. A point per right person, and a bonus for both.
+one portrait per print. On the night the host asks the pictures one by one.
+The pictures still to come stand on the TV as placeholders; asking one plays
+the suspense (a highlight hops across them, lands on the one asked, it grows
+to the middle and its face flips in), then the countdown runs and each phone
+picks the two names in it and locks in. The reveal shows who it was, with the
+two people's own photos. A point per right person, and a bonus for both.
 
 | Phase | TV | Phones | The host's gold step | Moves on |
 | --- | --- | --- | --- | --- |
-| `lobby` | What the game is, and how it scores | Watch the TV | Start the showing | Host |
-| `showing` | Each picture large, `showSeconds` each | "Look at the TV." | Skip to the wall | By itself after the last picture |
-| `wall` | Every picture at once; revealed ones carry their names | Your points and guesses | Ask the next picture, or Crown the face detective after the last | Host |
-| `asking` | The picture, "Who is it?", the countdown, the lock-in pips | Pick two and Lock in; the two in it get the same picker, told "This one is you." and that it won't count | Reveal now | By itself when time is up |
-| `reveal` | Who it was, how many got both, the top 3 | What you got | Back to the wall | By itself after 10 s |
+| `lobby` | What the game is, and how it scores | Watch the TV | Ask #1 (menu: Show the wall first) | Host |
+| `wall` | Every picture at once: asked ones as pictures (revealed ones with their names), the rest as placeholders | Your points and guesses | Ask the next picture, or Crown the face detective after the last | Host |
+| `asking` | The suspense (about 2.8 s), then the picture, "Who is in it?", the countdown, the lock-in pips | "Look at the TV." during the suspense, then pick two names and Lock in | Reveal now | By itself when time is up |
+| `reveal` | Who it was, with their own photos, how many got both, the top 3 | What you got, who it was | Back to the wall | By itself after 10 s |
 | `done` | The winner's screen | The result card | none | |
 
 - **Presentation**: `'stage'`. `stageBanners: 'sound-only'`. Start takes the
   TV and the core's "Hurra presents" card opens it; the round itself
   announces nothing until the crown.
 - **The shared contract**: `src/games/fusion/shapes.ts` holds the public
-  state, the player view, the host actions, the constants and the readers
+  state, the player view, the host actions, the constants, `voteSpec`,
+  `countHits` (the scoring rule the phone's fallback uses too) and the readers
   (`readPublic`, `readView`) every screen reads saved JSON through, so a save
-  from the background version or a fixture with parts left out still gives a
-  screen the full shape. Relative imports only: the Netlify function bundles
-  it with `logic.ts`.
+  from an older version or a fixture with parts left out still gives a screen
+  the full shape. Relative imports only: the Netlify function bundles it with
+  `logic.ts`. Names are matched by `src/games/core/names.ts` (`nameKey`: case,
+  accents, Nordic letters and every space never matter; `nameFromSetting`
+  turns a saved guest id into that guest's name), which Lydspor shares.
 - **Config** (`game_settings`, hosts only):
 
   ```ts
   export type FusionPicture = {
     label: string
     image?: string
-    people?: [PlayerId, PlayerId]
+    people?: [string, string]                    // two typed names; old settings hold two guest ids
     originals?: [string | null, string | null]   // each person's own photo, in the order of people
   }
   export type FusionConfig = {
     pictures: FusionPicture[]
     pointsPerPerson: number   // 1, whole 0 to 10
     bonusForBoth: number      // 0, whole 0 to 10
-    seconds: number           // 30, whole 10 to 90: time to guess each picture
-    showSeconds: number       // 6, whole 3 to 20: each picture in the showing
+    seconds: number           // 30, whole 10 to 90: time to guess each picture, after the suspense
   }
   ```
 
   `parseConfig`: 1 to 40 pictures; a blank label is `#n`, labels are at most
   20 characters (in code points); `image` an optional plain `.jpg`
-  game-media path; `people`, when given, two different players (a pair with
-  one person is refused); points whole from 0 to 10; "The time to guess must
-  be 10 to 90 seconds", "The showing must be 3 to 20 seconds a picture".
-  Settings saved before the two times existed start with the defaults (the
-  engine merges `defaultConfig` under them), and a frozen config without them
-  is read with the defaults wherever it is read. People can be set in the
-  settings before the start or on the night with `setKey`. **Changed for the
-  guest list (26 Nov):** a picture may name anyone on the host's guest list,
-  joined or not (`info.guests`); the start refuses only someone in neither
-  list: "#3 names someone who isn't on the guest list any more. Pick again in
-  the settings." See [guest-list.md, 9.2](guest-list.md#92-participant-fusion-fusionstage).
-- **The two people's own photos** (`originals`, added 25 November): per
-  picture, an optional game-media path for each of the two people, uploaded
-  through the same pipeline as the picture (`media.upload`: canvas, metadata
-  dropped, a full image and a thumbnail). Each belongs to its place in the
-  pair: `originals[0]` is the photo of `people[0]`, so the host picks each
-  person beside their photo, in the settings or with Show who on the night.
+  game-media path; `people`, when given, two names (trimmed, every run of
+  spaces one space), each at most 40 characters, different by `nameKey`
+  ("#3: type two different names", "#3: type the second name, or clear the
+  first", "#3: names are at most 40 characters"); points whole from 0 to 10;
+  "The time to guess must be 10 to 90 seconds". `showSeconds`, from settings
+  saved while the round opened with a showing, is read no more. The names are
+  plain text, not tied to the guest list: the editor and Show who offer the
+  guest list and the guests here as suggestions so the spelling matches how
+  the guest joins, and say where each typed name stands ("Here", "On the
+  guest list, not here yet", "Nobody here or on the guest list by this name:
+  check the spelling"). **Old settings with ids** (from before 26 November)
+  keep working: `setup`, the first place the guest list is known, turns each
+  id into its guest's name (`nameFromSetting`, from `info.guests` or
+  `info.players`), and refuses only an id on neither list: "#3 names someone
+  who isn't on the guest list any more. Type their name in the settings."
+  The editor shows such an id as its guest's name and saves names from the
+  first edit on.
+- **The two people's own photos** (`originals`): per picture, an optional
+  game-media path for each of the two people, uploaded through the same
+  pipeline as the picture. `originals[0]` is the photo of `people[0]`, so the
+  host types each name beside its photo, in the settings or with Show who.
   `parseConfig`: an array of at most two, each a plain `.jpg` game-media path
-  or null (empty strings read as null, both null as none at all); otherwise
-  "{label}: those photos of the two people aren't valid. Add them again." or
-  "{label}: the photo of the first person isn't valid. Add it again.". They
-  are as secret as the key: in the host-only settings and state, and in
-  `publicState` only inside that picture's `revealed`, from its reveal on.
-  Never in a view, a prompt, an announcement, the log or the recap. A person
-  without one shows at the reveal as their profile photo, else their token.
+  or null; otherwise "{label}: those photos of the two people aren't valid.
+  Add them again." or "{label}: the photo of the first person isn't valid.
+  Add it again.". They are as secret as the key: in the host-only settings
+  and state, and in `publicState` only inside that picture's `revealed`, from
+  its reveal on. A person without one shows at the reveal as the profile photo
+  of the guest with that name, else a token.
 - **State**:
 
   ```ts
   export type FusionState = {
-    phase: 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done'
-    key: Record<string, [PlayerId, PlayerId]>   // by picture number; secret until that picture is revealed
-    names: Record<PlayerId, string>             // the people in the key, from the guest list: for a guest who never joins, or leaves first
-    revealed: number[]                          // picture numbers, in the order they were asked and revealed
+    phase: 'lobby' | 'wall' | 'asking' | 'reveal' | 'done'
+    key: Record<string, [string, string]>   // by picture number: two names; secret until that picture is revealed
+    revealed: number[]                      // picture numbers, in the order they were asked and revealed
     results: Record<string, { both: number; one: number; none: number; voters: number; hits: Record<PlayerId, number>; at?: number }>
     totals: Record<PlayerId, number>
-    showStartedAt: number | null                // when the showing started; null again once a picture is asked
-    current: number | null                      // the picture asked (asking) or just revealed (reveal)
-    openedAt: number | null
-    endsAt: number | null
+    current: number | null                  // the picture asked (asking) or just revealed (reveal)
+    openedAt: number | null                 // when it was asked: the suspense starts
+    endsAt: number | null                   // the countdown's end: openedAt + SUSPENSE_MS + seconds
     revealedAt: number | null
   }
   ```
 
-  `key`, `names`, `revealed`, `results` and `totals` keep their names and
-  shapes from the background version, so the recap, End and the crown read
-  old saves unchanged. `readState` fills the new fields with null for a save
-  that lacks them.
+  No guest or player id says who is in a picture: the key is names. Points
+  and hits stay by player id (they are the players' scores). `readState`
+  reads every older save: a key of ids (before 26 November) as the names the
+  save kept beside it (`names`), the showing (`showing`, `showStartedAt`) as
+  the wall, and the background version's fields as before.
 - **Prompts**: one per picture, `p1` to `p40`, opened when the picture is
-  asked, never before: `{ kind: 'choice', options: 'guests', min: 2, max: 2,
-  exclude_self: true, final: true }` (the first lock counts), with the
-  countdown's end plus `GRACE_MS` (1 s) as its `closesAt`. The spec is public
-  and says nothing about the answer. `'guests'` (since the guest list, 26 Nov;
-  `'players'` before): a lock may name a guest on the list who never came,
-  and only guests who joined can answer.
+  asked, never before: `voteSpec(names)` = `{ kind: 'choice', options:
+  names, min: 2, max: 2, final: true }` (the first lock counts), with the
+  countdown's end plus `GRACE_MS` (1 s) as its `closesAt`. `names`
+  (`guessNames`) is everyone who has joined (as they typed their own name)
+  and every name in the pictures, each once by `nameKey`, in Danish order:
+  the same list whichever picture is asked, so it says nothing about the
+  answer, and `check_answer` takes only those. The phone leaves the guest's
+  own name out. A lock is two names.
 - **Host actions** (`FusionHostAction`). Each names its step (3.5): a phase,
   or a picture number. One whose step has passed returns the state unchanged,
   which the engine answers as skipped:
-  - `{ type: 'show' }`: in the lobby, phase `showing`, `showStartedAt = now`.
-  - `{ type: 'wall', from: 'lobby' | 'showing' }`: unchanged unless the phase
-    is that one; then phase `wall`. `{ type: 'wall', from: 'reveal', n }`:
-    unchanged unless picture n is the one being revealed.
-  - `{ type: 'ask', n }`: from the lobby, the showing, the wall or a reveal, in
-    any order. Past the last picture: `GameError` "There is no picture #n".
-    Unchanged when n is revealed or is the picture being asked (a double tap).
-    While another picture is asked: "Reveal #4 first". Without `key[n]`: "Set
-    who is in #n first". Otherwise opens `p<n>` with
-    `closesAt = now + seconds * 1000 + GRACE_MS`; phase `asking`,
-    `current = n`, `openedAt = now`, `endsAt = now + seconds * 1000`.
+  - `{ type: 'wall', from: 'lobby' }` (Show the wall first): unchanged unless
+    the phase is the lobby; then the wall. `{ type: 'wall', from: 'reveal',
+    n }`: unchanged unless picture n is the one being revealed. `show` and
+    `wall from showing` are unknown host actions now.
+  - `{ type: 'ask', n }`: from the lobby, the wall or a reveal, in any order.
+    Past the last picture: `GameError` "There is no picture #n". Unchanged
+    when n is revealed or is the picture being asked (a double tap). While
+    another picture is asked: "Reveal #4 first". Without `key[n]`: "Set who
+    is in #n first". Otherwise opens `p<n>` with `closesAt = endsAt +
+    GRACE_MS`, where `endsAt = now + SUSPENSE_MS + seconds * 1000` (the TV
+    shows which picture it is first, so nobody loses guessing time); phase
+    `asking`, `current = n`, `openedAt = now`.
   - `{ type: 'reveal', n }`, sent with `close: ['p' + n]` (Reveal now):
     unchanged unless n is being asked (the timer may have revealed it).
     Needs the picture's locks in `info.answers` ("The votes for #n are still
     open"). Then the reveal (below).
-  - `{ type: 'setKey', n, people }`: refused once that picture is revealed;
-    two different people on the guest list, joined or not ("Pick two people
-    on the guest list"); the same pair again is unchanged, in
-    either order, unless the picture has its people's own photos: then the
-    order says whose photo is whose, and the pair the other way round is a
-    change.
-    Allowed in every phase but done, the picture being asked included.
+  - `{ type: 'setKey', n, people }`: two typed names (an older host page's
+    ids become their guests' names); refused once that picture is revealed;
+    "Type the two names in the picture" (a blank, or an id on no list), "Names
+    are at most 40 characters", "Type two different names". The same pair
+    again is unchanged, in either order, unless the picture has its people's
+    own photos (then the order says whose is whose); a new spelling is a
+    change. Allowed in every phase but done, the picture being asked
+    included (its guess already offers the names it had when asked).
   - `{ type: 'finish' }`: while a picture is asked, "Reveal #n first".
     Otherwise phase `done`; announces "{name} has the sharpest eye" (crown,
     fanfare, `interrupt`) and "You have the sharpest eye" to the winners;
@@ -4019,160 +4044,167 @@ was. A point per right person, and a bonus for both.
     points on the board: "Participant fusion is over", "Nobody scored this
     time", no winner.
 - **The reveal** (Reveal now and the timer alike): every lock from a guest
-  here who isn't in the picture counts (a lock from anyone gone since, or from
-  the two in it, counts for nothing;
-  their phones keep theirs on the phone and never send it); `hits` is how many of the two each voter
-  got; `totals += hits * pointsPerPerson + (hits === 2 ? bonusForBoth : 0)`.
-  No speed points. `revealPrompt('p' + n)`; records `revealed` with
-  `{ n, label, people, both, one, none, voters }` (its `about` only the
-  people in it who joined); phase `reveal`,
-  `results[n].at = revealedAt = now`. **No announcement**: the TV and every
-  phone show the moment themselves, as the quiz does.
+  here counts, the two in the picture too; a lock from anyone gone since
+  counts for nothing. `hits` is how many of the two each voter named
+  (`countHits`: a pick counts when it folds to one of the picture's names; a
+  pick of the voter's own name counts for nothing, as their phone never
+  offers it, so someone in the picture gets at most the other one); `totals
+  += hits * pointsPerPerson + (hits === 2 ? bonusForBoth : 0)`. No speed
+  points. `revealPrompt('p' + n)`; records `revealed` with `{ n, label,
+  people, both, one, none, voters }` (`people` the two names; its `about` the
+  players whose name is one of them); phase `reveal`, `results[n].at =
+  revealedAt = now`. **No announcement**: the TV and every phone show the
+  moment themselves, as the quiz does.
 - **Timers** (`GRACE_MS` 1 s, `WAKE_MARGIN_MS` 250 ms, `REVEAL_HOLD_MS` 10 s,
-  the quiz's reasons): `wakeAt` is the showing's end in `showing`
-  (`showStartedAt + pictures * showSeconds * 1000`), `endsAt + GRACE_MS +
-  WAKE_MARGIN_MS` in `asking`, `revealedAt + REVEAL_HOLD_MS` in `reveal`, else
-  null. `onWake`: the showing goes to the wall; asking reveals; a reveal goes
-  back to the wall. If the timer ever finds a picture's locks missing, it
-  closes its prompt and changes nothing, so Reveal now still works. The
-  showing is clocked, not stepped: screens compute the picture on show from
-  `showing.startedAt` and the database clock, so 40 pictures cost two saves.
+  `SUSPENSE_MS` 2.8 s): `wakeAt` is `endsAt + GRACE_MS + WAKE_MARGIN_MS` in
+  `asking`, `revealedAt + REVEAL_HOLD_MS` in `reveal`, else null. `onWake`:
+  asking reveals; a reveal goes back to the wall. If the timer ever finds a
+  picture's locks missing, it closes its prompt and changes nothing, so
+  Reveal now still works.
 - **Races**, each answered as skipped: the countdown ends as the host taps
   Reveal now (either order); the reveal's 10 s end as the host taps Back to
-  the wall, or asks the next picture (the ask applies either way); the showing
-  ends as the host skips to the wall; a double tap on Ask. Two hosts asking
+  the wall, or asks the next picture (the ask applies either way); Show the
+  wall first as the host asks #1; a double tap on Ask. Two hosts asking
   different pictures: the second gets "Reveal #5 first". A sync before
-  `wake_at` finds nothing due. A lock at 29.9 s is taken until `endsAt` plus
-  1 s by the database clock; a second lock is refused ("You already
-  answered").
+  `wake_at` finds nothing due. A lock at 29.9 s of the countdown is taken
+  until `endsAt` plus 1 s by the database clock; a second lock is refused
+  ("You already answered"). A lock during the suspense is taken too (the
+  prompt is open from the ask), though no phone shows its picker then.
 - **isFinished**: phase `done`. `onEnd('host')`: "Participant fusion is over"
   with the leader (trophy, gong); a picture still asked stays unscored and
-  secret. `onEnd('game')`: quiet. `scores()`: `totals`. `winners`: the top
-  totals among players still in the party, all tied ones; nobody when the top
-  is 0.
-- **publicState** (never a key before its reveal):
+  secret, its image too. `onEnd('game')`: quiet. `scores()`: `totals`.
+  `winners`: the top totals among players still in the party, all tied ones;
+  nobody when the top is 0.
+- **publicState** (never a key before its reveal, never an image before its
+  ask):
 
   ```ts
   export type FusionPublicState = {
     phase: FusionPhase
-    pictures: { n: number; key: string; label: string; image: string | null; revealed: FusionReveal | null }[]
-    rules: { seconds: number; showSeconds: number; perPerson: number; bothBonus: number }
-    showing: { startedAt: number; endsAt: number } | null      // in the showing only
-    current: { n: number; step: number; key: string; openedAt: number; endsAt: number; revealedAt: number | null } | null
+    pictures: { n: number; key: string; label: string; asked: boolean; image: string | null; revealed: FusionReveal | null }[]
+    rules: { seconds: number; perPerson: number; bothBonus: number }
+    current: { n: number; step: number; key: string; openedAt: number; startsAt: number; endsAt: number; revealedAt: number | null } | null
     top: { playerId: PlayerId; points: number; rank: number }[] // the top 5 still in the party, competition ranks
-    expected: { id: PlayerId; name: string }[]  // everyone on the guest list who hasn't joined (26 Nov); [] in older saves
   }
   export type FusionReveal = {
-    people: [PlayerId, PlayerId]; names: [string, string]
+    names: [string, string]                      // as typed in the settings or with Show who
     both: number; one: number; none: number; voters: number
-    originals: [string | null, string | null]   // the settings' own photos, in the order of people; [null, null] for none
+    originals: [string | null, string | null]   // the settings' own photos, in the order of names; [null, null] for none
     step: number            // its place in the guessing: "Picture 4 of 12"
     at: number | null       // when it was revealed; null in the background version's saves
   }
   ```
 
-  `current.step` counts the guessing, so a picture asked out of order is still
-  "Picture 4 of 12" while its label says "#6". `expected` holds every guest
-  on the list who hasn't joined, by id and name only, whatever the pictures
-  are, so it says nothing about the key: the phone's picker lists them after
-  the guests here, under "Not here yet". A reveal's `names` come from the
-  guest list (a guest here, else one listed, else the name the key kept).
-- **playerView**: `{ points, rank, hits, inPicture }`: `rank` is null until
-  the player scores; `hits` holds each revealed picture they locked in on and
-  aren't in; `inPicture` is true only for the two in the picture asked or just
-  revealed, so their phones say "This one is you." over the same picker and
-  Lock in everyone gets, and keep that lock on the phone (a glance from the
-  next seat can't tell). A guest's own lock comes from `myAnswers`.
+  `asked` is true for the picture asked now and every revealed one, and
+  `image` is its game-media path only then (null for one not asked yet, and
+  for one without an image): a picture's image reaches no phone and no TV
+  before it is asked. `current.startsAt` is when the countdown starts
+  (`max(openedAt, endsAt - seconds)`: after the suspense; at the ask for a
+  picture asked before the suspense existed). `current.step` counts the
+  guessing, so a picture asked out of order is still "Picture 4 of 12" while
+  its label says "#6". The guest list's expected guests (`expected`, 26 Nov)
+  are gone from the public state: the names to guess come with each
+  picture's guess. Screens find the guest a revealed name belongs to (for
+  their profile photo and token) by `nameKey` among the players.
+- **playerView**: `{ points, rank, hits }`: `rank` is null until the player
+  scores; `hits` holds each revealed picture they locked in on, whether they
+  are in it or not. A guest's own lock comes from `myAnswers`. `inPicture` is
+  gone (readers drop it from older views).
 - **Guests joining and leaving**: a guest who joins mid-round gets a view at
-  the next sync and can lock in on the next picture asked; a guest in a
-  picture who arrives late is in it from then on (`inPicture`, no score on
-  it). A guest removed before a reveal loses their lock with them (the
-  database deletes their answers), so it counts nowhere; one removed after it
-  stays in that picture's numbers. `onPlayerLeave` (26 Nov) drops the id's
-  `totals` and its `hits` on every revealed picture, so a name the host frees
-  and someone takes again starts at nothing; `both`, `one`, `none`, `voters`,
-  the key and its names stay (they name the listed guest in the picture, not
-  the phone). Nobody can pick a removed guest any more, so a picture with
-  someone who left the list gives at most one of two. A picture of a guest who
-  never came is asked and revealed like any other, with their name and, if
-  set, their own photo.
+  the next sync and can lock in on the next picture asked (a picture's guess
+  offers the names it had when asked); one whose name is in a picture scores
+  on it like anyone, matched by name. A guest removed before a reveal loses
+  their lock with them (the database deletes their answers); one removed
+  after it stays in that picture's numbers. `onPlayerLeave` drops the id's
+  `totals` and its `hits` on every revealed picture, so a name the host
+  frees and someone takes again starts at nothing; `both`, `one`, `none`,
+  `voters` and the key stay (the key names the people in the picture, not a
+  phone).
 - **Old saves** (no migration: everything new is game JSON). A round started
   with the background version (`voting` or `locked`) reads as a lobby that
   never starts: `wakeAt` is null, every host action is refused with "This
   round started before the update. End it, then restart it.", and the host
-  room says so. End works (the leader from the points so far), and Restart
-  starts the stage round with the same settings. A finished round of the
-  background version keeps its result card, final screen and recap.
+  room says so. End works, and Restart starts the stage round with the same
+  settings (ids become names at the start). A round saved in the showing
+  reads as the wall.
 - **recap** (finished rounds only, revealed pictures only): "Sharpest eye:
   {names}" (headline); "Best disguise: #4 fooled the room", "Only 2 of 21 saw
-  Mads and Ida", when under half got both; "Perfect eye: {names}" for anyone
-  who got both people of every revealed picture they could score on (at least
-  two).
+  Mads and Ida", when under half got both (its people the players with those
+  names); "Perfect eye: {names}" for anyone who, on every revealed picture
+  (at least two), named everyone in it they could: both, or the other one on
+  a picture they are in.
 - **Badges**: `detective` as "Face detective" (`DetectiveIcon`, violet).
   `icon: DetectiveIcon`.
 
 **Screens.**
 
-- **TV** (`TvView`, `FinalTvView`, `TvStatus`): the lobby; the showing, each
-  picture in a frame with its label chip and a pip per picture; the wall,
-  every picture at once (`wall.ts` lays the tiles out); asking, the picture
-  in the frame with "Who is in it?", the quiz's countdown and the lock-in pips
-  (`max(locked, guests - 2)`, so the pips never tell the room that someone in
-  the picture has left); the reveal, the picture moving to the middle and
-  the two people sliding in beside it as their own photos (else their
-  profile photo, else their token), named on paper chips, then the counts
-  and the sharpest eyes; the winner's screen. The strap says where the round
-  is: "12 pictures, starting soon", "Showing 3 of 12", "4 of 12 revealed",
-  "Picture 4 of 12", "Final result" (`strapWords`). Images: the full image in
-  the frame, thumbnails on small wall tiles, every picture warmed in the
-  lobby. The own photos can't be warmed: their paths reach the TV with the
-  reveal's state and no sooner, so `useOriginals` loads both (thumbnail and
-  full image, high priority, decoded) from that render on, while the picture
-  moves; each person comes in at their beat once theirs is in, or at 2 s at
-  the latest (`arriveIn` in `reveal.ts`, tested), and the picture is there
-  first. See docs/identity.md.
-- **Phone** (`PlayerView`, `PlayerCard`, `ResultView`): the lobby and the
-  showing say to watch the TV; the wall shows your points and your guesses;
-  while a picture is asked, a thumbnail, the guests to pick from (search over
-  16), two pick slots and the gold Lock in, the one gold step on the screen;
-  then "Locked in". The two in it get the same picker under "This one is you.
-  Keep a straight face and pick any two: it won't count.", and their lock
-  stays on the phone, so the next seat can't tell; the reveal says what you
-  got, with who it was as two small tokens wearing their own photos
-  (thumbnails) where the settings have them. The phone strap (`phoneStrap`) uses
-  the strap's words without the clock. Phones load thumbnails only.
+- **TV** (`TvView`, `FinalTvView`, `TvStatus`): the lobby (words only); the
+  wall, every picture at once (`wall.ts` lays the tiles out), each one not
+  asked yet as a placeholder (a drawn head and shoulders with a big "?",
+  `Placeholder` in `parts.tsx`); asking, first the suspense (`suspense.ts`,
+  tested: the highlight hops forward across the placeholders still to come,
+  slowing, 1.3 s, lands on the picture asked, it grows out of its tile to the
+  middle, its "?" pulses once and its face flips in, with pop ticks and the
+  whoosh; with reduced motion a calm fade; a TV that opens in the middle
+  shows how it ends), then the picture in the frame with "Who is in it?",
+  the quiz's countdown from `startsAt` and the lock-in pips (everyone here);
+  the reveal, the picture moving to the middle and the two people sliding in
+  beside it as their own photos (else the profile photo of the guest with
+  that name, else a token), named on paper chips, then the counts and the
+  sharpest eyes; the winner's screen. The strap says where the round is: "12
+  pictures, starting soon", "12 pictures", "4 of 12 revealed", "Picture 4 of
+  12", "Final result" (`strapWords`). Images: a picture's image loads when it
+  is asked (its path arrives with that state), the full image decoded at high
+  priority during the suspense; the face flips in once it is in (the
+  placeholder holds till then). The own photos load from the reveal's own
+  state (`useOriginals`), as before. See docs/identity.md.
+- **Phone** (`PlayerView`, `PlayerCard`, `ResultView`): the lobby says to
+  watch the TV; the wall shows your points and your guesses; while a picture
+  is asked, "Look at the TV." until the countdown starts, then a thumbnail of
+  the picture, the names to pick from (`guessOptions`: the guess's names, A to
+  Z, never your own; plain name tiles, no photos and no tokens; a search over
+  16), two picks and the gold Lock in, the one gold step on the screen; then
+  "Locked in: Mads and Ida." with the two names. The two in the picture get
+  the same screens and score like anyone. The reveal says what you got and
+  shows who it was with their own photos, your two picks by name with Right
+  or Not in it, and your place. The phone strap (`phoneStrap`) uses the
+  strap's words. Phones load thumbnails only.
 - **Host** (`HostView`, with its steps in `host.ts`, tested): the phase as a
-  chip (Ready, Showing, The wall, Guessing, Revealed, Over), the title line
-  ("Picture 5 of 12: #5") and the seconds left; one gold step (Start the
-  showing, Skip to the wall, Ask #5, Reveal now, Back to the wall, Crown the
-  face detective) with the skips in the menu beside it (Skip the showing,
-  Crown the face detective now, Skip the wall: ask #6 or crown); crowning
+  chip (Ready, The wall, Guessing, Revealed, Over), the title line ("Picture
+  5 of 12: #5") and the seconds left; one gold step (Ask #1 from the lobby,
+  with Show the wall first in the menu; Ask #5; Reveal now; Back to the wall;
+  Crown the face detective) with the skips in the menu beside it; crowning
   while pictures are unasked asks first. The line under the steps says what
-  happens next and when ("14 of 22 have locked in. It reveals by itself when
-  time's up.", "Everyone has locked in. Reveal now.", "The wall follows by
-  itself in 6 s."); the count of who may vote is exact here (everyone but the
-  two in the picture). Every picture has a state chip (On now, Revealed, Not
-  asked), its counts once revealed and its own Ask. Who is in each picture
-  sits behind Show who, off by default: two pickers on a row of their own
-  under the picture's label, each beside its person's own photo when the
-  settings have one, so the host picks the person in that photo (the order
-  is saved). Notes: fusion isn't on the TV;
-  pictures without their people; a round from before the update.
+  happens next ("The TV is picking the picture. The guessing starts in a
+  moment.", "14 of 22 have locked in. It reveals by itself when time's up.",
+  "Everyone has locked in. Reveal now."); the count of who may vote is
+  everyone here. Every picture has a state chip, its counts once revealed,
+  its thumbnail (from the settings: the host sees every picture) and its own
+  Ask. Who is in each picture sits behind Show who, off by default: two name
+  fields with suggestions (`NameField`, `people.ts`) on a row of their own,
+  each beside its person's own photo when the settings have one.
 - **Settings** (`ConfigEditor`): how many pictures, a label and an optional
-  image per picture (re-encoded and uploaded with `media.upload`; a picture
-  without one shows its label on the TV), optional people, each in a slot
-  with their own optional photo ("Add photo", "Replace", remove; the same
-  upload), with a note that the photos stay secret until the reveal, the timing
-  ("Seconds to guess each picture", "Seconds each picture shows first") and
-  the points.
+  image per picture (re-encoded and uploaded with `media.upload`), two name
+  fields per picture with the guest list and the guests here as suggestions
+  and where each name stands, each beside its photo slot ("Add photo",
+  "Replace", remove), a note that the photos and the pictures stay hidden
+  until their moment, the time to guess, and the points.
 - **Bot** (`bot.ts`): `settings` makes 4 pictures whose people are pairs of
-  the first 8 players, 10 s to guess, a 3 s showing and a bonus of 1; `move`
-  locks in only while a picture is asked, never on one the bot is in, at a
-  random moment inside the countdown; `hostMove`: Start the showing; nothing
-  in the showing (the wall when its timer is 5 s overdue); from the wall,
-  after a 3 s pause, the next picture (setting a missing key first) or the
-  crown when none is left; Reveal now once everyone who may vote has locked
-  in; nothing in the reveal (the wall when overdue).
+  the first 8 players (as ids, which the start turns into names: the
+  rehearsal knows only ids), 10 s to guess and a bonus of 1; `move` locks in
+  on every picture asked once its countdown has started, the two in it too,
+  with 2 of the names the guess offers but its own, at a random moment inside
+  the countdown; `hostMove`: from the lobby, and from the wall after a 3 s
+  pause, the next picture (typing a missing key first) or the crown when
+  none is left; Reveal now once everyone here has locked in; nothing in the
+  reveal (the wall when overdue).
+- **Fixtures** (5.11): `fusion-lobby`, `fusion-start` (the first wall, every
+  picture a placeholder; `-2`, `-8`), `fusion-wall` (three revealed, the rest
+  placeholders; `-2`, `-8`, `-40`), `fusion-hop` (`-2`, `-8`: the picture is
+  asked 3 s after the scene's clock starts, so a TV opened on it plays the
+  suspense), `fusion-asking`, the reveals, `fusion-crown` and `fusion-final`.
+  #3 is of Zelda, on the guest list but never joined, and #7 of Tilde, on no
+  list. Captures: `.design/fusion-surprise/`.
 
 ### 8.5 Lydspor (new)
 
@@ -4198,18 +4230,24 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   1 to 12 songs in play order, each with its title and singer as the reveal
   shows them (1 to 60 characters), up to 6 extra accepted answers for each
   (never shown to guests), a photo, a caption (1 to 30, shown at the reveal),
-  where the hook starts (whole seconds within the first hour), a story note
-  for the cue card (0 to 140) and who is in the photo (at most 10); 0 to 4
+  where the hook starts (whole seconds within the first hour) and a story note
+  for the cue card (0 to 140); 0 to 4
   extra photos that fit no song (at least 2 from 3 songs on); points (whole
   numbers 0 to 5, default event 2, title 1, singer 1); `lastCallSeconds` (20
   to 180, default 60); `standingsEvery` (default 4); `hints` (captions under
   the photos while songs play, default off); `boardMax` (1 to 25, default 20);
-  `intro`, `storyteller` and `sitOut`. **Changed for the guest list (26
-  Nov):** `sitOut` and each song's `inPhoto` may name anyone on the host's
-  guest list, joined or not; the editor and the host's dialogs list the whole
-  list, an expected guest marked "(not here yet)". They name the listed guest:
-  one who joins later sits out or is in the photo from then on, and one who
-  never comes changes nothing ([guest-list.md, 9.3](guest-list.md#93-the-photo-and-song-game-lydsporgame)).
+  `intro`, `storyteller` and `sitOut`. **Changed 26 Nov, not tied to the
+  guest list:** `sitOut` is typed names, at most 200, each once by `nameKey`
+  (src/games/core/names.ts: case, accents and spaces never matter; people.ts
+  holds `sitOutNames` and `sittingOut`). A guest here sits out when their name
+  matches one on it, so one who joins later with that name sits out from then
+  on, and a name nobody joins with changes nothing. The editor and the host's
+  Who sits out take typed names with suggestions from the guest list and the
+  guests here, each chip marked "(not here yet)" or "(not on the list)".
+  Settings saved with guests' ids still start: `setup` turns each id into its
+  guest's name and drops an id on neither list. **The in-photo rule is gone
+  (26 Nov):** songs no longer say who is in their photo (`inPhoto` in older
+  settings and saves is ignored), and nobody gets an own average.
   `checkConfig(input)` returns the cleaned
   settings with every problem, in the order a host fixes them, and every
   warning (fewer than 4 extra photos, a long caption, a shared singer, a short
@@ -4243,8 +4281,8 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   | `reveal { index }` | locked, reveal or top 5, in order | `revealed + 1`; records `song_revealed` |
   | `accept { index, part, key, accepted }` | a revealed song's close or wrong row, until the crown | sets that row's `accepted`; records `answer_accepted` or `answer_unaccepted` |
   | `standings { after }` | reveal, `after` the songs revealed | the top 5: offered every `standingsEvery` reveals and always after the last song played, so its "These had no song" shows however many songs ran |
-  | `crown` | lobby, locked, reveal or top 5 | the own averages, the payout, the winner |
-  | `setInPhoto`, `sitOut` | before the crown | replace the list |
+  | `crown` | lobby, locked, reveal or top 5 | the payout, the winner |
+  | `sitOut { names }` (an older page's `playerIds` read the same way) | before the crown | replace the list |
 
   Refusals are in the game's words: "Play the songs in order", "That was the
   last song. Tap Last call.", "The answers are locking", "That's all the extra
@@ -4284,9 +4322,8 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
 - **Scoring**, from the state whenever it is read: event, title and singer
   points per revealed song; a photo left on two songs at the lock scores on
   neither (the guard); a typed part counts when its row is `exact`, `typo` or
-  accepted. A guest in a song's photo scores no points on it and, at the
-  crown, gets it as their own average (`round(earned / played * inPhoto)`,
-  kept in `credits`). Participants are present guests not sitting out with
+  accepted. Everyone playing scores every revealed song the same way,
+  whoever is in its photo. Participants are present guests not sitting out with
   any answer at the lock. `scores()` is `{}` until the crown, then each
   participant's final points scaled to the night board,
   `round(final * boardMax / most)`, where `most` is the songs revealed times
@@ -4301,22 +4338,18 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   how many are playing, the songs revealed, the latest reveal (its truth, the
   room's counts with the host's accepts, and how many could score on it), the
   photos that fit no song after the last reveal, the top 5 with each gain
-  since the last top 5 (once every song played is revealed, its points
-  count each own average, as `credit`, so it ranks as the crown will), and
-  the final rows after the crown. Never a title,
-  singer or caption before its reveal, never a typed answer, never who is in
-  a photo, and nothing about a guest on the list who hasn't joined (no reveal
-  names anyone in a photo, so none needs a name from the list). **playerView**: sitting out, the guest's own locked answers from the
+  since the last top 5, and the final rows after the crown. Never a title,
+  singer or caption before its reveal, never a typed answer, never who sits
+  out, and nothing about a guest on the list who hasn't joined. **playerView**: sitting out, the guest's own locked answers from the
   lock on, how each revealed song went (`exact`, `typo`, `accepted`, `close`,
   `wrong` or `none` per typed part; `right`, `wrong`, `doubled` or `none` for
-  the event), their points and place (with the own average once every song
-  played is revealed, as `credit`), and their final row.
+  the event), their points and place, and their final row.
 - **Guests leaving** (`onPlayerLeave`, 26 Nov): a guest removed, or whose
   name the host frees, takes their answers with them: their `picks`, their
   place in every `review` row (a row left with nobody goes), their points at
-  the last top 5 (`shownTop`) and their own average (`credits`), so whoever
-  takes a freed name next starts with nothing. `sitOut` and `inPhoto` keep the
-  id: it names the listed guest, not the phone. Before the lock their answers
+  the last top 5 (`shownTop`), so whoever takes a freed name next starts with
+  nothing. `sitOut` keeps its names: they name people, not phones. Before the
+  lock their answers
   are prompt answers, which the database deletes with them.
 - **recap** (finished rounds, revealed songs only): "Lydspor champion:
   {names}", the best known song and the hardest, with how many placed the
@@ -4334,7 +4367,7 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   (`samples.ts`), beside a live Last one standing.
 - **Bot** (`bot.ts`): eight invented songs with an extra answer each; its
   scripted round plays the first three with two extra photos and a 20 s last
-  call, and `botSettings(ids, 8)` gives a rehearsal of the night's length
+  call, and `botSettings(8)` gives a rehearsal of the night's length
   (four extra photos, the top 5 every 4 songs). Guests type the right answer,
   one with a typo inside a word, one 3 letters off or a wrong one, pick
   photos and swap them; the scripted host plays the songs 3 s apart, calls
@@ -4354,8 +4387,8 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
 | GAME-elimination | Today's tests on v2, plus: removal drops the task and finishes the game with one left; `isFinished`; `onEnd` quiet for game; the winner's announcement is `interrupt`; alive order after a round trip; `recap` on a finished round; the contract (with a join and a leave); the bot playing a round to its end through `simulateParty`. |
 | GAME-inperson | The contract; `recap`; the default winners after End (the top of the awards, nobody without awards). |
 | GAME-quiz | `parseConfig` refusals; neither the public state nor a prompt spec holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; a duplicated Next opens one question; Reveal now racing the timer scores once with no error; a stale Show the leaderboard is skipped; 45 answers through `simulateParty`; finish and winners (nobody when nobody scored); the recap of an early-ended quiz names no unasked question; the contract; the bot playing a full quiz through `simulateParty`. |
-| GAME-fusion | `shapes.test.ts`: the readers (new states, the background version's saves), the strap's words, the showing's clock, the counts line, the lock-in total. `logic.test.ts`: settings and their ranges; setup opens no prompt; the showing and its timer; the wall from each phase, stale steps skipped; asking (the spec, the deadline, any order, a double tap, another while asking, a missing key); the reveal by Reveal now and by the timer alike; people in a picture never score, even with a crafted lock; the timer without locks closes the guess and changes nothing; every race of 8.4 through `simulateParty`; no key in any public state or other guest's view before its reveal; finish and End; the background version's saves; the recap; the contract; the bot. `host.test.ts`: the host's steps per phase. `fusion.integration.test.ts`: one picture through the real engine, revealed by the TV's sync. |
-| GAME-soundtrack (Lydspor, 25 Nov) | `match.test.ts`: the spec's example table of 70 invented rows, row for row, plus the distance, the allowance and the grouping key. `logic.test.ts`: every settings refusal and warning; the deal and the prompts (text with `max_length` 60, the photo with `none`, none final, no answer in a spec); Play in order and its double tap; the last call, More time and the lock in two timer steps (and a list still missing); Lock now and its races with the timer; the review (grouping, the most common spelling, the order); reveals in order; Accept and Undo with the rescore of counts, points, top 5 and payout, every refusal, refused after the crown; the guard, a take, a shared singer, the own average, the scaled payout, the top 5's gains; sit out; guests leaving before and after the lock and joining late; guests on the list who haven't joined sitting out and in a photo, and a freed name taken again after the lock (26 Nov); no secret in public or in another guest's view before its reveal; the recap; the contract over an example and over the bot's round; a party of 24 played by the bot to the crown. `samples.test.ts`: the seven fixture scenes and their secrets. |
+| GAME-fusion | `shapes.test.ts`: the readers (new states, older saves: the background version's, the showing's, ids in reveals), the strap's words, the guess and `countHits`, the counts line, the lock-in total. `logic.test.ts`: settings and their ranges, names cleaned and folded; setup opens no prompt and turns old ids into names; no showing (old saves read as the wall); the wall from the lobby or a reveal, stale steps skipped; asking (the spec of names, the suspense before the countdown, any order, a double tap, another while asking, a missing key); the reveal by Reveal now and by the timer alike; everyone scores, the two in the picture too, a pick of one's own name never; images and keys secret until their moment; the timer without locks closes the guess and changes nothing; every race through `simulateParty`; finish and End; the recap; the contract; the bot. `suspense.test.ts`: the beats, the hops, the ticks, which TV plays it. `host.test.ts`: the host's steps per phase. `fusion.integration.test.ts`: two rounds through the real engine: images and own photos secret until their moment, names offered and matched, old ids as names, a name nobody joined with, everyone scoring. |
+| GAME-soundtrack (Lydspor, 25 Nov) | `match.test.ts`: the spec's example table of 70 invented rows, row for row, plus the distance, the allowance and the grouping key. `logic.test.ts`: every settings refusal and warning; the deal and the prompts (text with `max_length` 60, the photo with `none`, none final, no answer in a spec); Play in order and its double tap; the last call, More time and the lock in two timer steps (and a list still missing); Lock now and its races with the timer; the review (grouping, the most common spelling, the order); reveals in order; Accept and Undo with the rescore of counts, points, top 5 and payout, every refusal, refused after the crown; the guard, a take, a shared singer, everyone scoring every song whoever is in its photo (old `inPhoto` settings ignored, `setInPhoto` refused), the scaled payout, the top 5's gains; sit out by typed names (folded, deduplicated, old ids turned into names at setup, a name nobody joined with, a late joiner matched by name); guests leaving before and after the lock and joining late, and a freed name taken again after the lock (26 Nov); no secret in public or in another guest's view before its reveal; the recap; the contract over an example and over the bot's round; a party of 24 played by the bot to the crown. `samples.test.ts`: the seven fixture scenes and their secrets. |
 | PHONE, TV, HOST | Unit tests for any pure helper they add. Screens are checked against the fixtures (5.11) and then on the local stack; TV also runs the fit checks in 10.4. |
 
 **Changed after the switch-over (15 Nov):** the TV's sound effects volume has
@@ -4526,7 +4559,7 @@ exception is `rehearse --target production`, which:
   private channels counting deliveries. The program: Last one standing in the
   background with knockouts from its bot; a 10-question quiz on the stage
   played by its bot's settings, moves and host moves; fusion with 4 pictures
-  on the stage (the showing, then each picture asked, locked in and
+  on the stage (each picture asked with the suspense, locked in and
   revealed, then the crown); an in-person round with 10 host awards;
   one guest moved to a new phone; one removed; the recap built with
   `buildRecapDoc` and published.

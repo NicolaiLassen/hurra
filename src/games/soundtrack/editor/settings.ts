@@ -3,7 +3,6 @@
 // so a space typed between two words survives), and the game's own problems
 // and warnings (checkConfig) placed under the fields they are about. Pure, so
 // the tests pin it.
-import type { PlayerId } from '../../core/Game'
 import { MAX_START } from '../logic'
 import { normalise } from '../match'
 import type { SoundtrackConfig, SoundtrackPhoto, SoundtrackSong } from '../types'
@@ -12,7 +11,8 @@ const record = (value: unknown) =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 const text = (value: unknown) => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '')
 const texts = (value: unknown) => (Array.isArray(value) ? value.map(text) : [])
-const ids = (value: unknown): PlayerId[] => (Array.isArray(value) ? value.filter((id): id is PlayerId => typeof id === 'string' && id !== '') : [])
+/** Names (or, in settings saved before names, guests' ids), as typed. */
+const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string' && name.trim() !== '') : [])
 const num = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
 
 export const emptySong = (): SoundtrackSong => ({
@@ -24,7 +24,6 @@ export const emptySong = (): SoundtrackSong => ({
   caption: '',
   startAt: 0,
   note: '',
-  inPhoto: [],
 })
 
 function readSong(raw: unknown): SoundtrackSong {
@@ -38,7 +37,6 @@ function readSong(raw: unknown): SoundtrackSong {
     caption: text(song.caption),
     startAt: num(song.startAt, 0),
     note: text(song.note),
-    inPhoto: ids(song.inPhoto),
   }
 }
 
@@ -61,7 +59,7 @@ export function readSettings(raw: unknown): SoundtrackConfig {
     boardMax: num(config.boardMax, 20),
     intro: text(config.intro),
     storyteller: text(config.storyteller),
-    sitOut: ids(config.sitOut),
+    sitOut: names(config.sitOut),
   }
 }
 
@@ -88,7 +86,7 @@ export const wholeFrom = (typed: string) => {
 export type Issue = { text: string; kind: 'problem' | 'warning' }
 
 /** The fields outside the song cards that problems and warnings are about. */
-export type FieldKey = 'songs' | 'extras' | 'points' | 'lastCall' | 'standings' | 'boardMax' | 'intro' | 'storyteller'
+export type FieldKey = 'songs' | 'extras' | 'points' | 'lastCall' | 'standings' | 'boardMax' | 'intro' | 'storyteller' | 'sitOut'
 
 export type PlacedIssues = {
   /** Per song, by index. */
@@ -107,6 +105,7 @@ const FIELD_PATTERNS: [RegExp, FieldKey][] = [
   [/^The most on the night board/, 'boardMax'],
   [/^The intro line/, 'intro'],
   [/^The storyteller/, 'storyteller'],
+  [/Doesn't play this game/, 'sitOut'],
 ]
 
 /**
@@ -120,7 +119,7 @@ export function placeIssues(problems: readonly string[], warnings: readonly stri
   const placed: PlacedIssues = {
     songs: songs.map(() => []),
     extras: Array.from({ length: extras }, () => []),
-    fields: { songs: [], extras: [], points: [], lastCall: [], standings: [], boardMax: [], intro: [], storyteller: [] },
+    fields: { songs: [], extras: [], points: [], lastCall: [], standings: [], boardMax: [], intro: [], storyteller: [], sitOut: [] },
   }
   const place = (message: string, kind: Issue['kind']) => {
     const song = /^Song (\d+)(:?)\s*(.*)$/.exec(message)

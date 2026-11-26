@@ -3,6 +3,7 @@
 // already. Read from the state the lock built (`review`), never from guests'
 // phones. Pure, so the tests pin it against the logic's own counts.
 import type { PlayerId } from '../../core/Game'
+import { sittingOut } from '../people'
 import type { ReviewRow, SoundtrackConfig, SoundtrackState, TypedPart } from '../types'
 
 export type PartReview = {
@@ -23,7 +24,7 @@ export type SongReview = {
   /** The song's number, from 1. */
   n: number
   index: number
-  /** Scoring guests for this song: present, not sitting out, not in its photo, with any answer at the lock. */
+  /** Scoring guests for this song: present, not sitting out, with any answer at the lock. */
   of: number
   title: PartReview
   singer: PartReview
@@ -31,29 +32,27 @@ export type SongReview = {
 
 const counts = (row: ReviewRow) => row.verdict === 'exact' || row.verdict === 'typo' || row.accepted
 
-/** Who can score on song `index`, as the logic counts them (spec 8.2). */
-export function scoringOn(state: Pick<SoundtrackState, 'sitOut' | 'picks' | 'inPhoto'>, players: readonly { id: PlayerId }[], index: number): Set<PlayerId> {
-  const sitOut = new Set(state.sitOut)
-  const inPhoto = new Set(state.inPhoto[index] ?? [])
+/** Who can score on the revealed songs, as the logic counts them (spec 8.2): here, not sitting out (by name), with any answer at the lock. */
+export function scoringOn(state: Pick<SoundtrackState, 'sitOut' | 'picks'>, players: readonly { id: PlayerId; name: string }[]): Set<PlayerId> {
+  const sitOut = sittingOut(Array.isArray(state.sitOut) ? state.sitOut : [], players)
   const picks = state.picks ?? {}
-  return new Set(players.map((p) => p.id).filter((id) => !sitOut.has(id) && !inPhoto.has(id) && Object.hasOwn(picks, id)))
+  return new Set(players.map((p) => p.id).filter((id) => !sitOut.has(id) && Object.hasOwn(picks, id)))
 }
 
 /**
  * Song `index`'s review for the host, or null before the lock. Each row keeps
  * only the guests it can score for, and a row with none of them left (only
- * someone sitting out, or in the photo, typed it) is dropped: accepting it
- * would change nothing.
+ * someone sitting out typed it) is dropped: accepting it would change nothing.
  */
 export function songReview(
-  state: Pick<SoundtrackState, 'review' | 'sitOut' | 'picks' | 'inPhoto'>,
+  state: Pick<SoundtrackState, 'review' | 'sitOut' | 'picks'>,
   config: Pick<SoundtrackConfig, 'songs'> | null,
-  players: readonly { id: PlayerId }[],
+  players: readonly { id: PlayerId; name: string }[],
   index: number,
 ): SongReview | null {
   const song = state.review?.[index]
   if (!song) return null
-  const scoring = scoringOn(state, players, index)
+  const scoring = scoringOn(state, players)
   const part = (name: TypedPart): PartReview => {
     const rows = (song[name] ?? [])
       .map((row) => ({ ...row, players: row.players.filter((id) => scoring.has(id)) }))

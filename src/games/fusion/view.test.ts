@@ -1,89 +1,74 @@
 import { describe, expect, it } from 'vitest'
-import { candidatesFor, choiceOf, nameOf, pickSignature, shortNames, stillExpected, togglePick } from '@/games/fusion/view'
+import { voteSpec } from '@/games/fusion/shapes'
+import { choiceOf, guessOptions, nameOf, namesFor, pickSignature, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
 import type { Player } from '@/lib/types'
 
 const player = (id: string, name = id): Player => ({ id, name, code: 'ABCDE', profile: {}, created_at: 0 })
 
 describe('votes', () => {
-  it('reads a two-person vote and nothing else', () => {
-    expect(choiceOf({ choice: ['a', 'b'] })).toEqual(['a', 'b'])
-    expect(choiceOf({ choice: ['a'] })).toBeNull()
+  it('reads a two-name vote and nothing else', () => {
+    expect(choiceOf({ choice: ['Ana', 'Bo'] })).toEqual(['Ana', 'Bo'])
+    expect(choiceOf({ choice: ['Ana'] })).toBeNull()
     expect(choiceOf({ value: 3 })).toBeNull()
     expect(choiceOf(undefined)).toBeNull()
   })
 
-  it('compares picks whatever their order', () => {
-    expect(pickSignature(['b', 'a'])).toBe(pickSignature(['a', 'b']))
+  it('compares picks whatever their order and spelling', () => {
+    expect(pickSignature(['Bo', 'Ana'])).toBe(pickSignature(['ana', 'bo']))
     expect(pickSignature(null)).toBe('')
   })
 
-  it('picks two at most, a third replacing the oldest', () => {
-    expect(togglePick([], 'a')).toEqual(['a'])
-    expect(togglePick(['a'], 'b')).toEqual(['a', 'b'])
-    expect(togglePick(['a', 'b'], 'c')).toEqual(['b', 'c'])
-    expect(togglePick(['a', 'b'], 'a')).toEqual(['b'])
+  it('picks two at most, a third replacing the oldest; a name picked again in another case drops it', () => {
+    expect(togglePick([], 'Ana')).toEqual(['Ana'])
+    expect(togglePick(['Ana'], 'Bo')).toEqual(['Ana', 'Bo'])
+    expect(togglePick(['Ana', 'Bo'], 'Cy')).toEqual(['Bo', 'Cy'])
+    expect(togglePick(['Ana', 'Bo'], 'Ana')).toEqual(['Bo'])
+    expect(togglePick(['Ana', 'Bo'], 'ana')).toEqual(['Bo'])
   })
 })
 
-describe('finding people', () => {
-  it('lists everyone but yourself, by name, filtered by a search', () => {
-    const players = [player('1', 'Mads'), player('2', 'Anna'), player('3', 'Søren'), player('me', 'Me')]
-    expect(candidatesFor(players, 'me', '').map((p) => p.name)).toEqual(['Anna', 'Mads', 'Søren'])
-    expect(candidatesFor(players, 'me', 'sor').map((p) => p.name)).toEqual(['Søren'])
-    expect(candidatesFor(players, 'me', 'me')).toEqual([])
+describe('the names a guess offers', () => {
+  it('lists the names the guess offers, A to Z the Danish way, never your own', () => {
+    const spec = voteSpec(['Zelda', 'Åse', 'Sofie', 'Bo', 'Ørn', 'Ana'])
+    expect(guessOptions(spec, [], 'Sofie')).toEqual(['Ana', 'Bo', 'Zelda', 'Ørn', 'Åse'])
+    // Your own name in another spelling is yours too.
+    expect(guessOptions(spec, [], 'sofie ')).toEqual(['Ana', 'Bo', 'Zelda', 'Ørn', 'Åse'])
+  })
+
+  it('falls back to the guests here for a prompt from before names', () => {
+    const players = [player('1', 'Mads'), player('2', 'Anna'), player('me', 'Sofie')]
+    expect(guessOptions({ kind: 'choice', options: 'guests', min: 2, max: 2 }, players, 'Sofie')).toEqual(['Anna', 'Mads'])
+    expect(guessOptions(undefined, players, 'Sofie')).toEqual(['Anna', 'Mads'])
   })
 
   it('searches like an autocomplete: names that start with the search come first', () => {
-    const players = [
-      player('1', 'Clara'),
-      player('2', 'Ana'),
-      player('3', 'Christoffer Bjørnskov'),
-      player('4', 'Asta'),
-      player('5', 'Lars'),
-      player('me', 'Sofie'),
-    ]
+    const names = ['Ana', 'Asta', 'Christoffer Bjørnskov', 'Clara', 'Lars']
     // "a": Ana and Asta start with it; Clara and Lars only contain it.
-    expect(candidatesFor(players, 'me', 'a').map((p) => p.name)).toEqual(['Ana', 'Asta', 'Clara', 'Lars'])
+    expect(namesFor(names, 'a')).toEqual(['Ana', 'Asta', 'Clara', 'Lars'])
     // A later word counts before a plain contains: "bj" finds the surname.
-    expect(candidatesFor(players, 'me', 'bj').map((p) => p.name)).toEqual(['Christoffer Bjørnskov'])
-    // Only contains: by name.
-    expect(candidatesFor(players, 'me', 'r').map((p) => p.name)).toEqual(['Christoffer Bjørnskov', 'Clara', 'Lars'])
+    expect(namesFor(names, 'bj')).toEqual(['Christoffer Bjørnskov'])
+    // Only contains: in the order given.
+    expect(namesFor(names, 'r')).toEqual(['Christoffer Bjørnskov', 'Clara', 'Lars'])
+    // Accents and Nordic letters fold: "soren" finds Søren.
+    expect(namesFor(['Søren', 'Bo'], 'soren')).toEqual(['Søren'])
+    expect(namesFor(names, '')).toEqual(names)
   })
 
-  it('calls a guest by their first name on the picker, or their whole name where a first name is shared', () => {
-    const names = shortNames([
-      player('1', 'Christoffer Bjørnskov'),
-      player('2', 'Anna Holm'),
-      player('3', 'anna  Berg'),
-      player('4', 'Marie-Louise Christensen'),
-      player('5', 'Bo'),
-    ])
+  it('calls a name by its first name on the picker, or the whole name where a first name is shared', () => {
+    const names = shortNames(['Christoffer Bjørnskov', 'Anna Holm', 'anna  Berg', 'Marie-Louise Christensen', 'Bo'])
     expect([...names.values()]).toEqual(['Christoffer', 'Anna Holm', 'anna  Berg', 'Marie-Louise', 'Bo'])
+    expect(shortName(names, 'christoffer bjørnskov')).toBe('Christoffer')
+    expect(shortName(names, 'Zelda Smith')).toBe('Zelda')
   })
 
-  it('lists the guests on the list who have not joined apart, less anyone here since, and finds them by search', () => {
-    const players = [player('1', 'Mads'), player('me', 'Me')]
-    // The public state's list, saved before Mads (2) joined: he is here now, so only once.
-    const expected = stillExpected(
-      [
-        { id: 'z', name: 'Zelda' },
-        { id: '1', name: 'Mads' },
-        { id: 'q', name: 'Quentin' },
-      ],
-      players,
-    )
-    expect(expected).toEqual([
-      { id: 'z', name: 'Zelda' },
-      { id: 'q', name: 'Quentin' },
-    ])
-    expect(candidatesFor(expected, 'me', '').map((p) => p.name)).toEqual(['Quentin', 'Zelda'])
-    expect(candidatesFor(expected, 'me', 'zel').map((p) => p.name)).toEqual(['Zelda'])
-    expect(nameOf([...players, ...expected], 'z')).toBe('Zelda')
+  it('finds the guest here a name belongs to, for their photo and token, and nobody for a name nobody joined with', () => {
+    const players = [player('1', 'Ana Maria'), player('2', 'Bo')]
+    expect(playerNamed(players, 'anamaría')?.id).toBe('1')
+    expect(playerNamed(players, 'Zelda')).toBeUndefined()
   })
 
-  it('names players, falling back to the name a reveal kept', () => {
+  it('names players by id, else a placeholder', () => {
     expect(nameOf([player('1', 'Mads')], '1')).toBe('Mads')
-    expect(nameOf([], '1', 'Anna')).toBe('Anna')
     expect(nameOf([], '1')).toBe('A guest')
   })
 })

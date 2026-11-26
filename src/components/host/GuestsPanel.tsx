@@ -202,7 +202,7 @@ export default function GuestsPanel({ snapshot, className }: { snapshot: Snapsho
         title={`Rename ${renaming.target?.name ?? 'the guest'}`}
         description={
           renaming.target?.here === false
-            ? "The name they tap when they join, and the name in the games' settings."
+            ? 'The name they tap when they join, and the one games suggest in their settings.'
             : 'Their phone, the TV and every game show the new name.'
         }
         initial={renaming.target?.name ?? ''}
@@ -230,7 +230,7 @@ export default function GuestsPanel({ snapshot, className }: { snapshot: Snapsho
           const row = removing.target
           if (row) void call(() => removePlayer(session.id, row.player_id), `Removed ${row.name}`)
         }}
-        // Someone took a name on the list by mistake: Free the name keeps the name, and its picks in the settings.
+        // Someone took a name on the list by mistake: Free the name keeps the name on the list.
         secondary={
           hasList && removedWasListed && removing.target
             ? {
@@ -248,7 +248,7 @@ export default function GuestsPanel({ snapshot, className }: { snapshot: Snapsho
         open={unlisting.open}
         onOpenChange={unlisting.onOpenChange}
         title={`Remove ${unlisting.target?.name ?? 'this guest'} from the guest list?`}
-        description={`${unlisting.target?.name ?? 'They'} can still join by typing a name. Game settings that name ${unlisting.target?.name ?? 'them'} lose that pick.`}
+        description={`${unlisting.target?.name ?? 'They'} can still join by typing a name. Names typed in a game's settings stay as they are.`}
         confirmLabel="Remove"
         onConfirm={() => {
           const guest = unlisting.target
@@ -261,8 +261,8 @@ export default function GuestsPanel({ snapshot, className }: { snapshot: Snapsho
         onOpenChange={setClearing}
         title="Remove everyone not here yet?"
         description={
-          `The ${notYet.length} names nobody has taken yet leave the guest list, and game settings that name them ` +
-          'lose those picks. Guests who are here stay.'
+          `The ${notYet.length} names nobody has taken yet leave the guest list. Guests who are here stay, and names ` +
+          "typed in a game's settings stay as they are."
         }
         confirmLabel={`Remove ${notYet.length} names`}
         onConfirm={() =>

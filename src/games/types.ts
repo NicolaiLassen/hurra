@@ -143,8 +143,10 @@ export type ConfigEditorProps<G extends AnyGame = AnyGame> = {
   players: Player[]
   /**
    * Everyone on the guest list, joined or still expected: settings may name
-   * guests before they come, e.g. who is in a picture. Store their ids; mark
-   * the expected ones ("not here yet"). docs/guest-list.md, section 9.
+   * guests before they come. Store their ids and mark the expected ones ("not
+   * here yet"), or, as Participant fusion and Lydspor do, take typed names
+   * and use the list only to suggest their spelling. docs/guest-list.md,
+   * section 9.
    */
   guests: readonly GameGuest[]
   /** Re-encodes and uploads to the public game-media bucket (hosts only, 5.8). */
@@ -228,7 +230,7 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   phoneStrap?: (publicState: Parts<G>['publicState']) => string | null
   /**
    * Whether the game's settings are ready to play, in one line under its name
-   * in the host's Games panel: "8 pictures, all with their people", "6 of 8
+   * in the host's Games panel: "8 pictures, all with two names", "6 of 8
    * songs ready: 2 need a photo". `config` is the saved settings over the
    * game's defaultConfig, as the engine merges them at start; `guests` is the
    * whole guest list. Not ready makes Set up the row's next step instead of

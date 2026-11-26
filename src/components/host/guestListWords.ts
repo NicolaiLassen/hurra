@@ -20,13 +20,15 @@ export function presenceLine({ here, expected, total, listed }: { here: number; 
 /**
  * The line under the count while the host has listed nobody (an empty list,
  * or only guests who typed their names): the invitation to add them. Null
- * once anyone is listed: the list says the rest.
+ * once anyone is listed: the list says the rest. The list helps guests join
+ * and shows who is here; games that name people take typed names, with the
+ * list only as suggestions (docs/guest-list.md).
  */
 export function guestListLine({ listed }: { listed: number }): string | null {
   if (listed > 0) return null
   return (
-    'Add the guests you invited. When they join, they tap their name instead of typing it, ' +
-    "and you can name them in a game's settings before they arrive."
+    'Add the guests you invited. When they join, they tap their name instead of typing it, and this list shows who ' +
+    'is here. Games that name people take typed names, with these names as suggestions.'
   )
 }
 
@@ -144,14 +146,15 @@ export function freeNameDescription({
 
 /**
  * The guest list's Remove, for a guest who is here. Every joined guest is also their place on the
- * guest list, so Remove takes them off it and out of game settings that name
- * them. `listed`: the name was on the list before this guest took it, so a
- * wrong name is fixed with Free the name, which keeps it on the list.
+ * guest list, so Remove takes them off it. Game settings that name people keep
+ * the names typed there. `listed`: the name was on the list before this guest
+ * took it, so a wrong name is fixed with Free the name, which keeps it on the
+ * list.
  */
 export function removePlayerDescription({ name, listed, canFree }: { name: string; listed: boolean; canFree: boolean }): string {
   return [
     'Their points go with them, and the games running now carry on without them.',
-    canFree ? `${name} also leaves the guest list, and game settings that name ${name} lose that pick.` : null,
+    canFree ? `${name} also leaves the guest list.` : null,
     canFree && listed ? 'Took the wrong name? Free the name instead: it stays on the list.' : null,
     'On a new phone? Move them instead: their points stay.',
   ]

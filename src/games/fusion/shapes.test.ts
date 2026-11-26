@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bestDisguise,
+  countHits,
   countsLine,
   isLegacyState,
   listNames,
@@ -11,17 +12,16 @@ import {
   readView,
   revealedCount,
   scoringLine,
-  showingIndex,
   strapWords,
+  voteSpec,
   type FusionPublicPicture,
   type FusionPublicState,
   type FusionReveal,
 } from './shapes'
 
-const RULES = { seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 1 }
+const RULES = { seconds: 30, perPerson: 1, bothBonus: 1 }
 
 const reveal = (patch: Partial<FusionReveal> = {}): FusionReveal => ({
-  people: ['ana', 'bo'],
   names: ['Ana', 'Bo'],
   both: 9,
   one: 6,
@@ -37,6 +37,7 @@ const picture = (n: number, revealed: FusionReveal | null = null): FusionPublicP
   n,
   key: `p${n}`,
   label: `#${n}`,
+  asked: revealed !== null,
   image: null,
   revealed,
 })
@@ -45,10 +46,8 @@ const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({
   phase: 'lobby',
   pictures: Array.from({ length: 12 }, (_, i) => picture(i + 1)),
   rules: RULES,
-  showing: null,
   current: null,
   top: [],
-  expected: [],
   ...patch,
 })
 
@@ -60,8 +59,8 @@ describe('readPublic', () => {
   it('reads a new state as it is, after a JSON round trip', () => {
     const pub = state({
       phase: 'asking',
-      pictures: [picture(1, reveal()), { ...picture(2), image: 's/g/a.jpg' }, picture(3)],
-      current: { n: 2, step: 2, key: 'p2', openedAt: 10_000, endsAt: 40_000, revealedAt: null },
+      pictures: [picture(1, reveal()), { ...picture(2), asked: true, image: 's/g/a.jpg' }, picture(3)],
+      current: { n: 2, step: 2, key: 'p2', openedAt: 10_000, startsAt: 12_800, endsAt: 42_800, revealedAt: null },
       top: [
         { playerId: 'cy', points: 3, rank: 1 },
         { playerId: 'dee', points: 3, rank: 1 },
@@ -69,14 +68,32 @@ describe('readPublic', () => {
       ],
     })
     expect(readPublic(JSON.parse(JSON.stringify(pub)))).toEqual(pub)
-    const showing = state({ phase: 'showing', showing: { startedAt: 1_000, endsAt: 73_000 } })
-    expect(readPublic(JSON.parse(JSON.stringify(showing)))).toEqual(showing)
+  })
+
+  it('reads a save from the showing, before 26 November, as the wall', () => {
+    const old = { ...state(), phase: 'showing', showing: { startedAt: 1_000, endsAt: 73_000 }, rules: { ...RULES, showSeconds: 6 } }
+    const pub = readPublic(JSON.parse(JSON.stringify(old)))!
+    expect(pub.phase).toBe('wall')
+    expect(pub).not.toHaveProperty('showing')
+    expect(pub.rules).toEqual(RULES)
+  })
+
+  it('reads a save from before the placeholders: revealed pictures and the one asked are asked', () => {
+    const old = {
+      ...state({ pictures: [picture(1, reveal()), picture(2), picture(3)] }),
+      phase: 'asking',
+      current: { n: 2, openedAt: 1, endsAt: 2 },
+    }
+    const raw = JSON.parse(JSON.stringify(old)) as { pictures: Record<string, unknown>[] }
+    for (const p of raw.pictures) delete p.asked
+    expect(readPublic(raw)!.pictures.map((p) => p.asked)).toEqual([true, true, false])
   })
 
   it('reads a round of the background version, voting or locked, as the lobby', () => {
     const old = {
       phase: 'locked',
       pictures: [
+        // The background version kept the people as ids beside their names: the names are what the room saw.
         { n: 1, key: 'p1', label: '#1', image: null, revealed: { people: ['ana', 'bo'], names: ['Ana', 'Bo'], both: 1, one: 0, none: 0, voters: 1 } },
         { n: 2, key: 'p2', label: '#2', image: null, revealed: null },
       ],
@@ -86,9 +103,8 @@ describe('readPublic', () => {
     }
     const pub = readPublic(old)!
     expect(pub.phase).toBe('lobby')
-    expect(pub.rules).toEqual({ seconds: 30, showSeconds: 6, perPerson: 2, bothBonus: 1 })
+    expect(pub.rules).toEqual({ seconds: 30, perPerson: 2, bothBonus: 1 })
     expect(pub.pictures[0].revealed).toEqual({
-      people: ['ana', 'bo'],
       names: ['Ana', 'Bo'],
       both: 1,
       one: 0,
@@ -99,7 +115,6 @@ describe('readPublic', () => {
       at: null,
     })
     expect(pub.top).toEqual([{ playerId: 'cy', points: 2, rank: 1 }])
-    expect(pub.showing).toBeNull()
     expect(pub.current).toBeNull()
     expect(readPublic({ ...old, phase: 'voting' })!.phase).toBe('lobby')
   })
@@ -121,7 +136,7 @@ describe('readPublic', () => {
       lastReveal: { n: 2, at: 9_000 },
     })!
     expect(pub.phase).toBe('done')
-    expect(pub.rules).toEqual({ seconds: 30, showSeconds: 6, perPerson: 1, bothBonus: 0 })
+    expect(pub.rules).toEqual({ seconds: 30, perPerson: 1, bothBonus: 0 })
     expect(pub.pictures.map((p) => p.key)).toEqual(['p1', 'p2', 'p3'])
     expect(pub.pictures.map((p) => p.label)).toEqual(['#1', '#2', '#3'])
     expect(pub.pictures[0].revealed!.names).toEqual(['A guest', 'A guest'])
@@ -151,12 +166,11 @@ describe('readPublic', () => {
       ],
     })!
     expect(pub.pictures.slice(0, 3)).toEqual([
-      { n: 1, key: 'p1', label: '#1', image: null, revealed: null },
-      { n: 2, key: 'p2', label: '#2', image: null, revealed: null },
-      { n: 7, key: 'p7', label: 'Viking', image: 's/g/v.jpg', revealed: null },
+      { n: 1, key: 'p1', label: '#1', asked: false, image: null, revealed: null },
+      { n: 2, key: 'p2', label: '#2', asked: false, image: null, revealed: null },
+      { n: 7, key: 'p7', label: 'Viking', asked: false, image: 's/g/v.jpg', revealed: null },
     ])
     expect(pub.pictures[3].revealed).toEqual({
-      people: ['a', 'b'],
       names: ['A guest', 'A guest'],
       both: 0,
       one: 0,
@@ -178,28 +192,25 @@ describe('readPublic', () => {
     expect(read('s/g/a.jpg')).toEqual([null, null])
   })
 
-  it('reads a showing without its times, or a picture asked without one, as the wall', () => {
+  it('reads a showing, or a picture asked without its times, as the wall', () => {
     expect(readPublic({ ...state(), phase: 'showing', showing: { startedAt: 1 } })!.phase).toBe('wall')
-    expect(readPublic({ ...state(), phase: 'showing' })!.showing).toBeNull()
     expect(readPublic({ ...state(), phase: 'asking', current: null })!.phase).toBe('wall')
     expect(readPublic({ ...state(), phase: 'asking', current: { n: 99, openedAt: 1, endsAt: 2 } })!.phase).toBe('wall')
     expect(readPublic({ ...state(), phase: 'reveal', current: { n: 2, openedAt: 1 } })!).toMatchObject({ phase: 'wall', current: null })
-    // A showing or a current picture outside its phases is dropped.
-    expect(readPublic({ ...state(), phase: 'wall', showing: { startedAt: 1, endsAt: 2 }, current: { n: 1, openedAt: 1, endsAt: 2 } })).toMatchObject({
-      showing: null,
-      current: null,
-    })
+    // A current picture outside its phases is dropped.
+    expect(readPublic({ ...state(), phase: 'wall', current: { n: 1, openedAt: 1, endsAt: 2 } })).toMatchObject({ current: null })
   })
 
-  it('fills a current picture’s key and step when they are missing', () => {
+  it('fills a current picture’s key, step and countdown start when they are missing', () => {
     const pub = readPublic({ ...state({ pictures: [picture(1, reveal()), picture(2)] }), phase: 'asking', current: { n: 2, openedAt: 1, endsAt: 2 } })!
-    expect(pub.current).toEqual({ n: 2, step: 2, key: 'p2', openedAt: 1, endsAt: 2, revealedAt: null })
+    // Asked before the suspense: its countdown started at the ask.
+    expect(pub.current).toEqual({ n: 2, step: 2, key: 'p2', openedAt: 1, startsAt: 1, endsAt: 2, revealedAt: null })
     const revealed = readPublic({
       ...state({ pictures: [picture(1, reveal({ step: 1 })), picture(2, reveal({ step: 2 }))] }),
       phase: 'reveal',
-      current: { n: 1, openedAt: 1, endsAt: 2, revealedAt: 3 },
+      current: { n: 1, openedAt: 1, startsAt: 3, endsAt: 4, revealedAt: 5 },
     })!
-    expect(revealed.current).toEqual({ n: 1, step: 1, key: 'p1', openedAt: 1, endsAt: 2, revealedAt: 3 })
+    expect(revealed.current).toEqual({ n: 1, step: 1, key: 'p1', openedAt: 1, startsAt: 3, endsAt: 4, revealedAt: 5 })
   })
 })
 
@@ -209,17 +220,16 @@ describe('readView', () => {
   })
 
   it('reads the background version’s view: points and hits only', () => {
-    expect(readView({ points: 3, hits: { 1: 2, 2: 0 } })).toEqual({ points: 3, rank: null, hits: { 1: 2, 2: 0 }, inPicture: false })
+    expect(readView({ points: 3, hits: { 1: 2, 2: 0 } })).toEqual({ points: 3, rank: null, hits: { 1: 2, 2: 0 } })
   })
 
-  it('keeps only what it knows', () => {
+  it('keeps only what it knows: a view from before still saying who is in the picture loses it', () => {
     expect(readView({ points: 'x', rank: 0, hits: { 1: 3, 2: 1, 3: '2', 4: -1 }, inPicture: 'yes' })).toEqual({
       points: 0,
       rank: null,
       hits: { 2: 1 },
-      inPicture: false,
     })
-    expect(readView({ points: 7, rank: 2, hits: [], inPicture: true })).toEqual({ points: 7, rank: 2, hits: {}, inPicture: true })
+    expect(readView({ points: 7, rank: 2, hits: [], inPicture: true })).toEqual({ points: 7, rank: 2, hits: {} })
   })
 })
 
@@ -233,41 +243,35 @@ describe('isLegacyState', () => {
   })
 })
 
-describe('showingIndex', () => {
-  const showing = state({ phase: 'showing', showing: { startedAt: 10_000, endsAt: 10_000 + 12 * 6_000 } })
-
-  it('is null outside the showing', () => {
-    expect(showingIndex(state(), 10_000)).toBeNull()
-    expect(showingIndex(state({ phase: 'wall' }), 10_000)).toBeNull()
+describe('the guess and its names', () => {
+  it('offers two of the names, the first lock counting: nothing about the answer', () => {
+    expect(voteSpec(['Ana', 'Bo', 'Zelda'])).toEqual({ kind: 'choice', options: ['Ana', 'Bo', 'Zelda'], min: 2, max: 2, final: true })
   })
 
-  it('counts pictures from the start, each its seconds, and holds the last one', () => {
-    expect(showingIndex(showing, 0)).toBe(0)
-    expect(showingIndex(showing, 10_000)).toBe(0)
-    expect(showingIndex(showing, 15_999)).toBe(0)
-    expect(showingIndex(showing, 16_000)).toBe(1)
-    expect(showingIndex(showing, 10_000 + 11 * 6_000)).toBe(11)
-    expect(showingIndex(showing, 10_000 + 12 * 6_000)).toBe(11)
-    expect(showingIndex(showing, 10_000 + 99 * 6_000)).toBe(11)
+  it('counts a pick right when it folds to a name in the picture, never the voter’s own', () => {
+    expect(countHits(['ana', 'BO'], ['Ana', 'Bo'])).toBe(2)
+    expect(countHits(['Ana María', 'Cy'], ['anamaria', 'Bo'])).toBe(1)
+    expect(countHits(['Cy', 'Dee'], ['Ana', 'Bo'])).toBe(0)
+    // Ana is in the picture: her own name scores nothing, Bo does.
+    expect(countHits(['Ana', 'Bo'], ['Ana', 'Bo'], 'ana')).toBe(1)
+    expect(countHits(['Bo', 'bo'], ['Ana', 'Bo'])).toBe(1)
+    expect(countHits([], ['Ana', 'Bo'])).toBe(0)
   })
 })
 
 describe('strapWords', () => {
-  const asked = { n: 6, step: 4, key: 'p6', openedAt: 1, endsAt: 2, revealedAt: null }
+  const asked = { n: 6, step: 4, key: 'p6', openedAt: 1, startsAt: 1, endsAt: 2, revealedAt: null }
 
   it('says where the round is, phase by phase', () => {
     expect(strapWords(null)).toBe('Getting ready')
     expect(strapWords(state())).toBe('12 pictures, starting soon')
     expect(strapWords(state({ pictures: [picture(1)] }))).toBe('1 picture, starting soon')
-    const showing = state({ phase: 'showing', showing: { startedAt: 0, endsAt: 72_000 } })
-    expect(strapWords(showing, 13_000)).toBe('Showing 3 of 12')
-    expect(strapWords(showing)).toBe('Showing 12 pictures')
-    expect(strapWords(state({ phase: 'wall' }))).toBe('All 12 pictures')
+    expect(strapWords(state({ phase: 'wall' }))).toBe('12 pictures')
     expect(strapWords(state({ phase: 'wall', pictures: [picture(1)] }))).toBe('1 picture')
     const four = state({ phase: 'wall', pictures: Array.from({ length: 12 }, (_, i) => picture(i + 1, i < 4 ? reveal({ step: i + 1 }) : null)) })
     expect(strapWords(four)).toBe('4 of 12 revealed')
     expect(strapWords(state({ phase: 'asking', current: asked }))).toBe('Picture 4 of 12')
-    expect(strapWords(state({ phase: 'reveal', current: { ...asked, revealedAt: 3 } }), 5)).toBe('Picture 4 of 12')
+    expect(strapWords(state({ phase: 'reveal', current: { ...asked, revealedAt: 3 } }))).toBe('Picture 4 of 12')
     expect(strapWords(state({ phase: 'done' }))).toBe('Final result')
   })
 })
@@ -295,10 +299,12 @@ describe('points and words', () => {
     expect(countsLine(reveal({ both: 0, one: 0, none: 0, voters: 0 }))).toBe('Nobody guessed this one.')
   })
 
-  it('never tells the TV exactly how many may vote', () => {
-    expect(lockedTotal(7, 24)).toBe(22)
-    expect(lockedTotal(23, 24)).toBe(23)
-    expect(lockedTotal(0, 1)).toBe(0)
+  it('counts everyone here on the TV: everyone guesses every picture', () => {
+    expect(lockedTotal(7, 24)).toBe(24)
+    expect(lockedTotal(24, 24)).toBe(24)
+    // One who joined since the TV last read the party.
+    expect(lockedTotal(25, 24)).toBe(25)
+    expect(lockedTotal(0, 1)).toBe(1)
     expect(lockedTotal(0, 0)).toBe(0)
   })
 

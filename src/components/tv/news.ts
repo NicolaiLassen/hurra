@@ -54,6 +54,26 @@ export type News = {
   sound?: SoundName
 }
 
+/**
+ * The strap and the event line for what holds the stage now. News is routed
+ * when it arrives, but the strap stays up for 8 seconds, and the stage can
+ * change under it: a knockout routed to the strap while the standings showed
+ * would otherwise go on covering the programme strap (and the title card) of
+ * the game that takes the stage a moment later, where the same news would
+ * only be a line in the band. So a strap that would not be big news on the
+ * new stage comes down, and a background game's line moves to the band's
+ * event line (quietly: its sound has played). Pure, so it is tested.
+ */
+export function restage(news: { banner?: FeedItem; ticker?: FeedItem }, stage: NewsStage): { banner?: FeedItem; ticker?: FeedItem } {
+  const { banner, ticker } = news
+  if (!banner) return news
+  const route = routeNews(banner, stage)
+  if (route === 'banner') return news
+  // The newer of the two keeps the event line.
+  const line = route === 'ticker' && (!ticker || ticker.id < banner.id) ? banner : ticker
+  return { banner: undefined, ticker: line }
+}
+
 /** Sorts a batch of new announcements (in any order) into what the TV shows and plays. */
 export function takeNews(items: readonly FeedItem[], stage: NewsStage): News {
   const news: News = {}

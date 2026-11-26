@@ -27,10 +27,10 @@ const SONG_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
 
 /**
  * Settings for a scripted round of 1 to 8 of the bot's songs, with sample
- * photo paths: 2 extra photos up to 3 songs, else 4; a short last call; the
- * second player in song 1's photo; the top 5 every 2 songs up to 3, else 4.
+ * photo paths: 2 extra photos up to 3 songs, else 4; a short last call;
+ * the top 5 every 2 songs up to 3, else 4.
  */
-export function botSettings(playerIds: readonly string[], count = 3): Record<string, unknown> {
+export function botSettings(count = 3): Record<string, unknown> {
   const songs = BOT_SONGS.slice(0, Math.max(1, Math.min(BOT_SONGS.length, count)))
   const extras = songs.length <= 3 ? 2 : 4
   return {
@@ -43,7 +43,6 @@ export function botSettings(playerIds: readonly string[], count = 3): Record<str
       caption: song.caption,
       startAt: 30 + i * 15,
       note: '',
-      inPhoto: i === 0 && playerIds[1] ? [playerIds[1]] : [],
     })),
     extraPhotos: [
       { photo: 'rehearsal/soundtrack/extra-1.jpg', caption: 'A wedding, 2016' },
@@ -70,9 +69,9 @@ const STEP_MS = 3000
 const KEY = /^s(\d+)\.(title|singer|event)$/
 
 export const bot: GameBot = {
-  /** The first 3 invented songs with sample photo paths, 2 extra photos, a short last call, the second player in song 1's photo. */
-  settings(playerIds) {
-    return botSettings(playerIds)
+  /** The first 3 invented songs with sample photo paths, 2 extra photos and a short last call; everyone plays. */
+  settings() {
+    return botSettings()
   },
 
   /**

@@ -45,11 +45,9 @@ export default function PlayerCard({ game, publicState, view: rawView, myAnswers
   } else if (pub.phase === 'lastCall' || pub.phase === 'locked') status = 'Your answers are locked'
   else if ((pub.phase === 'reveal' || pub.phase === 'standings') && pub.reveal) {
     const song = view?.songs[pub.reveal.n - 1]
-    status = song?.inPhoto
-      ? `Song ${pub.reveal.n}: you’re in the photo`
-      : view?.rank
-        ? `You’re ${ordinal(view.rank)}, with ${view.points} Lydspor ${view.points === 1 ? 'point' : 'points'}`
-        : `Song ${pub.reveal.n}: ${song?.points ?? 0} of ${pointsPerSong(pub.points)} points`
+    status = view?.rank
+      ? `You’re ${ordinal(view.rank)}, with ${view.points} Lydspor ${view.points === 1 ? 'point' : 'points'}`
+      : `Song ${pub.reveal.n}: ${song?.points ?? 0} of ${pointsPerSong(pub.points)} points`
   } else status = 'Lydspor is over'
 
   return (

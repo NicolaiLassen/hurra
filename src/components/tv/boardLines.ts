@@ -36,6 +36,13 @@ export function aheadLine(rows: readonly Row[]): string | null {
   return `${leader.points - rest[0].points} ahead of ${listNames(next.map((row) => row.name))}`
 }
 
+/**
+ * Whether the board has a leader for its hero: someone with points. Before
+ * anyone has scored, every guest is level on 0 and the first row is only the
+ * first name in A to Z, so the hero holds the party's name instead of a guest.
+ */
+export const hasLeader = (rows: readonly Row[]) => rows.some((row) => row.points > 0)
+
 const places = (n: number) => `${n} place${n === 1 ? '' : 's'}`
 const points = (n: number) => `${n} point${n === 1 ? '' : 's'}`
 

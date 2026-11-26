@@ -4,12 +4,12 @@
 // picker comes back with the picks still made and a short line says why.
 // Pure, so the order of what the phone shows is unit-tested in lock.test.ts,
 // as the quiz's answer.ts is.
-import type { AnswerPayload, PlayerId } from '@/games/core/Game'
+import type { AnswerPayload } from '@/games/core/Game'
 import { choiceOf } from '@/games/fusion/view'
 import type { SubmitResult } from '@/lib/types'
 
-/** Two guests, as a lock sends them. */
-export type Pick2 = [PlayerId, PlayerId]
+/** Two names, as a lock sends them. */
+export type Pick2 = [string, string]
 
 /** What this phone shows of its own lock on the picture being asked. */
 export type LockState =

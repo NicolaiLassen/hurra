@@ -64,9 +64,10 @@ describe('the TV scene for each fixture', () => {
     ['fixture=quiz-reveal', 'Quiz | Question 3 of 10'],
     ['fixture=quiz-leaderboard', 'Quiz | After question 3 of 10'],
     ['fixture=fusion-lobby', 'Who is fused? | 12 pictures, starting soon'],
-    ['fixture=fusion-showing', 'Who is fused? | Showing 3 of 12'],
-    ['fixture=fusion-showing-2', 'Who is fused? | Showing 2 of 2'],
+    ['fixture=fusion-start', 'Who is fused? | 12 pictures'],
+    ['fixture=fusion-start-2', 'Who is fused? | 2 pictures'],
     ['fixture=fusion-wall', 'Who is fused? | 3 of 12 revealed'],
+    ['fixture=fusion-hop', 'Who is fused? | Picture 4 of 12'],
     ['fixture=fusion-wall-40', 'Who is fused? | 15 of 40 revealed'],
     ['fixture=fusion-asking', 'Who is fused? | Picture 4 of 12'],
     ['fixture=fusion-asking-you', 'Who is fused? | Picture 4 of 12'],
@@ -181,6 +182,25 @@ describe('the TV scene for each fixture', () => {
     expect(crowns(await html('fixture=standings&players=24'))).toBe(1)
   })
 
+  it('puts no guest in the hero spot before anyone has scored: the party, "Nobody has scored yet", no rank and no gold', async () => {
+    for (const players of [2, 12, 45]) {
+      const page = await html(`fixture=standings-zero&players=${players}`)
+      const stage = page.slice(page.indexOf('data-frame="stage"'), page.indexOf('data-frame="band"') > 0 ? page.indexOf('data-frame="band"') : undefined)
+      expect(stage).toContain('data-board-hero="nobody"')
+      expect(stage.replace(/<[^>]*>/g, ' ')).toMatch(/Birthday party\s+Nobody has scored yet/)
+      // The first name in A to Z leads nothing: no crown, no gold, and no rank of 1 for everyone.
+      expect(stage).not.toContain('data-crown')
+      expect(stage).not.toContain('text-gold')
+      expect(stage).not.toMatch(/tv-num text-tv-name[^"]*text-paper-3">1</)
+      // Ana, the first in A to Z, stands among the places, not as the hero.
+      expect(stage).toMatch(/data-fit="place"[^]*>Ana</)
+    }
+    // Once someone has points, the leader is the hero again.
+    const scored = await html('fixture=standings&players=12')
+    expect(scored).not.toContain('data-board-hero="nobody"')
+    expect(scored).toContain('data-crown')
+  })
+
   it("cheers a game's winner with the screen's one exclamation mark and saves the third hurra for the night's winner", async () => {
     for (const search of ['fixture=final', 'fixture=pong-final']) {
       const page = await html(search)
@@ -197,8 +217,9 @@ describe('the TV scene for each fixture', () => {
   it("shows Participant fusion's phases on the stage, and an old round from before the update safely as its lobby", async () => {
     for (const [scene, phase] of [
       ['fusion-lobby', 'lobby'],
-      ['fusion-showing', 'showing'],
+      ['fusion-start', 'wall'],
       ['fusion-wall', 'wall'],
+      ['fusion-hop', 'asking'],
       ['fusion-asking', 'asking'],
       ['fusion-reveal', 'reveal'],
       ['fusion-crown', 'wall'],
@@ -235,7 +256,7 @@ describe('the TV scene for each fixture', () => {
   })
 
   it("speaks Participant fusion in the frame's language: no exclamation marks, no violet or glow, nothing under the floor", async () => {
-    for (const search of ['fixture=fusion-showing', 'fixture=fusion-wall', 'fixture=fusion-asking', 'fixture=fusion-reveal']) {
+    for (const search of ['fixture=fusion-start', 'fixture=fusion-wall', 'fixture=fusion-hop', 'fixture=fusion-asking', 'fixture=fusion-reveal']) {
       const page = await html(search)
       const stage = page.slice(page.indexOf('data-frame="stage"'), page.indexOf('data-frame="band"'))
       expect(stage, search).toContain('data-frame="stage"')

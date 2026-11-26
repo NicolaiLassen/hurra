@@ -164,10 +164,12 @@ The rules:
 - `onWake` must move `wakeAt` forward or to null.
 - The deciding change announces the result; `onEnd(..., 'game')` stays quiet.
 - `recap()` reveals only what the finished round showed the room.
-- Settings may name guests who have not joined yet. Accept any id in
-  `info.guests` at setup, never require one to be a player, and copy the
-  names the room must see into the public state. What each game must do with
-  expected guests is [guest-list.md, section 9](guest-list.md#9-what-each-game-must-do-with-expected-guests).
+- Settings may name guests who have not joined yet. Either take typed names
+  and match them to players by `nameKey` (`src/games/core/names.ts`; the
+  guest list only suggests the spelling, as fusion and Lydspor do since 26
+  November), or accept any id in `info.guests` at setup, never require one to
+  be a player, and copy the names the room must see into the public state.
+  What each game must do with expected guests is [guest-list.md, section 9](guest-list.md#9-what-each-game-must-do-with-expected-guests).
 - A typed answer (a `text` prompt) is stored as the guest typed it, trimmed.
   Judge it on the server, once, when the prompts lock, never on the phone,
   and never show one guest's text to anyone else: Lydspor keeps its verdicts
@@ -188,7 +190,7 @@ each optional but the first:
 | `HostView` | The game's controls in the host control room, with the full `state`, the `config` and host `act`. |
 | `TvView`, `FinalTvView` | The TV stage while live, and its final screen: `lazyScreen(() => import('./TvView'))`, which the TV loads as it opens. Without them the TV shows the standings or a generic winners screen. |
 | `TvStatus` | The game's status on the TV while it runs: a whole card for the strip beside the podium, and with `variants` its line in the TV's bottom band (`band`) and its words in the programme strap while it holds the stage (`strap`). See [The TV's frame](identity.md#the-tvs-frame). |
-| `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. It opens as a page of its own in the control room, with the game's name, its readiness and Cancel and Save on a bar that stays at the top, so it can use the page's width. Its `guests` are everyone on the guest list, so settings can name guests before they come: mark the expected ones ("not here yet"). The `HostView` gets `guests` too. |
+| `ConfigEditor` | The settings editor, saved to the host-only `game_settings`; it can upload images. It opens as a page of its own in the control room, with the game's name, its readiness and Cancel and Save on a bar that stays at the top, so it can use the page's width. Its `guests` are everyone on the guest list, joined or still expected. Fusion and Lydspor take typed names and use the list only to suggest the spelling, saying where each typed name stands ("Here", "On the guest list, not here yet", nobody by this name); a game that stores ids marks the expected ones ("not here yet"). The `HostView` gets `guests` too. |
 
 Shared building blocks: `QrScanner`, `ScanSheet`, `SecretCard` and `PlayerQr`
 in [src/components](../src/components).
@@ -204,7 +206,7 @@ without it naming the game:
 | `knockedOut(publicState)` | The players this live game has knocked out: the TV board, the host's player list and the phone's standings mark them Out with the token's stripe (`knockedOutIds` in the registry). |
 | `phoneStrap(publicState)` | The words on the paper strap beside the game's tab on a phone while it holds the main card ("Question 3 of 10"). |
 | `accent: 'hunt'` | The game's tabs are the hunt's pink with the popper's stripes: the TV's news strap and programme strap, its ticker line, and a phone's tab. |
-| `setupStatus(config, guests)` | Whether the game's settings are ready to play, as `{ ready, line }`: the line under its name in the host's Games panel ("8 pictures, all with their people", "6 of 8 songs ready: 2 need a photo"). `config` is the saved settings over `defaultConfig`, `guests` the whole guest list. Build it from the game's own check (`parseConfig`, a `check...` function) so the row and the start agree; the words in [src/games/core/setup.ts](../src/games/core/setup.ts) (`readyLine`, `need`) count what is left. Not ready makes Set up the row's next step in place of Start; a warning never makes a game not ready. Without it the row shows no line and its Start as always; a game without a `ConfigEditor` is always ready. |
+| `setupStatus(config, guests)` | Whether the game's settings are ready to play, as `{ ready, line }`: the line under its name in the host's Games panel ("8 pictures, all with two names", "6 of 8 songs ready: 2 need a photo"). `config` is the saved settings over `defaultConfig`, `guests` the whole guest list. Build it from the game's own check (`parseConfig`, a `check...` function) so the row and the start agree; the words in [src/games/core/setup.ts](../src/games/core/setup.ts) (`readyLine`, `need`) count what is left. Not ready makes Set up the row's next step in place of Start; a warning never makes a game not ready. Without it the row shows no line and its Start as always; a game without a `ConfigEditor` is always ready. |
 | `phoneSecret(view)` | This player's secret, read from their own view (`{ label: 'task', text }`): while a stage game takes over the phone and this game runs in the background, the bottom bar keeps it one tap away as a face-down "My task" beside Show my code ([identity.md](identity.md#the-phone)). |
 
 **`bot.ts`**:
@@ -226,8 +228,10 @@ party, with no TV and Lydspor and fusion still to set up, and `setup-ready`
 the same program set up with a TV paired; the host page reads each scene's
 game settings from `fixtureSettings` and saves them in memory, and
 `&settings=<game id>` opens one game's settings; Participant fusion has one per step
-of its round, `fusion-lobby` to `fusion-final`, some with 2 or 40 pictures
-as `-2` and `-40`, and their pictures are drawn sample portraits; the host's
+of its round, `fusion-lobby` to `fusion-final`, some with 2, 8 or 40
+pictures as `-2`, `-8` and `-40`, `fusion-start` for the first wall of
+placeholders and `fusion-hop` for the suspense, which plays 3 s after the
+scene opens, and their pictures are drawn sample portraits; the host's
 scenes have four guests still expected on the guest list),
 `/join/x?fixture=guests` shows Who are you? on a sample guest list
 (`&names=45`, `&freed=Ana`), and `/dev/tokens` draws the token sheet

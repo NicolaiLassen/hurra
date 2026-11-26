@@ -7,7 +7,8 @@ import { placeIssues } from '@/games/soundtrack/editor/settings'
 import { checkConfig } from '@/games/soundtrack/logic'
 import type { SoundtrackConfig } from '@/games/soundtrack/types'
 
-// The guest list doesn't change whether Lydspor is ready: who is in a photo and who sits out are optional.
+// The guest list doesn't change whether Lydspor is ready: who sits out is optional, and it is typed names
+// ("Doesn't play this game"), so a name nobody joins with changes nothing.
 export function soundtrackSetup(raw: SoundtrackConfig): SetupStatus {
   const { config, problems, warnings } = checkConfig(raw)
   const songs = config.songs
