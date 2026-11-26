@@ -305,8 +305,13 @@ select id from auth.users where email = '<their email>';
 
 ## Sound effects
 
-The sound effects were generated with [ElevenLabs](https://elevenlabs.io) from
-the prompts in [src/games/core/sounds.ts](../src/games/core/sounds.ts). The
-current set is final: don't regenerate it, since each run of
-`npm run sounds -- <name>` replaces that sound's file in
-[public/sounds](../public/sounds) with a new, different take.
+The sound effects in [public/sounds](../public/sounds) are a simple set made in
+code (26 Nov 2026): bells, celesta, marimba, vibraphone and soft air, all in D
+major, level matched by role (big moments about -15 LUFS, points and news 3 dB
+under, the tick-tock 6 dB under), each starting at once and fading to silence.
+The owner picked them by ear over the older ElevenLabs set. The tick-tock file
+is 2.0 s with its bell at exactly 1.6 s, the lead `SOUNDS.ticktock.seconds`
+keeps, so the bell lands on zero and rings out. Don't run
+`npm run sounds:elevenlabs`: each run replaces a sound's file with a new
+ElevenLabs take from the prompts in
+[src/games/core/sounds.ts](../src/games/core/sounds.ts).

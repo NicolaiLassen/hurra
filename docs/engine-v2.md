@@ -32,7 +32,7 @@ stays in the repo as the engine's design doc.
 - **Phosphor icons only, no emoji, and no en or em dashes** in UI copy or docs.
 - **The quiz has an original look.** No Kahoot shapes, colours, music or layout.
 - **Keep** the logo (the party popper), the sound library in `public/sounds`
-  (never run `npm run sounds`), the visual identity (Running Order since
+  (never run `npm run sounds:elevenlabs`), the visual identity (Running Order since
   November 16: the warm studio ground `#14110e`, gold `#f5c542` for what is on
   air, pink `#ff6fae` for the hunt, Archivo and Schibsted Grotesk, the hopping
   confetti loader; [identity.md](identity.md)), and what already works: the

@@ -3,8 +3,8 @@ import { SOUND_NAMES, SOUNDS, type SoundName } from '@/games/core/sounds'
 import { decideSound, type SoundSlot } from '@/lib/soundPolicy'
 import { DEFAULT_SOUND_VOLUME, soundVolumeGain, soundVolumeOf } from '@/lib/soundVolume'
 
-// Plays the sound library (public/sounds/<name>.mp3, generated with ElevenLabs
-// by `npm run sounds`). Browsers keep audio locked until the page is tapped,
+// Plays the sound library (public/sounds/<name>.mp3, a simple set made in code;
+// see src/games/core/sounds.ts). Browsers keep audio locked until the page is tapped,
 // so the first tap or key press anywhere unlocks it. One sound plays at a time
 // (see soundPolicy.ts), through a master gain and a limiter so nothing clips.
 // On the TV the master gain also follows the party's sound effects volume
