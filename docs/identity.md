@@ -564,8 +564,10 @@ showing ("Now showing #3.").
   and the seconds left (`tv-num`, gold for the last 5). Everyone but you on
   `overlay` tiles, four across, each with the token and the first name (a name
   breaks after its hyphen, Marie- over Louise, and a long one steps down a
-  size rather than end in an ellipsis); a search over 16 guests. A picked tile
-  turns paper with a check.
+  size rather than end in an ellipsis); a search over 16 guests. Guests on
+  the host's guest list who haven't joined follow on the same tiles under
+  "Not here yet" in paper-2, since a picture may be of one of them, and the
+  search finds them too. A picked tile turns paper with a check.
 - **Lock in** is the screen's one gold step, on a solid bar fixed to the
   screen's foot where Show my code stands at other times (it steps aside for
   the timed prompt), so the phone's toasts, which stack from 96 px up, never

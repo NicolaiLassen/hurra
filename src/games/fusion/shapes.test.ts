@@ -48,6 +48,7 @@ const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({
   showing: null,
   current: null,
   top: [],
+  expected: [],
   ...patch,
 })
 

@@ -7,6 +7,9 @@ import type { AnswerPayload, PlayerId } from '@/games/core/Game'
 import { foldName } from '@/lib/format'
 import type { Player } from '@/lib/types'
 
+/** Someone a guess can name: a guest here, or one on the guest list who hasn't joined. */
+export type Pickable = Pick<Player, 'id' | 'name'>
+
 /** A vote's two player ids, or null when it isn't a two-person vote. */
 export function choiceOf(answer: AnswerPayload | null | undefined): [PlayerId, PlayerId] | null {
   if (!answer || !('choice' in answer) || !Array.isArray(answer.choice) || answer.choice.length !== 2) return null
@@ -26,11 +29,11 @@ export function togglePick(pick: readonly PlayerId[], id: PlayerId): PlayerId[] 
 }
 
 /**
- * The players a guest can vote for: everyone but themselves, filtered by a search like an autocomplete.
+ * The people a guest can vote for: everyone but themselves, filtered by a search like an autocomplete.
  * Names that start with the search come first, then names with a later word that does ("bj" finds
  * Christoffer Bjørnskov), then names that only contain it; each group by name.
  */
-export function candidatesFor(players: readonly Player[], meId: PlayerId, query: string): Player[] {
+export function candidatesFor<T extends Pickable>(players: readonly T[], meId: PlayerId, query: string): T[] {
   const needle = foldName(query)
   return players
     .filter((p) => p.id !== meId)
@@ -38,6 +41,16 @@ export function candidatesFor(players: readonly Player[], meId: PlayerId, query:
     .filter((c) => c.rank < NO_MATCH)
     .sort((a, b) => a.rank - b.rank || a.p.name.localeCompare(b.p.name))
     .map((c) => c.p)
+}
+
+/**
+ * The guests on the list who haven't joined, as the public state names them
+ * (docs/guest-list.md, 9.2), less anyone here already: a guest who joined
+ * since the game's last save is in `players`, so never twice.
+ */
+export function stillExpected<T extends Pickable>(expected: readonly T[], players: readonly Pickable[]): T[] {
+  const here = new Set(players.map((p) => p.id))
+  return expected.filter((g) => !here.has(g.id))
 }
 
 const NO_MATCH = 3
@@ -62,6 +75,6 @@ function matchRank(name: string, needle: string): number {
 }
 
 /** A player's name now, else the one the reveal kept, else a placeholder. */
-export function nameOf(players: readonly Player[], id: PlayerId, kept?: string): string {
+export function nameOf(players: readonly Pickable[], id: PlayerId, kept?: string): string {
   return players.find((p) => p.id === id)?.name ?? kept ?? 'A guest'
 }

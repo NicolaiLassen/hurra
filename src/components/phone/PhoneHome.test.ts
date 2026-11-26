@@ -145,10 +145,12 @@ describe('the phone home', () => {
     expect(text).toContain('Who is fused? Picture 4 of 12')
     expect(text).toContain('#4 Who is in it? 18 s left')
     expect(text).toContain('Pick two guests, then lock in. Only your first lock counts.')
-    // Everyone in the party but Sofie, by name; 11 guests, so no search.
+    // Everyone in the party but Sofie, by name, then the four on the guest list who haven't joined,
+    // under "Not here yet" (a picture may be of one of them); 15 guests, so no search.
     // Each tile: the token (which names its guest too) and the first name.
     const tiles = [...html.matchAll(/data-guest-tile=""[^>]*>(.*?)<\/button>/g)].map(([, inner]) => plain(inner).trim().split(' ').at(-1))
-    expect(tiles).toEqual(['Ana', 'Bo', 'Clara', 'Emil', 'Freja', 'Ida', 'Lars', 'Mads', 'Maja', 'Noah', 'Oscar'])
+    expect(tiles).toEqual(['Ana', 'Bo', 'Clara', 'Emil', 'Freja', 'Ida', 'Lars', 'Mads', 'Maja', 'Noah', 'Oscar', 'Quentin', 'Ulrik', 'Ximena', 'Zelda'])
+    expect(text).toContain('Oscar Not here yet Q')
     expect(text).not.toContain('Find a guest')
     expect(text).toContain('Pick two Lock in')
     // Who is in it is nowhere on the phone before its reveal.

@@ -21,6 +21,7 @@ const state = (patch: Partial<FusionPublicState> = {}): FusionPublicState => ({
   showing: null,
   current: null,
   top: [],
+  expected: [],
   ...patch,
 })
 const withRevealed = (count: number) => Array.from({ length: 12 }, (_, i) => picture(i + 1, i < count ? { ...REVEAL, step: i + 1 } : null))

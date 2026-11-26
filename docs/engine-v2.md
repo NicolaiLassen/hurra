@@ -3825,8 +3825,11 @@ was. A point per right person, and a bonus for both.
   Settings saved before the two times existed start with the defaults (the
   engine merges `defaultConfig` under them), and a frozen config without them
   is read with the defaults wherever it is read. People can be set in the
-  settings before the start (those guests must have joined) or on the night
-  with `setKey`.
+  settings before the start or on the night with `setKey`. **Changed for the
+  guest list (26 Nov):** a picture may name anyone on the host's guest list,
+  joined or not (`info.guests`); the start refuses only someone in neither
+  list: "#3 names someone who isn't on the guest list any more. Pick again in
+  the settings." See [guest-list.md, 9.2](guest-list.md#92-participant-fusion-fusionstage).
 - **The two people's own photos** (`originals`, added 25 November): per
   picture, an optional game-media path for each of the two people, uploaded
   through the same pipeline as the picture (`media.upload`: canvas, metadata
@@ -3847,7 +3850,7 @@ was. A point per right person, and a bonus for both.
   export type FusionState = {
     phase: 'lobby' | 'showing' | 'wall' | 'asking' | 'reveal' | 'done'
     key: Record<string, [PlayerId, PlayerId]>   // by picture number; secret until that picture is revealed
-    names: Record<PlayerId, string>             // the people in the key, for anyone who leaves first
+    names: Record<PlayerId, string>             // the people in the key, from the guest list: for a guest who never joins, or leaves first
     revealed: number[]                          // picture numbers, in the order they were asked and revealed
     results: Record<string, { both: number; one: number; none: number; voters: number; hits: Record<PlayerId, number>; at?: number }>
     totals: Record<PlayerId, number>
@@ -3864,10 +3867,12 @@ was. A point per right person, and a bonus for both.
   old saves unchanged. `readState` fills the new fields with null for a save
   that lacks them.
 - **Prompts**: one per picture, `p1` to `p40`, opened when the picture is
-  asked, never before: `{ kind: 'choice', options: 'players', min: 2, max: 2,
+  asked, never before: `{ kind: 'choice', options: 'guests', min: 2, max: 2,
   exclude_self: true, final: true }` (the first lock counts), with the
   countdown's end plus `GRACE_MS` (1 s) as its `closesAt`. The spec is public
-  and says nothing about the answer.
+  and says nothing about the answer. `'guests'` (since the guest list, 26 Nov;
+  `'players'` before): a lock may name a guest on the list who never came,
+  and only guests who joined can answer.
 - **Host actions** (`FusionHostAction`). Each names its step (3.5): a phase,
   or a picture number. One whose step has passed returns the state unchanged,
   which the engine answers as skipped:
@@ -3887,7 +3892,8 @@ was. A point per right person, and a bonus for both.
     Needs the picture's locks in `info.answers` ("The votes for #n are still
     open"). Then the reveal (below).
   - `{ type: 'setKey', n, people }`: refused once that picture is revealed;
-    two different players in the party; the same pair again is unchanged, in
+    two different people on the guest list, joined or not ("Pick two people
+    on the guest list"); the same pair again is unchanged, in
     either order, unless the picture has its people's own photos: then the
     order says whose photo is whose, and the pair the other way round is a
     change.
@@ -3898,12 +3904,14 @@ was. A point per right person, and a bonus for both.
     `updateProfile(winner, { detective: n + 1 })`; records `crowned`. With no
     points on the board: "Participant fusion is over", "Nobody scored this
     time", no winner.
-- **The reveal** (Reveal now and the timer alike): every lock from someone
-  not in the picture counts (a lock from the two in it counts for nothing;
+- **The reveal** (Reveal now and the timer alike): every lock from a guest
+  here who isn't in the picture counts (a lock from anyone gone since, or from
+  the two in it, counts for nothing;
   their phones keep theirs on the phone and never send it); `hits` is how many of the two each voter
   got; `totals += hits * pointsPerPerson + (hits === 2 ? bonusForBoth : 0)`.
   No speed points. `revealPrompt('p' + n)`; records `revealed` with
-  `{ n, label, people, both, one, none, voters }`; phase `reveal`,
+  `{ n, label, people, both, one, none, voters }` (its `about` only the
+  people in it who joined); phase `reveal`,
   `results[n].at = revealedAt = now`. **No announcement**: the TV and every
   phone show the moment themselves, as the quiz does.
 - **Timers** (`GRACE_MS` 1 s, `WAKE_MARGIN_MS` 250 ms, `REVEAL_HOLD_MS` 10 s,
@@ -3938,6 +3946,7 @@ was. A point per right person, and a bonus for both.
     showing: { startedAt: number; endsAt: number } | null      // in the showing only
     current: { n: number; step: number; key: string; openedAt: number; endsAt: number; revealedAt: number | null } | null
     top: { playerId: PlayerId; points: number; rank: number }[] // the top 5 still in the party, competition ranks
+    expected: { id: PlayerId; name: string }[]  // everyone on the guest list who hasn't joined (26 Nov); [] in older saves
   }
   export type FusionReveal = {
     people: [PlayerId, PlayerId]; names: [string, string]
@@ -3949,7 +3958,11 @@ was. A point per right person, and a bonus for both.
   ```
 
   `current.step` counts the guessing, so a picture asked out of order is still
-  "Picture 4 of 12" while its label says "#6".
+  "Picture 4 of 12" while its label says "#6". `expected` holds every guest
+  on the list who hasn't joined, by id and name only, whatever the pictures
+  are, so it says nothing about the key: the phone's picker lists them after
+  the guests here, under "Not here yet". A reveal's `names` come from the
+  guest list (a guest here, else one listed, else the name the key kept).
 - **playerView**: `{ points, rank, hits, inPicture }`: `rank` is null until
   the player scores; `hits` holds each revealed picture they locked in on and
   aren't in; `inPicture` is true only for the two in the picture asked or just
@@ -3957,12 +3970,18 @@ was. A point per right person, and a bonus for both.
   Lock in everyone gets, and keep that lock on the phone (a glance from the
   next seat can't tell). A guest's own lock comes from `myAnswers`.
 - **Guests joining and leaving**: a guest who joins mid-round gets a view at
-  the next sync and can lock in on the next picture asked. A guest removed
-  before a reveal loses their lock with them (the database deletes their
-  answers), so it counts nowhere; one removed after it stays in that
-  picture's numbers, and their points leave the board. Nobody can pick a
-  removed guest any more, so a picture with someone who left gives at most
-  one of two.
+  the next sync and can lock in on the next picture asked; a guest in a
+  picture who arrives late is in it from then on (`inPicture`, no score on
+  it). A guest removed before a reveal loses their lock with them (the
+  database deletes their answers), so it counts nowhere; one removed after it
+  stays in that picture's numbers. `onPlayerLeave` (26 Nov) drops the id's
+  `totals` and its `hits` on every revealed picture, so a name the host frees
+  and someone takes again starts at nothing; `both`, `one`, `none`, `voters`,
+  the key and its names stay (they name the listed guest in the picture, not
+  the phone). Nobody can pick a removed guest any more, so a picture with
+  someone who left the list gives at most one of two. A picture of a guest who
+  never came is asked and revealed like any other, with their name and, if
+  set, their own photo.
 - **Old saves** (no migration: everything new is game JSON). A round started
   with the background version (`voting` or `locked`) reads as a lobby that
   never starts: `wakeAt` is null, every host action is refused with "This

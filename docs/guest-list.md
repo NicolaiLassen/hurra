@@ -720,10 +720,22 @@ lydspor/game), and for any new game.
 
 ### 9.2 Participant fusion (fusion/stage)
 
-Today's fusion logic on this branch is unchanged: its `setup` still requires
-every person in a picture to be in `ctx.players`, so a picture naming a guest
-who has not joined blocks Start ("has someone who isn't in the party") until
-fusion/stage applies this list.
+**Applied on `party/integration` (26 Nov),** on fusion as the stage show with
+the two people's own photos. What it does, as built: setup and `setKey`
+accept anyone in `info.guests`; `state.names` comes from the list; the vote is
+`options: 'guests'` with `exclude_self`; the public state's `expected` holds
+`{ id, name }` of every guest on the list who hasn't joined (all of them,
+whatever the pictures, so it says nothing about the key), and the phone's
+picker lists them after the guests here under "Not here yet"; only locks from
+guests here count at a reveal; a picture of a guest who never came is asked
+and revealed with their name and their own photo; Show who and the settings
+list the whole guest list, an expected guest marked "(not here yet)"; and an
+`onPlayerLeave` drops the id's totals and hits. The refusals read "#3 names
+someone who isn't on the guest list any more. Pick again in the settings."
+and "Pick two people on the guest list". Tests: `fusion/logic.test.ts`
+("guests on the list who are not here", and a party where a picture is of a
+guest who never came), `view.test.ts`, `fixtures.test.ts`, `PhoneHome.test.ts`
+and `fusion.integration.test.ts`. The plan it followed:
 
 - `pictures[].people` may name expected guests. `parseConfig` and `setup`
   check people against `info.guests`, not `ctx.players`.
@@ -969,9 +981,9 @@ reads `freed: true`, and the TV is back to the guests it had.
 2. **A shared local stack's history** now holds 20261126000000. A checkout
    without the file may have `supabase migration up` refuse; copy the file into
    it rather than resetting.
-3. **Fusion on this branch:** the editor offers expected guests, but today's
-   fusion refuses to start while a picture names someone who has not joined,
-   until fusion/stage applies 9.2.
+3. **Fusion on `guests/list` alone:** the editor offers expected guests, but
+   that branch's fusion refuses to start while a picture names someone who
+   has not joined. `party/integration` applies 9.2, so there it starts.
 4. **Freeing after games have run** takes the taker's points, answers, photo
    and badges, as the confirm says. Log rows they caused stay under the id, so a
    recap moment from before the free can name the listed guest. Freeing is meant

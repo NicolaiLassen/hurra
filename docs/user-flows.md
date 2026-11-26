@@ -368,7 +368,11 @@ A picture without its two people can't be asked: set them with Show who
 first. In the settings each person can have their own photo; it stays
 secret until the reveal, where the TV shows it beside the picture, and the
 host picks each person beside their photo (with Show who too). Without one,
-the reveal shows the guest's profile photo, or their token. A round started before the update (when fusion ran in the background)
+the reveal shows the guest's profile photo, or their token. The settings and
+Show who pick from the whole guest list, so a picture may be of a guest who
+hasn't come, marked "(not here yet)"; it is asked and revealed like any other,
+with that guest's name, and phones list the guests still expected after the
+guests here when they pick. A round started before the update (when fusion ran in the background)
 can't go on: End it, then restart it, and its pictures and people are kept.
 
 ### 3.3 Scanning and points

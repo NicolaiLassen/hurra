@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { candidatesFor, choiceOf, nameOf, pickSignature, shortNames, togglePick } from '@/games/fusion/view'
+import { candidatesFor, choiceOf, nameOf, pickSignature, shortNames, stillExpected, togglePick } from '@/games/fusion/view'
 import type { Player } from '@/lib/types'
 
 const player = (id: string, name = id): Player => ({ id, name, code: 'ABCDE', profile: {}, created_at: 0 })
@@ -59,6 +59,26 @@ describe('finding people', () => {
       player('5', 'Bo'),
     ])
     expect([...names.values()]).toEqual(['Christoffer', 'Anna Holm', 'anna  Berg', 'Marie-Louise', 'Bo'])
+  })
+
+  it('lists the guests on the list who have not joined apart, less anyone here since, and finds them by search', () => {
+    const players = [player('1', 'Mads'), player('me', 'Me')]
+    // The public state's list, saved before Mads (2) joined: he is here now, so only once.
+    const expected = stillExpected(
+      [
+        { id: 'z', name: 'Zelda' },
+        { id: '1', name: 'Mads' },
+        { id: 'q', name: 'Quentin' },
+      ],
+      players,
+    )
+    expect(expected).toEqual([
+      { id: 'z', name: 'Zelda' },
+      { id: 'q', name: 'Quentin' },
+    ])
+    expect(candidatesFor(expected, 'me', '').map((p) => p.name)).toEqual(['Quentin', 'Zelda'])
+    expect(candidatesFor(expected, 'me', 'zel').map((p) => p.name)).toEqual(['Zelda'])
+    expect(nameOf([...players, ...expected], 'z')).toBe('Zelda')
   })
 
   it('names players, falling back to the name a reveal kept', () => {

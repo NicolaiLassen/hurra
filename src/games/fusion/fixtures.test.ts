@@ -3,7 +3,7 @@
 // readers. Here, beside the game, so the core's tests never import a game.
 import { describe, expect, it } from 'vitest'
 import { readPublic, readView, type FusionPublicState } from '@/games/fusion/shapes'
-import { FIXTURE_NOW, fixtureSnapshot, FUSION_STAGE_SCENES, type FusionStageScene } from '@/lib/fixtures'
+import { FIXTURE_EXPECTED_NAMES, FIXTURE_NOW, fixtureSnapshot, FUSION_STAGE_SCENES, type FusionStageScene } from '@/lib/fixtures'
 import { backgroundGames, phoneLayout, tvScene } from '@/lib/stage'
 
 describe('Participant fusion on the stage', () => {
@@ -21,6 +21,16 @@ describe('Participant fusion on the stage', () => {
     for (const scene of FUSION_STAGE_SCENES) {
       const { pub } = fusionOf(scene)
       expect(readPublic(JSON.parse(JSON.stringify(pub))), scene).toEqual(pub)
+    }
+  })
+
+  it('names the guests on the list who have not joined, by id and name only, on every screen', () => {
+    for (const scene of FUSION_STAGE_SCENES) {
+      for (const screen of ['phone', 'tv', 'host'] as const) {
+        const { pub } = fusionOf(scene, screen)
+        expect(pub.expected.map((g) => g.name), scene).toEqual([...FIXTURE_EXPECTED_NAMES])
+        for (const guest of pub.expected) expect(Object.keys(guest)).toEqual(['id', 'name'])
+      }
     }
   })
 

@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { PlayerId } from '@/games/core/Game'
+import type { GameGuest, PlayerId } from '@/games/core/Game'
 import {
   canAsk,
   headline,
@@ -52,6 +52,7 @@ import {
 import { nameOf, pickSignature } from '@/games/fusion/view'
 import type { HostViewProps } from '@/games/types'
 import { useServerTime } from '@/lib/gameClock'
+import { sortNames } from '@/lib/guestList'
 import type { Player } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -68,10 +69,24 @@ const ICONS: Record<StepIcon, Icon> = {
  * round is, one gold button for its next step and the steps that skip ahead
  * in the menu beside it (docs/identity.md, The host room), every picture with
  * its own Ask, and who is in each picture behind Show who, because the host's
- * phone is out in the room. Each step names the step it was made for, so a
- * double tap or a race with a timer does nothing.
+ * phone is out in the room; Show who picks from the whole guest list, so a
+ * picture may be of a guest who hasn't come (docs/guest-list.md, 9.2). Each
+ * step names the step it was made for, so a double tap or a race with a timer
+ * does nothing.
  */
-export default function HostView({ session, game, players, state, config, publicState, tallies, serverNow, act, mediaUrl }: HostViewProps<FusionGame>) {
+export default function HostView({
+  session,
+  game,
+  players,
+  guests,
+  state,
+  config,
+  publicState,
+  tallies,
+  serverNow,
+  act,
+  mediaUrl,
+}: HostViewProps<FusionGame>) {
   const [showWho, setShowWho] = useState(false)
   // One host action at a time: its button shows it is busy, the others wait.
   const [pending, setPending] = useState<string | null>(null)
@@ -199,6 +214,7 @@ export default function HostView({ session, game, players, state, config, public
             pub={pub}
             state={state}
             players={players}
+            guests={guests}
             originals={config?.pictures?.[picture.n - 1]?.originals ?? null}
             showWho={showWho}
             legacy={legacy}
@@ -287,6 +303,7 @@ function PictureRow({
   pub,
   state,
   players,
+  guests,
   originals,
   showWho,
   legacy,
@@ -300,6 +317,8 @@ function PictureRow({
   pub: FusionPublicState
   state: FusionState | null
   players: Player[]
+  /** Everyone on the guest list, joined or not: Show who may pick any of them. */
+  guests: readonly GameGuest[]
   /** The two people's own photos from the round's settings, in the order of its people. */
   originals: readonly [string | null, string | null] | null
   showWho: boolean
@@ -349,7 +368,7 @@ function PictureRow({
           key={key ? key.join('+') : ''}
           current={key}
           state={state}
-          players={players}
+          guests={guests}
           originals={originals}
           mediaUrl={mediaUrl}
           disabled={busy}
@@ -388,14 +407,15 @@ function PictureRow({
 
 /**
  * Two pickers for who is in a picture, and Save once both are chosen and
- * differ from what is saved. With the two people's own photos in the
- * settings, each picker stands beside its photo: the host picks the person
- * in it, so the order counts (whose photo is whose at the reveal).
+ * differ from what is saved. They list the whole guest list, a guest who
+ * hasn't joined marked "(not here yet)". With the two people's own photos in
+ * the settings, each picker stands beside its photo: the host picks the
+ * person in it, so the order counts (whose photo is whose at the reveal).
  */
 function KeyEditor({
   current,
   state,
-  players,
+  guests,
   originals,
   mediaUrl,
   disabled,
@@ -405,7 +425,7 @@ function KeyEditor({
 }: {
   current: readonly [PlayerId, PlayerId] | null
   state: FusionState
-  players: Player[]
+  guests: readonly GameGuest[]
   originals: readonly [string | null, string | null] | null
   mediaUrl: HostViewProps['mediaUrl']
   disabled: boolean
@@ -418,11 +438,11 @@ function KeyEditor({
   const photos = originals !== null && (originals[0] !== null || originals[1] !== null)
   const changed = photos ? draft.join('+') !== (current ?? []).join('+') : pickSignature(draft) !== pickSignature(current)
   const ready = draft[0] !== '' && draft[1] !== '' && !same && changed
-  // Someone in the saved key who has left the party still shows, by the name the game kept.
-  const gone = (current ?? []).filter((id) => !players.some((p) => p.id === id))
+  // Someone in the saved key who has left the guest list still shows, by the name the game kept.
+  const gone = (current ?? []).filter((id) => !guests.some((g) => g.id === id))
   const options = [
-    ...[...players].sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({ id: p.id, name: p.name })),
-    ...gone.map((id) => ({ id, name: `${state.names?.[id] ?? 'A guest'} (left)` })),
+    ...sortNames(guests).map((g) => ({ id: g.id, name: g.name, expected: !g.joined })),
+    ...gone.map((id) => ({ id, name: `${state.names?.[id] ?? 'A guest'} (left)`, expected: false })),
   ]
 
   return (
@@ -444,7 +464,7 @@ function KeyEditor({
             <Select value={draft[slot]} disabled={disabled} onValueChange={(id) => setDraft((d) => (slot === 0 ? [id, d[1]] : [d[0], id]))}>
               <SelectTrigger
                 size="sm"
-                className="w-36"
+                className="w-40"
                 aria-label={photo ? `Who is in the ${slot === 0 ? 'first' : 'second'} photo` : slot === 0 ? 'First person' : 'Second person'}
               >
                 <SelectValue placeholder="Pick someone" />
@@ -453,6 +473,13 @@ function KeyEditor({
                 {options.map((option) => (
                   <SelectItem key={option.id} value={option.id} disabled={gone.includes(option.id)}>
                     {option.name}
+                    {/* A guest on the list who hasn't joined yet. */}
+                    {option.expected && (
+                      <>
+                        {' '}
+                        <span className="text-paper-3">(not here yet)</span>
+                      </>
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>

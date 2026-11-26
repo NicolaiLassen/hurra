@@ -5,8 +5,7 @@ import { useState } from 'react'
 import Avatar from '@/components/Avatar'
 import type { PlayerId } from '@/games/core/Game'
 import type { FusionPublicPicture } from '@/games/fusion/shapes'
-import { nameOf } from '@/games/fusion/view'
-import type { Player } from '@/lib/types'
+import { nameOf, type Pickable } from '@/games/fusion/view'
 import { cn } from '@/lib/utils'
 
 /**
@@ -94,7 +93,7 @@ export function Pair({
   avatarClassName = 'size-7',
 }: {
   people: readonly PlayerId[]
-  players: readonly Player[]
+  players: readonly Pickable[]
   /** Names a reveal kept, for anyone who has left since. */
   kept?: readonly string[]
   /** A photo URL for each person in its place, over their profile photo; null keeps theirs. */

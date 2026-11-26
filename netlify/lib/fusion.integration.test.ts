@@ -3,6 +3,8 @@
 // straight to the database, and revealed by the paired TV's sync once its
 // countdown and the grace second have passed (closes_at, then wake_at). The
 // two people's own photos stay off every phone and the TV until the reveal.
+// A picture may be of a guest on the host's guest list who never joins
+// (docs/guest-list.md, 9.2): it is asked, guessed and revealed with their name.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { admin, engine, rows, sleep, World, type Guest, type Party, type Person } from './testUsers'
 
@@ -11,15 +13,23 @@ let host: Person
 let tv: Person
 let party: Party
 let ana: Guest, bo: Guest, cy: Guest, dee: Guest
+let zelda: { id: string; name: string }
 let gameId: string
 // The two people's own photos in the settings: paths only, as uploads make them (the files needn't exist).
-const PHOTO = { bo: 'party/game/0a1b2c3d-bo-own.jpg', cy: 'party/game/4e5f6a7b-cy-own.jpg', ana: 'party/game/8c9d0e1f-ana-own.jpg' }
+const PHOTO = {
+  bo: 'party/game/0a1b2c3d-bo-own.jpg',
+  cy: 'party/game/4e5f6a7b-cy-own.jpg',
+  ana: 'party/game/8c9d0e1f-ana-own.jpg',
+  zelda: 'party/game/2a3b4c5d-zelda-own.jpg',
+}
 
 beforeAll(async () => {
   host = await world.host()
   party = await world.party(host, 'Fusion test')
   ;[ana, bo, cy, dee] = await Promise.all(['Ana', 'Bo', 'Cy', 'Dee'].map((name) => world.guest(party, name)))
   tv = await world.screen(host, party)
+  // On the guest list, never joins.
+  ;[zelda] = (await world.listGuests(host, party, ['Zelda'])).added
   gameId = await world.game(host, party, 'fusion', 'Who is fused?', {
     pictures: [
       { label: '#1', people: [bo.playerId, cy.playerId], originals: [PHOTO.bo, PHOTO.cy] },
@@ -70,7 +80,7 @@ describe('Participant fusion on the stage', () => {
     // Who is in it stays secret: never in the public state, the prompt or another guest's view.
     expect(JSON.stringify(asked.public_state)).not.toContain(bo.playerId)
     const [prompt] = await rows<{ spec: unknown; closes_at: string }>('game_prompts', 'game_id', gameId)
-    expect(prompt.spec).toEqual({ kind: 'choice', options: 'players', min: 2, max: 2, exclude_self: true, final: true })
+    expect(prompt.spec).toEqual({ kind: 'choice', options: 'guests', min: 2, max: 2, exclude_self: true, final: true })
     const views = await rows<{ player_id: string; view: { inPicture: boolean } }>('game_player_views', 'game_id', gameId)
     expect(views.filter((v) => v.view.inPicture).map((v) => v.player_id).sort()).toEqual([bo.playerId, cy.playerId].sort())
     expect(Date.parse(prompt.closes_at) - Date.parse(asked.wake_at!)).toBe(-250)
@@ -114,5 +124,50 @@ describe('Participant fusion on the stage', () => {
     expect(done).toMatchObject({ status: 'finished', winners: [ana.playerId], wake_at: null })
     const crowned = await admin.from('session_feed').select('message, interrupt').eq('game_id', gameId).order('id')
     expect(crowned.data).toEqual([{ message: 'Ana has the sharpest eye', interrupt: true }, { message: 'You have the sharpest eye', interrupt: false }])
+  }, 30_000)
+
+  it('asks and reveals a picture of a guest who never joined, with her name and own photo; only guests here score', async () => {
+    const second = await world.game(host, party, 'fusion', 'Who else is fused?', {
+      pictures: [{ label: '#1', people: [ana.playerId, zelda.id], originals: [null, PHOTO.zelda] }],
+      pointsPerPerson: 1,
+      bonusForBoth: 0,
+      seconds: 30,
+      showSeconds: 3,
+    })
+    const act = (action: Record<string, unknown>, close?: string[]) =>
+      engine(host, { type: 'host-action', gameId: second, action, ...(close ? { close } : {}) })
+    const room = async () => (await rows<Row>('session_games', 'id', second))[0].public_state
+    const vote = (who: Guest, choice: string[]) =>
+      who.client.rpc('submit_answer', { p_game_id: second, p_key: 'p1', p_payload: { choice }, p_request_id: crypto.randomUUID() })
+
+    // The start takes a picture of someone still expected.
+    expect(await engine(host, { type: 'start', gameId: second })).toMatchObject({ status: 200 })
+    expect(await act({ type: 'ask', n: 1 })).toMatchObject({ status: 200 })
+    // Phones get her id and name to pick, and nothing else: not the key, not her photo, not her player code.
+    const asked = await room()
+    expect(asked.expected).toEqual([{ id: zelda.id, name: 'Zelda' }])
+    expect(JSON.stringify(asked.pictures)).not.toContain(zelda.id)
+    const { data: phone } = await bo.client.rpc('session_snapshot', { p_session_id: party.id, p_screen: 'phone' })
+    const text = JSON.stringify(phone)
+    expect(text).not.toContain(PHOTO.zelda)
+    expect((phone as { players: { id: string }[] }).players.map((p) => p.id)).not.toContain(zelda.id)
+    const [row] = await rows<{ code: string }>('players', 'id', zelda.id)
+    expect(text).not.toContain(row.code)
+
+    expect((await vote(bo, [ana.playerId, zelda.id])).error).toBeNull() // both right, naming her
+    expect((await vote(cy, [ana.playerId, dee.playerId])).error).toBeNull() // one
+    expect((await vote(dee, [zelda.id, cy.playerId])).error).toBeNull() // one
+    expect((await vote(ana, [zelda.id, bo.playerId])).error).toBeNull() // in it: the reveal ignores it
+    expect((await vote(dee, [zelda.id, bo.playerId])).error?.message).toBe('You already answered')
+
+    expect(await act({ type: 'reveal', n: 1 }, ['p1'])).toMatchObject({ status: 200 })
+    const revealed = await room()
+    expect((revealed.pictures as unknown[])[0]).toMatchObject({
+      revealed: { people: [ana.playerId, zelda.id], names: ['Ana', 'Zelda'], originals: [null, PHOTO.zelda], both: 1, one: 2, none: 0, voters: 3 },
+    })
+    const scores = await rows<{ player_id: string; points: number }>('game_scores', 'game_id', second)
+    expect(Object.fromEntries(scores.map((s) => [s.player_id, s.points]))).toEqual({ [bo.playerId]: 2, [cy.playerId]: 1, [dee.playerId]: 1 })
+    expect(await act({ type: 'finish' })).toMatchObject({ status: 200 })
+    expect((await rows<Row>('session_games', 'id', second))[0]).toMatchObject({ status: 'finished', winners: [bo.playerId] })
   }, 30_000)
 })

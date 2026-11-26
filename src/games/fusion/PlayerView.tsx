@@ -33,7 +33,7 @@ import {
   type FusionPublicState,
   type FusionReveal,
 } from '@/games/fusion/shapes'
-import { choiceOf, nameOf, shortNames, togglePick } from '@/games/fusion/view'
+import { choiceOf, nameOf, shortNames, stillExpected, togglePick, type Pickable } from '@/games/fusion/view'
 import type { PlayerViewProps } from '@/games/types'
 import { useMomentSoundAt, useServerTime } from '@/lib/gameClock'
 import type { Player, PromptState, SessionGame, SubmitResult } from '@/lib/types'
@@ -93,6 +93,7 @@ export default function PlayerView({
           inPicture={view?.inPicture === true}
           player={player}
           players={players}
+          expected={stillExpected(pub.expected, players)}
           onStage={onStage}
           submit={submit}
           serverNow={serverNow}
@@ -110,7 +111,7 @@ export default function PlayerView({
           view={view}
           mine={choiceOf(myAnswers[pub.current.key])}
           player={player}
-          players={players}
+          players={[...players, ...stillExpected(pub.expected, players)]}
           serverNow={serverNow}
           mediaUrl={mediaUrl}
         />
@@ -204,7 +205,8 @@ function Wall({
  * shows at once (Sending), then locked in; a refusal brings the picker back
  * with the picks and the server's words. The two in the picture pick and lock
  * in the same way, but their lock never leaves the phone: nothing they send
- * could count, and the TV's count already leaves them out.
+ * could count, and the TV's count already leaves them out. Guests on the list
+ * who haven't joined can be picked too: a picture may be of one of them.
  */
 function Asking({
   picture,
@@ -214,6 +216,7 @@ function Asking({
   inPicture,
   player,
   players,
+  expected,
   onStage,
   submit,
   serverNow,
@@ -226,6 +229,8 @@ function Asking({
   inPicture: boolean
   player: Player
   players: Player[]
+  /** Guests on the list who haven't joined (none of them in `players`). */
+  expected: readonly Pickable[]
   onStage: boolean
   submit: (key: string, answer: AnswerPayload) => Promise<SubmitResult>
   serverNow: () => number
@@ -233,7 +238,9 @@ function Asking({
 }) {
   const [pick, setPick] = useState<PlayerId[]>([])
   const [lock, setLock] = useState<LockState>(NO_LOCK)
-  const names = useMemo(() => shortNames(players), [players])
+  // Everyone a guess can name: the guests here, then those on the list who aren't.
+  const pickable = useMemo<Pickable[]>(() => [...players, ...expected], [players, expected])
+  const names = useMemo(() => shortNames(pickable), [pickable])
   const lockedIn = isLockedIn(saved, lock)
   const sending = lock.kind === 'sending'
   const now = useServerTime(serverNow, 250, !lockedIn)
@@ -242,7 +249,7 @@ function Asking({
   const view = askingCase({ lockedIn, sending, over })
   // A second tap before the first one's render can't send twice.
   const inFlight = useRef(false)
-  const nameFor = (id: PlayerId) => names.get(id) ?? nameOf(players, id)
+  const nameFor = (id: PlayerId) => names.get(id) ?? nameOf(pickable, id)
 
   const header = <AskHeader picture={picture} endsAt={endsAt} closed={over} serverNow={serverNow} mediaUrl={mediaUrl} />
 
@@ -255,7 +262,7 @@ function Asking({
       <div className="grid grid-cols-1 gap-5">
         {header}
         <MomentCard head={words.head} line={words.line}>
-          <TwoTokens people={two} players={players} names={twoNames} />
+          <TwoTokens people={two} players={pickable} names={twoNames} />
         </MomentCard>
       </div>
     )
@@ -270,8 +277,8 @@ function Asking({
     )
   }
 
-  // A guest removed from the party since they were picked can't be locked in on: they drop out of the picks.
-  const picks = pick.filter((id) => players.some((p) => p.id === id))
+  // A guest removed from the party or the list since they were picked can't be locked in on: they drop out of the picks.
+  const picks = pick.filter((id) => pickable.some((p) => p.id === id))
   const shown = sending ? lock.pick : picks
   const shownNames = shown.map(nameFor)
   const canRetry = lock.kind !== 'refused' || lock.retry
@@ -296,17 +303,18 @@ function Asking({
       </p>
       <GuestPicker
         players={players}
+        expected={expected}
         meId={player.id}
         names={names}
         pick={shown}
         busy={sending || !canRetry}
         onToggle={(id) => {
-          setPick((current) => togglePick(current.filter((p) => players.some((player) => player.id === p)), id))
+          setPick((current) => togglePick(current.filter((p) => pickable.some((guest) => guest.id === p)), id))
           // A new pick after a refusal starts afresh.
           if (lock.kind === 'refused') setLock(NO_LOCK)
         }}
       />
-      <LockBar pick={shown} players={players} names={shownNames} sending={sending} canLock={canLock} onLock={lockIn} />
+      <LockBar pick={shown} players={pickable} names={shownNames} sending={sending} canLock={canLock} onLock={lockIn} />
     </div>
   )
 }
@@ -331,7 +339,8 @@ function Revealed({
   view: FusionPlayerView | null
   mine: Pick2 | null
   player: Player
-  players: Player[]
+  /** The guests here, then those on the list who aren't: a guess may name either. */
+  players: readonly Pickable[]
   serverNow: () => number
   mediaUrl: PlayerViewProps['mediaUrl']
 }) {

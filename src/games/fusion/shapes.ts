@@ -72,6 +72,13 @@ export type FusionCurrent = {
 /** A face detective in the top 5: ties share a rank (1, 2, 2, 4). */
 export type FusionTopRow = { playerId: PlayerId; points: number; rank: number }
 
+/**
+ * A guest on the host's guest list who hasn't joined: a picture may be of
+ * them, so a guess may name them (docs/guest-list.md, 9.2). Their id and name
+ * only, nothing else about them.
+ */
+export type FusionGuest = { id: PlayerId; name: string }
+
 /** What everyone sees. Never who is in a picture before its reveal. */
 export type FusionPublicState = {
   phase: FusionPhase
@@ -88,6 +95,13 @@ export type FusionPublicState = {
   current: FusionCurrent | null
   /** The top 5 face detectives still in the party, most points first. */
   top: FusionTopRow[]
+  /**
+   * Everyone on the guest list who hasn't joined, in the order the host added
+   * them: the phone's picker lists them after the guests here. Every one of
+   * them, whether a picture is of them or not, so the list says nothing about
+   * the key. Empty in saves from before the guest list.
+   */
+  expected: FusionGuest[]
 }
 
 /** What one guest sees. Their own lock comes from myAnswers. */
@@ -142,8 +156,12 @@ export const pictureKey = (n: number) => `p${n}`
 /** The label a picture gets when the settings leave it blank. */
 export const defaultLabel = (n: number) => `#${n}`
 
-/** Each picture's guess: two other guests, and the first lock counts. Public: never anything about the answer. */
-export const VOTE_SPEC: PromptSpec = { kind: 'choice', options: 'players', min: 2, max: 2, exclude_self: true, final: true }
+/**
+ * Each picture's guess: two other guests, and the first lock counts. Anyone on
+ * the guest list, so a guess can name a guest who never came (only guests here
+ * answer). Public: never anything about the answer.
+ */
+export const VOTE_SPEC: PromptSpec = { kind: 'choice', options: 'guests', min: 2, max: 2, exclude_self: true, final: true }
 
 /** What the host hears for a round started with the background version. */
 export const LEGACY_MESSAGE = 'This round started before the update. End it, then restart it.'
@@ -203,7 +221,20 @@ export function readPublic(raw: unknown): FusionPublicState | null {
     if (!current) phase = 'wall'
   }
 
-  return { phase, pictures, rules, showing, current, top: readTop(raw.top) }
+  return { phase, pictures, rules, showing, current, top: readTop(raw.top), expected: readGuests(raw.expected) }
+}
+
+/** The expected guests a save carries: well formed ones, each id once. */
+function readGuests(raw: unknown): FusionGuest[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const guests: FusionGuest[] = []
+  for (const item of raw) {
+    if (!isObject(item) || typeof item.id !== 'string' || item.id === '' || typeof item.name !== 'string' || seen.has(item.id)) continue
+    seen.add(item.id)
+    guests.push({ id: item.id, name: item.name })
+  }
+  return guests
 }
 
 /** Null-at-times last when ordering by time. */

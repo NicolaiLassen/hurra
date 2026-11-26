@@ -133,9 +133,17 @@ const PLAYERS: Player[] = NAMES.map((name, i) => ({
  * joined, and the four the host listed before the party who haven't joined
  * yet, by name as the database sorts it. Only the host page reads it.
  */
+/** The four guests the host listed who haven't joined, in the order they were added. */
+const EXPECTED_GUESTS: ListedGuest[] = FIXTURE_EXPECTED_NAMES.map((name, i) => ({
+  id: uid(2, NAMES.length + i + 1),
+  name,
+  joined_at: null,
+  created_at: FIXTURE_NOW - (170 - i) * MIN,
+}))
+
 const GUESTS: ListedGuest[] = [
   ...PLAYERS.map((p) => ({ id: p.id, name: p.name, joined_at: p.joined_at!, created_at: p.created_at })),
-  ...FIXTURE_EXPECTED_NAMES.map((name, i) => ({ id: uid(2, NAMES.length + i + 1), name, joined_at: null, created_at: FIXTURE_NOW - (170 - i) * MIN })),
+  ...EXPECTED_GUESTS,
 ].sort((a, b) => a.name.localeCompare(b.name))
 
 const BASE_SESSION: Session = {
@@ -884,6 +892,8 @@ function fusionStage(scene: FusionStageScene) {
           }
         : null,
     top: scorers.slice(0, 5).map((id) => ({ playerId: id, points: totals[id], rank: rankOfScorer(id) })),
+    // The four on the guest list who haven't joined: the phone's picker lists them under "Not here yet".
+    expected: EXPECTED_GUESTS.map((g) => ({ id: g.id, name: g.name })),
   }
 
   const inPicture = (id: string) => current !== null && stagePair(current).includes(id)
@@ -908,7 +918,7 @@ function fusionStage(scene: FusionStageScene) {
     revealedAt: phase === 'reveal' ? currentTimes!.at : null,
   }
 
-  const spec = { kind: 'choice' as const, options: 'players' as const, min: 2, max: 2, exclude_self: true, final: true }
+  const spec = { kind: 'choice' as const, options: 'guests' as const, min: 2, max: 2, exclude_self: true, final: true }
   const promptsAsked = phase === 'asking' ? [...revealed, current!] : revealed
   const prompts: PromptState[] = promptsAsked.map((n) => {
     const i = revealed.indexOf(n)

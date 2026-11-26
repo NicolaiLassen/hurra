@@ -14,11 +14,17 @@
 // own photos (the originals). Both live in the host-only settings and the
 // state, and reach publicState only once that picture is revealed. Relative
 // imports only: the Netlify function bundles this file.
+//
+// A picture may be of a guest on the host's guest list who hasn't joined, or
+// never comes (docs/guest-list.md, 9.2): the settings and Show who take anyone
+// on the list, the key keeps their name, and a guess may name them. Only the
+// guests who joined guess and score.
 import {
   Game,
   GameError,
   type Answer,
   type GameContext,
+  type GameGuest,
   type GameInfo,
   type GamePlayer,
   type Highlight,
@@ -48,6 +54,7 @@ import {
   TOP_SIZE,
   VOTE_SPEC,
   WAKE_MARGIN_MS,
+  type FusionGuest,
   type FusionHostAction,
   type FusionPhase as Phase,
   type FusionPlayerView as PlayerViewShape,
@@ -101,9 +108,15 @@ export type FusionResult = {
 
 export type FusionState = {
   phase: Phase
-  /** Who is in each picture, by picture number. Secret until that picture is revealed. */
+  /**
+   * Who is in each picture, by picture number: anyone on the guest list, joined
+   * or not. Secret until that picture is revealed.
+   */
   key: Record<string, [PlayerId, PlayerId]>
-  /** The names of the people in the key, for anyone who leaves before their picture is revealed. */
+  /**
+   * The names of the people in the key, from the guest list: for a guest who
+   * never joins, and anyone who leaves before their picture is revealed.
+   */
   names: Record<PlayerId, string>
   /** Picture numbers, in the order they were asked and revealed. */
   revealed: number[]
@@ -162,9 +175,10 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const key: FusionState['key'] = {}
     ctx.config.pictures.forEach((picture, i) => {
       if (!picture.people) return
-      // Settings can be made before the night; someone in them may have left since.
-      if (!picture.people.every((id) => ctx.players.some((p) => p.id === id))) {
-        throw new GameError(`${picture.label} has someone who isn't in the party. Pick the people again in the settings.`)
+      // Settings can name guests who haven't joined yet (the guest list), and be
+      // made before the night; someone in them may have left the list since.
+      if (!picture.people.every((id) => onList(ctx, id))) {
+        throw new GameError(`${picture.label} names someone who isn't on the guest list any more. Pick again in the settings.`)
       }
       key[i + 1] = [picture.people[0], picture.people[1]]
     })
@@ -172,7 +186,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     return {
       phase: 'lobby',
       key,
-      names: namesOf(key, ctx.players, {}),
+      names: namesOf(key, ctx, {}),
       revealed: [],
       results: {},
       totals: {},
@@ -284,6 +298,31 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     }
   }
 
+  /**
+   * Someone left the party: removed, or the host freed their name, which
+   * someone else may take next under the same id (docs/guest-list.md, 9.1).
+   * Their points and how they did on each picture go with them. The counts
+   * stay as the room saw them, and the key and its names stay: they name the
+   * guest in the picture, not the phone that had the name.
+   */
+  onPlayerLeave(state: FusionState, playerId: PlayerId): FusionState {
+    if (isLegacyState(state)) return state
+    const s = readState(state)
+    const scored = Object.hasOwn(s.totals, playerId)
+    const guessed = Object.values(s.results).some((result) => Object.hasOwn(result.hits ?? {}, playerId))
+    if (!scored && !guessed) return state
+    return {
+      ...s,
+      totals: without(s.totals, playerId),
+      results: Object.fromEntries(
+        Object.entries(s.results).map(([n, result]) => [
+          n,
+          Object.hasOwn(result.hits ?? {}, playerId) ? { ...result, hits: without(result.hits, playerId) } : result,
+        ]),
+      ),
+    }
+  }
+
   isFinished(state: FusionState): boolean {
     return state.phase === 'done'
   }
@@ -330,7 +369,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
         label: picture.label,
         image: picture.image ?? null,
         // Who is in it, and their own photos, only once it is revealed: never a key before that.
-        revealed: revealedOf(s, n, info.players, picture),
+        revealed: revealedOf(s, n, info, picture),
       }
     })
     const asking = s.phase === 'asking' || s.phase === 'reveal'
@@ -356,6 +395,8 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
             }
           : null,
       top: ranked(s, info).slice(0, TOP_SIZE),
+      // Everyone still expected, the same whatever the pictures are, so phones can name them in a guess.
+      expected: expectedOf(info),
     }
   }
 
@@ -412,7 +453,8 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
       highlights.push({
         title: `Best disguise: ${labelOf(disguise.n)} fooled the room`,
         detail: both === 0 ? `Nobody saw ${who}` : `Only ${both} of ${voters} saw ${who}`,
-        players: [...people],
+        // A guest who never came is named in the words only: the recap's people are the guests who came.
+        players: people.filter((id) => round.players.some((p) => p.id === id)),
         at: revealedAt(disguise.n),
         icon: 'detective',
         tone: 'violet',
@@ -466,7 +508,11 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     const people = s.key[n]
     if (!people) throw new GameError(`Set who is in ${label} first`)
 
-    const result = scoreVotes(votes, people)
+    // Only guests here guess and score: a lock from anyone else (gone since) counts for nothing.
+    const result = scoreVotes(
+      votes.filter((vote) => ctx.players.some((p) => p.id === vote.playerId)),
+      people,
+    )
     const rules = rulesOf(ctx.config)
     const totals = { ...s.totals }
     for (const [id, hits] of Object.entries(result.hits)) {
@@ -504,15 +550,14 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (s.revealed.includes(n)) throw new GameError(`${picture.label} is already revealed`)
     const [a, b] = people
     if (a === b) throw new GameError('Pick two different people')
-    if (!ctx.players.some((p) => p.id === a) || !ctx.players.some((p) => p.id === b)) {
-      throw new GameError('Pick two people who are in the party')
-    }
+    // Anyone on the guest list, joined or not: a picture may be of a guest who never comes.
+    if (!onList(ctx, a) || !onList(ctx, b)) throw new GameError('Pick two people on the guest list')
     const current = s.key[n]
     // The same two again change nothing, in either order; with their own photos the order says whose photo is whose.
     const ordered = originalsOf(picture).some((path) => path !== null)
     if (current && (ordered ? current[0] === a && current[1] === b : current.includes(a) && current.includes(b))) return state
     const key = { ...s.key, [n]: [a, b] as [PlayerId, PlayerId] }
-    return { ...s, key, names: namesOf(key, ctx.players, s.names) }
+    return { ...s, key, names: namesOf(key, ctx, s.names) }
   }
 
   private finish(state: FusionState, s: FusionState, ctx: GameContext<FusionConfig>): FusionState {
@@ -598,14 +643,21 @@ const showingMs = (config: FusionConfig) => (Array.isArray(config.pictures) ? co
 const labelOf = (config: FusionConfig, n: number) => config.pictures[n - 1]?.label ?? defaultLabel(n)
 
 /** A revealed picture as the room sees it, or null before its reveal. */
-function revealedOf(s: FusionState, n: number, players: readonly GamePlayer[], picture: FusionPicture): PublicPicture['revealed'] {
+function revealedOf(
+  s: FusionState,
+  n: number,
+  info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>,
+  picture: FusionPicture,
+): PublicPicture['revealed'] {
   const index = s.revealed.indexOf(n)
   const result = index >= 0 ? s.results[n] : undefined
   const people = s.key[n]
   if (!result || !people) return null
+  // A guest here by their name now, one on the list by theirs, else the name the key kept.
+  const named = (id: PlayerId) => nameIn(info.players, s.names, id, info.guests)
   return {
     people: [people[0], people[1]],
-    names: [nameIn(players, s.names, people[0]), nameIn(players, s.names, people[1])],
+    names: [named(people[0]), named(people[1])],
     both: result.both,
     one: result.one,
     none: result.none,
@@ -737,23 +789,48 @@ function leaders(s: FusionState, info: Pick<GameInfo<FusionConfig>, 'players'>):
     .map((row) => row.playerId)
 }
 
-/** A player's name now, else the one kept with the key, else a placeholder. */
-function nameIn(players: readonly GamePlayer[], kept: Readonly<Record<PlayerId, string>>, id: PlayerId): string {
-  return players.find((p) => p.id === id)?.name ?? kept[id] ?? 'a guest who left'
+/** A player's name now, else a listed guest's, else the one kept with the key, else a placeholder. */
+function nameIn(
+  players: readonly GamePlayer[],
+  kept: Readonly<Record<PlayerId, string>>,
+  id: PlayerId,
+  guests: readonly GameGuest[] = [],
+): string {
+  return players.find((p) => p.id === id)?.name ?? guests.find((g) => g.id === id)?.name ?? kept[id] ?? 'a guest who left'
 }
 
-/** The names of everyone in the key: their current name, or the one kept from before they left. */
+/**
+ * The names of everyone in the key: their name on the guest list (joined or
+ * not), or the one kept from before they left it.
+ */
 function namesOf(
   key: FusionState['key'],
-  players: readonly GamePlayer[],
+  info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>,
   kept: Readonly<Record<PlayerId, string>>,
 ): Record<PlayerId, string> {
   const names: Record<PlayerId, string> = {}
   for (const people of Object.values(key)) {
     for (const id of people) {
-      const name = players.find((p) => p.id === id)?.name ?? kept[id]
+      const name = info.players.find((p) => p.id === id)?.name ?? info.guests.find((g) => g.id === id)?.name ?? kept[id]
       if (name !== undefined) names[id] = name
     }
   }
   return names
+}
+
+/** Whether an id is on the guest list: a guest here, or one listed who hasn't joined. */
+function onList(info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>, id: PlayerId): boolean {
+  return info.guests.some((g) => g.id === id) || info.players.some((p) => p.id === id)
+}
+
+/** The guests on the list who haven't joined, in the list's order: ids and names only. */
+function expectedOf(info: Pick<GameInfo<FusionConfig>, 'players' | 'guests'>): FusionGuest[] {
+  return info.guests
+    .filter((g) => !g.joined && !info.players.some((p) => p.id === g.id))
+    .map((g) => ({ id: g.id, name: g.name }))
+}
+
+/** A record without one id's entry. */
+function without<T>(record: Readonly<Record<PlayerId, T>>, id: PlayerId): Record<PlayerId, T> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => key !== id))
 }
