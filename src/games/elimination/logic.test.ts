@@ -219,7 +219,10 @@ describe('rules', () => {
     expect(effects.announcements.at(-2)).toMatchObject({ sound: 'fanfare', icon: 'crown' })
     expect(effects.announcements.at(-2)?.message).toContain('last one standing')
     expect(effects.announcements.at(-1)?.to).toEqual(['bo'])
-    expect(() => tag(end, 'bo', 'ana')).toThrow('The game is over')
+    // A tap on a decided round changes nothing: the save that decided it finishes it.
+    const late = tag(end, 'bo', 'ana')
+    expect(late.state).toBe(end)
+    expect(late.effects.announcements).toEqual([])
   })
 
   it('refuses a knockout of someone who left the party', () => {
@@ -606,6 +609,23 @@ describe('a round in a party', () => {
     expect(lastOneStanding(p)).toEqual([expect.objectContaining({ interrupt: true, sound: 'fanfare' })])
     expect(p.feed.find((f) => f.message === "You're the last one standing!")?.audience).toEqual([ana.id])
     expect(p.players.find((pl) => pl.id === ana.id)?.profile.elimination).toEqual({ tags: 1, wins: 1 })
+  })
+
+  it("crowns the last one standing on the winner's next tap when the sync after a removal didn't land", () => {
+    // Found by the game mechanic verifier: the tap was refused "The game is over",
+    // which threw away the save that would have crowned Ana, and the round stayed open.
+    const p = party(3)
+    const [ana, bo, cy] = p.players
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    knock(p, ana, bo)
+    p.removePlayer(cy.id)
+    p.tick(1000)
+    expect(knock(p, ana, cy).kind).toBe('commit')
+
+    expect(p.game('g')).toMatchObject({ status: 'finished', finishedBy: 'game', winners: [ana.id] })
+    expect(lastOneStanding(p)).toEqual([expect.objectContaining({ interrupt: true })])
+    expect(p.feed.find((f) => f.message === "You're the last one standing!")?.audience).toEqual([ana.id])
+    expect(p.game('g').scores).toEqual({ [ana.id]: 1 })
   })
 
   it('drops a removed player and crowns the last one standing once, later', () => {

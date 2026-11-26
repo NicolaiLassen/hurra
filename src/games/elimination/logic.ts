@@ -310,7 +310,12 @@ export class EliminationGame extends Game<
     const name = nameIn(ctx)
     const { target, type: method } = action
 
-    if (winnerOf(state, ctx)) throw new GameError('The game is over')
+    // Decided, but not finished: a guest who left was the last but one, and this
+    // tap is the first save to see it (the host page's sync after the removal
+    // didn't land). A refusal would throw that save away and leave the round
+    // undecided, with no timer to finish it; unchanged, the same save crowns
+    // the winner (onPlayerLeave) and finishes the round (isFinished).
+    if (winnerOf(state, ctx)) return state
     if (!holds(state, playerId)) {
       throw new GameError(dealtIn(state, playerId) ? "You're out" : 'You joined after this game started')
     }
