@@ -13,16 +13,20 @@ const SHOWN = 5
 /**
  * The round in the host control room: Scan a player (for this round), and who
  * leads this round so far, so the host knows how it stands before ending it.
+ * Scan a player is the room's one gold step only while the round is on the
+ * TV; beside another game on the TV (the quiz) it stays quiet, since that
+ * game's next step holds the gold (docs/identity.md, The host room).
  */
-export default function HostView({ game, players, gamePoints }: HostViewProps<InPersonGame>) {
+export default function HostView({ session, game, players, gamePoints }: HostViewProps<InPersonGame>) {
   const rows = withRanks(scorers(gamePoints, players))
+  const onTv = session.spotlight_game_id === game.id
 
   return (
     // grid-cols-1: one column as wide as the panel, so a long name truncates instead of widening it.
     <div className="grid min-w-0 grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-paper-2">Scan players' QR codes to give points for {game.title}.</p>
-        <Button asChild>
+        <Button asChild variant={onTv ? 'default' : 'secondary'}>
           {/* The game id goes along, so the points land in this round even with two rounds live. */}
           <Link to={`/host/scan?game=${game.id}`}>
             <ScanIcon />

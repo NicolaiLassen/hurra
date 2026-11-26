@@ -397,6 +397,21 @@ describe('the games’ settings in the control room', () => {
     const gone = await roomWithSettings('setup', (node) => html(node, '/host/s/x?settings=no-such-game'))
     expect(gone).toContain('On the TV now')
   })
+
+  it('gives the gold to the game on the TV: the quiz’s Reveal now, with the darts round beside it quiet until darts is on the TV', async () => {
+    /** Gold buttons and gold links (a Button asChild), each with its words. */
+    const goldSteps = (raw: string) =>
+      [...raw.matchAll(/<(button|a)\b(?![^>]*disabled="")[^>]*data-variant="default"[^>]*>([^]*?)<\/\1>/g)].map((m) => m[2].replace(/<[^>]+>/g, '').trim())
+    const scanLink = (raw: string, scene: FixtureScene) => raw.match(new RegExp(`<a[^>]*href="/host/scan\\?game=${idOf(scene, 'Darts')}"[^>]*>`))?.[0] ?? ''
+
+    const beside = await roomWithSettings('background', markup)
+    expect(goldSteps(beside)).toEqual(['Reveal now'])
+    expect(scanLink(beside, 'background')).toContain('data-variant="secondary"')
+
+    const onTv = await roomWithSettings('in-person', markup)
+    expect(goldSteps(onTv)).toEqual(['Scan a player'])
+    expect(scanLink(onTv, 'in-person')).toContain('data-variant="default"')
+  })
 })
 
 describe('the recap preview', () => {

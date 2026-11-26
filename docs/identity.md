@@ -682,8 +682,12 @@ confirmation stays where it was. Its own rules:
   Ask #5, Reveal now, Back to the wall or Crown the face detective). A step
   that skips ahead (skip the leaderboard, crown early, skip the wall) goes in
   the menu beside it, behind the same confirmation, never next to it. Fusion's
-  Ask on each picture and the Save of who is in it are `secondary`. Where
-  the TV leaves the step to the program (it shows the standings), the room's
+  Ask on each picture and the Save of who is in it are `secondary`. With two
+  games live, the one on the TV holds the room's gold: an in-person round's
+  Scan a player is gold only while its round is on the TV, so beside the
+  quiz on the TV it is `secondary` and Reveal now is the screen's one gold
+  step (`controlRoom.test.ts` checks the `background` and `in-person`
+  scenes). Where the TV leaves the step to the program (it shows the standings), the room's
   one gold step is `roomStep` in
   [src/components/host/scene.ts](../src/components/host/scene.ts): with no
   TV open, Set up on the first game not started that isn't ready, else Pair
