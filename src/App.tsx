@@ -12,7 +12,8 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
-      <Toaster position="bottom-center" offset={24} mobileOffset={{ bottom: 96 }} />
+      {/* On a phone the toasts stand 10 px over the Show my code bar as tall as it is now (96 px at rest), so a task turned over on the bar pushes them up. */}
+      <Toaster position="bottom-center" offset={24} mobileOffset={{ bottom: 'calc(var(--phone-bar-height, 86px) + 10px)' }} />
     </>
   )
 }

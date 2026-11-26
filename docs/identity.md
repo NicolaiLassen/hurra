@@ -558,7 +558,9 @@ logic's `presentation` and its status, never a game's name.
   `--phone-bar-height` on the root while it shows, and a note a game floats
   above the bar stands on it (`BAR_NOTE_BOTTOM` in
   [ShowMyCode.tsx](../src/components/phone/ShowMyCode.tsx)): Lydspor's swap
-  note with Undo rises with the task instead of sitting under it.
+  note with Undo rises with the task instead of sitting under it, and so do
+  the phone's toasts ("Last one standing has started"), which stand 10 px
+  over the bar (96 px up at rest, [App.tsx](../src/App.tsx)).
 - **Captures:** `.design/phone-takeover`, before and after at 390 by 844 and
   375 by 667. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
   and [running.test.ts](../src/components/phone/running.test.ts) check which
