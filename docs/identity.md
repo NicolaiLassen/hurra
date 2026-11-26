@@ -503,9 +503,12 @@ the standings card below the fold, and Show my code in the thumb zone.
   its actions are `outline` Buttons (Scan, Vote, Answer now), and a row on
   the overlay surface opens its full view. A section's tab is gold only while
   the TV shows its game (on air), pink for the hunt, paper otherwise. While a
-  timed question holds the main card the bar steps aside, so that screen has
-  no gold button at all. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
-  checks it over the scenes.
+  timed question holds the main card, or while a guest types into a game's
+  text field (Lydspor's title and singer), the bar steps aside, so that
+  screen has no gold button at all. [PhoneHome.test.ts](../src/components/phone/PhoneHome.test.ts)
+  checks the timed question over the scenes, and
+  [useTypingFocus.test.ts](../src/components/phone/useTypingFocus.test.ts)
+  checks that typing holds while the focus moves from one field to the next.
 - **The strap** over a game: its tab and a paper strap with the game's own
   words (`GameModule.phoneStrap`: "Question 3 of 10"), else "On the TV",
   "Since 20:30" or "Finished at 22:41". A long name and its words wrap, the

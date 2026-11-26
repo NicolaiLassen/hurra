@@ -200,6 +200,42 @@ flowchart TD
   PC -- "not signed in on this browser" --> NSI["Player code (C16)<br/>Only the host can give points with this code<br/>Host login, Go to the start page"]:::closed
 ```
 
+### 2.5 Lydspor on the phone
+
+The flow as built from `.design/lydspor/spec.md`, section 4.
+
+```mermaid
+flowchart TD
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef gate fill:#14110e,stroke:#f5c542,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
+
+  START(["The host starts Lydspor on the TV"]) --> LOB["Lobby: the intro, four rules,<br/>Event +2, Title +1, Singer +1"]:::screen
+  LOB -- "the host taps Play song n" --> NOW["Now playing: Name song n.<br/>1 Title and 2 Who sings it, typed<br/>3 Event: tap its photo on the wall, A to L"]:::screen
+  NOW -- "Next and Done save each field;<br/>a photo saves at once" --> NAMED["Song n is named.<br/>Open your board"]:::screen
+  NOW -- "a photo another song has" --> SWAP["Song 2 and song 5 swapped events.<br/>Undo for 8 s"]:::screen
+  SWAP --> NOW
+  NAMED -- "Your board" --> BOARD["Your board: a row per song played,<br/>as typed; any cell opens to change it"]:::screen
+  BOARD -- "a new song starts while I type or read" --> BANNER["Song 6 is playing. Name it"]:::screen
+  BANNER --> NOW
+  BOARD -- "the host taps Last call" --> LAST["Last call: 60 s countdown,<br/>each missing part as a one-tap row"]:::screen
+  NOW -- "the host taps Last call" --> LAST
+  LAST -- "time is up, or the host locks now" --> LOCKED["Your answers are locked.<br/>the board read-only"]:::closed
+  LOCKED -- "the host reveals song n" --> REV["The storyteller tells the story. Look at the TV.<br/>Song 1: 3 of 4 points; per part what I typed<br/>and whether it counted (Spelling forgiven.)"]:::screen
+  REV -- "the host accepts my close answer" --> REV
+  REV -- "the next reveal" --> REV
+  REV -- "after the last reveal" --> TOP["The top 5 is on the TV.<br/>My points with my own average:<br/>Your own photo counts as 3 of them."]:::screen
+  TOP -- "the host crowns Lydspor" --> RES
+  REV -- "the host crowns Lydspor" --> RES["Result card: You won Lydspor, +20 on the night board,<br/>or my place and payout"]:::closed
+  START -- "I sit this one out" --> SIT["You sit this one out. Enjoy the show."]:::closed
+```
+
+Typed answers are saved when a field is left (Next, Done, another field, a
+photo, the page going hidden, or the last call changing the screen under it),
+never per letter. Spelling is forgiven on the
+server at the lock, never judged on the phone, and nobody's typed answer ever
+reaches another phone or the TV.
+
 ## 3. Host
 
 The host pages are the same on a laptop and a phone. On a phone the header
@@ -300,14 +336,17 @@ Each live game has its own card, so its controls sit with its title and its End
 for the next step and its answered count; fusion's one gold step (Start the
 showing, Ask the next picture, Reveal now, Back to the wall, Crown the face
 detective), its locked-in count, an Ask on every picture and who is in each
-picture; Last one standing's who is still in. Secrets (the quiz's
+picture; Last one standing's who is still in; Lydspor's Play song n, Last
+call, Reveal song n with the close answers to accept (one tap counts an
+answer for everyone who typed it, Undo takes it back) and Crown Lydspor.
+Secrets (the quiz's
 answers, fusion's people, the tasks) stay behind a Show toggle, because the
 host's phone is out in the room. A game whose controls crash shows a note in
 its card; Show on the TV and End keep working.
 
 The split button starts a game the way it presents itself: the quiz,
-Participant fusion and in-person rounds take the TV, Last one standing runs in
-the background. The caret offers the other way.
+Participant fusion, Lydspor and in-person rounds take the TV, Last one
+standing runs in the background. The caret offers the other way.
 
 Participant fusion on the stage, from the host's side:
 
@@ -458,6 +497,12 @@ the last game moved the places) beside the field of rows, measured in fit.ts,
 with the join block under the field (the QR code on paper, the code and the
 page's own address) or its short form, the code over the address, when the
 rows need the room.
+
+Lydspor on the TV is silent from Play song 1 to the crown: while a song plays
+it shows the wall of photos A to L and how many have typed a title, a singer
+and a photo (never what); at each reveal the photo, the title, the singer and
+the room's counts, which follow the host's accepts in place. A typed answer
+never shows on the TV.
 
 ## 5. Errors, not found and the ways back
 

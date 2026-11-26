@@ -3,6 +3,7 @@ import { bot as elimination } from './elimination/bot'
 import { bot as fusion } from './fusion/bot'
 import { bot as inPerson } from './in-person/bot'
 import { bot as quiz } from './quiz/bot'
+import { bot as soundtrack } from './soundtrack/bot'
 
 // Every game's rehearsal bot, keyed by game type (docs/engine-v2.md, 3.6), so
 // the rehearsal plays every game without knowing its rules. Relative imports
@@ -12,4 +13,5 @@ export const gameBots: ReadonlyMap<string, GameBot> = new Map([
   ['elimination', elimination],
   ['quiz', quiz],
   ['fusion', fusion],
+  ['soundtrack', soundtrack],
 ])

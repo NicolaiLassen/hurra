@@ -16,6 +16,7 @@ import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
 import type { TabTone } from '@/components/phone/Strap'
 import { finishedAt, finishedLine, runningSince } from '@/components/phone/text'
+import { isTypingTarget, useTypingFocus } from '@/components/phone/useTypingFocus'
 import YourNight from '@/components/phone/YourNight'
 import QueryGate from '@/components/QueryGate'
 import SoundToggle from '@/components/SoundToggle'
@@ -115,6 +116,9 @@ function Home({
   // code bar steps aside for it, so it covers none of the answers.
   const timed =
     main.kind === 'game' && snapshot.prompts.some((p) => p.game_id === main.game.id && p.closes_at !== null && p.closed_at === null)
+  // A guest typing into a game's text field: the bar steps aside too, for the
+  // browsers that lift a fixed bar above the keyboard.
+  const typing = useTypingFocus()
   const out = useMemo(() => knockedOutIds(snapshot.games), [snapshot.games])
   const rows = tvRows(snapshot, now, player.id, mainGame?.id ?? null, phoneStrapOf)
 
@@ -238,7 +242,7 @@ function Home({
 
       {snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />}
 
-      {!over && <ShowMyCode player={player} hidden={timed} />}
+      {!over && <ShowMyCode player={player} hidden={timed || typing} />}
 
       <GameSheet
         open={sheetOpen}
@@ -491,6 +495,8 @@ function useBringIntoView(
     const element = card.current
     const box = element?.getBoundingClientRect()
     if (!news || !element || !box || (box.top >= 0 && box.bottom <= window.innerHeight)) return
+    // Never under the fingers of a guest typing into a field: the game's own view shows what is new.
+    if (isTypingTarget(document.activeElement)) return
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     element.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
   }, [gameId, questionKey, covered, card])

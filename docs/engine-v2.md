@@ -55,7 +55,7 @@ stays in the repo as the engine's design doc.
 5. [Client data layer: src/lib](#5-client-data-layer-srclib)
 6. [Game module API: src/games/types.ts](#6-game-module-api-srcgamestypests)
 7. [Screens and behaviour](#7-screens-and-behaviour)
-8. [The four games](#8-the-four-games)
+8. [The games](#8-the-games)
 9. [Testing plan](#9-testing-plan)
 10. [Work packages and file ownership](#10-work-packages-and-file-ownership)
 11. [Switch-over notes](#11-switch-over-notes)
@@ -3043,6 +3043,9 @@ builds, `?fixture=<scene>` renders a fixture instead (5.11).
    timed question open (a prompt with a `closes_at`), so it covers none of the
    answers on a small phone; a new question also scrolls the main card into
    view when it doesn't fit on screen, not only when its top is above it.
+   Since Lydspor, the bar also steps aside while a guest types into a text
+   field (`useTypingFocus`), and a new question never scrolls the page while
+   one has the focus.
 
 **Behaviour.**
 
@@ -3483,7 +3486,7 @@ back on the list as expected and sends the phone back to Who are you?
 | The host restarts the finished game | Live again, a new round | Its screen if started on the TV | Dealt in again | Dealt in |
 | The host archives the party | Archived badge | Final standings, or the recap if shown | That's a wrap!, Your night when published | Same |
 
-## 8. The four games
+## 8. The games
 
 ### 8.1 Last one standing (elimination), ported
 
@@ -4038,6 +4041,160 @@ was. A point per right person, and a bonus for both.
   crown when none is left; Reveal now once everyone who may vote has locked
   in; nothing in the reveal (the wall when overdue).
 
+### 8.5 Lydspor (new)
+
+**The idea**: songs from the storyteller's life. The operator plays each song
+from Spotify (never from the app) and taps Play song n. Every phone asks three
+things about it: its **title** and **who sings it**, typed, and its **event**,
+a tap on one of the lettered photos on the wall. Any answer stays changeable
+until the **last call**; then everything locks at once, and the host reveals
+the songs one by one on the TV while the storyteller tells each story. The
+full design, with every screen, is `.design/lydspor/spec.md` (approved on
+25 November, then changed by the owner to typed titles and singers).
+
+- **Files**: `src/games/soundtrack/`: `types.ts` (the shared shapes, the same
+  for the TV, the phone and the host room), `match.ts` (the matching rules),
+  `logic.ts` (`SoundtrackGame`, type `'soundtrack'`), `read.ts` (safe readers
+  for the screens), `samples.ts` (sample rounds for the fixture scenes),
+  `bot.ts` and `index.ts` (module `soundtrack`, name "Lydspor",
+  `CassetteTapeIcon`).
+- **Presentation**: `'stage'`. `stageBanners: 'sound-only'`. Lydspor announces
+  nothing from the start to the crown, so the TV stays silent while songs
+  play and while the stories are told.
+- **Config** (`game_settings`, hosts only; the exact types are in `types.ts`):
+  1 to 12 songs in play order, each with its title and singer as the reveal
+  shows them (1 to 60 characters), up to 6 extra accepted answers for each
+  (never shown to guests), a photo, a caption (1 to 30, shown at the reveal),
+  where the hook starts (whole seconds within the first hour), a story note
+  for the cue card (0 to 140) and who is in the photo (at most 10); 0 to 4
+  extra photos that fit no song (at least 2 from 3 songs on); points (whole
+  numbers 0 to 5, default event 2, title 1, singer 1); `lastCallSeconds` (20
+  to 180, default 60); `standingsEvery` (default 4); `hints` (captions under
+  the photos while songs play, default off); `boardMax` (1 to 25, default 20);
+  `intro`, `storyteller` and `sitOut`. `checkConfig(input)` returns the cleaned
+  settings with every problem, in the order a host fixes them, and every
+  warning (fewer than 4 extra photos, a long caption, a shared singer, a short
+  title or singer, two near titles, an extra answer that counts already, a
+  feat. part); `parseConfig` refuses the first problem. Lengths count code
+  points, as Postgres does. The photos are public, and each file's
+  Last-Modified is its upload time: uploaded song by song, the times would
+  read the wall's secret. So the editor's **Mix the upload order** uploads
+  every photo again in a random order (fetched from its public URL,
+  re-encoded and uploaded as new paths), to tap once every photo is in,
+  then save.
+- **Setup**: the wall is the songs' photos and the extra photos, shuffled with
+  `ctx.random` and lettered A on. Which letter is each song's photo
+  (`wall.indexOf(i)`) is the secret, with the titles and singers in the
+  settings. No prompts and no announcement until Play.
+- **Prompts**: song n's three, opened by `play`, none final and none with a
+  deadline: `s{n}.title` and `s{n}.singer` (`{ kind: 'text', max_length: 60 }`)
+  and `s{n}.event` (`{ kind: 'choice', options: ['none', '0', ...] }`, where
+  `'none'` lets a take leave another song without a photo). `check_answer`
+  trims text and refuses an empty answer or one over 60 characters;
+  `submit_answer` allows 20 changes per prompt per guest. 36 prompts for 12
+  songs, under the `close` cap of 50. No database change.
+- **Host actions**, each naming its step (3.5); a stale one is a skip:
+
+  | Action | Allowed | Effect |
+  | --- | --- | --- |
+  | `play { index }` | lobby or playing, `index` the next song | opens its three prompts, `playedAt.push(now)` |
+  | `lastCall { after }` | playing, `after` the songs played | `lockAt = now + lastCallSeconds` |
+  | `more { n }` | last call, `n` the next of 2 | `lockAt = max(lockAt, now) + 30 s` |
+  | `lock` | playing or last call, sent with every played key in `close` | reads every answer into `picks`, builds `review`, reveals every prompt |
+  | `reveal { index }` | locked, reveal or top 5, in order | `revealed + 1`; records `song_revealed` |
+  | `accept { index, part, key, accepted }` | a revealed song's close or wrong row, until the crown | sets that row's `accepted`; records `answer_accepted` or `answer_unaccepted` |
+  | `standings { after }` | reveal, `after` the songs revealed | the top 5: offered every `standingsEvery` reveals and always after the last song played, so its "These had no song" shows however many songs ran |
+  | `crown` | lobby, locked, reveal or top 5 | the own averages, the payout, the winner |
+  | `setInPhoto`, `sitOut` | before the crown | replace the list |
+
+  Refusals are in the game's words: "Play the songs in order", "That was the
+  last song. Tap Last call.", "The answers are locking", "That's all the extra
+  time", "The answers are still coming in", "Reveal the songs in order",
+  "Reveal song {n} first", "Nobody typed that for song {n}", "That answer
+  counts already", "Lock the answers first", "Lydspor is over".
+- **The lock wake**: in the last call `wakeAt` is `lockAt`, then `closingAt +
+  1 s`. At `lockAt` the TV's sync closes every played prompt (`closingAt =
+  now`); a second later the next sync finds every answer list in
+  `info.answers` and locks as `lock` does. A list still missing closes again
+  and waits another second. Lock now from the host page skips both steps.
+- **Matching** (`match.ts`, spec 5.2): an answer is read as a short form
+  (brackets, a spaced dash tail and a feat. tail dropped) and a full form,
+  each also with English number words as digits; capitals, accents, Danish
+  spellings (å as a or aa, æ as a or ae, ø as o or oe), punctuation, spaces,
+  "and", "&", "og" and a leading "the" never matter, and a singer's words may
+  come in any order. An answer is `exact` when a key matches, `typo` when it
+  is within about one wrong letter in five (none up to 4 letters, the first
+  letter right, numbers exact; optimal string alignment distance), `close`
+  with a reason (the other part, words in another order, part of it, extra
+  words, up to 2 letters more off) for the host to decide, else `wrong`.
+  An accepted text (the truth or an extra) is also read with its leading
+  "the" kept, with Mister, Saint, Doctor and the like as written and spelled
+  out, and with its numbers 0 to 99 spelled out, so "Teh Lanterns", "Docter
+  Lind" and "Sevn Years" count as typos however the host typed the setting;
+  a typed number still never takes a typo ("Route 14" is not "Route 41").
+  `match.test.ts` holds the spec's example table of 70 invented rows, and
+  these kinder readings.
+- **The review** (`buildReview`, at the lock): per played song and typed part,
+  the answers grouped by their normalised key, with the spelling most of
+  them typed and the guests in arrival order. Each spelling is judged on its
+  own, and spellings of one key the rule judges differently get rows of
+  their own (`some1likeyou`, `some1likeyou#2`), so nobody is judged by
+  another guest's spelling; close
+  first, then wrong, typo and exact. Accept changes a row's `accepted` and
+  nothing else.
+- **Scoring**, from the state whenever it is read: event, title and singer
+  points per revealed song; a photo left on two songs at the lock scores on
+  neither (the guard); a typed part counts when its row is `exact`, `typo` or
+  accepted. A guest in a song's photo scores no points on it and, at the
+  crown, gets it as their own average (`round(earned / played * inPhoto)`,
+  kept in `credits`). Participants are present guests not sitting out with
+  any answer at the lock. `scores()` is `{}` until the crown, then each
+  participant's final points scaled to the night board,
+  `round(final * boardMax / most)`, where `most` is the songs revealed times
+  the points a song gives. `winners`: everyone tied at the top of the final
+  points; nobody at 0.
+- **The crown** (or End by the host): "{names} wins Lydspor!" with the points
+  (crown, fanfare, `interrupt`), "You won Lydspor!" with "+{paid} on the night
+  board" to the winners, and `wins + 1` on their profile; with nobody above
+  0, "Lydspor is over" with "Nobody scored this time".
+- **publicState**: the phase, the songs in the settings, `playedAt`, the wall
+  (paths, and captions only with hints on), the points, `lockAt`, `lockedAt`,
+  how many are playing, the songs revealed, the latest reveal (its truth, the
+  room's counts with the host's accepts, and how many could score on it), the
+  photos that fit no song after the last reveal, the top 5 with each gain
+  since the last top 5 (once every song played is revealed, its points
+  count each own average, as `credit`, so it ranks as the crown will), and
+  the final rows after the crown. Never a title,
+  singer or caption before its reveal, never a typed answer, never who is in
+  a photo. **playerView**: sitting out, the guest's own locked answers from the
+  lock on, how each revealed song went (`exact`, `typo`, `accepted`, `close`,
+  `wrong` or `none` per typed part; `right`, `wrong`, `doubled` or `none` for
+  the event), their points and place (with the own average once every song
+  played is revealed, as `credit`), and their final row.
+- **recap** (finished rounds, revealed songs only): "Lydspor champion:
+  {names}", the best known song and the hardest, with how many placed the
+  photo and typed the title and the singer. Never a typed answer.
+- **Badges**: `wins` as "Lydspor champion" (`CassetteTapeIcon`, gold). The
+  phone strap says "8 songs", "Song 5 of 8", "Last call", "Locked at 21:24"
+  and "Reveal 1 of 8".
+- **Screens** (spec sections 4, 9, 10 and 12), merged from their own
+  packages: the TV (`TvView`, `FinalTvView`, `TvStatus`, `tv/`), the phone
+  (`PlayerView`, `PlayerCard`, `ResultView`, `typing.ts`, `phone/`) and the
+  host room (`HostView`, `host/`, `ConfigEditor`, `editor/`).
+- **Fixtures**: `soundtrack-lobby`, `-playing` (song 5 of 8), `-last-call`,
+  `-locked`, `-reveal` (reveal 1, a close title accepted), `-standings` and
+  `-final`, each played through the real logic on the fixture party
+  (`samples.ts`), beside a live Last one standing.
+- **Bot** (`bot.ts`): eight invented songs with an extra answer each; its
+  scripted round plays the first three with two extra photos and a 20 s last
+  call, and `botSettings(ids, 8)` gives a rehearsal of the night's length
+  (four extra photos, the top 5 every 4 songs). Guests type the right answer,
+  one with a typo inside a word, one 3 letters off or a wrong one, pick
+  photos and swap them; the scripted host plays the songs 3 s apart, calls
+  the last call, reveals 3 s apart, accepts the first close title of each
+  reveal, shows the top 5 when it is due and after the last reveal, and
+  crowns.
+
 ## 9. Testing plan
 
 ### 9.1 Unit tests (vitest, `npm test`)
@@ -4051,6 +4208,7 @@ was. A point per right person, and a bonus for both.
 | GAME-inperson | The contract; `recap`; the default winners after End (the top of the awards, nobody without awards). |
 | GAME-quiz | `parseConfig` refusals; neither the public state nor a prompt spec holds `correct` before its reveal; speed scoring (fastest 1,000, slowest 500); the timer reveal and the auto leaderboard; a duplicated Next opens one question; Reveal now racing the timer scores once with no error; a stale Show the leaderboard is skipped; 45 answers through `simulateParty`; finish and winners (nobody when nobody scored); the recap of an early-ended quiz names no unasked question; the contract; the bot playing a full quiz through `simulateParty`. |
 | GAME-fusion | `shapes.test.ts`: the readers (new states, the background version's saves), the strap's words, the showing's clock, the counts line, the lock-in total. `logic.test.ts`: settings and their ranges; setup opens no prompt; the showing and its timer; the wall from each phase, stale steps skipped; asking (the spec, the deadline, any order, a double tap, another while asking, a missing key); the reveal by Reveal now and by the timer alike; people in a picture never score, even with a crafted lock; the timer without locks closes the guess and changes nothing; every race of 8.4 through `simulateParty`; no key in any public state or other guest's view before its reveal; finish and End; the background version's saves; the recap; the contract; the bot. `host.test.ts`: the host's steps per phase. `fusion.integration.test.ts`: one picture through the real engine, revealed by the TV's sync. |
+| GAME-soundtrack (Lydspor, 25 Nov) | `match.test.ts`: the spec's example table of 70 invented rows, row for row, plus the distance, the allowance and the grouping key. `logic.test.ts`: every settings refusal and warning; the deal and the prompts (text with `max_length` 60, the photo with `none`, none final, no answer in a spec); Play in order and its double tap; the last call, More time and the lock in two timer steps (and a list still missing); Lock now and its races with the timer; the review (grouping, the most common spelling, the order); reveals in order; Accept and Undo with the rescore of counts, points, top 5 and payout, every refusal, refused after the crown; the guard, a take, a shared singer, the own average, the scaled payout, the top 5's gains; sit out; guests leaving before and after the lock and joining late; no secret in public or in another guest's view before its reveal; the recap; the contract over an example and over the bot's round; a party of 24 played by the bot to the crown. `samples.test.ts`: the seven fixture scenes and their secrets. |
 | PHONE, TV, HOST | Unit tests for any pure helper they add. Screens are checked against the fixtures (5.11) and then on the local stack; TV also runs the fit checks in 10.4. |
 
 **Changed after the switch-over (15 Nov):** the TV's sound effects volume has
@@ -4115,6 +4273,13 @@ file's pings. **Changed during build:** an answer is held in flight with
   reveal) runs through `FakeParty` and through `handleGameRequest` (with
   `logicFor` serving the probe game), and status, `finished_by`, winners, the
   spotlight and the views must match.
+- **`soundtrack.integration.test.ts`** (25 Nov): Lydspor through the real
+  handler: three songs played (a double tap on Play skipped), typed answers
+  trimmed by the database and refused empty or over 60 characters, a take
+  with `none`, the tallies, nothing secret in the public state and only a
+  guest's own submissions readable, the last call locked by two syncs from
+  the paired TV, reveals with an accept and its double tap, and the crown
+  paying the night board once, scaled to `boardMax`.
 - **`prompts.integration.test.ts`**: every `submit_answer` rule (closed, past
   the deadline, not a player, outsider, anon, a paired screen, invalid
   choices, final, the same answer again, a changeable vote, 20 changes); a
