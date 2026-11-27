@@ -459,6 +459,112 @@ describe('the games’ settings in the control room', () => {
     const lobby = await roomWithSettings('fusion-lobby', html)
     expect(lobby).not.toMatch(/Start the showing|Skip to the wall/)
   })
+
+  it('puts Play in teams above the editor of a game that can be played in teams, and only there', async () => {
+    for (const title of ['Quiz', 'Lydspor', 'Who is fused?']) {
+      const at = `/host/s/x?settings=${idOf('setup', title)}`
+      const page = pageOf(await roomWithSettings('setup', (node) => markup(node, at)))
+      expect(page, title).toMatch(/<button[^>]*role="switch"[^>]*aria-checked="false"/)
+      const text = await roomWithSettings('setup', (node) => html(node, at))
+      // The party has no teams yet: it says to make them first.
+      expect(text, title).toContain('Play in teams Each guest answers for themselves. To play in teams, make teams in Guests first. Off')
+      // Saved at once, apart from Save: the page still has nothing gold.
+      expect(goldButtons(page), title).toBe(0)
+    }
+    const at = `/host/s/x?settings=${idOf('setup', 'Last one standing')}`
+    expect(await roomWithSettings('setup', (node) => html(node, at))).not.toContain('Play in teams')
+  })
+})
+
+describe('the teams', () => {
+  /** The guest list's rows: from its Here group to the Teams card. */
+  const hereRows = (text: string) => text.slice(text.indexOf('Here ('), text.indexOf('Teams', text.indexOf('Here (')))
+
+  it('offers to make teams under the guests: what they do, how many, and what that gives for the guests here', async () => {
+    const text = await controlRoom('lobby')
+    const raw = await controlRoomOf(fixtureSnapshot('lobby', 'host'), markup)
+    expect(text.indexOf('Here (12)')).toBeLessThan(text.indexOf('Some games can be played in teams'))
+    expect(text).toContain('Teams Some games can be played in teams: one answer from any member counts for the whole team.')
+    expect(text).toContain('How many teams 2 3 4 5 6 12 guests here: 4 teams of 3. Make teams')
+    // 4 is picked to begin with, and the picker is a radio group.
+    expect(raw).toMatch(/role="radiogroup"/)
+    expect(raw).toMatch(/<button[^>]*role="radio"[^>]*aria-checked="true"[^>]*aria-label="4 teams"/)
+    // A choice, not the room's step: never gold.
+    expect(raw).toMatch(/<button[^>]*data-variant="secondary"[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
+  })
+
+  it('waits for 2 guests before it makes teams, and says so', async () => {
+    const lobby = fixtureSnapshot('lobby', 'host')
+    const one = await controlRoomOf({ ...lobby, players: lobby.players.slice(0, 1), standings: lobby.standings.slice(0, 1) })
+    expect(one).toContain('Only 1 guest is here. Make teams once 2 or more have joined.')
+    const raw = await controlRoomOf({ ...lobby, players: [], standings: [] }, markup)
+    expect(raw).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
+  })
+
+  it('shows each team with its members and Rename, and holds Make and Clear while a game played in teams is live', async () => {
+    const snapshot = fixtureSnapshot('teams-quiz', 'host')
+    const text = await controlRoom('teams-quiz')
+    const raw = await controlRoomOf(snapshot, markup)
+    // Each member's token prints their name too (hidden from screen readers).
+    expect(text).toContain('Team Gold 3 guests Ana Ana Sofie Sofie Lars Lars')
+    expect(text).toContain('Team Violet 3 guests Freja Freja Clara Clara Oscar Oscar')
+    for (const name of ['Team Gold', 'Team Pink', 'Team Teal', 'Team Violet']) expect(raw).toContain(`aria-label="Rename ${name}"`)
+    expect(text).toContain('Late guests go into the smallest team.')
+    expect(text).not.toContain('How many teams')
+    expect(text).not.toContain('No team')
+    // The quiz is live in teams: the buttons wait, and say why.
+    expect(text).toContain('End Quiz to make new teams or clear them.')
+    expect(raw).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Make teams again…<\/button>/)
+    expect(raw).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Clear teams…<\/button>/)
+  })
+
+  it('lets the host make teams again and clear them once no game is live in teams, and lists guests in no team', async () => {
+    const snapshot = fixtureSnapshot('teams-quiz', 'host')
+    const ana = snapshot.players.find((p) => p.name === 'Ana')!
+    const calm = {
+      ...snapshot,
+      games: snapshot.games.map((g) => ({ ...g, team_play: false })),
+      players: snapshot.players.map((p) => (p.id === ana.id ? { ...p, team_id: null } : p)),
+    }
+    const text = await controlRoomOf(calm)
+    const raw = await controlRoomOf(calm, markup)
+    expect(text).toContain('Team Gold 2 guests Sofie Sofie Lars Lars')
+    expect(text).toContain('No team 1 guest, answering alone Ana Ana')
+    expect(text).not.toContain('to make new teams or clear them')
+    expect(raw).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Make teams again…<\/button>/)
+    expect(raw).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Clear teams…<\/button>/)
+  })
+
+  it('puts each guest’s team beside their name in the list, as a colour with the name for a screen reader', async () => {
+    const snapshot = fixtureSnapshot('teams-quiz', 'host')
+    const text = hereRows(await controlRoom('teams-quiz'))
+    expect(text).toMatch(/ Sofie Team Gold Here /)
+    expect(text).toMatch(/ Freja Team Violet Here /)
+    const raw = await controlRoomOf(snapshot, markup)
+    expect(raw).toContain('title="Team Gold"')
+    // No teams, no colours.
+    expect(hereRows(await controlRoom('lobby'))).not.toContain('Team ')
+  })
+
+  it('marks a game played in teams: the live card, and a game in the program switched to it', async () => {
+    const text = await controlRoom('teams-quiz')
+    const live = text.slice(text.indexOf('Live now'), text.indexOf('Games'))
+    expect(live).toMatch(/Quiz (On the TV|Live) In teams /)
+    const setup = fixtureSnapshot('setup', 'host')
+    const switched = { ...setup, games: setup.games.map((g) => (g.title === 'Quiz' ? { ...g, team_play: true } : g)) }
+    const program = await controlRoomOf(switched)
+    expect(program.split(' In teams ').length - 1).toBe(1)
+    expect(program).toMatch(/Quiz[^]*?Not started In teams /)
+    // Switched on without teams it plays alone: the live card says nothing of teams.
+    const alone = fixtureSnapshot('teams-quiz', 'host')
+    expect(await controlRoomOf({ ...alone, teams: [], players: alone.players.map((p) => ({ ...p, team_id: null })) })).not.toContain(' In teams ')
+  })
+
+  it('shows no teams on an archived party that had none', async () => {
+    const text = await controlRoom('archived')
+    expect(text).not.toContain('Some games can be played in teams')
+    expect(text).not.toContain('Make teams')
+  })
 })
 
 describe('the recap preview', () => {

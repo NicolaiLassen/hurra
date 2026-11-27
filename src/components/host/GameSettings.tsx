@@ -4,8 +4,9 @@ import { UNSAFE_DataRouterContext, useBlocker } from 'react-router'
 import Confirm from '@/components/Confirm'
 import { errorMessage } from '@/components/host/hostCalls'
 import { useProgramSettings } from '@/components/host/programSettings'
+import TeamPlaySetting from '@/components/host/TeamPlaySetting'
 import { Button } from '@/components/ui/button'
-import { configOf, setupStatusOf, startProblemOf } from '@/games/registry'
+import { canPlayInTeams, configOf, setupStatusOf, startProblemOf } from '@/games/registry'
 import type { GameModule, SetupStatus } from '@/games/types'
 import { guestsOf } from '@/lib/guestList'
 import { countingUploads, gameMediaUrl, uploadGameMedia } from '@/lib/media'
@@ -23,6 +24,8 @@ import { cn } from '@/lib/utils'
  * while it isn't live. The editor gets the whole guest list, so settings can
  * name guests who haven't joined yet (docs/guest-list.md). Images are
  * re-encoded in the browser and uploaded to the public game-media bucket.
+ * A game that can be played in teams (GameModule.teamPlay) has Play in teams
+ * above its editor, saved at once, apart from Save (TeamPlaySetting).
  */
 export default function GameSettings({
   snapshot,
@@ -153,6 +156,7 @@ function SettingsForm({
         </>
       }
     >
+      {canPlayInTeams(game.game_type) && <TeamPlaySetting snapshot={snapshot} game={game} />}
       <Editor config={config} onChange={setConfig} session={session} game={game} players={snapshot.players} guests={guests} media={media} />
       <Confirm
         open={discarding}

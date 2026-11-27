@@ -22,7 +22,7 @@ import { useProgramSettings, useRoomStep } from '@/components/host/programSettin
 import RenameDialog from '@/components/host/RenameDialog'
 import { nextPosition, rowPlan, winnersChip, type RoomStep } from '@/components/host/scene'
 import StartButton from '@/components/host/StartButton'
-import StateChip from '@/components/host/StateChip'
+import StateChip, { InTeamsChip } from '@/components/host/StateChip'
 import { useDialogTarget } from '@/components/host/useDialogTarget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { gameModules, getGameModule } from '@/games/registry'
 import { addGame, archiveGame, callGame, deleteGame, renameGame, setSpotlight } from '@/lib/queries'
+import { teamPlayOn } from '@/lib/teams'
 import { tvScene } from '@/lib/stage'
 import { toast } from '@/lib/toast'
 import type { SessionGame, Snapshot } from '@/lib/types'
@@ -327,6 +328,8 @@ function GameRow({
         <div className="flex w-full flex-wrap-reverse items-center gap-2 pl-12">
           {/* A phone has no room to spare: its Start button says the game hasn't started. */}
           <StateChip state={archived ? 'archived' : game.status} className={!archived && game.status === 'pending' ? 'max-sm:hidden' : undefined} />
+          {/* Switched on in its settings: it is played in teams once the party has them. */}
+          {!archived && teamPlayOn(game) && <InTeamsChip />}
           {plan.settings && (
             <Button
               // Set up is the row's next step while the game isn't ready: gold when it is the room's (roomStep).
