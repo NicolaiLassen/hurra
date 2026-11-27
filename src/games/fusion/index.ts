@@ -32,6 +32,8 @@ export const fusion = defineGameModule({
   setupStatus: fusionSetup,
   // The TV view plays each moment itself, so its announcements only bring their sound there.
   stageBanners: 'sound-only',
+  // One answer from any member counts for the whole team (docs/user-flows.md, Teams).
+  teamPlay: true,
   // "12 pictures", "4 of 12 revealed", "Picture 4 of 12"; the phone's own words in the lobby and once done.
   phoneStrap: (publicState) => {
     const pub = readPublic(publicState)

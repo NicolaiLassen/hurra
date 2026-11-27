@@ -13,6 +13,10 @@ export const gameModules: GameModule[] = [inPerson, elimination, quiz, fusion, s
 
 export const getGameModule = (type: string) => gameModules.find((m) => m.logic.type === type)
 
+/** Whether a game type can be played in teams (GameModule.teamPlay). */
+export const canPlayInTeams = (gameType: string | null | undefined, modules: readonly GameModule[] = gameModules): boolean =>
+  gameType ? modules.find((m) => m.logic.type === gameType)?.teamPlay === true : false
+
 /** A game's colour on air (GameModule.accent): 'hunt' for the hunt's pink, else undefined. */
 export const accentOf = (gameType: string | null | undefined) => (gameType ? getGameModule(gameType)?.accent : undefined)
 

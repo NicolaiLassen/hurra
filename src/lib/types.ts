@@ -41,7 +41,16 @@ export type Player = {
    * or null (docs/guest-photos.md). Optional, so fixtures and test players need none.
    */
   photo?: string | null
+  /**
+   * The player's team (the snapshot's teams), or null for none. Optional, so
+   * fixtures, test players and a database from before teams need none.
+   */
+  team_id?: string | null
 }
+/** A team's colour: a key into the app's palette (src/lib/teams.ts). */
+export type TeamColour = 'gold' | 'pink' | 'teal' | 'violet' | 'sky' | 'lime'
+/** One of the party's teams (the snapshot's teams, in position order). Who is in it is players[].team_id. */
+export type Team = { id: string; name: string; colour: TeamColour; position: number }
 /**
  * A name on the host's guest list (the snapshot's guests, the host page only):
  * a guest who joined (joined_at set) or one still expected (joined_at null).
@@ -75,6 +84,12 @@ export type SessionGame = {
   wake_at: number | null
   archived_at: number | null
   created_at: number
+  /**
+   * Whether the game is played in teams: one answer from any member counts
+   * for the whole team. Optional, so fixtures and a database from before
+   * teams need none (then it is off).
+   */
+  team_play?: boolean
 }
 
 /** A row of the host's party list (useSessions): read directly, so its times are ISO strings. */
@@ -143,6 +158,12 @@ export type Snapshot = {
     player_id: string
     views: Record<string, unknown>
     answers: Record<string, Record<string, AnswerPayload>>
+    /**
+     * For an answer written for the whole team: which teammate gave it (this
+     * player too) and when it last changed, by game id and prompt key.
+     * Optional: a database from before teams has none.
+     */
+    answered_by?: Record<string, Record<string, { by: string; at: number }>>
   } | null
   states: Record<string, { state: unknown; config: unknown; round: number; members: string[] }> | null
   /** Paired screens of this party: the host screen only, else null. */
@@ -154,4 +175,6 @@ export type Snapshot = {
   freed?: boolean
   /** The whole guest list, joined or still expected, by name: the host page only, else null (docs/guest-list.md). */
   guests?: ListedGuest[] | null
+  /** The party's teams, in order; empty when it has none. Optional: a database from before teams has none. */
+  teams?: Team[]
 }

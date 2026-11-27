@@ -28,6 +28,8 @@ export const quiz = defineGameModule({
   setupStatus: quizSetup,
   // The TV view shows each moment itself, so its announcements only sound there.
   stageBanners: 'sound-only',
+  // One answer from any member counts for the whole team (docs/user-flows.md, Teams).
+  teamPlay: true,
   // The phone's strap over the quiz: which question it is on.
   phoneStrap: (publicState) => {
     const pub = readPublic(publicState)

@@ -533,6 +533,41 @@ export async function removeExpectedGuests(sessionId: string): Promise<number> {
   return unwrap<unknown[] | null>(result)?.length ?? 0
 }
 
+// Host: teams (docs/user-flows.md, "Teams") -------------------------------------------------------
+
+/**
+ * host_make_teams: makes `count` teams (2 to 6) and splits the guests who are
+ * here between them at random, as evenly as it goes. Run again, it shuffles
+ * everyone again; teams up to the new count keep their names. Refusals:
+ * 'bad_count', 'team_game_live' (a game played in teams is live), 'archived',
+ * 'not_host', 'not_found'.
+ */
+export async function makeTeams(sessionId: string, count: number): Promise<void> {
+  unwrap(await supabase.rpc('host_make_teams', { p_session_id: sessionId, p_count: count }))
+}
+
+/** host_move_to_team: a guest who is here into another team of the party, or into none (null). Refusals: 'not_joined', 'team_not_found', 'not_found', 'not_host'. */
+export async function moveToTeam(playerId: string, teamId: string | null): Promise<void> {
+  unwrap(await supabase.rpc('host_move_to_team', { p_player_id: playerId, p_team_id: teamId }))
+}
+
+/** host_rename_team. The database stores the name clean, 1 to 40 characters. Refusals: 'bad_name', 'name_taken', 'team_not_found', 'not_host'. */
+export async function renameTeam(teamId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (length(trimmed) < 1 || length(trimmed) > 40) throw new GameCallError('Team names are 1 to 40 characters', 400, 'bad_name')
+  unwrap(await supabase.rpc('host_rename_team', { p_team_id: teamId, p_name: trimmed }))
+}
+
+/** host_clear_teams: every guest in no team again. Refusals: 'team_game_live', 'not_host', 'not_found'. */
+export async function clearTeams(sessionId: string): Promise<void> {
+  unwrap(await supabase.rpc('host_clear_teams', { p_session_id: sessionId }))
+}
+
+/** host_set_team_play: a game played in teams or not, while it isn't live. Refusals: 'active', 'not_found', 'not_host'. */
+export async function setTeamPlay(gameId: string, on: boolean): Promise<void> {
+  unwrap(await supabase.rpc('host_set_team_play', { p_game_id: gameId, p_on: on }))
+}
+
 /**
  * A 6-character code that moves this player to a new phone, valid 5 minutes.
  * `expiresAt` is by this device's clock (Date.now()), taken before the call,

@@ -5,7 +5,7 @@ import { GameError } from './core/Game'
 import { jsonbRoundTrip } from './core/testing'
 import { DEFAULT_TASKS } from './elimination/logic'
 import { gameLogic } from './logic'
-import { accentOf, gameModules, preloadTvScreens, setupStatusOf, startProblemOf } from './registry'
+import { accentOf, canPlayInTeams, gameModules, preloadTvScreens, setupStatusOf, startProblemOf } from './registry'
 import type { GameModule } from './types'
 
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
@@ -99,4 +99,13 @@ describe.each([...gameLogic.values()].map((logic) => [logic.type, logic] as cons
     }
     expect(checkGameContract(logic, result.example)).toEqual([])
   })
+})
+
+it('lets the quiz, fusion and Lydspor be played in teams, and no other game', () => {
+  expect(gameModules.filter((m) => m.teamPlay === true).map((m) => m.logic.type)).toEqual(['quiz', 'fusion', 'soundtrack'])
+  expect(canPlayInTeams('quiz')).toBe(true)
+  expect(canPlayInTeams('elimination')).toBe(false)
+  expect(canPlayInTeams('in-person')).toBe(false)
+  expect(canPlayInTeams('no-such-game')).toBe(false)
+  expect(canPlayInTeams(null)).toBe(false)
 })

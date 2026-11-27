@@ -203,6 +203,16 @@ export type GameModule<G extends AnyGame = AnyGame> = {
   /** The PlayerView takes player codes; camera scans of player QR codes land here. */
   acceptsScans?: boolean
   /**
+   * The game can be played in teams (docs/user-flows.md, Teams): the host
+   * gets a Play in teams switch in its settings. With it on, one answer from
+   * any member of a team counts for the whole team: the database writes it
+   * for every member (submit_answer), so each member has the answer and the
+   * game scores each of them as always. Only for a game whose guests play
+   * through prompts (ctx.openPrompt and `submit`); its moves (`act`) stay
+   * each guest's own. Left out: always played alone.
+   */
+  teamPlay?: true
+  /**
    * The game's own colour where the frame draws its tab (docs/identity.md,
    * Colour jobs). 'hunt': the hunt's pink with the popper's stripes, on the
    * news strap for its news, on the programme strap while it holds the stage
