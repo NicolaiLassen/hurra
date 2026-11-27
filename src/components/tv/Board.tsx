@@ -126,6 +126,49 @@ export default function Board({
 
   if (rows.length === 0) return null
 
+  // The leader's column: the hero, the next places and the line about the last game.
+  const leaderParts = (
+    <>
+      {leader ? (
+        <Hero ref={heroRef} row={leader} games={games} out={out.has(leader.player_id)} ahead={aheadLine(rows)} gain={gains[leader.player_id]} />
+      ) : (
+        <NoLeader ref={heroRef} party={snapshot?.session?.name ?? ''} />
+      )}
+      {/* With no field the places are as wide as their longest row, so their points sit beside the names. */}
+      {places.length > 0 && (
+        <ol className={cn('mt-6 grid grid-cols-1 gap-1.5', !hasField && 'w-fit max-w-full')}>
+          <AnimatePresence initial={false}>
+            {places.map((row, i) => (
+              <Place
+                key={row.player_id}
+                ref={i === 0 ? placeRef : undefined}
+                row={row}
+                ranked={scored}
+                out={out.has(row.player_id)}
+                moved={moved[row.player_id]}
+                gain={gains[row.player_id]}
+              />
+            ))}
+          </AnimatePresence>
+        </ol>
+      )}
+      {said && <Commentary ref={saidRef} said={said} hidden={!column.comment} />}
+    </>
+  )
+  // Beside the field: the status chips and the join block.
+  const sideParts = (
+    <>
+      {strip && measured && stripRoom > 0 && <div className="min-h-0">{strip(rightWidth, stripRoom)}</div>}
+      {invite && (
+        <>
+          <JoinBlock ref={blockRef} joinCode={invite} hidden={joinForm !== 'block'} />
+          <JoinLine ref={lineRef} joinCode={invite} hidden={joinForm !== 'line'} />
+        </>
+      )}
+    </>
+  )
+
+
   return (
     <LayoutGroup>
       <div ref={areaRef} className="flex min-h-0 flex-1">
@@ -134,30 +177,19 @@ export default function Board({
           style={twoColumns ? { gridTemplateColumns: area.width > 0 ? `${leftWidth}px minmax(0, 1fr)` : '1fr 1fr', columnGap: SPLIT_GAP } : undefined}
         >
           {/* The leader's column. */}
-          <section className={cn('relative flex min-h-0 min-w-0 flex-col *:shrink-0', hasField ? 'justify-start' : 'justify-center')}>
-            {leader ? (
-              <Hero ref={heroRef} row={leader} games={games} out={out.has(leader.player_id)} ahead={aheadLine(rows)} gain={gains[leader.player_id]} />
+          <section className={cn('relative flex min-h-0 min-w-0 flex-col', hasField ? 'justify-start *:shrink-0' : 'justify-center')}>
+            {hasField ? (
+              leaderParts
             ) : (
-              <NoLeader ref={heroRef} party={snapshot?.session?.name ?? ''} />
+              // A small party's board (no field): the hero, the places and the line under them make one block no wider
+              // than it needs, so the middle of the screen stays clear.
+              <div
+                data-board-group="leader"
+                className={cn('relative flex w-fit max-w-full min-w-0 shrink-0 flex-col *:shrink-0', !twoColumns && 'self-center')}
+              >
+                {leaderParts}
+              </div>
             )}
-            {places.length > 0 && (
-              <ol className="mt-6 grid grid-cols-1 gap-1.5">
-                <AnimatePresence initial={false}>
-                  {places.map((row, i) => (
-                    <Place
-                      key={row.player_id}
-                      ref={i === 0 ? placeRef : undefined}
-                      row={row}
-                      ranked={scored}
-                      out={out.has(row.player_id)}
-                      moved={moved[row.player_id]}
-                      gain={gains[row.player_id]}
-                    />
-                  ))}
-                </AnimatePresence>
-              </ol>
-            )}
-            {said && <Commentary ref={saidRef} said={said} hidden={!column.comment} />}
           </section>
 
           {/* The field, and the join block under it. */}
@@ -166,12 +198,13 @@ export default function Board({
               {hasField && measured && split.fit && (
                 <Field rows={field} fit={split.fit} width={rightWidth} out={out} gains={gains} ranked={scored} />
               )}
-              {strip && measured && stripRoom > 0 && <div className="min-h-0">{strip(rightWidth, stripRoom)}</div>}
-              {invite && (
-                <>
-                  <JoinBlock ref={blockRef} joinCode={invite} hidden={joinForm !== 'block'} />
-                  <JoinLine ref={lineRef} joinCode={invite} hidden={joinForm !== 'line'} />
-                </>
+              {hasField ? (
+                sideParts
+              ) : (
+                // With no field, the status chips and the join block make one block against the right edge, as the header's clock is.
+                <div data-board-group="side" className="ml-auto flex w-fit max-w-full min-h-0 min-w-0 flex-col gap-8">
+                  {sideParts}
+                </div>
               )}
             </section>
           )}

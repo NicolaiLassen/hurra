@@ -158,6 +158,15 @@ describe('the TV scene for each fixture', () => {
     }
   })
 
+  it('groups a small party\'s board into two blocks with a clear middle, and leaves a bigger board as it was', async () => {
+    // Everyone fits beside the leader: their block, and the join block against the right edge.
+    const small = await html('fixture=standings&players=2')
+    expect(small).toContain('data-board-group="leader"')
+    expect(small).toContain('data-board-group="side"')
+    // A field of rows beside the leader keeps the full-width columns.
+    expect(await html('fixture=standings&players=24')).not.toContain('data-board-group')
+  })
+
   it('puts the word Out in pink beside every guest the live hunt has knocked out on the standings board', async () => {
     for (const search of ['fixture=between&players=12', 'fixture=pong&players=12']) {
       const setup = devTv(new URLSearchParams(search))!
