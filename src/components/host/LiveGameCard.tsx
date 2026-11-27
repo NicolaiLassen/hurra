@@ -15,13 +15,16 @@ import { callGame, setSpotlight } from '@/lib/queries'
 import { gamePointsOf, promptsOf, talliesOf } from '@/lib/stage'
 import type { SessionGame, Snapshot } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
+import { cardChoice, rememberCardOpen } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 /**
  * One live game in the control room (docs/engine-v2.md, 7.3): its title and
  * where it shows, Show on the TV and End, and the game's own HostView fed the
  * full state (hosts only), this round's settings, the answers coming in,
- * this round's points and the whole guest list.
+ * this round's points and the whole guest list. The game on the TV starts
+ * open, since its next step is in it; a game in the background starts closed.
+ * Once the host opens or closes a card, a reload keeps it so (lib/storage).
  */
 export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Snapshot; game: SessionGame; onStage: boolean }) {
   const gameModule = getGameModule(game.game_type)
@@ -31,11 +34,18 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
   const act = useHostAct(game.id)
   const call = useHostCall()
   const [pending, setPending] = useState<'stage' | 'end' | null>(null)
-  const [open, setOpen] = useState(true)
+  const [choice, setChoice] = useState(() => cardChoice(game.id))
+  const open = choice ?? onStage
   const session = snapshot.session!
   const held = snapshot.states?.[game.id]
   const prompts = useMemo(() => promptsOf(snapshot, game.id), [snapshot, game.id])
   const guests = useMemo(() => guestsOf(snapshot), [snapshot])
+
+  function toggle() {
+    const next = !open
+    rememberCardOpen(game.id, next)
+    setChoice(next)
+  }
 
   async function run(id: 'stage' | 'end', request: () => Promise<unknown>) {
     if (pending) return
@@ -94,7 +104,7 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
           size="icon-lg"
           aria-expanded={open}
           aria-label={open ? `Hide the controls of ${game.title}` : `Show the controls of ${game.title}`}
-          onClick={() => setOpen((shown) => !shown)}
+          onClick={toggle}
         >
           <CaretDownIcon className={cn('transition-transform', open && 'rotate-180')} />
         </Button>

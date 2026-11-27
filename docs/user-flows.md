@@ -420,7 +420,10 @@ screen are in
 [guest-list.md](guest-list.md), section 7.
 
 Each live game has its own card, so its controls sit with its title and its End
-(P2-4). The game's own controls are its `HostView`: the quiz's one big button
+(P2-4). The card of the game on the TV starts open, since its next
+step is in it; a game in the background (Last one standing) starts closed.
+The caret opens or closes a card, and a reload keeps it as the host left it,
+in that browser. The game's own controls are its `HostView`: the quiz's one big button
 for the next step and its answered count; fusion's one gold step (Ask the
 next picture, Ask #1 from the lobby, Reveal now, Back to the wall, Crown the
 face detective), its locked-in count, an Ask on every picture and who is in each

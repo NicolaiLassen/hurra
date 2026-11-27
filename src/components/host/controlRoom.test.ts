@@ -429,7 +429,11 @@ describe('the games’ settings in the control room', () => {
 
     const beside = await roomWithSettings('background', markup)
     expect(goldSteps(beside)).toEqual(['Reveal now'])
-    expect(scanLink(beside, 'background')).toContain('data-variant="secondary"')
+    // Darts runs in the background, so its card starts closed: its Scan a player waits behind the caret.
+    expect(scanLink(beside, 'background')).toBe('')
+    expect(beside).toContain('aria-label="Show the controls of Darts"')
+    expect(beside).toContain('aria-label="Show the controls of Last one standing"')
+    expect(beside).toContain('aria-label="Hide the controls of Quiz"')
 
     const onTv = await roomWithSettings('in-person', markup)
     expect(goldSteps(onTv)).toEqual(['Scan a player'])
