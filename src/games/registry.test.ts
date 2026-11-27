@@ -7,6 +7,7 @@ import { DEFAULT_TASKS } from './elimination/logic'
 import { gameLogic } from './logic'
 import { accentOf, canPlayInTeams, gameModules, preloadTvScreens, setupStatusOf, startProblemOf } from './registry'
 import type { GameModule } from './types'
+import { TEAM_PLAY_GAMES } from '../../scripts/verify/core'
 
 /** What a placeholder module's setup says until its game lands (docs/engine-v2.md, 10.4). */
 const NOT_READY = "This game isn't ready yet"
@@ -108,4 +109,8 @@ it('lets the quiz, fusion and Lydspor be played in teams, and no other game', ()
   expect(canPlayInTeams('in-person')).toBe(false)
   expect(canPlayInTeams('no-such-game')).toBe(false)
   expect(canPlayInTeams(null)).toBe(false)
+})
+
+it('plays in teams in the verifier exactly the games the registry lets play in teams', () => {
+  expect([...TEAM_PLAY_GAMES]).toEqual(gameModules.filter((m) => m.teamPlay === true).map((m) => m.logic.type))
 })
