@@ -1,3 +1,4 @@
+import { UsersFourIcon } from '@phosphor-icons/react'
 import { Badge } from '@/components/ui/badge'
 import type { GameStatus, Session } from '@/lib/types'
 
@@ -24,6 +25,19 @@ export default function StateChip({ state, className }: { state: GameState; clas
   return (
     <Badge variant={variant} className={className}>
       {label}
+    </Badge>
+  )
+}
+
+/**
+ * A game played in teams, beside its state chip: a quiet plain word with the
+ * teams glyph, never a colour, so it never reads as a state of its own.
+ */
+export function InTeamsChip({ className }: { className?: string }) {
+  return (
+    <Badge variant="ghost" className={className}>
+      <UsersFourIcon weight="bold" aria-hidden />
+      In teams
     </Badge>
   )
 }

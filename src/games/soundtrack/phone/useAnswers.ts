@@ -9,7 +9,7 @@ import { answerPhoto, answerText } from '@/games/soundtrack/read'
 import { promptKey, type SongPart, type TypedPart } from '@/games/soundtrack/types'
 import { dbTrim, decideSave, NOT_EMPTIED, readDraft, refusalWords, serialSaves, writeDraft } from '@/games/soundtrack/typing'
 import type { SubmitResult } from '@/lib/types'
-import { confirmAnswer, planPhoto, photoChoice, shownAnswer, type Confirmed, type PhotoWrite } from './model'
+import { confirmAnswer, planPhoto, photoChoice, settleLedger, shownAnswer, type Confirmed, type PhotoWrite } from './model'
 import { swapToast } from './words'
 
 /** The line under a field left with unsaved text after the lock. */
@@ -83,6 +83,11 @@ export function useAnswers({
     latest.current = { myAnswers, ledger, drafts, submit, closed, round, played, pending }
   })
   const photoLock = useRef(false)
+
+  // A save the snapshot has caught up with leaves the ledger, so a teammate's later answer shows (settleLedger).
+  useEffect(() => {
+    setLedger((current) => settleLedger(current, myAnswers))
+  }, [myAnswers])
 
   const savedOf = (key: string) => shownAnswer(myAnswers[key], ledger[key])
 

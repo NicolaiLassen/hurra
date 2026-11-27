@@ -361,7 +361,14 @@ export function pingedFingerprint(screen: Screen, s: Snapshot): string {
   const feed = s.feed.reduce<number | null>((newest, item) => (newest === null || item.id > newest ? item.id : newest), null)
   const views = s.me ? s.games.filter((g) => live.has(g.id)).map((g) => [g.id, s.me!.views[g.id] ?? null]) : null
   const recap = s.recap?.published_at ?? null
-  if (phone) return JSON.stringify([session, games, prompts, feed, views, recap])
+  // Every change to the teams, a guest's team or a game's team play pings the room (docs/user-flows.md, Teams).
+  const teams = (s.teams ?? []).map((t) => [t.id, t.name, t.colour, t.position])
+  if (phone) {
+    // A phone's own team only: a latecomer put into a team at their join pings the stage, which phones don't hear.
+    const me = s.me ? (s.players.find((p) => p.id === s.me!.player_id)?.team_id ?? null) : null
+    const teamPlay = s.games.filter((g) => g.status !== 'pending').map((g) => [g.id, g.team_play === true])
+    return JSON.stringify([session, games, prompts, feed, views, recap, teams, me, teamPlay])
+  }
   return JSON.stringify([
     session,
     games,
@@ -370,8 +377,9 @@ export function pingedFingerprint(screen: Screen, s: Snapshot): string {
     views,
     recap,
     // Every game change pings the stage or the room, pending games included.
-    s.games.map((g) => [g.id, g.status, g.title, g.position, g.archived_at]),
-    s.players.map((p) => [p.id, p.name, p.code, p.profile]),
+    s.games.map((g) => [g.id, g.status, g.title, g.position, g.archived_at, g.team_play === true]),
+    s.players.map((p) => [p.id, p.name, p.code, p.profile, p.team_id ?? null]),
+    teams,
     s.standings.map((r) => [r.player_id, r.name, r.points]),
     // Live games only: a finished game's points leave the snapshot by time alone.
     s.games.filter((g) => live.has(g.id)).map((g) => [g.id, s.game_points[g.id] ?? null]),

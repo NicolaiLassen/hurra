@@ -523,6 +523,30 @@ describe('the takeover', () => {
     expect(text).toContain('My task Show my code')
   })
 
+  it('a quiz played in teams: the team line over the quiz, the teammate’s answer locked in, and the team under your place in the peek', async () => {
+    const { text } = await seen('teams-quiz')
+    expect(text).toContain('Quiz Question 3 of 10')
+    expect(text).toContain('Team Gold answers together. Any of you can answer: the first answer counts for all of you.')
+    expect(text).toContain('Ana answered for your team.')
+    // Ana's tap is this phone's answer too: locked in, as if Sofie had tapped it.
+    expect(text).toContain('Locked in: B.')
+    // The core's line stands between the strap and the game's own screen.
+    expect(text.indexOf('Question 3 of 10')).toBeLessThan(text.indexOf('Team Gold answers together.'))
+    expect(text.indexOf('Ana answered for your team.')).toBeLessThan(text.indexOf('The question is on the TV.'))
+    for (const part of HOME) expect(text, part).not.toContain(part)
+    // Your team follows you: under your place, in the peek.
+    const peek = plain(inSight(await phoneMarkup('teams-quiz', '/play/HURRA30?fixture=teams-quiz&peek=1')))
+    expect(peek).toContain('Your team: Team Gold')
+    expect(peek.indexOf('Sofie , tonight')).toBeLessThan(peek.indexOf('Your team: Team Gold'))
+  })
+
+  it('a party without teams: no team line and no team', async () => {
+    const text = plain(await phoneMarkup('quiz-question', '/play/HURRA30?fixture=quiz-question&peek=1'))
+    expect(text).not.toContain('answers together')
+    expect(text).not.toContain('for your team')
+    expect(text).not.toContain('Your team')
+  })
+
   it('no peek on the home, even when asked for', async () => {
     const html = await phoneMarkup('between', '/play/HURRA30?fixture=between&peek=1')
     expect(html).not.toContain('data-peek=""')

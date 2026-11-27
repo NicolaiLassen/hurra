@@ -734,6 +734,42 @@ before the claim, the same normalised answer already saved returns replayed
 without claiming, so a repeat with a new request id adds no `prompt.answered`
 row and the recap's answer count stays true.
 
+**Changed for teams (27 November, `20261127000000_teams.sql`):** after
+check_answer, when the game is played in teams (`session_games.team_play`) and
+the caller's player has a team (`players.team_id`), the answer goes to
+`submit_team_answer` (internal: no client may call it), which writes it for
+the whole team; otherwise every step above runs exactly as before. The team
+path takes a transaction advisory lock per team and prompt, so two teammates'
+taps take turns, then:
+
+1. The team is the caller's team's joined members, in id order.
+2. The caller's row already has this answer: `{ accepted, replayed }`, nothing
+   written.
+3. A `final` prompt: the caller has an answer, or any member has one written
+   by a member of this team (`game_submissions.answered_by`): `PT409` "Your
+   team already answered" (detail `already_answered`). Any other prompt: the
+   caller's row has 20 changes: `PT409` "That's enough changes for this one".
+4. The claim, as above: one `prompt.answered` row for the caller, its data
+   also holding `team` and `for` (the members).
+5. For each member: with `exclude_self`, check_answer for that member, and a
+   member it doesn't hold for is left out. Not final: a row with another
+   answer is updated (`payload`, `at = now`, `changes + 1` capped at 20,
+   `answered_by` the caller). Otherwise a member without a row gets one
+   (`first_at = at = now`, `answered_by` the caller); a final prompt never
+   overwrites a member's answer.
+6. A player ping to every member whose row changed (not the caller), so each
+   phone reads its answers again; the tally ping to the stage when a row was
+   new.
+7. Returns the caller's row as above, with `team: { id, written }`.
+
+Every member then simply has the answer: games read it in `ctx.answers` as
+each member's own, so scoring is unchanged and the whole team has the same
+`ms` (the quiz's speed points). A guest who joins while the party has teams
+goes into the team with the fewest joined members (the `players_join_team`
+trigger); the host's team functions are `host_make_teams`,
+`host_move_to_team`, `host_rename_team`, `host_clear_teams` and
+`host_set_team_play` (docs/user-flows.md, 3.6).
+
 **`prompt_tallies(p_session_id uuid) returns jsonb`**, stable, definer.
 `{ "<game id>": { "<key>": count } }` for prompts of the party's active games
 that are not revealed yet. Empty unless the caller is a host or a member.
@@ -772,6 +808,13 @@ phones never parse timestamps. Returns:
   "recap": { "published_at": 1795900000000 }                    // null when nothing is published
 }
 ```
+
+**Changed for teams (27 November):** the snapshot also carries `teams` (the
+party's teams, `{ id, name, colour, position }` by position, empty when it has
+none), `players[].team_id`, `games[].team_play`, and for a phone
+`me.answered_by`: `{ "<game id>": { "<key>": { by, at } } }` for each of its
+answers a teammate wrote for the whole team (active games only). Every change
+to the teams, a guest's team or a game's team play pings the room.
 
 **Shown games** are the active games, the spotlit game, games finished in the
 last 60 minutes, and the most recently finished game (not archived), so the

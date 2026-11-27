@@ -28,6 +28,7 @@ import type { RecapDoc } from '@/lib/recap'
 import { PHONE_SOUNDS } from '@/lib/sound'
 import { scanTarget, tvScene } from '@/lib/stage'
 import { rememberJoinCode } from '@/lib/storage'
+import { teamOf } from '@/lib/teams'
 import { toast } from '@/lib/toast'
 import type { Player, PromptState, PublicSession, Session, SessionGame, Snapshot } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -188,9 +189,11 @@ function Home({
   usePeekKeys(peeking, sheetOpen, closePeek, peekControl)
 
   const myToken = <Avatar name={player.name} playerId={player.id} className="size-9" />
+  // This guest's team: it follows them all night, under their place and on their code.
+  const team = teamOf(snapshot, player.id)
   const standings = snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />
   // In the peek the bar is the peek's own, so a game's layer opened there (the hunt's scan sheet) covers it as on the home.
-  const codeBar = !over && <ShowMyCode player={player} hidden={timed || typing} secret={secret?.secret ?? null} />
+  const codeBar = !over && <ShowMyCode player={player} hidden={timed || typing} secret={secret?.secret ?? null} team={team} />
 
   return (
     // Bottom padding keeps the last section clear of the Show my code bar.
@@ -258,7 +261,7 @@ function Home({
           stays on top), and Standings opens it as the peek. */}
       <HomeSections mode={takeover ? (peeking ? 'peek' : 'hidden') : 'flow'} session={session} onClose={closePeek} foot={codeBar}>
         <div className="mt-7">
-          <MyPlace session={session} player={player} standings={snapshot.standings} />
+          <MyPlace session={session} player={player} standings={snapshot.standings} team={team} />
         </div>
 
         {/* Opened from Standings, the peek has them right under your place. */}

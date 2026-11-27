@@ -14,6 +14,7 @@ import {
   missingParts,
   photoChoice,
   planPhoto,
+  settleLedger,
   shownAnswer,
   TOUCH_GUARD_MS,
   type PhotoWrite,
@@ -210,5 +211,18 @@ describe('the ledger', () => {
 
   it('shows the snapshot when nothing was saved here', () => {
     expect(shownAnswer(cold, undefined)).toEqual(cold)
+  })
+
+  it('lets a save go once the snapshot holds it, so a teammate changing it back shows (a game played in teams)', () => {
+    // A teammate typed Cold; this phone changed it to Coldwave.
+    const mine = { 's1.title': confirmAnswer(undefined, cold, coldwave) }
+    // A snapshot still behind keeps the save; one that caught up lets it go.
+    expect(settleLedger(mine, { 's1.title': cold })).toBe(mine)
+    const settled = settleLedger(mine, { 's1.title': coldwave })
+    expect(settled).toEqual({})
+    // The teammate changes it back to Cold: the phone shows Cold, not its own older save.
+    expect(shownAnswer(cold, settled['s1.title'])).toEqual(cold)
+    // Without settling, the old save would hide it.
+    expect(shownAnswer(cold, mine['s1.title'])).toEqual(coldwave)
   })
 })

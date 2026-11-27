@@ -318,6 +318,7 @@ matcher must judge them. The invariants, per game:
 | `secrets-kept` | Nothing secret in the public state, a prompt, the feed or another guest's view before its moment: the quiz's answer, another guest's task, who is in a fusion picture, its image before it is asked and its own photos before its reveal, Lydspor's titles, singers, other answers and photos before each reveal, and any typed answer ever. |
 | `payouts-within-limits` | Points stay within each game's limits (Lydspor's payout within `boardMax`), and the day's scoreboard is the ledger plus the game's scores. |
 | `latecomers-dealt-fairly` | Last one standing: a latecomer gets the next undealt card while dealing in is open, never a second life; a freed name taken again watches. |
+| `team-members-equal` | In teams only: the members of a team all round (there at the start, never removed, freed or moved) have the same answer to every prompt at the same time, and the same points in the game, but where its rules tell them apart (a fusion guest's own name never counts for them; a Lydspor guest who sits out scores nothing). |
 | `same-seed-same-result` | The same seed gives the same night. |
 | `reloads-change-nothing` | The night with every table reloaded from JSON now and then is the same night. |
 | `old-saves-load` | Saves made by older versions load, play on and end (below). |
@@ -329,6 +330,18 @@ npm run verify:games -- --game fusion              # one game
 npm run verify:games -- --game quiz --size 24 --seed 7   # one run again, as the report names it
 npm run verify:games -- --report /tmp/report.md    # the report somewhere else
 ```
+
+**Teams.** The games that can be played in teams (`TEAM_PLAY_GAMES` in
+[scripts/verify/core.ts](../scripts/verify/core.ts), which must match the
+registry's `GameModule.teamPlay`: the quiz, fusion and Lydspor) play a third of
+their seeds again in teams. Before the start the host makes 2 to 4 teams and
+switches team play on; latecomers go into the smallest team, the host moves a
+guest to another team or out of every team now and then, and makes the teams
+again between rounds now and then. `FakeParty.submit` writes an answer for the
+whole team as `submit_answer` does and says whom it wrote, and the oracle hears
+of each of them, so the oracles keep their rules. These runs show in the report
+as, say, *quiz in teams*: replay one with `--teams` added, and keep to the runs
+in teams or alone with `--teams` or `--solo`.
 
 The report lists each game and invariant with its runs and the first failing
 run (its seed and party size) with the last steps before it, and what the

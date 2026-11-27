@@ -17,10 +17,21 @@ import { cn } from '@/lib/utils'
  * the frame's `group/frame`) the tab stands on ink and the bug's words turn
  * ink, so both read on any guest colour.
  */
-export default function Header({ line, name, now }: { line: SceneLine; name: string; now: number }) {
+export default function Header({
+  line,
+  name,
+  now,
+  teams = false,
+}: {
+  line: SceneLine
+  name: string
+  now: number
+  /** The stage game is played in teams: its strap words end ", played in teams". */
+  teams?: boolean
+}) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between gap-12 short:h-14 short:gap-8">
-      <Strap line={line} />
+      <Strap line={line} teams={teams} />
       <Bug name={name} now={now} />
     </header>
   )
@@ -29,9 +40,11 @@ export default function Header({ line, name, now }: { line: SceneLine; name: str
 /**
  * The tab and the paper strap. The strap's words end in an ellipsis when they
  * run out of room. The hunt's tab (GameModule.accent) is pink with the
- * popper's stripes, its words pink on ink over its winner's colour.
+ * popper's stripes, its words pink on ink over its winner's colour. A stage
+ * game played in teams says so after its own words, quieter, as the rest of
+ * a line between games is: "Question 3 of 10, played in teams".
  */
-function Strap({ line }: { line: SceneLine }) {
+function Strap({ line, teams }: { line: SceneLine; teams: boolean }) {
   const hunt = accentOf(line.game?.game_type) === 'hunt'
   return (
     <div data-frame="strap" className="flex min-w-0 items-center">
@@ -49,9 +62,12 @@ function Strap({ line }: { line: SceneLine }) {
       <p className="-ml-1 flex h-14 min-w-0 items-center bg-paper px-6 text-tv-body text-ink short:h-12 short:px-5 short:text-tv-tab">
         <span className="min-w-0 truncate">
           {line.game ? (
-            <span className="font-semibold">
-              <GameWords game={line.game} />
-            </span>
+            <>
+              <span className="font-semibold">
+                <GameWords game={line.game} />
+              </span>
+              {teams && <span className="font-normal text-ink/75">, played in teams</span>}
+            </>
           ) : (
             <>
               {line.strong && <span className="font-bold">{line.strong}</span>}

@@ -3,6 +3,8 @@ import { useMemo } from 'react'
 import Contained from '@/components/Contained'
 import { usePhoneCalls } from '@/components/phone/calls'
 import { GenericPlayerCard, GenericResult } from '@/components/phone/GenericCards'
+import { teamLine } from '@/components/phone/team'
+import TeamLine from '@/components/phone/TeamLine'
 import { Button } from '@/components/ui/button'
 import { getGameModule } from '@/games/registry'
 import type { PlayerViewProps, ResultViewProps } from '@/games/types'
@@ -48,15 +50,24 @@ function usePlayerViewProps({ snapshot, session, game, player, onStage }: GamePr
   }
 }
 
-/** The game's full PlayerView: the main card's content, or the sheet's. */
+/**
+ * The game's full PlayerView: the main card's content, or the sheet's. In a
+ * game played in teams, the team line stands over it (the core's, never the
+ * game's). One wrapper either way, so the line coming or going never remounts
+ * the game's screen.
+ */
 export function GameView(props: GameProps & { scannedCode?: string; onScanHandled?: () => void }) {
   const viewProps = usePlayerViewProps(props)
   const module = getGameModule(props.game.game_type)
+  const team = teamLine(props.snapshot, props.game, props.player.id)
   if (!module) return <UnknownGame game={props.game} />
   return (
-    <Contained key={roundOf(props.game)} fallback={<ScreenFailed game={props.game} />}>
-      <module.PlayerView {...viewProps} scannedCode={props.scannedCode} onScanHandled={props.onScanHandled} />
-    </Contained>
+    <div className="grid grid-cols-1 gap-4">
+      {team && <TeamLine team={team.team} words={team.words} />}
+      <Contained key={roundOf(props.game)} fallback={<ScreenFailed game={props.game} />}>
+        <module.PlayerView {...viewProps} scannedCode={props.scannedCode} onScanHandled={props.onScanHandled} />
+      </Contained>
+    </div>
   )
 }
 

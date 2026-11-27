@@ -159,6 +159,28 @@ export function bandRows(games: readonly SessionGame[], ticker?: { game_id: stri
 }
 
 /**
+ * Whether the band has room for the teams line (each team's points in the
+ * stage game played in teams) beside `rows` of games and news: only while
+ * they leave a line of BAND_LINES free, so the teams never take the stage's
+ * height past what two lines leave it. Without room, the strap still says
+ * the game is played in teams.
+ */
+export const teamsLineFits = (rows: readonly BandRow[]): boolean => rows.length < BAND_LINES
+
+const TEAM_PREFIX = /^team\s+/i
+
+/**
+ * The teams' names on the band's teams line, whose tab says Teams already:
+ * "Gold", "Pink" when every name starts with "Team " (the names teams get),
+ * so four fit beside the join tag on a 720p TV; else the names as the host
+ * gave them.
+ */
+export function bandTeamNames(names: readonly string[]): string[] {
+  const shared = names.every((name) => TEAM_PREFIX.test(name) && name.replace(TEAM_PREFIX, '').trim() !== '')
+  return names.map((name) => (shared ? name.replace(TEAM_PREFIX, '') : name))
+}
+
+/**
  * Oldest start first: the band keeps the evening-long game (Last one standing)
  * on its bottom line, and a game started later joins above it instead of
  * moving it.

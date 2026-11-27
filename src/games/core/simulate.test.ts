@@ -56,10 +56,10 @@ describe('prompts', () => {
     p.send(p.hostUser, { type: 'start', gameId: 'g' })
     p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'ask', step: 0 } })
     expect(p.pings.at(-1)).toBe('room')
-    expect(p.submit('g', 'q1', bo.id, { choice: ['yes'] })).toEqual({ accepted: true, ms: 0 })
+    expect(p.submit('g', 'q1', bo.id, { choice: ['yes'] })).toEqual({ accepted: true, ms: 0, written: [bo.id] })
     expect(p.pings.at(-1)).toBe('stage q1')
     p.tick(2000)
-    expect(p.submit('g', 'q1', ana.id, { choice: ['no'] })).toEqual({ accepted: true, ms: 2000 })
+    expect(p.submit('g', 'q1', ana.id, { choice: ['no'] })).toEqual({ accepted: true, ms: 2000, written: [ana.id] })
     // The same answer again counts as success; a different one is refused (final).
     expect(p.submit('g', 'q1', ana.id, { choice: 'no' } as never)).toMatchObject({ accepted: true, replayed: true })
     expect(() => p.submit('g', 'q1', ana.id, { choice: ['yes'] })).toThrow(expect.objectContaining({ code: 'already_answered' }))
@@ -444,5 +444,178 @@ describe('seeds and reloads', () => {
     p.tick(10_000)
     p.sync('g')
     expect(p.game('g').publicState).toMatchObject({ question: null, results: [{ key: 'q1', yes: 1, no: 0 }] })
+  })
+})
+
+describe('teams', () => {
+  /** Two prompts that may change until they close: a pick, and a vote for someone else. */
+  class Vote extends Game<{ open: true }, { type: 'none' }, Record<string, never>, Record<string, never>, Record<string, never>> {
+    readonly type = 'vote'
+    readonly defaultConfig = {}
+    setup(ctx: GameContext<Record<string, never>>): { open: true } {
+      ctx.openPrompt('pick', { kind: 'choice', options: ['a', 'b', 'c'] })
+      ctx.openPrompt('who', { kind: 'choice', options: 'players', exclude_self: true })
+      return { open: true }
+    }
+    parseAction(): { type: 'none' } {
+      throw new GameError('No moves here')
+    }
+    handleAction(state: { open: true }) {
+      return state
+    }
+    scores() {
+      return {}
+    }
+    publicState() {
+      return {}
+    }
+    playerView() {
+      return {}
+    }
+  }
+
+  /** A party of `players` in `count` teams, game 'g' (the probe's final yes or no) and 'v' (Vote), both played in teams. */
+  function teams(players: number, count: number) {
+    const p = simulateParty({ games: [probe, new Vote()], players })
+    p.addGame('g', 'probe', 'Probe')
+    p.addGame('v', 'vote', 'Vote')
+    p.makeTeams(count)
+    p.setTeamPlay('g', true)
+    p.setTeamPlay('v', true)
+    return p
+  }
+  const rows = (p: ReturnType<typeof teams>, game: string, key: string) =>
+    Object.fromEntries(p.submissionsOf(game, key).map((row) => [row.player_id, row]))
+
+  it('makes balanced teams of everyone here, and deals them again when made again', () => {
+    const p = teams(7, 3)
+    expect(p.teams.map((t) => [t.name, t.colour, t.position])).toEqual([
+      ['Team Gold', 'gold', 0],
+      ['Team Pink', 'pink', 1],
+      ['Team Teal', 'teal', 2],
+    ])
+    expect(p.teams.map((t) => p.membersOf(t.id).length)).toEqual([3, 2, 2])
+    expect(p.players.every((pl) => p.teamOf(pl.id) !== null)).toBe(true)
+    expect(p.log.find((row) => row.kind === 'teams.made')).toMatchObject({ actor: 'host', data: { count: 3 } })
+    const gold = p.teams[0].id
+    p.makeTeams(2)
+    expect(p.teams.map((t) => t.id)[0]).toBe(gold)
+    expect(p.teams.map((t) => p.membersOf(t.id).length)).toEqual([4, 3])
+    expect(() => p.makeTeams(7)).toThrow(expect.objectContaining({ code: 'bad_count' }))
+    // A guest still expected is in no team.
+    expect(p.teamOf(p.listGuest('Zelda').id)).toBeNull()
+  })
+
+  it('writes one answer for every member, with the same time, and locks the whole team on a final prompt', () => {
+    const p = teams(6, 2)
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'ask', step: 0 } })
+    const [gold, pink] = p.teams.map((t) => p.membersOf(t.id))
+    const [ana, bo] = gold
+    p.tick(1500)
+    const pings = p.pings.length
+    expect(p.submit('g', 'q1', bo, { choice: ['yes'] })).toEqual({ accepted: true, ms: 1500, written: gold })
+    const answers = rows(p, 'g', 'q1')
+    for (const id of gold) {
+      expect(answers[id]).toMatchObject({ payload: { choice: ['yes'] }, first_at: answers[bo].first_at, changes: 0, answered_by: bo })
+    }
+    for (const id of pink) expect(answers[id]).toBeUndefined()
+    // A ping for each teammate's phone, then the count to the stage.
+    expect(p.pings.slice(pings)).toEqual([...gold.filter((id) => id !== bo).map((id) => `player ${id}`), 'stage q1'])
+    expect(p.log.at(-1)).toMatchObject({ kind: 'prompt.answered', playerId: bo, data: { team: p.teams[0].id, for: gold, ms: 1500 } })
+
+    // The team answered: the same answer again is a replay, another one is refused.
+    expect(p.submit('g', 'q1', ana, { choice: ['yes'] })).toEqual({ accepted: true, replayed: true, ms: 1500, written: [] })
+    expect(() => p.submit('g', 'q1', ana, { choice: ['no'] })).toThrow(expect.objectContaining({ code: 'already_answered', message: 'Your team already answered' }))
+    // The other team answers for itself.
+    p.tick(500)
+    expect(p.submit('g', 'q1', pink[2], { choice: ['no'] })).toMatchObject({ ms: 2000, written: pink })
+    p.tick(10_000)
+    p.sync('g')
+    // The team's yes scores for every member.
+    expect((p.game('g').publicState as ProbePublicState).results).toEqual([{ key: 'q1', yes: 3, no: 3 }])
+    expect(gold.map((id) => p.game('g').scores[id])).toEqual([1, 1, 1])
+    expect(pink.map((id) => p.game('g').scores[id] ?? 0)).toEqual([0, 0, 0])
+  })
+
+  it('takes the latest answer from any member on a prompt that may change, until the 20 changes run out', () => {
+    const p = teams(4, 2)
+    p.send(p.hostUser, { type: 'start', gameId: 'v' })
+    const [ana, bo] = p.membersOf(p.teams[0].id)
+    p.submit('v', 'pick', ana, { choice: ['a'] })
+    const first = rows(p, 'v', 'pick')[ana].first_at
+    p.tick(1000)
+    expect(p.submit('v', 'pick', bo, { choice: ['b'] })).toEqual({ accepted: true, ms: 0, written: [ana, bo] })
+    expect(rows(p, 'v', 'pick')[ana]).toMatchObject({ payload: { choice: ['b'] }, first_at: first, at: first + 1000, changes: 1, answered_by: bo })
+    expect(p.answersOf('v', bo)).toEqual({ pick: { choice: ['b'] } })
+    for (let i = 0; i < 19; i++) p.submit('v', 'pick', i % 2 === 0 ? ana : bo, { choice: [i % 2 === 0 ? 'c' : 'b'] })
+    expect(rows(p, 'v', 'pick')[ana].changes).toBe(20)
+    expect(() => p.submit('v', 'pick', ana, { choice: ['a'] })).toThrow(expect.objectContaining({ code: 'too_many_changes' }))
+  })
+
+  it('leaves a member out where the answer would name them, on a prompt that excludes yourself', () => {
+    const p = teams(4, 2)
+    p.send(p.hostUser, { type: 'start', gameId: 'v' })
+    const [ana, bo] = p.membersOf(p.teams[0].id)
+    expect(p.submit('v', 'who', ana, { choice: [bo] })).toMatchObject({ written: [ana] })
+    expect(p.answersOf('v', bo)).toEqual({})
+    const other = p.membersOf(p.teams[1].id)[0]
+    expect(p.submit('v', 'who', bo, { choice: [other] })).toMatchObject({ written: [ana, bo] })
+  })
+
+  it('answers alone with team play off, or for a guest in no team', () => {
+    const p = teams(4, 2)
+    p.setTeamPlay('g', false)
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    expect(() => p.setTeamPlay('g', true)).toThrow(expect.objectContaining({ code: 'active' }))
+    p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'ask', step: 0 } })
+    const [ana, bo] = p.membersOf(p.teams[0].id)
+    expect(p.submit('g', 'q1', ana, { choice: ['yes'] })).toEqual({ accepted: true, ms: 0, written: [ana] })
+    expect(p.answersOf('g', bo)).toEqual({})
+    expect(p.log.at(-1)!.data).toEqual({ key: 'q1', answer: { choice: ['yes'] }, ms: 0, round: 1 })
+
+    p.send(p.hostUser, { type: 'start', gameId: 'v' })
+    expect(p.setTeam(bo, null)).toBe(true)
+    expect(p.setTeam(bo, null)).toBe(false)
+    expect(p.submit('v', 'pick', bo, { choice: ['a'] })).toMatchObject({ written: [bo] })
+    expect(p.submit('v', 'pick', ana, { choice: ['b'] })).toMatchObject({ written: [ana] })
+    expect(p.answersOf('v', bo)).toEqual({ pick: { choice: ['a'] } })
+  })
+
+  it('puts a guest who joins into the smallest team, the lowest place on a tie, and a freed name back in none', () => {
+    const p = teams(5, 2)
+    const [gold, pink] = p.teams.map((t) => t.id)
+    expect([p.membersOf(gold).length, p.membersOf(pink).length]).toEqual([3, 2])
+    const late = p.addPlayer('Late')
+    expect(p.teamOf(late.id)).toBe(pink)
+    expect(p.teamOf(p.addPlayer('Later').id)).toBe(gold)
+    const zelda = p.listGuest('Zelda')
+    expect(p.teamOf(zelda.id)).toBeNull()
+    p.claimGuest(zelda.id)
+    expect(p.teamOf(zelda.id)).toBe(pink)
+    p.freeGuest(zelda.id)
+    expect(p.teamOf(zelda.id)).toBeNull()
+    p.claimGuest(zelda.id)
+    expect(p.teamOf(zelda.id)).toBe(pink)
+    p.reload()
+    expect(p.teams.map((t) => t.id)).toEqual([gold, pink])
+    expect(p.teamOf(zelda.id)).toBe(pink)
+  })
+
+  it('no longer writes for a member who was removed, and refuses new teams while a team game is live', () => {
+    const p = teams(6, 2)
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    p.send(p.hostUser, { type: 'host-action', gameId: 'g', action: { type: 'ask', step: 0 } })
+    const [ana, bo, cy] = p.membersOf(p.teams[0].id)
+    p.removePlayer(cy)
+    expect(p.teamOf(cy)).toBeNull()
+    expect(p.submit('g', 'q1', ana, { choice: ['no'] })).toMatchObject({ written: [ana, bo] })
+    expect(p.submissionsOf('g', 'q1').map((row) => row.player_id)).not.toContain(cy)
+    expect(() => p.makeTeams(3)).toThrow(expect.objectContaining({ code: 'team_game_live' }))
+    expect(() => p.clearTeams()).toThrow(expect.objectContaining({ code: 'team_game_live' }))
+    expect(() => p.setTeam(p.listGuest('Zelda').id, p.teams[0].id)).toThrow(expect.objectContaining({ code: 'not_joined' }))
+    p.send(p.hostUser, { type: 'end', gameId: 'g' })
+    expect(p.clearTeams()).toBe(2)
+    expect(p.teamOf(ana)).toBeNull()
   })
 })

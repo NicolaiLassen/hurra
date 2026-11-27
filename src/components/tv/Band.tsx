@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react'
+import { TeamSwatch } from '@/components/TeamChip'
 import { onAirText } from '@/lib/onAirText'
 import { BandEvent, BandLine, BandSince, Tab } from '@/components/tv/onAir'
 import { JoinTag } from '@/components/tv/Join'
-import { bandRows } from '@/components/tv/scene'
+import { bandRows, bandTeamNames, teamsLineFits } from '@/components/tv/scene'
 import { GameStatus } from '@/components/tv/StatusCard'
 import Ticker from '@/components/tv/Ticker'
 import { accentOf } from '@/games/registry'
-import type { FeedItem, SessionGame } from '@/lib/types'
+import type { FeedItem, SessionGame, Team } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
+
+/** A team's points in the stage game (teamPoints in src/lib/teams.ts). */
+type TeamRow = { team: Pick<Team, 'id' | 'name' | 'colour'>; points: number }
 
 /**
  * The band along the bottom of the TV (docs/identity.md, The TV's frame): one
@@ -21,13 +25,16 @@ import { useLive } from '@/lib/useLive'
  * newer ones folded into "Also running", and the ticker's news (from a game
  * in the background) in its game's line, in place of "Also running" while it
  * holds news from a folded game. More lines, such as a slim line with the
- * night's top five, join the list in `lines`.
+ * night's top five, join the list in `lines`: while the stage game is played
+ * in teams, a line with each team's points in it, above the games, when the
+ * band has a line to spare (`teamsLineFits`).
  */
 export default function Band({
   games,
   joinCode,
   ticker,
   sourceOf,
+  teams = null,
 }: {
   /** The games in the background, oldest start first. */
   games: SessionGame[]
@@ -37,12 +44,15 @@ export default function Band({
   ticker?: FeedItem
   /** A game's title, for news from a game that has no line. */
   sourceOf: (gameId: string | null | undefined) => string | undefined
+  /** Each team's points in the stage game while it is played in teams, in team order; else null. */
+  teams?: readonly TeamRow[] | null
 }) {
   const { snapshot } = useLive()
   const feed = snapshot?.feed ?? []
   const tickerType = snapshot?.games.find((g) => g.id === ticker?.game_id)?.game_type
 
-  const lines: ReactNode[] = bandRows(games, ticker).map((row) => {
+  const rows = bandRows(games, ticker)
+  const lines: ReactNode[] = rows.map((row) => {
     switch (row.kind) {
       case 'game':
         return (
@@ -59,6 +69,8 @@ export default function Band({
         return ticker && <Ticker key={`news:${ticker.id}`} item={ticker} source={sourceOf(ticker.game_id)} hunt={accentOf(tickerType) === 'hunt'} />
     }
   })
+  // Last in the list, so it stands above the games and the evening-long one keeps the bottom line.
+  if (teams && teams.length > 0 && teamsLineFits(rows)) lines.push(<TeamsLine key="teams" teams={teams} />)
   if (lines.length === 0 && !joinCode) return null
 
   return (
@@ -92,6 +104,28 @@ function AlsoRunning({ games }: { games: SessionGame[] }) {
       <span className="min-w-0 truncate text-tv-tab font-semibold text-paper short:text-tv-floor">
         {titles.length > 1 ? `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}` : titles[0]}
       </span>
+    </BandLine>
+  )
+}
+
+/**
+ * The teams in the stage game: each team's swatch, its name and its points,
+ * in team order so nobody moves as the points come in. The name carries the
+ * team (a state never rests on colour alone), without the "Team " they all
+ * share (bandTeamNames); names end in an ellipsis when the line runs out of
+ * room, the points never do.
+ */
+function TeamsLine({ teams }: { teams: readonly TeamRow[] }) {
+  const names = bandTeamNames(teams.map((row) => row.team.name))
+  return (
+    <BandLine tab={<Tab tone="paper">Teams</Tab>}>
+      {teams.map(({ team, points }, i) => (
+        <span key={team.id} data-team="" className="flex min-w-0 items-center gap-3 short:gap-2.5">
+          <TeamSwatch team={team} className="size-6 short:size-5" />
+          <span className="min-w-0 truncate text-tv-tab font-semibold text-paper-2 short:text-tv-floor">{names[i]}</span>
+          <span className="shrink-0 tv-num text-tv-band text-paper short:text-tv-field">{points}</span>
+        </span>
+      ))}
     </BandLine>
   )
 }

@@ -86,6 +86,8 @@ describe('the TV scene for each fixture', () => {
     ['fixture=background&players=45', 'Quiz | Question 3 of 10'],
     ['fixture=final&players=45', 'Last one standing | The final knockout'],
     ['fixture=fusion-final', 'Who is fused? | Final result'],
+    // A game played in teams says so after its own words.
+    ['fixture=teams-quiz', 'Quiz | Question 3 of 10, played in teams'],
   ])('%s: the programme strap says what is on', async (search, expected) => {
     expect(strapOf(await html(search))).toBe(expected)
   })
@@ -113,6 +115,20 @@ describe('the TV scene for each fixture', () => {
     const recap = await html('fixture=recap')
     expect(recap).not.toContain('data-frame="strap"')
     expect(recap).not.toContain('data-frame="band"')
+  })
+
+  it("puts each team's points in the stage game in the band while it is played in teams, and keeps the standings each guest's own", async () => {
+    const page = await html('fixture=teams-quiz')
+    const band = page.slice(page.indexOf('data-frame="band"'), page.indexOf('</footer>'))
+    expect(band).toContain('>Teams<')
+    // In team order, by name and points: the "Team " they share is the tab's.
+    const teams = [...band.matchAll(/data-team="".*?<span[^>]*>([^<]+)<\/span><span[^>]*>(\d+)<\/span>/g)].map(([, name, points]) => `${name} ${points}`)
+    expect(teams).toEqual(['Gold 2', 'Pink 2', 'Teal 1', 'Violet 1'])
+    expect(band).toContain('Join with')
+    // Without teams: no teams line, and the strap says nothing of teams.
+    const solo = await html('fixture=quiz-question')
+    expect(solo).not.toContain('data-team=""')
+    expect(solo).not.toContain('played in teams')
   })
 
   it("shows a host's own browser as a preview", async () => {

@@ -168,6 +168,10 @@ the game's result card on top. The rules are `phoneFocus`, `barSecret` and
 `peekOpen` in [running.ts](../src/components/phone/running.ts); the look is
 in [identity.md](identity.md#the-phone).
 
+A guest in a team sees it under their place and on their code, and over a
+game played in teams a line says how the team answers and who answered for it
+(3.6).
+
 Announcements from games show as toasts on every phone. Ones aimed at one player
 replace the room-wide one and play one sound (the strongest of the batch). A
 refused answer or move is a toast with the server's own words, from the game's
@@ -550,6 +554,77 @@ The page holds the loader until the night is in, then shows it whole; pressing
 Recap in a control room opened before a deploy loads the new app straight onto
 the recap.
 
+### 3.6 Teams
+
+A party can have teams. A team follows its guests all night, and some games
+can be played in teams: then one answer from any member counts for the whole
+team, so every member gets the points. The core does it, so games stay as
+they are: each game opts in with `GameModule.teamPlay` (the quiz, Participant
+fusion and Lydspor do; Last one standing and in-person rounds don't).
+
+```mermaid
+flowchart TD
+  classDef screen fill:#1e1a16,stroke:#c9bfae,color:#f2ebde
+  classDef closed fill:#203733,stroke:#4fd1c5,color:#f2ebde
+
+  NONE["Teams card, under Guests: what teams do,<br/>How many teams 2 to 6 (4 to start),<br/>22 guests here: 4 teams of 5 or 6"]:::screen -- "Make teams" --> TEAMS
+  TEAMS["Each team: its colour, name, size and members,<br/>Rename; guests here in no team; Make teams again,<br/>Clear teams"]:::closed
+  TEAMS -- "Make teams again: the count again, after a confirm" --> TEAMS
+  TEAMS -- "Clear teams, after a confirm" --> NONE
+  ROW["A guest's menu (Here): Move to team"]:::screen -- "a team, or No team" --> TEAMS
+  LATE["A guest joins, or takes a name from the list"]:::screen -- "into the smallest team" --> TEAMS
+  SET["A game's settings: Play in teams<br/>(saved at once, apart from Save)"]:::closed -- "on" --> CHIP["Its row in the program and its live card:<br/>In teams"]:::screen
+  CHIP -- "Start" --> PLAY["Played in teams: one answer from any member<br/>counts for the whole team"]:::closed
+```
+
+**The host.** Make teams splits the guests who are here at random into
+balanced teams (sizes differ by one at most); guests still on the list go
+into a team as they join. The teams are Team Gold, Team Pink, Team Teal, Team
+Violet, Team Sky and Team Lime, in that order, and the host can rename each.
+Make teams again shuffles everyone again: teams up to the new count keep
+their names and colours. A guest who joins later, or takes their name from
+the guest list, goes into the team with the fewest guests here (a tie goes to
+the first team). Move to team in a guest's menu moves one guest, any time;
+from their next answer they answer with their new team. A freed name comes
+back on the list with no team. Making and clearing teams wait while a game
+played in teams is live.
+
+Play in teams is on a game's settings page, for games that can be played in
+teams. It changes only while the game isn't live (before it starts, or
+between rounds), so a round is played one way all through; while it is live
+the switch says how it is played. Without teams it may still be switched on,
+and says to make teams in Guests first: until there are teams, the game is
+played alone.
+
+**The phones.** A guest in a team sees it under their place on the phone
+home and on their full-screen code: its colour and its name. Over a game
+played in teams, a line says so: "Team Gold answers together. Any of you can
+answer: the first answer counts for all of you." (the quiz and fusion, whose
+answers lock), or "and the latest answer counts" (Lydspor, whose answers
+change until the lock); under it, "Ana answered for your team." When a
+teammate answers, every phone in the team shows the team's answer as its own:
+locked in, or the typed title and the photo. A teammate who taps something
+else after a final answer gets "Your team already answered", and the phone
+shows the team's answer at once.
+
+**The TV.** The standings stay each guest's own. While the game on the stage
+is played in teams, the strap says so ("Question 3 of 10, played in teams"),
+and the band has a Teams line with each team's points in this game (the most
+any member has), when it has a line to spare.
+
+**How it works.** `submit_answer` writes the same answer, with the same time,
+for every member of the answering guest's team who is here
+([engine-v2.md](engine-v2.md), 2.7, and the teams file
+`supabase/migrations/20261127000000_teams.sql`). Each member's write keeps the
+prompt's rules: open and before its deadline, a final prompt's first answer
+locked for the whole team, at most 20 changes, and a prompt's `exclude_self`
+checked for each member. Each member's phone gets its own ping. Scoring is
+unchanged: each member simply has the answer, so the game scores each of them
+as always, the quiz's speed points included. With team play off, or for a
+guest in no team, nothing changes. One rule of a game still holds in teams:
+in fusion a guest's own name never counts for them, so a member whose name
+the team locks in scores less for that picture.
+
 ## 4. The TV
 
 The TV laptop opens `/tv/:code`, a public page. It signs in anonymously and asks
@@ -618,6 +693,9 @@ name and "Nobody has scored yet", no guest, and everyone stands in A to Z
 without a rank), with the join block under the field (the QR code on
 paper, the code and the page's own address) or its short form, the code over
 the address, when the rows need the room.
+
+A game played in teams says so on the strap, and the band shows each team's
+points in it (3.6).
 
 Lydspor on the TV is silent from Play song 1 to the crown: while a song plays
 it shows the wall of photos A to L and how many have typed a title, a singer

@@ -1,9 +1,10 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useRef, useState } from 'react'
 import { SHOW_MS } from '@/components/SecretCard'
+import { TeamSwatch } from '@/components/TeamChip'
 import { Button } from '@/components/ui/button'
 import type { PhoneSecret } from '@/games/types'
-import type { Player } from '@/lib/types'
+import type { Player, Team } from '@/lib/types'
 import { playerUrl } from '@/lib/urls'
 import { cn } from '@/lib/utils'
 
@@ -11,8 +12,8 @@ import { cn } from '@/lib/utils'
  * The "Show my code" bar, in the thumb zone at the bottom of the phone home
  * (in-person games need your code at a moment's notice): the home's one gold
  * step, on a solid strip of the ground, with your code at its right. It opens
- * the full-screen QR code: white, so it scans in a dark room. Tap anywhere to
- * close.
+ * the full-screen QR code: white, so it scans in a dark room, with your name,
+ * your code and your team when you're in one. Tap anywhere to close.
  *
  * While a stage game takes over the phone, the bar also keeps a background
  * game's `secret` one tap away (GameModule.phoneSecret: Last one standing's
@@ -33,10 +34,13 @@ export default function ShowMyCode({
   player,
   hidden = false,
   secret = null,
+  team = null,
 }: {
   player: Pick<Player, 'name' | 'code'>
   hidden?: boolean
   secret?: PhoneSecret | null
+  /** This guest's team (teamOf), or null for none. */
+  team?: Pick<Team, 'name' | 'colour'> | null
 }) {
   const [open, setOpen] = useState(false)
   const [turned, setTurned] = useState({ up: false, times: 0 })
@@ -108,6 +112,12 @@ export default function ShowMyCode({
           <span className="text-center">
             <span className="block text-3xl font-bold">{player.name}</span>
             <span className="block font-mono text-xl tracking-widest">{player.code}</span>
+            {team && (
+              <span className="mt-2 flex items-center justify-center gap-2 text-lg font-bold">
+                <TeamSwatch team={team} className="size-4" />
+                {team.name}
+              </span>
+            )}
           </span>
           <span className="text-sm text-black/50">Turn your brightness up if it won't scan. Tap anywhere to close.</span>
         </button>

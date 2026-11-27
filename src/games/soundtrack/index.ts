@@ -33,6 +33,8 @@ export const soundtrack = defineGameModule({
   setupStatus: soundtrackSetup,
   // The TV view shows each moment itself; Lydspor announces only its winner.
   stageBanners: 'sound-only',
+  // One answer from any member counts for the whole team (docs/user-flows.md, Teams).
+  teamPlay: true,
   // The phone's strap over Lydspor: where the round is.
   phoneStrap: (publicState) => {
     const pub = readPublic(publicState)

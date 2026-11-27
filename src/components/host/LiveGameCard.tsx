@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import Confirm from '@/components/Confirm'
 import GameViewBoundary from '@/components/host/GameViewBoundary'
 import { useHostAct, useHostCall } from '@/components/host/hostCalls'
-import StateChip from '@/components/host/StateChip'
+import StateChip, { InTeamsChip } from '@/components/host/StateChip'
 import { clockTime } from '@/components/tv/clock'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { guestsOf } from '@/lib/guestList'
 import { gameMediaUrl } from '@/lib/media'
 import { callGame, setSpotlight } from '@/lib/queries'
 import { gamePointsOf, promptsOf, talliesOf } from '@/lib/stage'
+import { playedInTeams } from '@/lib/teams'
 import type { SessionGame, Snapshot } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
 import { cardChoice, rememberCardOpen } from '@/lib/storage'
@@ -65,6 +66,7 @@ export default function LiveGameCard({ snapshot, game, onStage }: { snapshot: Sn
           <h3 className="truncate text-lg leading-snug font-extrabold">{game.title}</h3>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-paper-2">
             {onStage ? <Badge>On the TV</Badge> : <StateChip state="active" />}
+            {playedInTeams(snapshot, game) && <InTeamsChip />}
             {/* The start the database holds, as a clock time (docs/identity.md). */}
             <span>
               {onStage ? 'Live' : 'In the background'}
