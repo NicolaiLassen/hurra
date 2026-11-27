@@ -9,6 +9,7 @@ screen connects, for guests, the host and the TV, is in
 **Contents:** [How it fits together](#how-it-fits-together) ·
 [Data model](#data-model) · [Pages](#pages) ·
 [Writing a game](#writing-a-game) · [Local development](#local-development) ·
+[The game mechanic verifier](#the-game-mechanic-verifier) ·
 [Production](#production) · [Sound effects](#sound-effects)
 
 ## How it fits together
@@ -213,8 +214,9 @@ without it naming the game:
 the game's rehearsal bot ([src/games/core/bot.ts](../src/games/core/bot.ts)).
 
 **Register** the logic in [src/games/logic.ts](../src/games/logic.ts), the module
-in [src/games/registry.ts](../src/games/registry.ts) and the bot in
-[src/games/bots.ts](../src/games/bots.ts); `registry.test.ts` checks the lists
+in [src/games/registry.ts](../src/games/registry.ts), the bot in
+[src/games/bots.ts](../src/games/bots.ts) and an oracle for
+[the game mechanic verifier](#the-game-mechanic-verifier); `registry.test.ts` checks the lists
 match and runs the contract over every game, played by its bot, and
 `views.test.ts` renders every view against the sample parties in
 [src/lib/fixtures.ts](../src/lib/fixtures.ts). Unit-test the rules with
@@ -255,6 +257,7 @@ npm run dev                   # also serves netlify/functions/* at /api/*
 ```sh
 npm test                      # unit tests: the SDK, the engine, the game rules and every screen on sample parties
 npm run check                 # types, lint and unit tests
+npm run verify:games          # many simulated parties per game, each checked against an oracle of its rules
 npm run test:integration      # the engine, prompts, secrecy and Realtime against the local stack
 npm run db:smoke              # a quick check that the schema, private Realtime and Storage work together
 ```
@@ -281,6 +284,72 @@ The dev server also listens on your LAN IP, so you can open the join page
 from a phone. The camera scanner needs HTTPS (or localhost), so test scanning
 on the deployed site.
 
+## The game mechanic verifier
+
+`npm run verify:games` plays many simulated parties of every registered game
+and checks that its mechanics hold, in about a minute; run it before a deploy.
+It needs nothing but Node (no stack, no browser) and writes its report to
+`.design/verify/report.md` as well as printing it.
+
+Each run is one game in one party, through `simulateParty` and the real
+`step()`: party sizes 1, 2, 5, 24 and 45 guests, each size with its own seeds.
+The game's bot plays the guests and the host, and the verifier adds what a
+night does to a round: guests join, are removed, have their names freed and
+taken again mid-round (the host page's sync after it now and then lost), names
+are taken from the guest list, the host gives awards, restarts the round,
+ends it at any moment and takes random steps in random orders (stale ones,
+refused ones and double taps included), the TV's timer syncs come on time,
+late or early, and in a paired run every table is reloaded from JSON now and
+then.
+
+For each game an oracle in [scripts/verify/games](../scripts/verify/games)
+recomputes the scores from what the database took (answers, locks, typed
+texts, knockouts) and what the host did, never by calling the game's scoring.
+Lydspor's typed answers come from the oracle with what each is meant to be
+(right, a forgiven typo, a near miss of each kind, wrong), so it knows how the
+matcher must judge them. The invariants, per game:
+
+| Invariant | What it checks |
+| --- | --- |
+| `no-exception` | No throw, and only the refusals the rules explain. |
+| `finishes-cleanly` | The round finishes by itself or ends with End; no timer stays due or gets stuck; a finished game refuses moves. |
+| `scores-match-oracle` | Scores, totals, ranks, top lists, reveals and every phone's points match the oracle after every save. |
+| `winners-match-oracle` | The winners match the oracle. |
+| `secrets-kept` | Nothing secret in the public state, a prompt, the feed or another guest's view before its moment: the quiz's answer, another guest's task, who is in a fusion picture, its image before it is asked and its own photos before its reveal, Lydspor's titles, singers, other answers and photos before each reveal, and any typed answer ever. |
+| `payouts-within-limits` | Points stay within each game's limits (Lydspor's payout within `boardMax`), and the day's scoreboard is the ledger plus the game's scores. |
+| `latecomers-dealt-fairly` | Last one standing: a latecomer gets the next undealt card while dealing in is open, never a second life; a freed name taken again watches. |
+| `same-seed-same-result` | The same seed gives the same night. |
+| `reloads-change-nothing` | The night with every table reloaded from JSON now and then is the same night. |
+| `old-saves-load` | Saves made by older versions load, play on and end (below). |
+
+```sh
+npm run verify:games                               # the quick sweep, about a minute
+npm run verify:games -- --deep                     # five times the seeds, a few minutes
+npm run verify:games -- --game fusion              # one game
+npm run verify:games -- --game quiz --size 24 --seed 7   # one run again, as the report names it
+npm run verify:games -- --report /tmp/report.md    # the report somewhere else
+```
+
+The report lists each game and invariant with its runs and the first failing
+run (its seed and party size) with the last steps before it, and what the
+runs did (reveals, knockouts, latecomers, accepts, frees, reloads). It exits
+with 1 when an invariant breaks. A failure is either a bug in the game or a
+mistake in its oracle: replay the seed, read the trace, and fix whichever it
+is, a game bug with a test that reproduces it.
+
+**Old saves.** [scripts/verify/saves.json.gz](../scripts/verify/saves.json.gz)
+holds what `game_load` gave older versions of the games, from production's
+`v2-rc1` and `v2-rc6` to the party build's steps of 25 and 26 November, one
+per phase each round went through, played by that version's own bot (invented
+content only). The verifier loads each into today's game through `step()`: the
+TV's sync, the host's steps, a guest leaving and one joining, a move, End and
+the recap. Rebuild it with `node scripts/verify/make-saves.ts` after adding a
+version to its list.
+
+A new game gets its oracle in `scripts/verify/games` and its line in
+[scripts/verify/run.ts](../scripts/verify/run.ts); until then the verifier
+says which registered game it can't check.
+
 ## Production
 
 The app runs on Netlify (the static site plus the two functions) with a
@@ -304,7 +373,8 @@ in order), then `npm run test:integration`. Then back up production (schema,
 data and auth users, kept outside the repo) and apply the file with
 `supabase db push --linked`, before the deploy that needs it.
 
-Deploy as a draft first: `netlify deploy --build`, without `--prod`. A `POST`
+Before a deploy, `npm run check`, `npm run build` and `npm run verify:games`
+must pass. Deploy as a draft first: `netlify deploy --build`, without `--prod`. A `POST`
 to the draft's `/api/game` without a token must answer 401, which proves the
 function bundled and has its environment. Then publish that exact deploy
 (Publish deploy on its page in Netlify). When deploying from a copy of the

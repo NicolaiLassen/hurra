@@ -14,7 +14,8 @@
     "sounds:elevenlabs": "node scripts/generate-sounds.ts",
     "dev:setup": "node scripts/dev-setup.ts",
     "db:smoke": "node scripts/db-smoke.ts",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "verify:games": "node scripts/verify-games.ts"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
