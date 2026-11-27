@@ -30,6 +30,8 @@ export type Loaded = {
     status: 'pending' | 'active' | 'finished'
     archived_at: number | null
     wake_at: number | null
+    /** Whether it is played in teams. Missing on a database before teams. */
+    team_play?: boolean
   }
   settings: Record<string, unknown>
   current: {
@@ -203,6 +205,7 @@ export function step(logic: AnyGame, loaded: Loaded, request: EngineRequest, env
       scoreboard: loaded.scoreboard,
       config,
       now: env.now,
+      teamPlay: loaded.game.team_play === true,
       prompts: starting ? {} : toPrompts(loaded.prompts),
       answers: starting ? {} : toAnswers(loaded.prompts),
     }

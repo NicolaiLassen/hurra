@@ -1,6 +1,7 @@
 // Participant fusion's oracle: the host asks the pictures one at a time, in
 // any order; each guest here locks in two names once; a name counts when it
-// folds to one of the two in the picture, never the guest's own; per right
+// folds to one of the two in the picture, never the guest's own (except in
+// teams, where every member has the team's lock and it counts); per right
 // person and a bonus for both; the top of the totals among guests here is the
 // face detective. Recomputed from the locks the database took, the key the
 // settings and the host's Show who gave, and each prompt's reveal. The names,
@@ -186,18 +187,7 @@ class FusionOracle implements Oracle {
     for (const list of this.hits.values()) list.delete(playerId)
   }
 
-  /** In teams: a teammate may lock in a guest's own name, which never counts for that guest. */
-  apart(playerId: PlayerId): string | null {
-    const own = fold(this.run.nameOf(playerId))
-    for (const n of this.order) {
-      const names = this.reveals.get(n)?.names ?? []
-      const picks = this.locks.get(`p${n}`)?.get(playerId) ?? []
-      if (names.some((name) => fold(name) === own) && picks.some((pick) => fold(pick) === own)) {
-        return `their team locked in their own name for picture ${n}`
-      }
-    }
-    return null
-  }
+  // No apart(): in teams a guest's own name counts for them as for their teammates, so a team scores as one.
 
   after(call: Call, result: Step) {
     const { run } = this
@@ -257,7 +247,8 @@ class FusionOracle implements Oracle {
     for (const [id, picks] of this.locks.get(prompt.key) ?? []) {
       const voter = present.get(id)
       if (!voter) continue
-      const own = fold(voter.name)
+      // Their own name counts for nothing, except in teams (a teammate may have named them).
+      const own = run.teams ? '' : fold(voter.name)
       const picked = new Set(picks.map(fold).filter((f) => f !== '' && f !== own))
       const count = names.filter((name) => picked.has(fold(name))).length
       hits.set(id, count)

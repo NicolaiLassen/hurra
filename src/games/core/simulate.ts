@@ -732,6 +732,7 @@ export class FakeParty {
       scoreboard: loaded.scoreboard,
       config: st.config,
       now: this.now,
+      teamPlay: this.teamPlay.has(gameId),
       prompts: Object.fromEntries(this.promptsOf(gameId).map((p) => [p.key, p])),
       answers: {},
     }
@@ -842,6 +843,7 @@ export class FakeParty {
         status: game.status,
         archived_at: game.archived_at,
         wake_at: game.wake_at,
+        team_play: this.teamPlay.has(game.id),
       },
       settings: structuredClone(this.settings.get(gameId) ?? {}),
       current: st

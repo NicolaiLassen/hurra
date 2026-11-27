@@ -151,6 +151,13 @@ export type GameInfo<Config> = {
   readonly config: Config
   /** Ms since epoch by the database clock, fixed for the whole request, retries included. */
   readonly now: number
+  /**
+   * Whether this round is played in teams (session_games.team_play): one
+   * answer from any member counts for the whole team, so every member has the
+   * same answer. Fixed for the round (the host switches it only while the game
+   * isn't live). Missing means no.
+   */
+  readonly teamPlay?: boolean
   /** This round's prompts, by key. */
   readonly prompts: Readonly<Record<string, Prompt>>
   /** Answers to prompts that are closed but not revealed yet, by key, in arrival order. */

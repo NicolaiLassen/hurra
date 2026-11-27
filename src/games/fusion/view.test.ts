@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { voteSpec } from '@/games/fusion/shapes'
-import { choiceOf, guessOptions, nameOf, namesFor, pickSignature, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
+import { choiceOf, guessOptions, nameOf, ownName, namesFor, pickSignature, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
 import type { Player } from '@/lib/types'
 
 const player = (id: string, name = id): Player => ({ id, name, code: 'ABCDE', profile: {}, created_at: 0 })
@@ -33,6 +33,15 @@ describe('the names a guess offers', () => {
     expect(guessOptions(spec, [], 'Sofie')).toEqual(['Ana', 'Bo', 'Zelda', 'Ørn', 'Åse'])
     // Your own name in another spelling is yours too.
     expect(guessOptions(spec, [], 'sofie ')).toEqual(['Ana', 'Bo', 'Zelda', 'Ørn', 'Åse'])
+  })
+
+  it('offers your own name too in teams, where it counts (ownName)', () => {
+    const spec = voteSpec(['Sofie', 'Bo', 'Ana'])
+    const sofie = player('me', 'Sofie')
+    expect(ownName({ team_play: false }, sofie)).toBe('Sofie')
+    expect(ownName({}, sofie)).toBe('Sofie')
+    expect(ownName({ team_play: true }, sofie)).toBeNull()
+    expect(guessOptions(spec, [], ownName({ team_play: true }, sofie))).toEqual(['Ana', 'Bo', 'Sofie'])
   })
 
   it('falls back to the guests here for a prompt from before names', () => {

@@ -433,3 +433,59 @@ describe('team play off', () => {
     expect(log.every((e) => !('team' in e.data))).toBe(true)
   })
 })
+
+describe('fusion in teams', () => {
+  // Fusion scores a team as one: game_load hands it team_play, and in teams a
+  // guest's own name counts for them, so when a team names one of its own,
+  // that member scores as much as the rest.
+  it('counts a member’s own name when their team names them, so every member scores the same', async () => {
+    const { party, byName } = await partyWith(['Ana', 'Bo', 'Cy', 'Dee'], 'Fusion in teams')
+    const { Ana, Bo, Cy, Dee } = byName
+    await arrange(party, { gold: [Ana, Bo], pink: [Cy, Dee] })
+    const gameId = await world.game(host, party, 'fusion', 'Who is fused?', {
+      pictures: [{ label: '#1', people: ['Ana', 'Cy'] }],
+      pointsPerPerson: 1,
+      bonusForBoth: 1,
+      seconds: 30,
+    })
+    expect(outcome(await setTeamPlay(host, gameId, true))).toBe('ok')
+    const act = (action: Record<string, unknown>, close?: string[]) => engine(host, { type: 'host-action', gameId, action, ...(close ? { close } : {}) })
+
+    expect(await engine(host, { type: 'start', gameId })).toMatchObject({ status: 200 })
+    const [state] = await rows<{ state: { teamPlay?: boolean } }>('game_states', 'game_id', gameId)
+    expect(state.state.teamPlay).toBe(true)
+    expect(await act({ type: 'ask', n: 1 })).toMatchObject({ status: 200 })
+    // Bo names his teammate Ana, and Cy names herself: each lock is the whole team's.
+    expect((await answer(Bo, gameId, 'p1', { choice: ['Ana', 'Cy'] })).error).toBeNull()
+    expect((await answer(Cy, gameId, 'p1', { choice: ['Cy', 'Ana'] })).error).toBeNull()
+    expect(await act({ type: 'reveal', n: 1 }, ['p1'])).toMatchObject({ status: 200 })
+
+    const scores = await rows<{ player_id: string; points: number }>('game_scores', 'game_id', gameId)
+    // Both right for all four, Ana and Cy too: 2 + the bonus each.
+    expect(Object.fromEntries(scores.map((s) => [s.player_id, s.points]))).toEqual({
+      [Ana.playerId]: 3,
+      [Bo.playerId]: 3,
+      [Cy.playerId]: 3,
+      [Dee.playerId]: 3,
+    })
+  }, 30_000)
+
+  it('still never counts a guest’s own name with team play off', async () => {
+    const { party, byName } = await partyWith(['Ana', 'Bo', 'Cy'], 'Fusion alone')
+    const { Ana, Bo, Cy } = byName
+    await arrange(party, { gold: [Ana, Bo], pink: [Cy] })
+    const gameId = await world.game(host, party, 'fusion', 'Who is fused?', {
+      pictures: [{ label: '#1', people: ['Ana', 'Bo'] }],
+      pointsPerPerson: 1,
+      bonusForBoth: 0,
+      seconds: 30,
+    })
+    expect(await engine(host, { type: 'start', gameId })).toMatchObject({ status: 200 })
+    expect(await engine(host, { type: 'host-action', gameId, action: { type: 'ask', n: 1 } })).toMatchObject({ status: 200 })
+    expect((await answer(Ana, gameId, 'p1', { choice: ['Ana', 'Bo'] })).error).toBeNull()
+    expect((await answer(Bo, gameId, 'p1', { choice: ['Ana', 'Bo'] })).error).toBeNull()
+    expect(await engine(host, { type: 'host-action', gameId, action: { type: 'reveal', n: 1 }, close: ['p1'] })).toMatchObject({ status: 200 })
+    const scores = await rows<{ player_id: string; points: number }>('game_scores', 'game_id', gameId)
+    expect(Object.fromEntries(scores.map((s) => [s.player_id, s.points]))).toEqual({ [Ana.playerId]: 1, [Bo.playerId]: 1 })
+  }, 30_000)
+})

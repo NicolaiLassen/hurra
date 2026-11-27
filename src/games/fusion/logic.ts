@@ -122,6 +122,12 @@ export type FusionState = {
   openedAt: number | null
   endsAt: number | null
   revealedAt: number | null
+  /**
+   * Played in teams: every member has the team's guess, so a guest's own name
+   * counts for them too, and a team that names one of its own scores as one.
+   * Missing when not, and in saves from before teams.
+   */
+  teamPlay?: true
 }
 
 /** What this game keeps on a player's profile. */
@@ -175,6 +181,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     })
     // No prompt and no announcement yet: the TV's "Hurra presents" card opens the game.
     return {
+      ...(ctx.teamPlay ? { teamPlay: true as const } : {}),
       phase: 'lobby',
       key,
       revealed: [],
@@ -439,12 +446,13 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     }
 
     // A perfect eye: on every revealed picture (at least two), everyone in it they could name. Their own
-    // name is never offered, so on a picture they are in, the other one is everything.
+    // name is never offered alone, so on a picture they are in, the other one is everything; in teams it
+    // counts, so both are.
     const perfect = round.players.filter((p) => {
       if (state.revealed.length < 2) return false
       return state.revealed.every((n) => {
         const key = state.key[n]
-        const most = key ? key.filter((name) => !sameName(name, p.name)).length : 2
+        const most = key && state.teamPlay !== true ? key.filter((name) => !sameName(name, p.name)).length : 2
         return state.results[n]?.hits[p.id] === most
       })
     })
@@ -492,7 +500,7 @@ export class FusionGame extends Game<FusionState, never, PublicState, PlayerView
     if (!people) throw new GameError(`Set who is in ${label} first`)
 
     // Every guest here guesses and scores, the two in it too: a lock from anyone gone since counts for nothing.
-    const result = scoreVotes(votes, people, ctx.players)
+    const result = scoreVotes(votes, people, ctx.players, s.teamPlay === true)
     const rules = rulesOf(ctx.config)
     const totals = { ...s.totals }
     for (const [id, hits] of Object.entries(result.hits)) {
@@ -635,7 +643,7 @@ const labelOf = (config: FusionConfig, n: number) => config.pictures[n - 1]?.lab
  * The names a guess offers: everyone who has joined (as they typed their
  * own name) and every name in the pictures, each once by nameKey, in Danish
  * order. The same list whichever picture is asked, so it says nothing about
- * the answer; the phone leaves out the guest's own name.
+ * the answer; the phone leaves out the guest's own name, except in teams.
  */
 export function guessNames(s: Pick<FusionState, 'key'>, info: Pick<GameInfo<FusionConfig>, 'players'>): string[] {
   const inPictures = Object.keys(s.key)
@@ -748,15 +756,22 @@ const isCount = (value: unknown): value is number => typeof value === 'number' &
 /**
  * Scores one picture's locks: every guest here who locked in, the two in it
  * too. A pick of the voter's own name counts for nothing (their phone never
- * offers it). The first lock is the only one (the prompt is final).
+ * offers it), except in teams: there every member has the team's guess, and
+ * a teammate may have named them, so it counts for them as for the rest. The
+ * first lock is the only one (the prompt is final).
  */
-function scoreVotes(votes: readonly Answer[], people: readonly [string, string], players: readonly GamePlayer[]): Omit<FusionResult, 'at'> {
+function scoreVotes(
+  votes: readonly Answer[],
+  people: readonly [string, string],
+  players: readonly GamePlayer[],
+  teamPlay: boolean,
+): Omit<FusionResult, 'at'> {
   const result: Omit<FusionResult, 'at'> = { both: 0, one: 0, none: 0, voters: 0, hits: {} }
   for (const vote of votes) {
     const voter = players.find((p) => p.id === vote.playerId)
     if (!voter || Object.hasOwn(result.hits, vote.playerId)) continue
     const picks = 'choice' in vote.answer ? vote.answer.choice : []
-    const hits = countHits(picks, people, voter.name)
+    const hits = countHits(picks, people, teamPlay ? null : voter.name)
     result.hits[vote.playerId] = hits
     result.voters++
     if (hits === 2) result.both++

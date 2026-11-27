@@ -8,7 +8,7 @@ import type { AnswerPayload, PromptSpec } from '@/games/core/Game'
 import { nameKey, sameName, uniqueNames } from '@/games/core/names'
 import { foldName } from '@/lib/format'
 import { sortNames } from '@/lib/guestList'
-import type { Player } from '@/lib/types'
+import type { Player, SessionGame } from '@/lib/types'
 
 /** A vote's two names, or null when it isn't a two-name vote. */
 export function choiceOf(answer: AnswerPayload | null | undefined): [string, string] | null {
@@ -29,14 +29,23 @@ export function togglePick(pick: readonly string[], name: string): string[] {
 }
 
 /**
+ * The name this guest's guesses leave out, and that never counts for them:
+ * their own. Null in teams: every member has the team's guess, a teammate may
+ * have named them, and it counts for them as for the rest (logic.ts,
+ * scoreVotes).
+ */
+export const ownName = (game: Pick<SessionGame, 'team_play'>, player: Pick<Player, 'name'>): string | null =>
+  game.team_play === true ? null : player.name
+
+/**
  * The names this guest can pick for the picture asked: the ones its guess
  * offers (everyone who has joined and every name in the pictures, each once),
- * else, for a prompt from before names, the guests here; never their own
- * name; A to Z, the Danish way.
+ * else, for a prompt from before names, the guests here; never `own`, their
+ * own name outside teams (ownName); A to Z, the Danish way.
  */
-export function guessOptions(spec: PromptSpec | null | undefined, players: readonly Pick<Player, 'name'>[], me: string): string[] {
+export function guessOptions(spec: PromptSpec | null | undefined, players: readonly Pick<Player, 'name'>[], own: string | null): string[] {
   const offered = spec && spec.kind === 'choice' && Array.isArray(spec.options) ? spec.options : players.map((p) => p.name)
-  return sortNames(uniqueNames(offered).filter((name) => !sameName(name, me)))
+  return sortNames(uniqueNames(offered).filter((name) => own === null || !sameName(name, own)))
 }
 
 /**

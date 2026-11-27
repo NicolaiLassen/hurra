@@ -34,7 +34,7 @@ import {
   type FusionPublicState,
   type FusionReveal,
 } from '@/games/fusion/shapes'
-import { choiceOf, guessOptions, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
+import { choiceOf, guessOptions, ownName, playerNamed, shortName, shortNames, togglePick } from '@/games/fusion/view'
 import type { PlayerViewProps } from '@/games/types'
 import { useMomentSoundAt, useServerTime } from '@/lib/gameClock'
 import { usePlayerPhoto } from '@/lib/photoIndex'
@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils'
 // then pick its two names and lock in, the screen's one gold step (Show my
 // code steps aside for the timed prompt). Names only while picking: no
 // photos, no tokens. Everyone guesses every picture, the two in it too (their
-// own name is never offered); the reveal says what you got, with the two
+// own name is never offered, except in teams, where it counts); the reveal says what you got, with the two
 // people's own photos. The phone draws the strap above it ("Picture 4 of 12",
 // phoneStrap in index.ts).
 
@@ -75,6 +75,7 @@ export default function PlayerView({
 }: PlayerViewProps<FusionGame>) {
   const pub = readPublic(publicState)
   const view = readView(rawView)
+  const own = ownName(game, player)
   if (!pub) return <p className="py-8 text-center text-paper-2">Getting the pictures ready…</p>
 
   const current = pub.current ? pub.pictures.find((p) => p.n === pub.current!.n) : undefined
@@ -82,7 +83,7 @@ export default function PlayerView({
     case 'lobby':
       return <Said words={lobbyWords(onStage, pub.rules)} />
     case 'wall':
-      return <Wall pub={pub} view={view} player={player} myAnswers={myAnswers} onStage={onStage} mediaUrl={mediaUrl} />
+      return <Wall pub={pub} view={view} player={player} own={own} myAnswers={myAnswers} onStage={onStage} mediaUrl={mediaUrl} />
     case 'asking':
       return current && pub.current ? (
         <Asking
@@ -91,7 +92,7 @@ export default function PlayerView({
           current={pub.current}
           prompt={prompts.find((p) => p.key === pub.current!.key)}
           saved={myAnswers[pub.current.key]}
-          player={player}
+          own={own}
           players={players}
           onStage={onStage}
           submit={submit}
@@ -110,6 +111,7 @@ export default function PlayerView({
           view={view}
           mine={choiceOf(myAnswers[pub.current.key])}
           player={player}
+          own={own}
           players={players}
           serverNow={serverNow}
           mediaUrl={mediaUrl}
@@ -144,6 +146,7 @@ function Wall({
   pub,
   view,
   player,
+  own,
   myAnswers,
   onStage,
   mediaUrl,
@@ -151,6 +154,8 @@ function Wall({
   pub: FusionPublicState
   view: FusionPlayerView | null
   player: Player
+  /** Their own name, which counts for nothing outside teams (ownName). */
+  own: string | null
   myAnswers: Readonly<Record<string, AnswerPayload>>
   onStage: boolean
   mediaUrl: PlayerViewProps['mediaUrl']
@@ -169,7 +174,7 @@ function Wall({
           </h3>
           <ul className="grid grid-cols-1 gap-2">
             {revealed.map((picture) => {
-              const outcome = outcomeFor(picture, player.name, view, choiceOf(myAnswers[picture.key]))
+              const outcome = outcomeFor(picture, own, view, choiceOf(myAnswers[picture.key]))
               const points = outcomePoints(outcome, pub.rules)
               const who = picture.revealed.names.map((name) => (sameName(name, player.name) ? 'You' : name))
               return (
@@ -204,7 +209,7 @@ function Asking({
   current,
   prompt,
   saved,
-  player,
+  own,
   players,
   onStage,
   submit,
@@ -215,7 +220,8 @@ function Asking({
   current: FusionCurrent
   prompt: PromptState | undefined
   saved: AnswerPayload | undefined
-  player: Player
+  /** Their own name, left out of the names outside teams (ownName). */
+  own: string | null
   players: Player[]
   onStage: boolean
   submit: (key: string, answer: AnswerPayload) => Promise<SubmitResult>
@@ -224,7 +230,7 @@ function Asking({
 }) {
   const [pick, setPick] = useState<string[]>([])
   const [lock, setLock] = useState<LockState>(NO_LOCK)
-  const names = useMemo(() => guessOptions(prompt?.spec, players, player.name), [prompt?.spec, players, player.name])
+  const names = useMemo(() => guessOptions(prompt?.spec, players, own), [prompt?.spec, players, own])
   const short = useMemo(() => shortNames(names), [names])
   const lockedIn = isLockedIn(saved, lock)
   const sending = lock.kind === 'sending'
@@ -322,6 +328,7 @@ function Revealed({
   view,
   mine,
   player,
+  own,
   players,
   serverNow,
   mediaUrl,
@@ -333,12 +340,13 @@ function Revealed({
   view: FusionPlayerView | null
   mine: Pick2 | null
   player: Player
+  own: string | null
   players: readonly Player[]
   serverNow: () => number
   mediaUrl: PlayerViewProps['mediaUrl']
 }) {
   const id = useId()
-  const outcome = outcomeFor(picture, player.name, view, mine)
+  const outcome = outcomeFor(picture, own, view, mine)
   const points = outcomePoints(outcome, pub.rules)
   const names = picture.revealed.names
   // When the reveal reached this phone: its sound follows 2 s later, only while fresh.
@@ -396,7 +404,7 @@ function Revealed({
           </h3>
           <ul className="grid grid-cols-1 gap-2">
             {mine.map((pick) => {
-              const right = !sameName(pick, player.name) && names.some((name) => sameName(name, pick))
+              const right = (own === null || !sameName(pick, own)) && names.some((name) => sameName(name, pick))
               const guest = playerNamed(players, pick)
               return (
                 <li key={pick} className={cn('flex min-h-14 items-center gap-3 rounded-phone py-2 pr-4 pl-2', right ? 'bg-paper text-ink' : 'bg-overlay')}>

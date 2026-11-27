@@ -621,9 +621,12 @@ locked for the whole team, at most 20 changes, and a prompt's `exclude_self`
 checked for each member. Each member's phone gets its own ping. Scoring is
 unchanged: each member simply has the answer, so the game scores each of them
 as always, the quiz's speed points included. With team play off, or for a
-guest in no team, nothing changes. One rule of a game still holds in teams:
-in fusion a guest's own name never counts for them, so a member whose name
-the team locks in scores less for that picture.
+guest in no team, nothing changes. Fusion bends one rule so a team scores
+as one: alone, a guest's own name is never offered and never counts for
+them; in teams, their phone offers it and it counts, so when the team locks
+in one of its own members, that member gets the same points as the rest
+(`game_load` hands the game `team_play`, and fusion keeps it in its state
+for the round).
 
 ## 4. The TV
 

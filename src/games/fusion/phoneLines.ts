@@ -68,16 +68,18 @@ export type Outcome = 'both' | 'one' | 'none' | 'noGuess'
 /**
  * A revealed picture's outcome for this guest, whether they are in it or not:
  * from their view's hits (the logic's count), or, without them (a view not
- * caught up, a late joiner), from their own lock against the two names.
+ * caught up, a late joiner), from their own lock against the two names,
+ * where `own` (their own name outside teams, view.ts ownName) counts for
+ * nothing.
  */
 export function outcomeFor(
   picture: Pick<FusionPublicPicture, 'n'> & { revealed: { names: readonly [string, string] } | null },
-  me: string,
+  own: string | null,
   view: FusionPlayerView | null,
   mine: readonly string[] | null,
 ): Outcome {
   const names = picture.revealed?.names
-  const hits = view?.hits[picture.n] ?? (mine && names ? countHits(mine, names, me) : undefined)
+  const hits = view?.hits[picture.n] ?? (mine && names ? countHits(mine, names, own) : undefined)
   if (hits === undefined) return 'noGuess'
   return hits >= 2 ? 'both' : hits === 1 ? 'one' : 'none'
 }
@@ -112,7 +114,7 @@ const picked = (names: readonly string[]) => (names.length >= 2 ? `${names[0]} a
  * The status line while a guest picks: how picking works, the picks so far,
  * the lock on its way, or why the database refused it (with "Try again." when
  * another lock can work). Everyone picks the same way, the two in the
- * picture too: their own name is never offered.
+ * picture too: their own name is never offered, except in teams.
  */
 export function pickLine(names: readonly string[], lock: LockState): string {
   if (lock.kind === 'refused') return lock.message
