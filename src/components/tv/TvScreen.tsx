@@ -20,6 +20,7 @@ import { withRanks } from '@/lib/format'
 import { usePublishedRecap } from '@/lib/queries'
 import type { RecapDoc } from '@/lib/recap'
 import { backgroundGames, recentlyFinished, tvScene, type TvScene } from '@/lib/stage'
+import { playedInTeams, teamPoints } from '@/lib/teams'
 import type { Session, Snapshot } from '@/lib/types'
 import { useLive, useServerNow } from '@/lib/useLive'
 
@@ -99,6 +100,10 @@ function Screen({
   const banner = strapNews(news.banner, area)
   const ticker = news.ticker
   const titleCard = useTitleCard(shown, session, now)
+  const line = sceneLine(shown, players, snapshot.games)
+  // The stage game played in teams: the strap says so, and the band has each team's points in it.
+  // The standings stay each guest's own.
+  const teamGame = line.game && playedInTeams(snapshot, line.game) ? line.game : null
   const titleOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.title
   const gameTypeOf = (gameId: string | null | undefined) => snapshot.games.find((g) => g.id === gameId)?.game_type
 
@@ -120,7 +125,7 @@ function Screen({
         <RecapScene doc={recap} partyName={session.name} startAt={recapSlide} />
       ) : (
         <>
-          <Header line={sceneLine(shown, players, snapshot.games)} name={session.name} now={now} />
+          <Header line={line} name={session.name} now={now} teams={teamGame !== null} />
           {/* Clipped at its edges, so a scene that runs out of room never paints over the band. */}
           <section data-frame="stage" data-fit="stage" className="mt-7 mb-5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden short:mt-5 short:mb-4">
             {area.kind === 'stage' ? (
@@ -136,6 +141,7 @@ function Screen({
             joinCode={join === 'code' ? session.join_code : null}
             ticker={ticker}
             sourceOf={titleOf}
+            teams={teamGame && !over ? teamPoints(snapshot, teamGame.id) : null}
           />
         </>
       )}

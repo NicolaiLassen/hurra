@@ -4,6 +4,7 @@ import type { Player, Session, SessionGame } from '@/lib/types'
 import {
   BAND_LINES,
   bandRows,
+  bandTeamNames,
   byOldestStart,
   comingUp,
   freshStage,
@@ -15,6 +16,7 @@ import {
   sceneLine,
   strapNews,
   TITLE_CARD_FRESH_MS,
+  teamsLineFits,
   titleCardKey,
   topOfGame,
   winnerNames,
@@ -240,6 +242,22 @@ describe('the band', () => {
   it('gives news from a game with no line a line of its own', () => {
     expect(kinds(bandRows([hunt], { game_id: 'gone' }))).toEqual(['h', 'news'])
     expect(kinds(bandRows([], { game_id: null }))).toEqual(['news'])
+  })
+
+  it('has room for the teams line only beside fewer than two lines, so the stage never loses more height', () => {
+    expect(teamsLineFits(bandRows([]))).toBe(true)
+    expect(teamsLineFits(bandRows([hunt]))).toBe(true)
+    expect(teamsLineFits(bandRows([hunt, fusion]))).toBe(false)
+    expect(teamsLineFits(bandRows([hunt, fusion, quiz]))).toBe(false)
+    expect(teamsLineFits(bandRows([hunt], { game_id: 'gone' }))).toBe(false)
+  })
+
+  it('names the teams without the "Team " they all share, else as the host named them', () => {
+    expect(bandTeamNames(['Team Gold', 'team Pink', 'Team  Teal'])).toEqual(['Gold', 'Pink', 'Teal'])
+    expect(bandTeamNames(['Team Gold', 'Vikings'])).toEqual(['Team Gold', 'Vikings'])
+    expect(bandTeamNames(['Teamwork', 'Team Pink'])).toEqual(['Teamwork', 'Team Pink'])
+    expect(bandTeamNames(['Team', 'Team Pink'])).toEqual(['Team', 'Team Pink'])
+    expect(bandTeamNames([])).toEqual([])
   })
 })
 
