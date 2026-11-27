@@ -204,7 +204,7 @@ game: every game is a plugin.
 
 ## Credits
 
-- Sound effects generated with [ElevenLabs](https://elevenlabs.io).
+- Sound effects synthesized in code, from simple tones.
 - Icons by [Phosphor](https://phosphoricons.com), components from
   [shadcn/ui](https://ui.shadcn.com), type in
   [Archivo](https://fonts.google.com/specimen/Archivo) and
