@@ -1634,6 +1634,8 @@ export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
     screens: screen === 'host' ? (w.screens ?? 1) : null,
     recap: w.recapAt ? { published_at: w.recapAt } : null,
     guests: screen === 'host' ? guestsOf(w.players ?? PLAYERS) : null,
+    // A database with teams: none in this party (the teams scene has four).
+    teams: [],
   }
 }
 

@@ -156,7 +156,7 @@ function SettingsForm({
         </>
       }
     >
-      {canPlayInTeams(game.game_type) && <TeamPlaySetting snapshot={snapshot} game={game} />}
+      {canPlayInTeams(game.game_type) && Array.isArray(snapshot.teams) && <TeamPlaySetting snapshot={snapshot} game={game} />}
       <Editor config={config} onChange={setConfig} session={session} game={game} players={snapshot.players} guests={guests} media={media} />
       <Confirm
         open={discarding}

@@ -47,6 +47,8 @@ export default function TeamsCard({ snapshot, className }: { snapshot: Snapshot;
 
   // An archived party keeps its teams to look at; one that never had any has nothing to show.
   if (over && teams.length === 0) return null
+  // A database from before teams sends no teams at all: nothing to make them with.
+  if (!Array.isArray(snapshot.teams)) return null
 
   async function make() {
     setMaking(true)
