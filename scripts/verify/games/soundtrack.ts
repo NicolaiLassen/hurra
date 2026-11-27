@@ -273,10 +273,20 @@ class SoundtrackOracle implements Oracle {
     return run.rng.pick(steps)
   }
 
-  answered(playerId: PlayerId, key: string, answer: AnswerPayload) {
+  answered(playerId: PlayerId, key: string, answer: AnswerPayload, by: PlayerId) {
     const list = this.answers.get(key) ?? new Map<PlayerId, AnswerPayload>()
     this.answers.set(key, list)
     list.set(playerId, answer)
+    // In teams a teammate typed it: it is meant as what they meant.
+    if (by !== playerId && 'text' in answer) {
+      const intent = this.intents.get(this.intentKey(by, key, answer.text))
+      if (intent) this.intents.set(this.intentKey(playerId, key, answer.text), intent)
+    }
+  }
+
+  /** In teams: a guest who sits out scores nothing, whatever their team answered. */
+  apart(playerId: PlayerId): string | null {
+    return this.sittingOut(playerId) ? 'they sit out' : null
   }
 
   dropped(playerId: PlayerId) {
@@ -500,12 +510,16 @@ class SoundtrackOracle implements Oracle {
       if (pub.playing !== run.present().filter((p) => !this.sittingOut(p.id)).length) run.fail('scores-match-oracle', 'the count of guests playing is off')
     }
 
-    // Phones: their own points, never another guest's typing.
+    // Phones: their own points, never another guest's typing (in teams, the team's typing is each member's own).
     const views = run.views()
-    const texts = new Map<string, PlayerId>()
+    const texts = new Map<string, Set<PlayerId>>()
     for (const [key, list] of this.answers) {
       if (key.endsWith('.event')) continue
-      for (const [id, answer] of list) if ('text' in answer && this.intents.get(this.intentKey(id, key, answer.text)) === 'wrong') texts.set(answer.text.trim(), id)
+      for (const [id, answer] of list) {
+        if (!('text' in answer) || this.intents.get(this.intentKey(id, key, answer.text)) !== 'wrong') continue
+        const text = answer.text.trim()
+        texts.set(text, new Set([...(texts.get(text) ?? []), id]))
+      }
     }
     for (const p of run.present()) {
       const view = views[p.id] as SoundtrackPlayerView | undefined
@@ -515,8 +529,8 @@ class SoundtrackOracle implements Oracle {
         run.fail('scores-match-oracle', `${p.name}'s phone shows ${view.points} Lydspor points, the oracle ${points.get(p.id) ?? 0}`)
       }
       for (const s of stringsIn(view)) {
-        const typist = texts.get(s)
-        if (typist !== undefined && typist !== p.id) run.fail('secrets-kept', `${p.name}'s phone shows what another guest typed`)
+        const typists = texts.get(s)
+        if (typists !== undefined && !typists.has(p.id)) run.fail('secrets-kept', `${p.name}'s phone shows what another guest typed`)
       }
       // A guest's own answers are theirs to see, the right ones included.
       const own = new Set([...(view.mine?.title ?? []), ...(view.mine?.singer ?? [])].filter((t): t is string => t !== null))

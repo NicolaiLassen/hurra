@@ -4,12 +4,14 @@
 // its host by the bot's steps and random ones, while guests join, leave, have
 // their names freed and taken again, the host restarts the round, the TV's
 // timer syncs come on time, late or early, and every table is reloaded from
-// JSON now and then. After every engine call the game's oracle compares.
+// JSON now and then. After every engine call the game's oracle compares. In
+// teams, the host makes teams before the start and switches team play on, and
+// moves a guest to another team or out of every team now and then.
 import { createHash } from 'node:crypto'
 import type { GameBot } from '../../src/games/core/bot'
 import type { AnswerPayload, AnyGame, GamePlayer, PlayerId } from '../../src/games/core/Game'
 import { canonicalJson, type Step } from '../../src/games/core/runtime'
-import { FakeDbError, simulateParty, type FakeParty } from '../../src/games/core/simulate'
+import { FakeDbError, simulateParty, type FakeParty, type FakeSubmission } from '../../src/games/core/simulate'
 import {
   Rng,
   type Adapter,
@@ -36,6 +38,12 @@ export type RunOptions = {
   checks: boolean
   /** Reload every table from JSON now and then, from a random of its own. */
   reloads: boolean
+  /**
+   * Play in teams: 2 to 4 teams made before the start (and now and then again
+   * between rounds), team play on, a guest moved now and then; every choice
+   * of it from a random of its own. Left out: alone, as always.
+   */
+  teams?: boolean
 }
 
 export type RunResult = {
@@ -59,6 +67,8 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
   const started = performance.now()
   const rng = new Rng(seed * 2654435761)
   const reloadRng = new Rng(seed * 40503 + 17)
+  const teamRng = new Rng(seed * 69069 + 7)
+  const teams = options.teams === true
   // The games' ctx.random: Park-Miller wants 1 to 2^31 - 2.
   const party = simulateParty({ games: [logic], players: 0, seed: 1 + ((seed * 7919) % 2147483000) })
   const failures = new Map<Invariant, { message: string; trace: string[] }>()
@@ -81,6 +91,8 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
   let dirty = false
   /** The host's awards per present guest: the day's ledger, which a removal or a free deletes. */
   const ledger = new Map<PlayerId, number>()
+  /** In teams: each guest in a team at the round's start who hasn't left, been freed or moved since, with that team. */
+  const steady = new Map<PlayerId, string>()
 
   for (let i = 0; i < size; i++) party.addPlayer(NAMES[i] ?? `Guest ${i + 1}`, { silent: true })
   const listed = Math.min(EXPECTED.length, 1 + rng.int(3) + Math.floor(size / 8))
@@ -96,6 +108,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     gameId: GAME_ID,
     logic,
     bot,
+    teams,
     round: 0,
     fail(invariant, message) {
       if (!options.checks && invariant !== 'no-exception') return
@@ -127,6 +140,10 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
   const settings = adapter.settings(run)
   party.addGame(GAME_ID, adapter.type, 'Verify round', settings)
   trace(`${size} guests, ${listed} more on the guest list`)
+  if (teams) {
+    party.setTeamPlay(GAME_ID, true)
+    makeTeams('the host makes')
+  }
 
   // ---------------------------------------------------------------------------
 
@@ -185,10 +202,12 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
         if (statusBefore === 'active' && game.status === 'finished') {
           endings.push(game.finishedBy === 'game' ? 'game' : 'host')
           oracle.finished(game.finishedBy === 'game' ? 'game' : 'host')
+          if (teams) for (const id of steady.keys()) if (oracle.apart?.(id)) count('teammates scored apart by the rules')
         }
         if (options.checks) {
           oracle.check()
           genericChecks(what, result)
+          if (teams) teamChecks()
         }
       } catch (error) {
         run.fail('no-exception', `the oracle failed after ${label}: ${describe(error)}`)
@@ -238,6 +257,39 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     }
   }
 
+  /**
+   * In teams: every steady member of a team has the team's answer to every
+   * prompt, with the same first time, and the same points in the game, but
+   * where the game's own rules tell them apart (oracle.apart).
+   */
+  function teamChecks() {
+    if (!oracle) return
+    const byTeam = new Map<string, PlayerId[]>()
+    for (const [id, team] of steady) byTeam.set(team, [...(byTeam.get(team) ?? []), id])
+    const rows = party.promptsOf(GAME_ID).map((prompt) => ({
+      key: prompt.key,
+      rows: new Map(party.submissionsOf(GAME_ID, prompt.key).map((row) => [row.player_id, row])),
+    }))
+    const shown = (row: FakeSubmission | undefined) => (row ? `${canonicalJson(row.payload)} at +${row.first_at - t0} ms` : 'nothing')
+    const scores = party.game(GAME_ID).scores
+    for (const ids of byTeam.values()) {
+      const [first, ...rest] = ids
+      for (const prompt of rows) {
+        const want = prompt.rows.get(first)
+        for (const id of rest) {
+          const got = prompt.rows.get(id)
+          if (canonicalJson(got?.payload ?? null) !== canonicalJson(want?.payload ?? null) || got?.first_at !== want?.first_at) {
+            run.fail('team-members-equal', `${run.nameOf(first)} and ${run.nameOf(id)}, teammates all round, have ${prompt.key} as ${shown(want)} and ${shown(got)}`)
+          }
+        }
+      }
+      const alike = ids.filter((id) => !oracle!.apart?.(id))
+      if (new Set(alike.map((id) => scores[id] ?? 0)).size > 1) {
+        run.fail('team-members-equal', `teammates all round end with different points: ${alike.map((id) => `${run.nameOf(id)} ${scores[id] ?? 0}`).join(', ')}`)
+      }
+    }
+  }
+
   // Engine calls --------------------------------------------------------------
 
   function start(): boolean {
@@ -249,6 +301,13 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     members = new Set(party.players.map((p) => p.id))
     rejoined.clear()
     dirty = false
+    steady.clear()
+    if (teams) {
+      for (const p of party.players) {
+        const team = party.teamOf(p.id)
+        if (team !== null) steady.set(p.id, team)
+      }
+    }
     oracle = adapter.begin(run)
     if (options.checks) oracle.check()
     return true
@@ -299,8 +358,14 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     try {
       const result = party.submit(GAME_ID, key, player.id, answer)
       count('answers taken')
-      if (!result.replayed) oracle?.answered(player.id, key, answer)
-      trace(`${player.name} answers ${key} ${JSON.stringify(answer)}${note ? ` (${note})` : ''}`)
+      // Everyone the database wrote it for: the player alone, or their team; nobody for a replay.
+      for (const id of result.written) oracle?.answered(id, key, answer, player.id)
+      const others = result.written.filter((id) => id !== player.id).length
+      if (teams) {
+        if (others > 0) count('answers written for teammates', others)
+        hash.update(`=${result.written.join(',')}`)
+      }
+      trace(`${player.name} answers ${key} ${JSON.stringify(answer)}${note ? ` (${note})` : ''}${others > 0 ? ` for ${others} teammates too` : ''}`)
     } catch (error) {
       if (!(error instanceof FakeDbError)) {
         run.fail('no-exception', `submit ${key} threw: ${describe(error)}`)
@@ -327,6 +392,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     epochs.set(player.id, run.epoch(player.id) + 1)
     rejoined.delete(player.id)
     ledger.delete(player.id)
+    steady.delete(player.id)
     oracle?.dropped(player.id)
     trace(`${player.name} ${how === 'removed' ? 'is removed by the host' : 'has their name freed by the host'}`)
     // The host page syncs every live game right after; now and then that sync doesn't land.
@@ -363,7 +429,30 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     trace(`${player.name} arrives and takes their name from the list`)
   }
 
+  // Teams ---------------------------------------------------------------------
+
+  /** The host makes 2 to 4 teams of everyone here (allowed only while the round isn't live). */
+  function makeTeams(how: string) {
+    const n = teamRng.between(2, 4)
+    party.makeTeams(n, teamRng.fn())
+    count('teams made')
+    trace(`${how} ${n} teams: ${party.teams.map((t) => `${t.name} ${party.membersOf(t.id).map(run.nameOf).join('/')}`).join(', ')}`)
+  }
+
+  /** The host moves a guest into another team, or out of every team, mid-round. */
+  function moveSomeone() {
+    const player = teamRng.pick(party.players)
+    const from = party.teamOf(player.id)
+    const others = party.teams.filter((t) => t.id !== from)
+    const to = from !== null && (others.length === 0 || teamRng.chance(0.2)) ? null : (teamRng.pick(others)?.id ?? null)
+    if (!party.setTeam(player.id, to)) return
+    steady.delete(player.id)
+    count(to === null ? 'guests moved out of every team' : 'guests moved to another team')
+    trace(`the host moves ${player.name} ${to === null ? 'out of every team' : `to ${party.teams.find((t) => t.id === to)!.name}`}`)
+  }
+
   function chaos() {
+    if (teams && party.players.length > 0 && teamRng.chance(0.008)) moveSomeone()
     const r = rng.next() / (adapter.churn ?? 1)
     const big = party.players.length > 30
     if (r < 0.012) join('new')
@@ -409,6 +498,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
         party.tick(5000)
         count('restarts')
         trace('the host starts the round again after it finished')
+        if (teams && teamRng.chance(0.5)) makeTeams('between rounds the host makes')
         if (!start()) break
         continue
       }
@@ -420,6 +510,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
       trace('the host restarts the round')
       end()
       party.tick(1000)
+      if (teams && teamRng.chance(0.5) && party.game(GAME_ID).status !== 'active') makeTeams('between rounds the host makes')
       if (!start()) break
       continue
     }
@@ -472,6 +563,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     }
     if (party.sync(GAME_ID).kind !== 'skip') run.fail('finishes-cleanly', 'a sync after the finish did something')
     oracle?.check()
+    if (teams) teamChecks()
   }
 
   return { game: adapter.type, size, seed, failures, hash: hash.digest('hex'), endings, calls, ms: performance.now() - started, counts }

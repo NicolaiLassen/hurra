@@ -186,6 +186,19 @@ class FusionOracle implements Oracle {
     for (const list of this.hits.values()) list.delete(playerId)
   }
 
+  /** In teams: a teammate may lock in a guest's own name, which never counts for that guest. */
+  apart(playerId: PlayerId): string | null {
+    const own = fold(this.run.nameOf(playerId))
+    for (const n of this.order) {
+      const names = this.reveals.get(n)?.names ?? []
+      const picks = this.locks.get(`p${n}`)?.get(playerId) ?? []
+      if (names.some((name) => fold(name) === own) && picks.some((pick) => fold(pick) === own)) {
+        return `their team locked in their own name for picture ${n}`
+      }
+    }
+    return null
+  }
+
   after(call: Call, result: Step) {
     const { run } = this
     if (call.kind === 'host') {

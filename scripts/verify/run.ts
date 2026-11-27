@@ -1,13 +1,14 @@
 // The game mechanic verifier's sweep: every registered game, across seeds and
 // party sizes, each run checked against its game's oracle, paired with a run
-// that reloads every table from JSON and (for some seeds) a plain repeat; then
-// the old saves. Prints a compact report and writes it as Markdown.
+// that reloads every table from JSON and (for some seeds) a plain repeat; the
+// games that can be played in teams again in teams, with fewer seeds; then the
+// old saves. Prints a compact report and writes it as Markdown.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { gameBots } from '../../src/games/bots'
 import { gameLogic } from '../../src/games/logic'
-import { INVARIANT_WORDS, INVARIANTS, type Adapter, type Invariant } from './core'
+import { INVARIANT_WORDS, INVARIANTS, TEAM_PLAY_GAMES, type Adapter, type Invariant } from './core'
 import { runParty, type RunResult } from './driver'
 import { elimination } from './games/elimination'
 import { fusion } from './games/fusion'
@@ -19,7 +20,17 @@ import { checkOldSaves } from './saves'
 const ADAPTERS: Adapter[] = [inPerson, elimination, quiz, fusion, soundtrack]
 export const SIZES = [1, 2, 5, 24, 45]
 
-type Options = { deep: boolean; game: string | null; size: number | null; seed: number | null; report: string | null; quiet: boolean }
+type Options = {
+  deep: boolean
+  game: string | null
+  size: number | null
+  seed: number | null
+  report: string | null
+  quiet: boolean
+  /** Only the runs in teams, or only the runs alone; both when neither. */
+  teams: boolean
+  solo: boolean
+}
 
 type Tally = { runs: number; failures: number; first: { seed: number; size: number; message: string; trace: string[] } | null }
 
@@ -36,6 +47,8 @@ export function parseArgs(argv: string[]): Options {
     seed: number('--seed'),
     report: value('--report'),
     quiet: argv.includes('--quiet'),
+    teams: argv.includes('--teams'),
+    solo: argv.includes('--solo'),
   }
 }
 
@@ -44,6 +57,14 @@ function seedsFor(size: number, deep: boolean): number {
   const base = size <= 5 ? 60 : size <= 24 ? 24 : 12
   return deep ? base * 5 : base
 }
+
+/** Seeds per party size in teams: a third of those alone, as the runs in teams come on top. */
+function teamSeedsFor(size: number, deep: boolean): number {
+  return Math.ceil(seedsFor(size, deep) / 3)
+}
+
+/** How a game's runs in teams show in the report. */
+const inTeams = (type: string) => `${type} in teams`
 
 export function main(argv: string[]): number {
   const options = parseArgs(argv)
@@ -58,6 +79,8 @@ export function main(argv: string[]): number {
   if (missing.length > 0) {
     console.error(`No oracle for ${missing.join(', ')}: add one in scripts/verify/games before relying on this report.`)
   }
+  const unknown = TEAM_PLAY_GAMES.filter((type) => !ADAPTERS.some((a) => a.type === type))
+  if (unknown.length > 0) console.error(`TEAM_PLAY_GAMES names ${unknown.join(', ')}, which the verifier has no oracle for.`)
 
   const tallies = new Map<string, Map<Invariant, Tally>>()
   const tally = (game: string, invariant: Invariant) => {
@@ -71,42 +94,50 @@ export function main(argv: string[]): number {
   const coverage = new Map<string, Map<string, number>>()
   let calls = 0
 
-  for (const adapter of adapters) {
+  /** One game's sweep, alone or in teams, under `label` in the report. */
+  function sweep(adapter: Adapter, label: string, teams: boolean) {
     const logic = gameLogic.get(adapter.type)!
     const bot = gameBots.get(adapter.type)!
     const sizes = options.size !== null ? [options.size] : SIZES
     for (const size of sizes) {
-      const seeds = options.seed !== null ? [options.seed] : Array.from({ length: seedsFor(size, options.deep) }, (_, i) => i + 1)
+      const count = teams ? teamSeedsFor(size, options.deep) : seedsFor(size, options.deep)
+      const seeds = options.seed !== null ? [options.seed] : Array.from({ length: count }, (_, i) => i + 1)
       for (const seed of seeds) {
-        const a = runParty(adapter, logic, bot, size, seed, { checks: true, reloads: false })
+        const a = runParty(adapter, logic, bot, size, seed, { checks: true, reloads: false, teams })
         calls += a.calls
-        const end = endings.get(adapter.type) ?? { game: 0, host: 0 }
+        const end = endings.get(label) ?? { game: 0, host: 0 }
         for (const how of a.endings) end[how]++
-        endings.set(adapter.type, end)
-        const cover = coverage.get(adapter.type) ?? new Map<string, number>()
-        coverage.set(adapter.type, cover)
+        endings.set(label, end)
+        const cover = coverage.get(label) ?? new Map<string, number>()
+        coverage.set(label, cover)
         for (const [what, n] of a.counts) cover.set(what, (cover.get(what) ?? 0) + n)
         for (const invariant of INVARIANTS) {
           if (invariant === 'same-seed-same-result' || invariant === 'reloads-change-nothing' || invariant === 'old-saves-load') continue
           if (invariant === 'latecomers-dealt-fairly' && adapter.type !== 'elimination') continue
-          record(tally(adapter.type, invariant), a, a.failures.get(invariant))
+          if (invariant === 'team-members-equal' && !teams) continue
+          record(tally(label, invariant), a, a.failures.get(invariant))
         }
         // The same night with every table reloaded from JSON now and then: nothing may differ.
-        const b = runParty(adapter, logic, bot, size, seed, { checks: false, reloads: true })
+        const b = runParty(adapter, logic, bot, size, seed, { checks: false, reloads: true, teams })
         calls += b.calls
         cover.set('reloads in the paired runs', (cover.get('reloads in the paired runs') ?? 0) + (b.counts.get('reloads') ?? 0))
         const reloadFailure = b.failures.get('no-exception') ?? (b.hash !== a.hash ? { message: 'the night differs once the tables are reloaded from JSON', trace: [] } : undefined)
-        record(tally(adapter.type, 'reloads-change-nothing'), a, reloadFailure)
+        record(tally(label, 'reloads-change-nothing'), a, reloadFailure)
         // And the same night again, plainly.
         if (seed % 3 === 1 || options.seed !== null) {
-          const c = runParty(adapter, logic, bot, size, seed, { checks: false, reloads: false })
+          const c = runParty(adapter, logic, bot, size, seed, { checks: false, reloads: false, teams })
           calls += c.calls
-          record(tally(adapter.type, 'same-seed-same-result'), a, c.hash !== a.hash ? { message: 'the same seed gave a different night', trace: [] } : undefined)
+          record(tally(label, 'same-seed-same-result'), a, c.hash !== a.hash ? { message: 'the same seed gave a different night', trace: [] } : undefined)
         }
         if (!options.quiet) process.stdout.write('.')
       }
     }
-    if (!options.quiet) process.stdout.write(` ${adapter.type}\n`)
+    if (!options.quiet) process.stdout.write(` ${label}\n`)
+  }
+
+  for (const adapter of adapters) {
+    if (!options.teams) sweep(adapter, adapter.type, false)
+    if (!options.solo && TEAM_PLAY_GAMES.includes(adapter.type)) sweep(adapter, inTeams(adapter.type), true)
   }
 
   // States saved by older versions of the games.
@@ -162,10 +193,15 @@ function render(
   md.push('# Game mechanic verifier', '')
   md.push(
     `${when} UTC, commit ${commit()}, ${meta.deep ? 'deep' : 'quick'} sweep: party sizes ${SIZES.join(', ')}, ` +
+      `alone and, for ${TEAM_PLAY_GAMES.join(', ')}, in 2 to 4 teams with a third of the seeds; ` +
       `${meta.calls.toLocaleString('en')} engine calls and ${meta.saves} old saves in ${meta.seconds.toFixed(1)} s.`,
     '',
   )
-  md.push('Run it with `npm run verify:games` (`-- --deep` for more seeds; `-- --game quiz --size 24 --seed 7` replays one run).', '')
+  md.push(
+    'Run it with `npm run verify:games` (`-- --deep` for more seeds; `-- --game quiz --size 24 --seed 7` replays one run, ' +
+      'with `--teams` a run in teams, and `--solo` or `--teams` alone keeps to the runs alone or in teams).',
+    '',
+  )
   md.push('| Game | Invariant | Runs | Result | First failing run |', '| --- | --- | ---: | --- | --- |')
   const failures: string[] = []
   for (const [game, byGame] of tallies) {

@@ -17,6 +17,7 @@ export const INVARIANTS = [
   'secrets-kept',
   'payouts-within-limits',
   'latecomers-dealt-fairly',
+  'team-members-equal',
   'same-seed-same-result',
   'reloads-change-nothing',
   'old-saves-load',
@@ -31,10 +32,19 @@ export const INVARIANT_WORDS: Record<Invariant, string> = {
   'secrets-kept': 'No secret in the public state, a prompt, the feed or another guest’s view before its moment',
   'payouts-within-limits': 'Payouts within their limits; the day’s scoreboard adds up',
   'latecomers-dealt-fairly': 'A latecomer gets the next undealt card while dealing in is open, never a second life',
+  'team-members-equal': 'In teams: the members of a team all round have the same answers at the same times, and the same points but where the game’s rules tell them apart',
   'same-seed-same-result': 'The same seed gives the same night',
   'reloads-change-nothing': 'Every table reloaded from JSON mid-round changes nothing',
   'old-saves-load': 'States saved by older versions load, play on and end',
 }
+
+/**
+ * The games that can be played in teams (GameModule.teamPlay), which the
+ * verifier also plays in teams. It must be the registry's list; this file runs
+ * under Node, which can't load the game modules, so a test beside the
+ * registry compares the two.
+ */
+export const TEAM_PLAY_GAMES: readonly string[] = ['quiz', 'fusion', 'soundtrack']
 
 /** A small, fast seeded random (mulberry32): the verifier's own choices, apart from the games' ctx.random. */
 export class Rng {
@@ -98,8 +108,11 @@ export interface Oracle {
   guest(playerId: PlayerId): Move | null
   /** The host's next step: progress (often the bot's), a random valid step, or a stale one. */
   host(): HostStep | null
-  /** An answer the database took. */
-  answered(playerId: PlayerId, key: string, answer: AnswerPayload): void
+  /**
+   * An answer the database took for this player. `by` is who gave it: a
+   * teammate when the database wrote it for the whole team, else the player.
+   */
+  answered(playerId: PlayerId, key: string, answer: AnswerPayload, by: PlayerId): void
   /** The database dropped everything the id had (removed or freed): its answers are gone at once. */
   dropped(playerId: PlayerId): void
   /**
@@ -113,6 +126,12 @@ export interface Oracle {
   finished(by: 'game' | 'host'): void
   /** The host gave points from the award page (score_events), with this round's game id or none. */
   awarded?(playerId: PlayerId, points: number, gameId: string | null): void
+  /**
+   * In teams: why the game's own rules may score this guest apart from the
+   * rest of their team (their own name in a fusion picture, sitting out of
+   * Lydspor), or null. Their answers are still the team's.
+   */
+  apart?(playerId: PlayerId): string | null
 }
 
 export type Adapter = {
@@ -147,6 +166,8 @@ export type Run = {
   readonly gameId: string
   readonly logic: AnyGame
   readonly bot: GameBot
+  /** Played in teams: teams made before the start, the game's team play on. */
+  readonly teams: boolean
   /** The round, from 1. */
   round: number
   /** Notes a broken invariant (the first message per invariant is kept). */
