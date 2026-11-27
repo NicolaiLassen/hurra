@@ -39,6 +39,25 @@ export function confirmAnswer(previous: Confirmed | undefined, snapshot: AnswerP
   return { answer, stale: [...stale] }
 }
 
+/**
+ * The ledger without the saves the snapshot has caught up with: once a read
+ * holds the very answer this phone saved, the snapshot is the truth again.
+ * Reads land in order, so nothing older can follow it. Without this, in a
+ * game played in teams, a teammate who changes the answer back to one this
+ * phone had before would stay hidden behind this phone's own save. The same
+ * object when nothing changes, so it can run on every snapshot.
+ */
+export function settleLedger(
+  ledger: Readonly<Record<string, Confirmed>>,
+  snapshot: Readonly<Record<string, AnswerPayload>>,
+): Record<string, Confirmed> {
+  const caughtUp = Object.keys(ledger).filter((key) => signature(snapshot[key]) === signature(ledger[key].answer))
+  if (caughtUp.length === 0) return ledger as Record<string, Confirmed>
+  const next = { ...ledger }
+  for (const key of caughtUp) delete next[key]
+  return next
+}
+
 // Photos -----------------------------------------------------------------------------
 
 /** Each played song's photo as this phone shows it: index i is song i + 1, a wall index or null. */
