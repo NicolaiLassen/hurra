@@ -73,7 +73,16 @@ type PromptRow = {
   closed_at: number | null
   revealed_at: number | null
 }
-type SubRow = { player_id: PlayerId; payload: AnswerPayload; first_at: number; at: number; changes: number }
+/** One answer (game_submissions). `answered_by` is the teammate who gave it when submit_answer wrote it for a whole team, null for an answer of one's own. */
+type SubRow = { player_id: PlayerId; payload: AnswerPayload; first_at: number; at: number; changes: number; answered_by: PlayerId | null }
+/** One answer as a test or the verifier reads it: game_submissions' row. */
+export type FakeSubmission = Readonly<SubRow>
+/** A team of the party (public.teams): its place is `position`, from 0. */
+export type FakeTeam = { id: string; name: string; colour: string; position: number }
+/** What submit() gives back. `written` is every player whose answer it wrote: the player alone, or each member of their team it wrote for; none when it changed nothing (`replayed`). */
+export type FakeAnswerResult = { accepted: true; replayed?: true; ms: number; written: PlayerId[] }
+/** A team's default colour by its place (team_colours()); its default name is Team and the colour. */
+const TEAM_COLOURS = ['gold', 'pink', 'teal', 'violet', 'sky', 'lime'] as const
 type LogRow = LogEntry & { gameId: string | null; causeId: number | null }
 export type FakeFeedItem = {
   id: number
@@ -131,6 +140,14 @@ export class FakeParty {
   private pinged = new Set<string>()
   private seq = 0
   private ids = 0
+  /** The party's teams (public.teams), by position. None: the party has no teams. */
+  private teamRows: FakeTeam[] = []
+  /** Each joined player's team (players.team_id). A player in no team, or a guest still expected, isn't here. */
+  private teamIds = new Map<PlayerId, string>()
+  /** The games played in teams (session_games.team_play). */
+  private readonly teamPlay = new Set<string>()
+  /** makeTeams's shuffle when it is given none: a stream of its own, so the games' random goes on untouched. */
+  private readonly teamRandom = seededRandom(9001)
 
   constructor({ games, players, start = PARTY_NIGHT, seed = 7 }: { games: AnyGame[]; players: number; start?: number; seed?: number }) {
     this.now = start
@@ -223,14 +240,13 @@ export class FakeParty {
     }
   }
 
-  /** submit_answer's rules in memory. Throws a FakeDbError with .code ('closed', 'already_answered', ...). */
-  submit(
-    gameId: string,
-    key: string,
-    playerId: PlayerId,
-    answer: AnswerPayload,
-    afterMs?: number,
-  ): { accepted: true; replayed?: true; ms: number } {
+  /**
+   * submit_answer's rules in memory. Throws a FakeDbError with .code ('closed',
+   * 'already_answered', ...). For a game played in teams and a player in a
+   * team, the answer goes to the whole team (submitTeam, as the SQL's
+   * submit_team_answer); otherwise it is the player's own, exactly as before teams.
+   */
+  submit(gameId: string, key: string, playerId: PlayerId, answer: AnswerPayload, afterMs?: number): FakeAnswerResult {
     this.beginTx()
     const prompt = this.prompts.get(gameId)?.get(key)
     if (!prompt) throw new FakeDbError(409, 'closed', 'This question is not open')
@@ -252,9 +268,11 @@ export class FakeParty {
     )
     const subs = this.subs.get(`${gameId}/${key}`) ?? new Map<PlayerId, SubRow>()
     this.subs.set(`${gameId}/${key}`, subs)
+    const team = this.teamPlay.has(gameId) ? this.teamOf(playerId) : null
+    if (team !== null) return this.submitTeam(gameId, prompt, subs, playerId, team, normalised, at)
     const old = subs.get(playerId)
     if (old && canonicalJson(old.payload) === canonicalJson(normalised)) {
-      return { accepted: true, replayed: true, ms: old.first_at - prompt.opened_at }
+      return { accepted: true, replayed: true, ms: old.first_at - prompt.opened_at, written: [] }
     }
     if (old && 'final' in prompt.spec && prompt.spec.final) throw new FakeDbError(409, 'already_answered', 'You already answered')
     if (old && old.changes >= 20) throw new FakeDbError(409, 'too_many_changes', "That's enough changes for this one")
@@ -266,11 +284,89 @@ export class FakeParty {
     })
     if (old) {
       subs.set(playerId, { ...old, payload: normalised, at, changes: old.changes + 1 })
-      return { accepted: true, ms: old.first_at - prompt.opened_at }
+      return { accepted: true, ms: old.first_at - prompt.opened_at, written: [playerId] }
     }
-    subs.set(playerId, { player_id: playerId, payload: normalised, first_at: at, at, changes: 0 })
+    subs.set(playerId, { player_id: playerId, payload: normalised, first_at: at, at, changes: 0, answered_by: null })
     this.pings.push(`stage ${key}`)
-    return { accepted: true, ms: at - prompt.opened_at }
+    return { accepted: true, ms: at - prompt.opened_at, written: [playerId] }
+  }
+
+  /**
+   * submit_team_answer (the teams migration, section 5): after submit()'s
+   * checks, one answer for the whole team. The members are the team's joined
+   * players in id order. A final prompt keeps the first answer: once a member
+   * of this team gave one, the whole team is locked, members who have an
+   * answer keep it and nobody gets a second. Any other prompt takes the
+   * latest answer, at most 20 changes for the one who answers. With
+   * exclude_self the answer is checked for each member, and a member it
+   * doesn't hold for is left out. A new row has the caller's time as its
+   * first_at, so the whole team has the same speed.
+   */
+  private submitTeam(
+    gameId: string,
+    prompt: PromptRow,
+    subs: Map<PlayerId, SubRow>,
+    playerId: PlayerId,
+    team: string,
+    answer: AnswerPayload,
+    at: number,
+  ): FakeAnswerResult {
+    const spec = prompt.spec
+    const final = 'final' in spec && spec.final === true
+    const each = 'exclude_self' in spec && spec.exclude_self === true
+    const members = this.membersOf(team)
+    if (!members.includes(playerId)) members.push(playerId)
+    const mine = subs.get(playerId)
+    // The same answer again (a teammate gave it, or a resend) counts as success.
+    if (mine && canonicalJson(mine.payload) === canonicalJson(answer)) {
+      return { accepted: true, replayed: true, ms: mine.first_at - prompt.opened_at, written: [] }
+    }
+    if (final) {
+      const locked = members.some((id) => {
+        const by = subs.get(id)?.answered_by ?? null
+        return by !== null && members.includes(by)
+      })
+      if (mine || locked) throw new FakeDbError(409, 'already_answered', 'Your team already answered')
+    } else if (mine && mine.changes >= 20) {
+      throw new FakeDbError(409, 'too_many_changes', "That's enough changes for this one")
+    }
+    this.write('prompt.answered', gameId, prompt.round, 'player', playerId, [playerId], {
+      key: prompt.key,
+      answer,
+      ms: at - prompt.opened_at,
+      round: prompt.round,
+      team,
+      for: members,
+    })
+    const playerIds = this.players.map((p) => p.id)
+    const guestIds = this.guestList().map((g) => g.id)
+    const written: PlayerId[] = []
+    let inserted = 0
+    for (const member of members) {
+      if (each && member !== playerId) {
+        try {
+          checkAnswer(spec, answer, playerIds, member, guestIds)
+        } catch (error) {
+          if (error instanceof FakeDbError && error.status === 400) continue
+          throw error
+        }
+      }
+      const old = subs.get(member)
+      if (!final && old && canonicalJson(old.payload) !== canonicalJson(answer)) {
+        subs.set(member, { ...old, payload: answer, at, changes: Math.min(old.changes + 1, 20), answered_by: playerId })
+        written.push(member)
+        continue
+      }
+      // A final prompt never overwrites a member who has an answer; nor does the same answer again.
+      if (old) continue
+      subs.set(member, { player_id: member, payload: answer, first_at: at, at, changes: 0, answered_by: playerId })
+      written.push(member)
+      inserted++
+    }
+    // Each teammate's phone reads its answers again; the caller has its reply. The count goes to the stage.
+    for (const id of written) if (id !== playerId) this.ping(`player ${id}`)
+    if (inserted > 0) this.pings.push(`stage ${prompt.key}`)
+    return { accepted: true, ms: subs.get(playerId)!.first_at - prompt.opened_at, written }
   }
 
   tick(ms: number): void {
@@ -290,6 +386,7 @@ export class FakeParty {
     this.created.set(player.id, this.created.size)
     this.joinedAt.set(player.id, this.now)
     this.everyone.push({ id: player.id, name })
+    this.joinSmallestTeam(player.id)
     if (!silent) {
       this.write('player.joined', null, null, 'player', player.id, [player.id], { name, player_id: player.id })
       this.beginTx()
@@ -333,6 +430,7 @@ export class FakeParty {
     this.users.set(player.id, `user-${++this.ids}`)
     this.joinedAt.set(player.id, this.now)
     this.everyone.push({ id: player.id, name: player.name })
+    this.joinSmallestTeam(player.id)
     this.write('player.joined', null, null, 'player', player.id, [player.id], { name: player.name, player_id: player.id, listed: true })
     this.beginTx()
     this.ping('stage')
@@ -377,6 +475,8 @@ export class FakeParty {
     this.players = this.players.filter((p) => p.id !== playerId)
     this.users.delete(playerId)
     this.joinedAt.delete(playerId)
+    // The row goes, and its team with it: a freed name comes back in no team.
+    this.teamIds.delete(playerId)
     for (const views of this.views.values()) views.delete(playerId)
     for (const [gameId, scores] of this.gameScores) {
       const rest = { ...scores }
@@ -386,6 +486,148 @@ export class FakeParty {
     this.scoreEvents = this.scoreEvents.filter((e) => e.player_id !== playerId)
     for (const subs of this.subs.values()) subs.delete(playerId)
     return player
+  }
+
+  // Teams (docs/user-flows.md, Teams; the teams migration) ---------------------------
+
+  /** The party's teams, by position. None: the party has no teams. */
+  get teams(): FakeTeam[] {
+    return this.teamRows.map((t) => ({ ...t }))
+  }
+
+  /** A player's team, or null: in no team (a guest still expected is in none). */
+  teamOf(playerId: PlayerId): string | null {
+    return this.teamIds.get(playerId) ?? null
+  }
+
+  /** A team's joined members in id order, as submit_answer reads them. */
+  membersOf(teamId: string): PlayerId[] {
+    return this.players
+      .map((p) => p.id)
+      .filter((id) => this.teamIds.get(id) === teamId)
+      .sort(byteOrder)
+  }
+
+  /** Whether a game is played in teams (session_games.team_play). */
+  teamPlayOf(gameId: string): boolean {
+    this.gameRow(gameId)
+    return this.teamPlay.has(gameId)
+  }
+
+  /**
+   * host_make_teams: `count` teams (2 to 6), and the guests who are here
+   * shuffled and dealt round the teams in order, so sizes differ by one at
+   * most. Made again, teams up to the new count keep their names and colours,
+   * the rest go, new ones take the first colour no team has, and everyone is
+   * dealt again. Guests still expected stay out of every team until they join.
+   * `random` is the shuffle (the database's random()); one of the party's own
+   * when left out. Refused while a game played in teams is live.
+   */
+  makeTeams(count: number, random: () => number = this.teamRandom): FakeTeam[] {
+    if (!Number.isInteger(count) || count < 2 || count > 6) throw new FakeDbError(400, 'bad_count', 'Make 2 to 6 teams')
+    this.refuseWhileTeamGameLive('make new')
+    this.teamRows = this.teamRows.slice(0, count).map((t, i) => ({ ...t, position: i }))
+    const kept = new Set(this.teamRows.map((t) => t.id))
+    for (const [id, team] of [...this.teamIds]) if (!kept.has(team)) this.teamIds.delete(id)
+    while (this.teamRows.length < count) {
+      const colour = TEAM_COLOURS.find((c) => !this.teamRows.some((t) => t.colour === c))!
+      const name = `Team ${colour[0].toUpperCase()}${colour.slice(1)}`
+      this.teamRows.push({ id: this.uuid(), name, colour, position: this.teamRows.length })
+    }
+    const here = this.players.map((p) => p.id)
+    for (let i = here.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[here[i], here[j]] = [here[j], here[i]]
+    }
+    here.forEach((id, n) => this.teamIds.set(id, this.teamRows[n % count].id))
+    this.write('teams.made', null, null, 'host', null, [], {
+      count,
+      teams: this.teamRows.map((t) => ({ id: t.id, name: t.name, colour: t.colour, members: this.membersOf(t.id) })),
+    })
+    this.beginTx()
+    this.ping('room')
+    return this.teams
+  }
+
+  /**
+   * host_move_to_team: a guest who is here into a team of the party, or into
+   * none (null). Allowed while a game is live: from their next answer on, they
+   * answer with their new team. True when it changed anything.
+   */
+  setTeam(playerId: PlayerId, teamId: string | null): boolean {
+    const player = this.players.find((p) => p.id === playerId)
+    if (!player) {
+      const guest = this.guests.find((g) => g.id === playerId)
+      if (guest) throw new FakeDbError(409, 'not_joined', `${guest.name} hasn't joined yet. They go into a team when they join.`)
+      throw new FakeDbError(404, 'not_found', "That guest isn't in the party any more")
+    }
+    const team = teamId === null ? null : this.teamRows.find((t) => t.id === teamId)
+    if (team === undefined) throw new FakeDbError(404, 'team_not_found', 'That team is gone')
+    const from = this.teamOf(playerId)
+    if (from === teamId) return false
+    if (teamId === null) this.teamIds.delete(playerId)
+    else this.teamIds.set(playerId, teamId)
+    this.write('team.joined', null, null, 'host', playerId, [playerId], {
+      player_id: playerId,
+      name: player.name,
+      team_id: teamId,
+      team: team?.name ?? null,
+      from,
+    })
+    this.beginTx()
+    this.ping('room')
+    return true
+  }
+
+  /** host_clear_teams: every team goes and everyone is in none; games keep team play and play alone until there are teams again. */
+  clearTeams(): number {
+    this.refuseWhileTeamGameLive('clear the')
+    const count = this.teamRows.length
+    this.teamRows = []
+    this.teamIds.clear()
+    if (count > 0) {
+      this.write('teams.cleared', null, null, 'host', null, [], { count })
+      this.beginTx()
+      this.ping('room')
+    }
+    return count
+  }
+
+  /** host_set_team_play: whether a game is played in teams, changed only while it isn't live. True when it changed. */
+  setTeamPlay(gameId: string, on: boolean): boolean {
+    const game = this.gameRow(gameId)
+    if (game.status === 'active') throw new FakeDbError(409, 'active', `Team play can't change while ${game.title} is live`)
+    if (this.teamPlay.has(gameId) === on) return false
+    if (on) this.teamPlay.add(gameId)
+    else this.teamPlay.delete(gameId)
+    this.write('game.team_play', gameId, null, 'host', null, [], { title: game.title, team_play: on })
+    this.beginTx()
+    this.ping('room')
+    return true
+  }
+
+  /** Making or clearing teams while a game played in teams is live would change who answers for whom in the middle of it. */
+  private refuseWhileTeamGameLive(what: string) {
+    const live = [...this.games.values()].find((g) => g.status === 'active' && g.archived_at === null && this.teamPlay.has(g.id))
+    if (live) throw new FakeDbError(409, 'team_game_live', `End ${live.title} before you ${what} teams`)
+  }
+
+  /**
+   * join_smallest_team: while the party has teams, a guest who joins goes into
+   * the team with the fewest joined members; a tie goes to the lowest position.
+   */
+  private joinSmallestTeam(playerId: PlayerId) {
+    if (this.teamRows.length === 0 || this.teamIds.has(playerId)) return
+    let smallest = this.teamRows[0]
+    let fewest = Infinity
+    for (const team of this.teamRows) {
+      const size = this.players.filter((p) => p.id !== playerId && this.teamIds.get(p.id) === team.id).length
+      if (size < fewest) {
+        smallest = team
+        fewest = size
+      }
+    }
+    this.teamIds.set(playerId, smallest.id)
   }
 
   /** A host award (score_events with this game's id), as the award page gives it. */
@@ -458,6 +700,13 @@ export class FakeParty {
       if (sub) out[prompt.key] = sub.payload
     }
     return out
+  }
+
+  /** Every answer to one of the game's prompts, as game_submissions holds them, in player id order. */
+  submissionsOf(gameId: string, key: string): FakeSubmission[] {
+    return [...(this.subs.get(`${gameId}/${key}`)?.values() ?? [])]
+      .sort((a, b) => byteOrder(a.player_id, b.player_id))
+      .map((row) => ({ ...row }))
   }
 
   /** Answer counts of the game's unrevealed prompts. */
@@ -538,6 +787,9 @@ export class FakeParty {
     for (const [id, subs] of this.subs) this.subs.set(id, new Map([...subs].map(([player, row]) => [player, back(row)])))
     this.players = this.players.map((p) => ({ ...p, profile: jsonbRoundTrip(JSON.parse(JSON.stringify(p.profile))) }))
     this.sessionData = jsonbRoundTrip(JSON.parse(JSON.stringify(this.sessionData)))
+    // The teams and who is in which, read back as they were.
+    this.teamRows = JSON.parse(JSON.stringify(this.teamRows)) as FakeTeam[]
+    this.teamIds = new Map(JSON.parse(JSON.stringify([...this.teamIds])) as [PlayerId, string][])
   }
 
   // game_load ------------------------------------------------------------------
