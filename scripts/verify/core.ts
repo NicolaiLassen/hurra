@@ -128,8 +128,7 @@ export interface Oracle {
   awarded?(playerId: PlayerId, points: number, gameId: string | null): void
   /**
    * In teams: why the game's own rules may score this guest apart from the
-   * rest of their team (their own name in a fusion picture, sitting out of
-   * Lydspor), or null. Their answers are still the team's.
+   * rest of their team (sitting out of Lydspor), or null. Their answers are still the team's.
    */
   apart?(playerId: PlayerId): string | null
 }

@@ -101,7 +101,7 @@ export function NamePicker({
   busy,
   onToggle,
 }: {
-  /** The names offered, your own left out, in the order to show (guessOptions). */
+  /** The names offered, your own left out outside teams, in the order to show (guessOptions). */
   names: readonly string[]
   /** What each name is called on its tile (shortNames). */
   short: ReadonlyMap<string, string>

@@ -390,7 +390,7 @@ function Rules({ config, change }: { config: FusionConfig; change: (patch: Parti
         </div>
         <p className="text-xs text-paper-2">
           A guest who gets both people of a picture right scores {2 * perPerson + bonus}. Everyone guesses every picture, the two
-          in it too; their own name is never offered.
+          in it too; their own name is never offered. Played in teams, it is, and it counts, so the team scores as one.
         </p>
       </section>
     </div>

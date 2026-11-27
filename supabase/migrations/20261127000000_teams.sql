@@ -15,9 +15,10 @@
 -- Safe on production while the v2-rc7 app is live: three new nullable or
 -- defaulted columns (players.team_id, session_games.team_play false,
 -- game_submissions.answered_by), one new table, new host functions, one new
--- trigger that does nothing while a party has no teams, and two replaced
--- functions (submit_answer and session_snapshot) that keep their signatures
--- and return a superset, the same as before for a party without teams.
+-- trigger that does nothing while a party has no teams, and three replaced
+-- functions (submit_answer, session_snapshot and game_load) that keep their
+-- signatures and return a superset, the same as before for a party without
+-- teams.
 -- Nothing is renamed or dropped.
 --
 -- Rules as in the init file (docs/engine-v2.md, 2.1): set search_path = '' and
@@ -717,6 +718,114 @@ begin
 end;
 $$;
 
+-- 6b. game_load: the guest list's body with team play ----------------------------------------
+-- Copied exactly from 20261126000000_guest_list.sql, plus game.team_play, so a
+-- game can score a team round as one: in fusion, a team that names one of its
+-- own members gets the points for that name for every member, that one too.
+-- The host can switch team play only while the game isn't live, so it holds
+-- for the whole round.
+create or replace function public.game_load(p_game_id uuid, p_user_id uuid, p_close text[] default '{}', p_request_id uuid default null)
+returns jsonb language plpgsql volatile security invoker set search_path = '' as $$
+declare
+  v_session uuid;
+  v_type text;
+  v_closed int := 0;
+  v_n int;
+  v jsonb;
+begin
+  select g.session_id, g.game_type into v_session, v_type from public.session_games g where g.id = p_game_id;
+  if v_session is null then
+    return null;
+  end if;
+
+  -- Only a host's close counts, so a guest can never close a question. Every
+  -- close is logged here, in the same statement, because the request may
+  -- still skip or be refused, and game_commit then finds the prompt closed.
+  -- No request_id on these rows: the request's own claim must not look like
+  -- a replay. The close time is in data, since a deadline close is in the past.
+  if coalesce(cardinality(p_close), 0) > 0 and exists (select 1 from public.hosts h where h.user_id = p_user_id) then
+    with closed as (
+      update public.game_prompts set closed_at = clock_timestamp()
+      where game_id = p_game_id and closed_at is null and key = any (p_close)
+      returning key, round, closed_at
+    ), logged as (
+      insert into public.event_log (session_id, kind, game_id, game_type, round, actor, user_id, data)
+      select v_session, 'prompt.closed', p_game_id, v_type, c.round, 'host', p_user_id,
+        jsonb_build_object('key', c.key, 'round', c.round, 'closed_at', public.epoch_ms(c.closed_at))
+      from closed c
+      returning 1
+    ) select count(*) into v_n from logged;
+    v_closed := v_closed + v_n;
+  end if;
+  with closed as (
+    update public.game_prompts set closed_at = closes_at
+    where game_id = p_game_id and closed_at is null and closes_at <= clock_timestamp()
+    returning key, round, closed_at
+  ), logged as (
+    insert into public.event_log (session_id, kind, game_id, game_type, round, actor, data)
+    select v_session, 'prompt.closed', p_game_id, v_type, c.round, 'timer',
+      jsonb_build_object('key', c.key, 'round', c.round, 'closed_at', public.epoch_ms(c.closed_at))
+    from closed c
+    returning 1
+  ) select count(*) into v_n from logged;
+  v_closed := v_closed + v_n;
+  -- Phones learn of the close even when the request then skips or is refused.
+  if v_closed > 0 then
+    perform public.ping_session(v_session, 'room', jsonb_build_object('game', p_game_id));
+  end if;
+
+  select jsonb_build_object(
+    'now', public.epoch_ms(clock_timestamp()),
+    'claimed', p_request_id is not null and exists (
+      select 1 from public.event_log e where e.user_id = p_user_id and e.request_id = p_request_id),
+    'game', jsonb_build_object('id', g.id, 'session_id', g.session_id, 'game_type', g.game_type, 'title', g.title,
+      'status', g.status, 'archived_at', public.epoch_ms(g.archived_at), 'wake_at', public.epoch_ms(g.wake_at),
+      'team_play', g.team_play),
+    'settings', coalesce((select gs.config from public.game_settings gs where gs.game_id = g.id), '{}'::jsonb),
+    'current', (select jsonb_build_object('state', st.state, 'version', st.version, 'round', st.round,
+        'config', st.config, 'members', to_jsonb(st.members), 'saved_at', public.epoch_ms(st.updated_at))
+      from public.game_states st where st.game_id = g.id),
+    'session', (select jsonb_build_object('id', s.id, 'name', s.name, 'data', s.data,
+        'spotlight_game_id', s.spotlight_game_id)
+      from public.sessions s where s.id = g.session_id),
+    -- The guests who joined, in join order: only they play.
+    'players', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'profile', p.profile,
+        'joined_at', public.epoch_ms(p.joined_at))
+        order by p.joined_at, p.id), '[]'::jsonb)
+      from public.players p where p.session_id = g.session_id and p.joined_at is not null),
+    -- Everyone on the guest list, joined or still expected: names for settings and keys only.
+    'guests', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'joined', p.joined_at is not null)
+        order by p.created_at, p.id), '[]'::jsonb)
+      from public.players p where p.session_id = g.session_id),
+    'caller', jsonb_build_object(
+      'player_id', (select p.id from public.players p where p.session_id = g.session_id and p.user_id = p_user_id),
+      'is_host', exists (select 1 from public.hosts h where h.user_id = p_user_id),
+      'is_screen', exists (select 1 from public.session_screens sc
+        where sc.session_id = g.session_id and sc.user_id = p_user_id)),
+    'scoreboard', (select coalesce(jsonb_object_agg(b.player_id, b.points), '{}'::jsonb)
+      from public.scoreboard b where b.session_id = g.session_id),
+    -- This round's score_events for this game: host awards and game bonuses.
+    'awards', (select coalesce(jsonb_object_agg(a.player_id, a.points), '{}'::jsonb) from (
+        select se.player_id, sum(se.points)::int as points from public.score_events se
+        where se.game_id = g.id and g.started_at is not null and se.created_at >= g.started_at
+        group by se.player_id) a),
+    'prompts', (select coalesce(jsonb_object_agg(pr.key, jsonb_build_object(
+        'spec', pr.spec, 'opened_at', public.epoch_ms(pr.opened_at), 'closes_at', public.epoch_ms(pr.closes_at),
+        'closed_at', public.epoch_ms(pr.closed_at), 'revealed_at', public.epoch_ms(pr.revealed_at),
+        'submissions', case when pr.closed_at is not null and pr.revealed_at is null then (
+          select coalesce(jsonb_agg(jsonb_build_object('player_id', su.player_id, 'answer', su.payload,
+              'first_at', public.epoch_ms(su.first_at), 'at', public.epoch_ms(su.at),
+              'ms', public.epoch_ms(su.first_at) - public.epoch_ms(pr.opened_at), 'changes', su.changes)
+            order by su.first_at, su.player_id), '[]'::jsonb)
+          from public.game_submissions su where su.game_id = pr.game_id and su.key = pr.key) end)), '{}'::jsonb)
+      from public.game_prompts pr
+      where pr.game_id = g.id and pr.round = (select st.round from public.game_states st where st.game_id = g.id))
+  ) into v
+  from public.session_games g where g.id = p_game_id;
+  return v;
+end;
+$$;
+
 -- 7. Function grants: everything revoked, then exactly what each role needs -------------------
 
 revoke execute on function
@@ -1075,6 +1184,10 @@ begin
   v_def := pg_get_functiondef('public.game_load(uuid, uuid, text[], uuid)'::regprocedure);
   if v_def not like '%p.joined_at is not null%' or v_def not like '%''guests''%' or v_def not like '%''saved_at''%' then
     v_problems := v_problems || 'game_load no longer keeps players to joined guests, or lacks guests or saved_at'::text;
+  end if;
+  -- New: and it hands the game its team play.
+  if v_def not like '%''team_play'', g.team_play%' then
+    v_problems := v_problems || 'game_load lacks game.team_play'::text;
   end if;
   v_def := pg_get_functiondef('public.game_commit(jsonb)'::regprocedure);
   if (length(v_def) - length(replace(v_def, 'pl.joined_at is not null', ''))) / length('pl.joined_at is not null') < 6 then

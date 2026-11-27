@@ -403,6 +403,23 @@ describe('the reveal', () => {
     ])
   })
 
+  it('counts a voter’s own name in teams, so a team that names one of its own scores as one', () => {
+    const teams = run((ctx) => game.setup(ctx), { teamPlay: true }).result
+    expect(teams.teamPlay).toBe(true)
+    // Ana's team locked in Ana and Bo for every member: Ana gets both too.
+    const { result } = revealed(1, [
+      ['ana', ['ana', 'bo']],
+      ['cy', ['ana', 'bo']],
+      ['bo', ['bo', 'eve']],
+    ], teams)
+    expect(result.results[1].hits).toEqual({ ana: 2, cy: 2, bo: 1 })
+    expect(result.totals).toEqual({ ana: 2, cy: 2, bo: 1 })
+    expect(result.teamPlay).toBe(true)
+    // Alone, the state says nothing of teams and the same locks give Ana one.
+    expect(start().result).not.toHaveProperty('teamPlay')
+    expect(revealed(1, [['ana', ['ana', 'bo']]]).result.results[1].hits).toEqual({ ana: 1 })
+  })
+
   it('matches names whatever their case, accents and spaces', () => {
     const cfg = config({ pictures: [{ label: '#1', people: ['Ana María', 'Bo'] }] })
     const players = [
@@ -1384,6 +1401,32 @@ describe('recap', () => {
     hostAct(p, { type: 'finish' })
     const perfect = game.recap(recapOf(p)).find((h) => h.title.startsWith('Perfect eye'))
     expect(perfect).toMatchObject({ title: 'Perfect eye: Guest 1 and Guest 3', players: [ids[0], ids[2]] })
+  })
+
+  it('asks for both names for a perfect eye in teams, where your own counts, and scores a team as one through the engine', () => {
+    const { p, ids, names } = party(4)
+    const [A, B, C, D] = names
+    const [gold] = p.makeTeams(2)
+    for (const id of ids) p.setTeam(id, null)
+    p.setTeam(ids[0], gold.id)
+    p.setTeam(ids[1], gold.id)
+    p.addGame(GAME, 'fusion', 'Who is fused?', { seconds: 30, pictures: [{ people: [A, B] }, { people: [C, D] }], pointsPerPerson: 1, bonusForBoth: 0 })
+    expect(p.setTeamPlay(GAME, true)).toBe(true)
+    expect(p.send(p.hostUser, { type: 'start', gameId: GAME }).kind).toBe('commit')
+    expect(stateOf(p).teamPlay).toBe(true)
+    hostAct(p, { type: 'ask', n: 1 })
+    lock(p, 1, ids[0], [A, B]) // Guest 1 names herself and her teammate, for both of them
+    lock(p, 1, ids[2], [A, C])
+    hostAct(p, { type: 'reveal', n: 1 }, ['p1'])
+    expect(stateOf(p).results[1].hits).toEqual({ [ids[0]]: 2, [ids[1]]: 2, [ids[2]]: 1 })
+    hostAct(p, { type: 'ask', n: 2 })
+    lock(p, 2, ids[0], [C, D])
+    lock(p, 2, ids[2], [C, D]) // in it: Guest 3's own name counts in teams, so both are right
+    hostAct(p, { type: 'reveal', n: 2 }, ['p2'])
+    hostAct(p, { type: 'finish' })
+    const perfect = game.recap(recapOf(p)).find((h) => h.title.startsWith('Perfect eye'))
+    // Guest 3 named only one of picture 1: in teams the other was there to get.
+    expect(perfect).toMatchObject({ title: 'Perfect eye: Guest 1 and Guest 2', players: [ids[0], ids[1]] })
   })
 
   it('never names the people of a picture the host did not reveal', () => {

@@ -696,7 +696,7 @@ starts).
   `raised`.
 - **The two in the picture** pick and lock in like anyone and score like
   anyone; their own name is never offered, so the most they get is the other
-  one. Nothing on the phone says "this one is you".
+  one. Played in teams it is offered and counts, so the team scores as one. Nothing on the phone says "this one is you".
 - **The reveal** is the phone's version of the TV's (26 Nov): first what you
   got and your points ("You got both." with +3 in the condensed figures,
   "You got one of the two.", "Not this time." or "No guess this time."), in

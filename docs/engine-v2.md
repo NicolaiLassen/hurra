@@ -1453,6 +1453,8 @@ export type GameInfo<Config> = {
   readonly config: Config
   /** Ms since epoch by the database clock, fixed for the whole request, retries included. */
   readonly now: number
+  /** Whether this round is played in teams (session_games.team_play, from game_load). Fixed for the round; missing means no. */
+  readonly teamPlay?: boolean
   /** This round's prompts, by key. */
   readonly prompts: Readonly<Record<string, Prompt>>
   /** Answers to prompts that are closed but not revealed yet, by key, in arrival order. */
@@ -4091,7 +4093,9 @@ two people's own photos. A point per right person, and a bonus for both.
   counts for nothing. `hits` is how many of the two each voter named
   (`countHits`: a pick counts when it folds to one of the picture's names; a
   pick of the voter's own name counts for nothing, as their phone never
-  offers it, so someone in the picture gets at most the other one); `totals
+  offers it, so someone in the picture gets at most the other one; in teams,
+  `state.teamPlay`, from `info.teamPlay` at setup, it is offered and counts
+  like any other, as every member has the team's lock); `totals
   += hits * pointsPerPerson + (hits === 2 ? bonusForBoth : 0)`. No speed
   points. `revealPrompt('p' + n)`; records `revealed` with `{ n, label,
   people, both, one, none, voters }` (`people` the two names; its `about` the

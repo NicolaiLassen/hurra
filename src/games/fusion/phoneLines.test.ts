@@ -149,6 +149,9 @@ describe('the reveal', () => {
     // In it: their own name never counts, the other one does.
     expect(outcomeFor(picture, 'Maja', null, ['Bo', 'Ida'])).toBe('one')
     expect(outcomeFor(picture, 'Maja', null, ['Maja', 'Ida'])).toBe('none')
+    // In teams (no own name left out): it counts like any other.
+    expect(outcomeFor(picture, null, null, ['Maja', 'Ida'])).toBe('one')
+    expect(outcomeFor(picture, null, null, ['Maja', 'Bo'])).toBe('both')
   })
 
   it('heads, points and the one-line outcome', () => {

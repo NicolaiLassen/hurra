@@ -7,7 +7,7 @@ import { askingCase, cardLine, outcomeFor, outcomePoints } from '@/games/fusion/
 import { SecondsLeft } from '@/games/fusion/phoneParts'
 import { readPublic, readView } from '@/games/fusion/shapes'
 import { sameName } from '@/games/core/names'
-import { choiceOf, shortName, shortNames } from '@/games/fusion/view'
+import { choiceOf, ownName, shortName, shortNames } from '@/games/fusion/view'
 import type { PlayerCardProps } from '@/games/types'
 import { useServerTime } from '@/lib/gameClock'
 
@@ -32,7 +32,7 @@ export default function PlayerCard({ game, players, player, publicState, view: r
 
   let reveal = null
   if (pub?.phase === 'reveal' && current?.revealed) {
-    const outcome = outcomeFor(current, player.name, view, mine)
+    const outcome = outcomeFor(current, ownName(game, player), view, mine)
     const short = shortNames([...players.map((p) => p.name), ...current.revealed.names])
     const names = current.revealed.names.map((name) => (sameName(name, player.name) ? 'you' : shortName(short, name)))
     reveal = { names, outcome, points: outcomePoints(outcome, pub.rules) }
