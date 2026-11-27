@@ -2,11 +2,15 @@
 // and 7.1). Moves go to the engine; answers and votes go straight to the
 // database. Both reject with the server's own words and show no toast: the
 // game's view shows the refusal. After a success they read the snapshot
-// again, because a phone hears no ping for its own call.
+// again, because a phone hears no ping for its own call. So does an answer
+// refused as already given: in a game played in teams a teammate may have
+// answered a moment before, and the phone shows the team's answer at once
+// instead of waiting for that ping.
 import { GameControllerIcon, type Icon } from '@phosphor-icons/react'
 import { createContext, useCallback, useContext } from 'react'
 import { getGameModule } from '@/games/registry'
 import type { PhoneSecret } from '@/games/types'
+import { GameCallError } from '@/lib/gameApi'
 import { callGame, submitAnswer } from '@/lib/queries'
 import type { AnswerPayload, SessionGame, SubmitResult } from '@/lib/types'
 import { useLive } from '@/lib/useLive'
@@ -37,9 +41,14 @@ export function usePhoneCalls(gameId: string): {
   const submit = useCallback(
     async (key: string, answer: AnswerPayload): Promise<SubmitResult> => {
       if (fixture) return fixtureSubmit(answer, serverNow())
-      const result = await submitAnswer(gameId, key, answer)
-      refresh()
-      return result
+      try {
+        const result = await submitAnswer(gameId, key, answer)
+        refresh()
+        return result
+      } catch (error) {
+        if (error instanceof GameCallError && error.code === 'already_answered') refresh()
+        throw error
+      }
     },
     [fixture, gameId, refresh, serverNow],
   )

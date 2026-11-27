@@ -1,15 +1,29 @@
 import { ordinal, placeOf, pointsText } from '@/components/phone/text'
 import MyPhotoButton from '@/components/photos/MyPhotoButton'
 import ProfileBadges from '@/components/ProfileBadges'
-import type { Player, ScoreRow, Session } from '@/lib/types'
+import TeamChip from '@/components/TeamChip'
+import type { Player, ScoreRow, Session, Team } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /**
  * Your token and place, at the top of the phone home: the token (a button for
  * "Your photo"), then "7th, 8 points" and who is next to you, ties said in
  * words ("1 behind Felix and Luna"). The place is gold only for the leader.
+ * Then your team, when you're in one (its swatch and its name, all night),
+ * and the badges games gave you.
  */
-export default function MyPlace({ session, player, standings }: { session: Session; player: Player; standings: ScoreRow[] }) {
+export default function MyPlace({
+  session,
+  player,
+  standings,
+  team = null,
+}: {
+  session: Session
+  player: Player
+  standings: ScoreRow[]
+  /** This guest's team (teamOf), or null for none. */
+  team?: Pick<Team, 'name' | 'colour'> | null
+}) {
   const place = placeOf(standings, player.id)
 
   return (
@@ -39,6 +53,12 @@ export default function MyPlace({ session, player, standings }: { session: Sessi
               <p className="mt-1 text-[0.9375rem] font-semibold text-paper-2">{place.line}</p>
             </div>
           </>
+        )}
+        {team && (
+          <p className="mt-2.5">
+            <span className="sr-only">Your team: </span>
+            <TeamChip team={team} size="lg" />
+          </p>
         )}
         <ProfileBadges profile={player.profile} className="mt-2" />
       </div>
