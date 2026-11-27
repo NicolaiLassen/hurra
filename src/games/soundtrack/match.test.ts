@@ -134,6 +134,12 @@ const KINDER: Row[] = [
   { part: 'title', accepted: ['Seven Ferries'], typed: 'Sevn Ferries', expect: 'typo', why: 'The same with the setting in words' },
   { part: 'title', accepted: ['Route 41'], typed: 'Route 14', expect: 'close:spelling', why: 'A number never takes a typo' },
   { part: 'title', accepted: ['33'], typed: 'thirty four', expect: 'close:spelling', why: 'Another number in words is not a typo' },
+  // Found in the rehearsal of 27 Nov: the spelled-out reading has no digits, so a short number word fitted a long title's allowance.
+  { part: 'title', accepted: ['Paper Lantern Parade 2'], typed: 'Paper Lantern Parade', expect: 'close:part', why: 'Leaving the number out is not a typo' },
+  { part: 'title', accepted: ['Paper Lantern Parade 2'], typed: 'Paper Lantern Parade six', expect: 'close:spelling', why: 'Another number in words is not a typo, however long the title' },
+  { part: 'singer', accepted: ['Harbour Lights Ensemble 6'], typed: 'Harbour Lights Ensemble', expect: 'close:part', why: 'A singer too' },
+  { part: 'title', accepted: ['Paper Lantern Parade 2'], typed: 'Papr Lantern Parade two', expect: 'typo', why: 'A typo elsewhere, the number said' },
+  { part: 'title', accepted: ['Paper Lantern Parade 2'], typed: 'Paper Lantern Parade tow', expect: 'close:spelling', why: 'A three-letter number word takes no typo' },
   { part: 'title', accepted: ['Doctor Lind'], typed: 'Docter Lind', expect: 'typo', why: 'A typo in Doctor is one letter' },
   { part: 'title', accepted: ['Dr. Lind'], typed: 'Docter Lind', expect: 'typo', why: 'Also when the setting says Dr' },
   { part: 'title', accepted: ['Mister Velvet'], typed: 'Mistr Velvet', expect: 'typo', why: 'A typo in Mister' },

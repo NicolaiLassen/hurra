@@ -8,8 +8,14 @@
 // Relative imports only: the Netlify function bundles this file.
 import type { CloseReason, TypedPart, Verdict } from './types'
 
-/** One way a text may be read: its key, its words A to Z (for singers), and its words. */
-export type Form = { key: string; sorted: string; words: string[] }
+/**
+ * One way a text may be read: its key, its words A to Z (for singers), and its
+ * words. `numberWords` marks an accepted text read with its numbers spelled
+ * out ("7 Years" as "seven years"): its key has no digits for the number
+ * check, so a typed answer is only within its allowance when it says each of
+ * those words (spelled right, or within the word's own allowance).
+ */
+export type Form = { key: string; sorted: string; words: string[]; numberWords?: string[] }
 
 export type Judgement = { verdict: Verdict; reason: CloseReason | null; off: number | null }
 
@@ -184,16 +190,16 @@ function numberWords(n: number): string {
   return ones === 0 ? TENS[Math.floor(n / 10)] : `${TENS[Math.floor(n / 10)]} ${ONES[ones]}`
 }
 
-/** The text with its numbers 0 to 99 spelled out ("7 Years" is "seven Years"), or null when it has none. */
-function spelledOut(text: string): string | null {
-  let changed = false
+/** The text with its numbers 0 to 99 spelled out ("7 Years" is "seven Years") and the words it spelled, or null when it has none. */
+function spelledOut(text: string): { text: string; words: string[] } | null {
+  const words: string[] = []
   const out = text.replace(/\d+/g, (digits) => {
     const n = Number(digits)
     if (digits.length > 2) return digits
-    changed = true
+    words.push(...numberWords(n).split(' '))
     return ` ${numberWords(n)} `
   })
-  return changed ? out : null
+  return words.length > 0 ? { text: out, words } : null
 }
 
 /**
@@ -207,10 +213,10 @@ export function acceptedForms(text: string): Form[] {
   const spelled = spelledOut(text)
   if (spelled === null) return out
   const seen = new Set(out.map((form) => form.key))
-  for (const form of forms(spelled, true)) {
+  for (const form of forms(spelled.text, true)) {
     if (!form.key || seen.has(form.key)) continue
     seen.add(form.key)
-    out.push(form)
+    out.push({ ...form, numberWords: spelled.words.map(fold) })
   }
   return out
 }
@@ -285,15 +291,17 @@ export function judge(answer: string, part: TypedPart, accepted: readonly string
     seen.add(form.key)
     theirs.push(form)
   }
-  const pairs: [string, string][] = []
+  const pairs: [string, string, boolean][] = []
   for (const a of mine) {
     for (const t of theirs) {
-      pairs.push([a.key, t.key])
-      if (part === 'singer') pairs.push([a.sorted, t.sorted])
+      // A number never takes a typo, spelled out too: "Paper Parade" or "Paper Parade one" is not "Paper Parade 2".
+      const saysNumber = !t.numberWords || t.numberWords.every((word) => a.words.some((typed) => wordMatches(typed, word)))
+      pairs.push([a.key, t.key, saysNumber])
+      if (part === 'singer') pairs.push([a.sorted, t.sorted, saysNumber])
     }
   }
   if (pairs.some(([a, t]) => a === t)) return { verdict: 'exact', reason: null, off: null }
-  if (pairs.some(([a, t]) => within(a, t))) return { verdict: 'typo', reason: null, off: null }
+  if (pairs.some(([a, t, saysNumber]) => saysNumber && within(a, t))) return { verdict: 'typo', reason: null, off: null }
 
   // Close: worth one look from the host. The first reason that fits.
   if (otherPart.length > 0) {
