@@ -573,13 +573,16 @@ flowchart TD
   TEAMS -- "Clear teams, after a confirm" --> NONE
   ROW["A guest's menu (Here): Move to team"]:::screen -- "a team, or No team" --> TEAMS
   LATE["A guest joins, or takes a name from the list"]:::screen -- "into the smallest team" --> TEAMS
+  PICK["The phone home: Your team,<br/>each team with its colour, name and size"]:::screen -- "a tap on another team<br/>(not while a team game is live)" --> TEAMS
   SET["A game's settings: Play in teams<br/>(saved at once, apart from Save)"]:::closed -- "on" --> CHIP["Its row in the program and its live card:<br/>In teams"]:::screen
   CHIP -- "Start" --> PLAY["Played in teams: one answer from any member<br/>counts for the whole team"]:::closed
 ```
 
 **The host.** Make teams splits the guests who are here at random into
 balanced teams (sizes differ by one at most); guests still on the list go
-into a team as they join. The teams are Team Gold, Team Pink, Team Teal, Team
+into a team as they join. Teams can be made before anyone is here, or with
+fewer guests than teams: they start empty ("Nobody here yet: 4 empty teams
+for now"), and the guests pick theirs on their phones. The teams are Team Gold, Team Pink, Team Teal, Team
 Violet, Team Sky and Team Lime, in that order, and the host can rename each.
 Make teams again shuffles everyone again: teams up to the new count keep
 their names and colours. A guest who joins later, or takes their name from
@@ -587,7 +590,8 @@ the guest list, goes into the team with the fewest guests here (a tie goes to
 the first team). Move to team in a guest's menu moves one guest, any time;
 from their next answer they answer with their new team. A freed name comes
 back on the list with no team. Making and clearing teams wait while a game
-played in teams is live.
+played in teams is live. Make teams again deals everyone again, so it undoes
+the guests' own picks (its confirm says most guests change team).
 
 Play in teams is on a game's settings page, for games that can be played in
 teams. It changes only while the game isn't live (before it starts, or
@@ -597,7 +601,19 @@ and says to make teams in Guests first: until there are teams, the game is
 played alone.
 
 **The phones.** A guest in a team sees it under their place on the phone
-home and on their full-screen code: its colour and its name. Over a game
+home and on their full-screen code: its colour and its name. While the party
+has teams, the home also has Your team, right under the guest's place: every
+team as an outlined tile with its colour, its name and how many are in it
+("3 guests", "Nobody yet"), the guest's own marked with a check and "You and
+2 more". A tap on another team switches to it at once (`choose_team`), and a
+refusal puts it back with the reason in a toast. Never gold: Show my code
+stays the home's one gold step. A guest who never picks is still in the
+smallest team from the moment they join, so nobody is left out. While a game
+played in teams is live, Your team is left out (the team still shows under
+the guest's place): nobody switches in the middle of a round, and the server
+refuses it too ("Teams stay as they are while a team game is live. You can
+switch once it ends.", `team_game_live`). The host's Move to team still
+works then. Over a game
 played in teams, a line says so: "Team Gold answers together. Any of you can
 answer: the first answer counts for all of you." (the quiz and fusion, whose
 answers lock), or "and the latest answer counts" (Lydspor, whose answers
@@ -627,6 +643,16 @@ them; in teams, their phone offers it and it counts, so when the team locks
 in one of its own members, that member gets the same points as the rest
 (`game_load` hands the game `team_play`, and fusion keeps it in its state
 for the round).
+
+A guest's own pick is `choose_team(p_team_id)` (the team choice file,
+`supabase/migrations/20261128000000_team_choice.sql`): it puts the caller's
+own player into a team of their party, logs `team.joined` with the guest as
+the actor and `chosen: true`, and pings the room, so the TV, the host page and
+every phone update. The same team again changes nothing. Refusals: `PT401
+not_signed_in`, `PT400 bad_request` (no team), `PT404 team_not_found`, `PT403
+not_player` (not a joined guest of that team's party: a guest of another
+party, the host, anyone else), `PT409 archived` and `PT409 team_game_live`.
+There is no No team for a guest: only the host's Move to team has it.
 
 ## 4. The TV
 

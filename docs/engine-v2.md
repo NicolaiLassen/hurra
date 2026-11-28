@@ -225,6 +225,12 @@ statement. They are:
   and ends with the current self-check block (2.12). Every replaced function
   keeps its signature and returns a superset, so the live app runs on it
   unchanged; push it before the app that shows the guest list.
+- `20261128000000_team_choice.sql`: a guest picks their own team (docs/user-flows.md,
+  3.6). It adds `choose_team` (2.7) and nothing else: no table, column or
+  replaced function, so the live app runs on it unchanged. It ends with the
+  teams file's self-check block plus checks that `choose_team` is granted to
+  `authenticated` and `service_role` only, is a definer with an empty search
+  path, checks its caller and refuses while a team game is live (2.12).
 
 ### 2.1 Rules for the file
 
@@ -768,7 +774,25 @@ each member's own, so scoring is unchanged and the whole team has the same
 goes into the team with the fewest joined members (the `players_join_team`
 trigger); the host's team functions are `host_make_teams`,
 `host_move_to_team`, `host_rename_team`, `host_clear_teams` and
-`host_set_team_play` (docs/user-flows.md, 3.6).
+`host_set_team_play` (docs/user-flows.md, 3.6). `host_make_teams` works with
+nobody here yet, or fewer guests than teams: the teams start empty.
+
+**`choose_team(p_team_id uuid) returns jsonb`**, volatile, definer
+(`20261128000000_team_choice.sql`). A guest picks their own team: the caller's
+joined player in that team's party goes into it. The same team again returns
+`{ id, team_id, changed: false }`; a switch returns `changed: true` and
+`from` (the old team's name, or null), logs `team.joined` (actor `player`,
+data as `host_move_to_team`'s plus `chosen: true`) and pings the room.
+Errors: `PT401` "Not signed in" (`not_signed_in`); `PT400` "Pick a team"
+(`bad_request`, a null team); `PT404` "That team is gone"
+(`team_not_found`); `PT403` "You're not a player in this party"
+(`not_player`: the caller has no joined player in the team's party, so a
+guest of another party, the host or a stranger); `PT409` "This party is
+over" (`archived`); `PT409` "Teams stay as they are while a team game is
+live. You can switch once it ends." (`team_game_live`, from
+`refuse_while_team_game_live`). Never a way out of every team: only the
+host's `host_move_to_team` takes null. Granted to `authenticated` and
+`service_role`.
 
 **`prompt_tallies(p_session_id uuid) returns jsonb`**, stable, definer.
 `{ "<game id>": { "<key>": count } }` for prompts of the party's active games
