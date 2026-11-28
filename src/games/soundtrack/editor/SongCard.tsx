@@ -2,7 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon, TrashIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MAX_CAPTION, MAX_NOTE } from '../logic'
-import { MAX_TYPED, type SoundtrackSong } from '../types'
+import { MAX_MOMENT, MAX_TYPED, type SoundtrackSong } from '../types'
 import { AlsoList, Field, Issues, PhotoPicker, StartField } from './parts'
 import type { Issue } from './settings'
 
@@ -10,11 +10,14 @@ import type { Issue } from './settings'
  * One song in the settings (spec section 12): its photo, title and singer as
  * the reveal shows them, the other answers that count, its caption, where
  * the hook starts in Spotify and a story note for the cue card, with the
- * game's problems and warnings about it underneath.
+ * game's problems and warnings about it underneath. With typed moments on,
+ * also its moment and the other moments that count, and the caption is
+ * optional; with them off those fields are hidden (their values are kept).
  */
 export default function SongCard({
   n,
   song,
+  momentTyped,
   count,
   photoUrl,
   uploading,
@@ -28,6 +31,8 @@ export default function SongCard({
 }: {
   n: number
   song: SoundtrackSong
+  /** Typed moments: guests type each song's moment. */
+  momentTyped: boolean
   /** Songs in the list, for Move down. */
   count: number
   photoUrl: string | null
@@ -98,13 +103,33 @@ export default function SongCard({
             <AlsoList label="Also accept for the title" items={song.alsoTitles} placeholder="Old Oak" onChange={(alsoTitles) => onChange({ alsoTitles })} />
             <AlsoList label="Also accept for the singer" items={song.alsoSingers} placeholder="Mira" onChange={(alsoSingers) => onChange({ alsoSingers })} />
           </div>
+          {momentTyped && (
+            <div className="grid grid-cols-1 gap-3">
+              <Field id={id('moment')} label="Moment" hint="What happened, as guests should type it. Shown at the reveal.">
+                <Input
+                  id={id('moment')}
+                  value={song.moment ?? ''}
+                  maxLength={MAX_MOMENT}
+                  placeholder="Roskilde Festival 2015, first time camping"
+                  onChange={(e) => onChange({ moment: e.target.value })}
+                />
+              </Field>
+              <AlsoList
+                label="Other moments that count"
+                items={song.alsoMoments ?? []}
+                maxLength={MAX_MOMENT}
+                placeholder="Roskilde 2015"
+                onChange={(alsoMoments) => onChange({ alsoMoments })}
+              />
+            </div>
+          )}
           <p className="text-sm text-paper-2">
             Capitals, accents, spaces, “the” and small typos are forgiven already. Add other names or spellings that should
             count, like a nickname or a shorter title.
           </p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <Field id={id('caption')} label="Caption at the reveal, with the year">
+            <Field id={id('caption')} label={momentTyped ? 'Caption at the reveal, with the year (optional)' : 'Caption at the reveal, with the year'}>
               <Input
                 id={id('caption')}
                 value={song.caption}

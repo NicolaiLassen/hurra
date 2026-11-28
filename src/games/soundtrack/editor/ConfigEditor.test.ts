@@ -64,6 +64,39 @@ describe("Lydspor's settings editor", () => {
     expect(gold(html)).toBe(0)
   })
 
+  it('shows both switches off and no moment fields by default', async () => {
+    const settings = sampleSettings({ players: fixtureSnapshot('lobby', 'host').players })
+    const html = await render(ConfigEditor as ComponentType<never>, editorProps(settings))
+    const shown = text(html)
+    expect(shown).toContain('Guests type the moment')
+    expect(shown).toContain('AI checks typed answers')
+    expect(html.match(/type="checkbox"[^>]*checked/g) ?? []).toHaveLength(0)
+    expect(shown).not.toContain('Other moments that count')
+    expect(shown).not.toContain('(optional)')
+    expect(shown).toContain('Caption at the reveal, with the year')
+    expect(shown).not.toContain('Show the extra photos')
+    expect(shown).toContain('Mix the upload order')
+  })
+
+  it('with typed moments on, asks each song for its moment, makes the caption optional and folds the extra photos away', async () => {
+    const settings = { ...sampleSettings({ players: fixtureSnapshot('lobby', 'host').players }, true), aiCheck: true }
+    settings.songs[1] = { ...settings.songs[1], moment: '' }
+    const html = await render(ConfigEditor as ComponentType<never>, editorProps(settings))
+    const shown = text(html)
+    expect(html.match(/type="checkbox"[^>]*checked/g) ?? []).toHaveLength(2)
+    expect(html.match(/<label[^>]*>Moment<\/label>/g)).toHaveLength(8)
+    expect(html).toContain('value="Roskilde Festival 2015, first time camping"')
+    expect(html).toContain('value="Roskilde 2015"')
+    expect(shown).toContain('Other moments that count')
+    expect(shown).toContain('Caption at the reveal, with the year (optional)')
+    expect(shown).toContain('Song 2 needs its moment')
+    // The extra photos are kept, folded away.
+    expect(shown).toContain('Extra photos (4 of 4)')
+    expect(shown).toContain('Show the extra photos')
+    expect(shown).not.toContain('Mix the upload order')
+    expect(gold(html)).toBe(0)
+  })
+
   it("takes typed names for who sits out, shows an id saved before names as its guest's name, and asks nothing about who is in a photo", async () => {
     const host = fixtureSnapshot('lobby', 'host')
     const guests = guestsOf(host)

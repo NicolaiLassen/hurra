@@ -23,9 +23,22 @@ describe('reading the saved settings', () => {
     })
   })
 
-  it('reads the sample settings back as they are', () => {
+  it('reads the sample settings back as they are, the switches off and the moments empty when they were never set', () => {
     const settings = sampleSettings(cast)
-    expect(readSettings(JSON.parse(JSON.stringify(settings)))).toEqual(settings)
+    expect(readSettings(JSON.parse(JSON.stringify(settings)))).toEqual({
+      ...settings,
+      momentTyped: false,
+      aiCheck: false,
+      songs: settings.songs.map((song) => ({ ...song, moment: '', alsoMoments: [] })),
+    })
+    const typed = { ...sampleSettings(cast, true), aiCheck: true }
+    expect(readSettings(JSON.parse(JSON.stringify(typed)))).toEqual(typed)
+  })
+
+  it('keeps the moments with typed moments off, so turning them on again finds them', () => {
+    const read = readSettings({ momentTyped: false, songs: [{ title: 'Glow', moment: 'Roskilde ', alsoMoments: ['Rosk', ''] }] })
+    expect(read.momentTyped).toBe(false)
+    expect(read.songs[0]).toMatchObject({ moment: 'Roskilde ', alsoMoments: ['Rosk', ''] })
   })
 })
 
@@ -76,6 +89,32 @@ describe("placing the game's problems and warnings", () => {
     const all = [...placed.songs.flat(), ...placed.extras.flat(), ...Object.values(placed.fields).flat()]
     expect(all.filter((i) => i.kind === 'problem').length).toBeGreaterThanOrEqual(problems.length)
     expect(all.filter((i) => i.kind === 'warning').length).toBe(warnings.length)
+  })
+
+  it("puts typed moments' problems under their song", () => {
+    const settings = sampleSettings(cast, true)
+    settings.songs[0] = { ...settings.songs[0], moment: '' }
+    settings.songs[1] = { ...settings.songs[1], moment: '!!!', caption: '' }
+    settings.songs[2] = { ...settings.songs[2], moment: 'x'.repeat(141) }
+    settings.songs[3] = { ...settings.songs[3], alsoMoments: ['x'.repeat(141)] }
+    settings.songs[4] = { ...settings.songs[4], alsoMoments: ['?'] }
+    settings.songs[5] = { ...settings.songs[5], alsoMoments: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] }
+    settings.extraPhotos = []
+    const { problems, warnings } = checkConfig(settings)
+    const placed = placeIssues(problems, warnings, settings.songs, 0)
+    const at = (i: number) => placed.songs[i].filter((issue) => issue.kind === 'problem').map((issue) => issue.text)
+
+    expect(at(0)).toEqual(['Song 1 needs its moment'])
+    // No caption is fine with typed moments on.
+    expect(at(1)).toEqual(['The moment needs a letter or a digit'])
+    expect(at(2)).toEqual(['The moment is at most 140 characters'])
+    expect(at(3)).toEqual(['An extra moment is at most 140 characters'])
+    expect(at(4)).toEqual(['An extra moment needs a letter or a digit'])
+    expect(at(5)).toEqual(['Song 6 takes at most 6 extra moments'])
+    expect(at(6)).toEqual([])
+    // No extra photos needed, and no warning about them.
+    expect(placed.fields.extras).toEqual([])
+    expect(placed.fields.songs).toEqual([])
   })
 
   it('puts the empty list under the songs', () => {

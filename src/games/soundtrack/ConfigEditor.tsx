@@ -45,8 +45,9 @@ function shuffled<T>(items: readonly T[]): T[] {
  * a card per song with its photo, title, singer, the other answers that
  * count, its caption, where its hook starts and a story note; the extra
  * photos that fit no song; the points and the pace; and the intro, the
- * storyteller and who sits out (typed names, suggested from the guest list).
- * The game's own check runs as you
+ * storyteller and who sits out (typed names, suggested from the guest list);
+ * and two switches: typed moments (each song gets its moment, the extra
+ * photos fold away) and the AI check. The game's own check runs as you
  * type, each problem and warning under what it is about. The settings live
  * in game_settings (hosts only), so no title reaches a phone before its
  * reveal.
@@ -58,6 +59,7 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
   const [uploading, setUploading] = useState<Partial<Record<Target, number>>>({})
   const [mixing, setMixing] = useState<{ done: number; of: number } | null>(null)
   const [mixed, setMixed] = useState(false)
+  const [showExtras, setShowExtras] = useState(false)
   const busy = Object.values(uploading).some((n) => (n ?? 0) > 0) || mixing !== null
   const ids = `lydspor-${game.id}`
 
@@ -146,6 +148,10 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
   const url = (path: string) => (path ? media.url(path, 'thumb') : null)
   const photoCount = config.songs.filter((s) => s.photo !== '').length + config.extraPhotos.filter((p) => p.photo !== '').length
   const perSong = pointsPerSong(config.points)
+  const typed = config.momentTyped === true
+  // Typed moments use no extra photos: they fold away (kept as they are) unless something about them needs a fix.
+  const extrasToFix = [...placed.extras.flat(), ...placed.fields.extras].some((issue) => issue.kind === 'problem')
+  const extrasOpen = !typed || showExtras || extrasToFix
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -154,10 +160,17 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
           <h3 id={`${ids}-songs`} className="font-extrabold">
             Songs ({config.songs.length} of {MAX_SONGS})
           </h3>
-          <p className="text-sm text-paper-2">
-            In play order, the same order as the Spotify playlist. Guests type each title and singer and tap the photo it
-            belongs to; the titles stay in these settings until each reveal.
-          </p>
+          {typed ? (
+            <p className="text-sm text-paper-2">
+              In play order, the same order as the Spotify playlist. Guests type each title, singer and moment while the song's
+              own photo shows; the answers stay in these settings until each reveal.
+            </p>
+          ) : (
+            <p className="text-sm text-paper-2">
+              In play order, the same order as the Spotify playlist. Guests type each title and singer and tap the photo it
+              belongs to; the titles stay in these settings until each reveal.
+            </p>
+          )}
         </div>
 
         {config.songs.length === 0 ? (
@@ -178,6 +191,7 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
                 key={i}
                 n={i + 1}
                 song={song}
+                momentTyped={typed}
                 count={config.songs.length}
                 photoUrl={url(song.photo)}
                 uploading={(uploading[`song:${i}`] ?? 0) > 0}
@@ -208,79 +222,96 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
         <Issues issues={placed.fields.songs} />
       </section>
 
-      <Panel id={`${ids}-extras`} title={`Extra photos (${config.extraPhotos.length} of ${MAX_EXTRA_PHOTOS})`} hint="Photos of the same kind that fit no song, so the last songs aren't a free pick. They join the wall, and their captions show after the last reveal.">
-        <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {config.extraPhotos.map((photo, k) => (
-            <li key={k} className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
-              <PhotoPicker
-                url={url(photo.photo)}
-                label={`extra photo ${k + 1}`}
-                uploading={(uploading[`extra:${k}`] ?? 0) > 0}
-                disabled={busy}
-                onUpload={(file) => void upload(`extra:${k}`, file)}
-              />
-              <div className="grid grid-cols-1 content-start gap-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label htmlFor={`${ids}-extra-${k}`} className="text-sm font-medium">
-                    Caption and year
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="-my-1 text-paper-2 hover:text-destructive"
-                    aria-label={`Remove extra photo ${k + 1}`}
+      <Panel
+        id={`${ids}-extras`}
+        title={`Extra photos (${config.extraPhotos.length} of ${MAX_EXTRA_PHOTOS})`}
+        hint={
+          typed
+            ? 'Not used while guests type the moment: there is no photo wall. Any extra photos stay saved for when it is off.'
+            : "Photos of the same kind that fit no song, so the last songs aren't a free pick. They join the wall, and their captions show after the last reveal."
+        }
+      >
+        {typed && !extrasToFix && (
+          <Button type="button" variant="ghost" size="sm" className="justify-self-start" aria-expanded={showExtras} onClick={() => setShowExtras(!showExtras)}>
+            {showExtras ? 'Hide the extra photos' : 'Show the extra photos'}
+          </Button>
+        )}
+        {extrasOpen && (
+          <>
+            <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {config.extraPhotos.map((photo, k) => (
+                <li key={k} className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                  <PhotoPicker
+                    url={url(photo.photo)}
+                    label={`extra photo ${k + 1}`}
+                    uploading={(uploading[`extra:${k}`] ?? 0) > 0}
                     disabled={busy}
-                    onClick={() => setExtras(config.extraPhotos.filter((_, j) => j !== k))}
-                  >
-                    <TrashIcon />
-                  </Button>
-                </div>
-                <Input
-                  id={`${ids}-extra-${k}`}
-                  value={photo.caption}
-                  maxLength={MAX_CAPTION}
-                  placeholder="Ski trip, 2017"
-                  aria-label={`Caption of extra photo ${k + 1}, with the year`}
-                  onChange={(e) => setExtras(config.extraPhotos.map((p, j) => (j === k ? { ...p, caption: e.target.value } : p)))}
-                />
-                <Issues issues={placed.extras[k] ?? []} />
+                    onUpload={(file) => void upload(`extra:${k}`, file)}
+                  />
+                  <div className="grid grid-cols-1 content-start gap-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label htmlFor={`${ids}-extra-${k}`} className="text-sm font-medium">
+                        Caption and year
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="-my-1 text-paper-2 hover:text-destructive"
+                        aria-label={`Remove extra photo ${k + 1}`}
+                        disabled={busy}
+                        onClick={() => setExtras(config.extraPhotos.filter((_, j) => j !== k))}
+                      >
+                        <TrashIcon />
+                      </Button>
+                    </div>
+                    <Input
+                      id={`${ids}-extra-${k}`}
+                      value={photo.caption}
+                      maxLength={MAX_CAPTION}
+                      placeholder="Ski trip, 2017"
+                      aria-label={`Caption of extra photo ${k + 1}, with the year`}
+                      onChange={(e) => setExtras(config.extraPhotos.map((p, j) => (j === k ? { ...p, caption: e.target.value } : p)))}
+                    />
+                    <Issues issues={placed.extras[k] ?? []} />
+                  </div>
+                </li>
+              ))}
+              {config.extraPhotos.length < MAX_EXTRA_PHOTOS && (
+                <li className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                  <PhotoPicker
+                    url={null}
+                    label="an extra photo"
+                    uploading={(uploading['extra:new'] ?? 0) > 0}
+                    disabled={busy && (uploading['extra:new'] ?? 0) === 0}
+                    onUpload={(file) => void upload('extra:new', file)}
+                  />
+                  <p className="self-center text-sm text-paper-2">
+                    {MAX_EXTRA_PHOTOS - config.extraPhotos.length} more can join the wall. Each needs a caption.
+                  </p>
+                </li>
+              )}
+            </ol>
+            <Issues issues={placed.fields.extras} />
+            <div className="grid grid-cols-1 gap-2 border-t border-rule pt-3">
+              <p className="text-sm text-paper-2">
+                A phone can read when each photo was uploaded. Once every photo is in, mix the upload order and save, so the times
+                say nothing about which song is which.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="secondary" size="lg" disabled={busy || photoCount === 0} onClick={() => void mixUploadOrder()}>
+                  <ShuffleIcon />
+                  {mixing ? `Mixing, ${mixing.done} of ${mixing.of}` : 'Mix the upload order'}
+                </Button>
+                {mixed && (
+                  <p role="status" className="text-sm font-semibold">
+                    Mixed. Save the settings to keep it.
+                  </p>
+                )}
               </div>
-            </li>
-          ))}
-          {config.extraPhotos.length < MAX_EXTRA_PHOTOS && (
-            <li className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
-              <PhotoPicker
-                url={null}
-                label="an extra photo"
-                uploading={(uploading['extra:new'] ?? 0) > 0}
-                disabled={busy && (uploading['extra:new'] ?? 0) === 0}
-                onUpload={(file) => void upload('extra:new', file)}
-              />
-              <p className="self-center text-sm text-paper-2">
-                {MAX_EXTRA_PHOTOS - config.extraPhotos.length} more can join the wall. Each needs a caption.
-              </p>
-            </li>
-          )}
-        </ol>
-        <Issues issues={placed.fields.extras} />
-        <div className="grid grid-cols-1 gap-2 border-t border-rule pt-3">
-          <p className="text-sm text-paper-2">
-            A phone can read when each photo was uploaded. Once every photo is in, mix the upload order and save, so the times
-            say nothing about which song is which.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="secondary" size="lg" disabled={busy || photoCount === 0} onClick={() => void mixUploadOrder()}>
-              <ShuffleIcon />
-              {mixing ? `Mixing, ${mixing.done} of ${mixing.of}` : 'Mix the upload order'}
-            </Button>
-            {mixed && (
-              <p role="status" className="text-sm font-semibold">
-                Mixed. Save the settings to keep it.
-              </p>
-            )}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
       </Panel>
 
       <Panel id={`${ids}-points`} title="Points and pace">
@@ -292,7 +323,7 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
             <div className="grid grid-cols-3 gap-2">
               {(['event', 'title', 'singer'] as const).map((part) => (
                 <label key={part} className="grid grid-cols-1 gap-1 text-sm text-paper-2">
-                  {part === 'event' ? 'Photo' : part === 'title' ? 'Title' : 'Singer'}
+                  {part === 'event' ? (typed ? 'Moment' : 'Photo') : part === 'title' ? 'Title' : 'Singer'}
                   <Input
                     type="number"
                     inputMode="numeric"
@@ -354,6 +385,34 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
           <span>
             <span className="font-medium">Hints under the photos while songs play</span>
             <span className="block text-paper-2">Off: captions show only at the reveal, so no event is a word match.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 shrink-0 accent-paper"
+            checked={typed}
+            onChange={(e) => change({ momentTyped: e.target.checked })}
+          />
+          <span>
+            <span className="font-medium">Guests type the moment</span>
+            <span className="block text-paper-2">
+              Each song's own photo shows while it plays, and guests type what happened. No photo wall, no extra photos needed.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 shrink-0 accent-paper"
+            checked={config.aiCheck === true}
+            onChange={(e) => change({ aiCheck: e.target.checked })}
+          />
+          <span>
+            <span className="font-medium">AI checks typed answers</span>
+            <span className="block text-paper-2">
+              After the lock, an AI accepts answers that are close enough, spelling aside. You can undo any of its accepts.
+            </span>
           </span>
         </label>
       </Panel>

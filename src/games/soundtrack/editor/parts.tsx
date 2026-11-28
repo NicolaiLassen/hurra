@@ -96,18 +96,21 @@ export function PhotoPicker({
 }
 
 /**
- * Other answers that count for a title or a singer: a short list of fields,
+ * Other answers that count for a title, a singer or a moment: a short list of fields,
  * up to MAX_ALSO, each removable. Empty rows are ignored at the start.
  */
 export function AlsoList({
   label,
   items,
   placeholder,
+  maxLength = MAX_TYPED,
   onChange,
 }: {
   label: string
   items: readonly string[]
   placeholder: string
+  /** The longest each may be: a title's or a singer's by default. */
+  maxLength?: number
   onChange: (items: string[]) => void
 }) {
   const [focus, setFocus] = useState<number | null>(null)
@@ -118,7 +121,7 @@ export function AlsoList({
         <div key={i} className="flex items-center gap-1">
           <Input
             value={item}
-            maxLength={MAX_TYPED}
+            maxLength={maxLength}
             placeholder={placeholder}
             aria-label={`${label}, ${i + 1}`}
             autoFocus={focus === i}

@@ -19,12 +19,18 @@ export function soundtrackSetup(raw: SoundtrackConfig): SetupStatus {
   const count = (test: (i: number) => boolean) => open.filter((isOpen, i) => isOpen && test(i)).length
   const noPhoto = count((i) => songs[i].photo === '')
   const noWords = count((i) => songs[i].title === '' || songs[i].singer === '')
-  const noCaption = count((i) => songs[i].caption === '')
+  // Typed moments: each song needs its moment, and the caption is optional.
+  const typed = config.momentTyped === true
+  const lacksMoment = (i: number) => typed && (songs[i].moment ?? '') === ''
+  const lacksCaption = (i: number) => !typed && songs[i].caption === ''
+  const noMoment = count(lacksMoment)
+  const noCaption = count(lacksCaption)
   // A song whose problem is something else: too long, a photo to upload again, the same title twice.
-  const other = count((i) => songs[i].photo !== '' && songs[i].title !== '' && songs[i].singer !== '' && songs[i].caption !== '')
+  const other = count((i) => songs[i].photo !== '' && songs[i].title !== '' && songs[i].singer !== '' && !lacksMoment(i) && !lacksCaption(i))
   const needs: Need[] = [
     need(noPhoto, 'a photo'),
     need(noWords, 'a title and singer'),
+    need(noMoment, 'a moment'),
     need(noCaption, 'a caption'),
     need(other, 'a fix'),
   ]
@@ -39,6 +45,7 @@ export function soundtrackSetup(raw: SoundtrackConfig): SetupStatus {
   }
   if (ready < songs.length) return { ready: false, line: songsLine }
 
-  const extras = config.extraPhotos.length
+  // Typed moments use no extra photos: the line doesn't count them.
+  const extras = typed ? 0 : config.extraPhotos.length
   return { ready: true, line: extras > 0 ? `${counted(songs.length, 'song')} and ${counted(extras, 'extra photo')} ready` : songsLine }
 }

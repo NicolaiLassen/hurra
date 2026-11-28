@@ -24,6 +24,8 @@ export const emptySong = (): SoundtrackSong => ({
   caption: '',
   startAt: 0,
   note: '',
+  moment: '',
+  alsoMoments: [],
 })
 
 function readSong(raw: unknown): SoundtrackSong {
@@ -37,6 +39,8 @@ function readSong(raw: unknown): SoundtrackSong {
     caption: text(song.caption),
     startAt: num(song.startAt, 0),
     note: text(song.note),
+    moment: text(song.moment),
+    alsoMoments: texts(song.alsoMoments),
   }
 }
 
@@ -56,6 +60,8 @@ export function readSettings(raw: unknown): SoundtrackConfig {
     lastCallSeconds: num(config.lastCallSeconds, 60),
     standingsEvery: num(config.standingsEvery, 4),
     hints: config.hints === true,
+    momentTyped: config.momentTyped === true,
+    aiCheck: config.aiCheck === true,
     boardMax: num(config.boardMax, 20),
     intro: text(config.intro),
     storyteller: text(config.storyteller),

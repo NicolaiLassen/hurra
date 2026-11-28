@@ -64,6 +64,30 @@ describe('Lydspor’s readiness', () => {
     expect(soundtrackSetup(old)).toEqual({ ready: true, line: '8 songs and 4 extra photos ready' })
   })
 
+  describe('with typed moments on', () => {
+    const typed = () => sampleSettings(cast, true)
+
+    it('is ready with its 8 songs and their moments, no extra photos needed', () => {
+      expect(soundtrackSetup(typed())).toEqual({ ready: true, line: '8 songs ready' })
+      expect(soundtrackSetup({ ...typed(), extraPhotos: [] })).toEqual({ ready: true, line: '8 songs ready' })
+    })
+
+    it('counts the songs still without a moment, and never asks for a caption', () => {
+      const settings = withSongs((_, n) => (n === 2 || n === 5 ? { moment: '' } : n === 3 ? { caption: '' } : {}), typed())
+      expect(soundtrackSetup(settings)).toEqual({ ready: false, line: '6 of 8 songs ready: 2 need a moment' })
+    })
+
+    it('names a moment beside the other work, and calls a moment too long a fix', () => {
+      const settings = withSongs((_, n) => (n === 1 ? { photo: '', moment: '' } : n === 4 ? { moment: 'x'.repeat(141) } : {}), typed())
+      expect(soundtrackSetup(settings)).toEqual({ ready: false, line: '6 of 8 songs ready: 1 needs a photo, 1 needs a moment, 1 needs a fix' })
+    })
+
+    it('keeps the moments out of it with typed moments off', () => {
+      const off = withSongs(() => ({ moment: '' }), { ...typed(), momentTyped: false })
+      expect(soundtrackSetup(off)).toEqual({ ready: true, line: '8 songs and 4 extra photos ready' })
+    })
+  })
+
   it('says when there are no songs, and reads settings with fields missing', () => {
     expect(soundtrackSetup({ ...sample(), songs: [] })).toEqual({ ready: false, line: 'No songs yet' })
     expect(soundtrackSetup({} as SoundtrackConfig)).toEqual({ ready: false, line: 'No songs yet' })
