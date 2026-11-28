@@ -4,7 +4,9 @@
 // for the whole team in submit_answer: every member gets it with the same
 // time, a final lock locks the team, the latest answer wins otherwise, each
 // teammate's phone hears it, a guest can never answer for another team, and
-// with team play off nothing changes. Every party here is new, so every other
+// with team play off nothing changes. A guest picks their own team
+// (choose_team, 20261128000000_team_choice.sql), and the host can make the
+// teams before anyone is here. Every party here is new, so every other
 // suite (parties without teams) proves the path of one is unchanged.
 // Run with `npm run test:integration`.
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -44,6 +46,7 @@ const moveTo = (person: Person, playerId: string, teamId: string | null) =>
 const renameTeam = (person: Person, teamId: string, name: string) => person.client.rpc('host_rename_team', { p_team_id: teamId, p_name: name })
 const clearTeams = (person: Person, party: Party) => person.client.rpc('host_clear_teams', { p_session_id: party.id })
 const setTeamPlay = (person: Person, gameId: string, on: boolean) => person.client.rpc('host_set_team_play', { p_game_id: gameId, p_on: on })
+const chooseTeam = (person: Person, teamId: string | null) => person.client.rpc('choose_team', { p_team_id: teamId })
 
 /** The party's teams and who is in each, as postgres sees them (joined guests only, by team position). */
 async function teamsOf(party: Party): Promise<{ teams: Team[]; of: Map<string, string | null> }> {
@@ -259,6 +262,121 @@ describe('a guest who joins goes into the smallest team', () => {
     // Gold has one now, pink two.
     const again = await world.claimGuest(party, 'Fay')
     expect((await teamsOf(party)).of.get(again.playerId)).toBe(teams[0].id)
+  })
+})
+
+describe('a guest picks their own team', () => {
+  it('lets the host make four teams before anyone is here, or with fewer guests than teams', async () => {
+    const empty = await world.party(host, 'Teams before guests')
+    const { data, error } = await makeTeams(host, empty, 4)
+    expect(error).toBeNull()
+    expect((data as { teams: Team[] }).teams.map((t) => t.name)).toEqual(['Team Gold', 'Team Pink', 'Team Teal', 'Team Violet'])
+    // The first guest who never picks goes into the smallest team: the first, on a tie.
+    const ana = await world.guest(empty, 'Ana')
+    const { teams, of } = await teamsOf(empty)
+    expect(of.get(ana.playerId)).toBe(teams[0].id)
+
+    const few = await partyWith(['Bo', 'Cy'], 'Fewer guests than teams')
+    expect(outcome(await makeTeams(host, few.party, 4))).toBe('ok')
+    const split = await teamsOf(few.party)
+    expect(split.teams).toHaveLength(4)
+    const sizes = split.teams.map((t) => few.guests.filter((g) => split.of.get(g.playerId) === t.id).length)
+    expect(sizes.sort()).toEqual([0, 0, 1, 1])
+  })
+
+  it('puts the caller into the team they pick, switches them, and logs and pings it', async () => {
+    const party = await world.party(host, 'Pick a team')
+    expect(outcome(await makeTeams(host, party, 4))).toBe('ok')
+    const ana = await world.guest(party, 'Ana')
+    const { teams } = await teamsOf(party)
+    expect((await teamsOf(party)).of.get(ana.playerId)).toBe(teams[0].id)
+
+    // The room hears it, so the TV, the host page and every phone read the snapshot again.
+    const tv = await world.screen(host, party)
+    await tv.client.realtime.setAuth(tv.token)
+    const heard: string[] = []
+    const channel = tv.client.channel(`room:${party.id}`, { config: { private: true } })
+    channel.on('broadcast', { event: '*' }, (message) => heard.push(message.event))
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('join timed out')), 8000)
+      channel.subscribe((state) => {
+        if (state === 'SUBSCRIBED') {
+          clearTimeout(timer)
+          resolve()
+        }
+      })
+    })
+    try {
+      const picked = await chooseTeam(ana, teams[2].id)
+      expect(picked.error).toBeNull()
+      expect(picked.data).toMatchObject({ id: ana.playerId, team_id: teams[2].id, changed: true, from: 'Team Gold' })
+      for (let i = 0; i < 100 && heard.length === 0; i++) await sleep(50)
+      expect(heard).toContain('changed')
+    } finally {
+      await tv.client.removeChannel(channel)
+    }
+    expect((await teamsOf(party)).of.get(ana.playerId)).toBe(teams[2].id)
+    // The same team again changes nothing.
+    expect((await chooseTeam(ana, teams[2].id)).data).toMatchObject({ changed: false })
+    // Then a switch, which every screen's snapshot shows.
+    expect(outcome(await chooseTeam(ana, teams[1].id))).toBe('ok')
+    for (const [person, screen] of [[ana, 'phone'], [tv, 'tv'], [host, 'host']] as const) {
+      expect((await snapshot(person, party, screen)).players.find((p) => p.id === ana.playerId)?.team_id).toBe(teams[1].id)
+    }
+    const log = (await rows<{ kind: string; actor: string; player_id: string; data: Record<string, unknown> }>('event_log', 'session_id', party.id))
+      .filter((e) => e.kind === 'team.joined')
+    expect(log).toHaveLength(2)
+    expect(log.every((e) => e.actor === 'player' && e.player_id === ana.playerId && e.data.chosen === true)).toBe(true)
+    expect(log.map((e) => e.data.team_id).sort()).toEqual([teams[1].id, teams[2].id].sort())
+  })
+
+  it('refuses a guest of another party, someone who is not a guest, an unknown team and no team', async () => {
+    const { party, byName } = await partyWith(['Ana'], 'Mine to pick')
+    expect(outcome(await makeTeams(host, party, 2))).toBe('ok')
+    const { teams } = await teamsOf(party)
+    const other = await partyWith(['Zed'], 'Not yours')
+    expect(outcome(await makeTeams(host, other.party, 2))).toBe('ok')
+    const theirs = (await teamsOf(other.party)).teams
+
+    // A guest of the other party can't go into this party's team, nor this guest into theirs.
+    expect(outcome(await chooseTeam(other.byName.Zed, teams[1].id))).toBe('PT403 not_player')
+    expect(outcome(await chooseTeam(byName.Ana, theirs[1].id))).toBe('PT403 not_player')
+    // Someone signed in who never joined, and the host (who is not a guest).
+    expect(outcome(await chooseTeam(await world.user(), teams[1].id))).toBe('PT403 not_player')
+    expect(outcome(await chooseTeam(host, teams[1].id))).toBe('PT403 not_player')
+    expect(outcome(await chooseTeam(byName.Ana, crypto.randomUUID()))).toBe('PT404 team_not_found')
+    expect(outcome(await chooseTeam(byName.Ana, null))).toBe('PT400 bad_request')
+    expect((await teamsOf(party)).of.get(byName.Ana.playerId)).toBe(teams[0].id)
+    expect((await teamsOf(other.party)).of.get(other.byName.Zed.playerId)).toBe(theirs[0].id)
+    // Still no direct write: only the function changes a guest's team.
+    expect(outcome(await byName.Ana.client.from('players').update({ team_id: teams[1].id }).eq('id', byName.Ana.playerId))).toBe('42501')
+  })
+
+  it('refuses a switch while a game played in teams is live; the host can still move anyone', async () => {
+    const { party, byName } = await partyWith(['Ana', 'Bo'], 'No hopping mid round')
+    const teams = await arrange(party, { gold: [byName.Ana], pink: [byName.Bo] })
+    const gameId = await startLab(party, true)
+
+    expect(outcome(await chooseTeam(byName.Ana, teams[1].id))).toBe('PT409 team_game_live')
+    expect((await chooseTeam(byName.Ana, teams[0].id)).data).toMatchObject({ changed: false })
+    expect((await teamsOf(party)).of.get(byName.Ana.playerId)).toBe(teams[0].id)
+    expect(outcome(await moveTo(host, byName.Ana.playerId, teams[1].id))).toBe('ok')
+    expect((await teamsOf(party)).of.get(byName.Ana.playerId)).toBe(teams[1].id)
+
+    // A game played alone holds nobody back.
+    await engine(host, { type: 'end', gameId })
+    await startLab(party, false)
+    expect(outcome(await chooseTeam(byName.Ana, teams[0].id))).toBe('ok')
+    expect((await teamsOf(party)).of.get(byName.Ana.playerId)).toBe(teams[0].id)
+  })
+
+  it('refuses a switch once the party is over', async () => {
+    const { party, byName } = await partyWith(['Ana'], 'Over')
+    expect(outcome(await makeTeams(host, party, 2))).toBe('ok')
+    const { teams } = await teamsOf(party)
+    const { error } = await host.client.from('sessions').update({ archived_at: new Date().toISOString() }).eq('id', party.id)
+    expect(error).toBeNull()
+    expect(outcome(await chooseTeam(byName.Ana, teams[1].id))).toBe('PT409 archived')
   })
 })
 

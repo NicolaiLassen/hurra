@@ -563,6 +563,16 @@ export async function clearTeams(sessionId: string): Promise<void> {
   unwrap(await supabase.rpc('host_clear_teams', { p_session_id: sessionId }))
 }
 
+/**
+ * choose_team: this phone's guest picks their own team, or switches. The same
+ * team again changes nothing. Refusals: 'team_game_live' (a game played in
+ * teams is live: no switching mid round), 'team_not_found', 'not_player',
+ * 'archived', 'not_signed_in'.
+ */
+export async function chooseTeam(teamId: string): Promise<{ id: string; team_id: string; changed: boolean }> {
+  return unwrap(await supabase.rpc('choose_team', { p_team_id: teamId }))
+}
+
 /** host_set_team_play: a game played in teams or not, while it isn't live. Refusals: 'active', 'not_found', 'not_host'. */
 export async function setTeamPlay(gameId: string, on: boolean): Promise<void> {
   unwrap(await supabase.rpc('host_set_team_play', { p_game_id: gameId, p_on: on }))
