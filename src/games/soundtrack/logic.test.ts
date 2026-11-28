@@ -1324,6 +1324,143 @@ describe('typed moments', () => {
   })
 })
 
+describe('typed moments on the wall', () => {
+  const MOMENTS = ['Roskilde Festival 2015, first time camping', 'Moving into the first flat', 'The wedding in the barn']
+  const WALL = { momentTyped: true, momentPhoto: 'wall', extraPhotos: [] }
+  const songsWith = () => MOMENTS.map((moment, i) => ({ moment, alsoMoments: i === 0 ? ['Roskilde 2015'] : [], caption: '' }))
+  const wallParty = (overrides: Record<string, unknown> = {}, players = 6) => startParty(players, { ...WALL, ...overrides }, songsWith())
+  const lockWall = (p: FakeParty) => hostAct(p, { type: 'lock' }, playedKeys(stateOf(p).playedAt.length, { momentTyped: true, momentPhoto: 'wall' }))
+  /** All four parts of song n. */
+  function four(p: FakeParty, n: number, id: PlayerId, parts: { moment?: string; title?: string; singer?: string; photo?: number }) {
+    if (parts.moment !== undefined) typeIn(p, n, 'moment', id, parts.moment)
+    if (parts.title !== undefined) typeIn(p, n, 'title', id, parts.title)
+    if (parts.singer !== undefined) typeIn(p, n, 'singer', id, parts.singer)
+    if (parts.photo !== undefined) pickPhoto(p, n, id, parts.photo)
+  }
+
+  it('need each song’s moment but no extra photos or captions, and give the moment 2 points of its own; old settings read as before', () => {
+    const songs = SONGS.map((song, i) => ({ ...song, photo: `test/lydspor/song-${i + 1}.jpg`, caption: '', moment: MOMENTS[i] }))
+    const ten = Array.from({ length: 10 }, (_, i) => ({ title: `Song number ${i + 1}`, singer: `Singer ${i + 1}`, photo: `test/lydspor/ten-${i}.jpg`, caption: '', moment: `Moment ${i + 1}` }))
+    expect(checkConfig({ songs: ten, ...WALL }).problems).toEqual([])
+    expect(checkConfig({ songs: ten, ...WALL }).warnings.some((w) => w.includes('extra'))).toBe(false)
+    expect(checkConfig({ songs, ...WALL }).config.points).toEqual({ event: 2, title: 1, singer: 1, moment: 2 })
+    expect(checkConfig({ songs, ...WALL, points: { event: 1, title: 1, singer: 1, moment: 3 } }).config).toMatchObject({
+      momentTyped: true,
+      momentPhoto: 'wall',
+      points: { event: 1, title: 1, singer: 1, moment: 3 },
+    })
+    expect(checkConfig({ songs, ...WALL, points: { event: 1, title: 1, singer: 1, moment: 6 } }).problems).toEqual(['Points must be whole numbers from 0 to 5'])
+    // Without the wall, nothing changes: no moment points, no momentPhoto.
+    expect(checkConfig({ songs, momentTyped: true }).config.points).toEqual({ event: 2, title: 1, singer: 1 })
+    expect('momentPhoto' in checkConfig({ songs, momentTyped: true }).config).toBe(false)
+    // The wall alone, typed moments off, still needs its extra photos.
+    expect(checkConfig({ songs, momentPhoto: 'wall' }).problems).toContain(`Add at least 2 extra photos, so the last song's photo isn't free`)
+  })
+
+  it('deal ten photos A to J on a shuffled wall, ask four prompts per song, and keep which photo is whose secret until its reveal', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => ({ title: `Song number ${i + 1}`, singer: `Singer ${i + 1}`, photo: `test/lydspor/ten-${i}.jpg`, caption: '', moment: `Secret moment ${i + 1}` }))
+    const p = simulateParty({ games: [new SoundtrackGame()], players: 4 })
+    p.addGame(GAME, 'soundtrack', 'Lydspor', { songs: ten, ...WALL, storyteller: 'Ida' })
+    expect(p.send(p.hostUser, { type: 'start', gameId: GAME }).kind).toBe('commit')
+    const wall = stateOf(p).wall
+    expect([...wall].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(pub(p).wall).toHaveLength(10)
+    expect(pub(p)).toMatchObject({ momentTyped: true, momentPhoto: 'wall', points: { event: 2, title: 1, singer: 1, moment: 2 } })
+    // The public wall is in wall order, never song order: it reads the same before and after Play.
+    const before = JSON.stringify(pub(p).wall)
+    play(p, 0)
+    expect(JSON.stringify(pub(p).wall)).toBe(before)
+    expect(p.promptsOf(GAME).map((pr) => [pr.key, pr.spec])).toEqual([
+      ['s1.title', TEXT_SPEC],
+      ['s1.singer', TEXT_SPEC],
+      ['s1.event', eventSpec(10)],
+      ['s1.moment', { kind: 'text', max_length: 100 }],
+    ])
+    const room = JSON.stringify(pub(p)) + JSON.stringify(p.game(GAME).views) + JSON.stringify(p.promptsOf(GAME))
+    expect(room).not.toContain('Secret moment')
+    expect(room).not.toContain('Song number')
+    expect(pub(p).reveal).toBeNull()
+    expect(playedKeys(1, { momentTyped: true, momentPhoto: 'wall' })).toEqual(['s1.title', 's1.singer', 's1.event', 's1.moment'])
+  })
+
+  it('score the photo, the moment, the title and the singer each on its own, and reveal the photo, the moment and how each part went', () => {
+    const { p, ids } = wallParty({ points: { event: 1, title: 1, singer: 1, moment: 2 } })
+    playAll(p)
+    four(p, 1, ids[0], { moment: 'roskilde festival 2015, first time camping', title: 'Paper Lanterns', singer: 'Mira Holm', photo: rightPhoto(p, 1) })
+    four(p, 1, ids[1], { moment: 'Roskilde 2015', photo: rightPhoto(p, 2) })
+    four(p, 1, ids[2], { title: 'Paper Lanterns', photo: rightPhoto(p, 1) })
+    four(p, 1, ids[3], { moment: 'A party', singer: 'Mira' })
+    // A photo on two songs scores on neither.
+    four(p, 2, ids[1], { photo: rightPhoto(p, 2) })
+    expect(lockWall(p).kind).toBe('commit')
+    expect(stateOf(p).picks![ids[0]]).toEqual({
+      event: [rightPhoto(p, 1), null, null],
+      title: ['Paper Lanterns', null, null],
+      singer: ['Mira Holm', null, null],
+      moment: ['roskilde festival 2015, first time camping', null, null],
+    })
+    reveal(p, 0)
+    expect(pub(p).reveal).toMatchObject({ n: 1, event: rightPhoto(p, 1), moment: MOMENTS[0], counts: { event: 2, title: 2, singer: 2, moment: 2 }, scoring: 4 })
+    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 5, event: 'right', title: 'exact', singer: 'exact', moment: 'exact' })
+    expect(viewOf(p, ids[1]).songs[0]).toEqual({ n: 1, points: 2, event: 'doubled', title: 'none', singer: 'none', moment: 'exact' })
+    expect(viewOf(p, ids[2]).songs[0]).toEqual({ n: 1, points: 2, event: 'right', title: 'exact', singer: 'none', moment: 'none' })
+    expect(viewOf(p, ids[3]).songs[0]).toEqual({ n: 1, points: 1, event: 'none', title: 'none', singer: 'exact', moment: 'wrong' })
+    // An accepted moment scores the moment's points, not the photo's.
+    expect(accept(p, 0, 'moment', 'aparty').kind).toBe('commit')
+    expect(viewOf(p, ids[3]).songs[0]).toMatchObject({ points: 3, event: 'none', moment: 'accepted' })
+    expect(pub(p).reveal?.counts).toEqual({ event: 2, title: 2, singer: 2, moment: 3 })
+    reveal(p, 1)
+    reveal(p, 2)
+    hostAct(p, { type: 'crown' })
+    // The most is 3 songs x 5 points; ids[0] has 5: round(5 x 20 / 15) = 7.
+    expect(pub(p).final?.find((r) => r.playerId === ids[0])).toMatchObject({ points: 5, paid: 7 })
+    expect(pub(p).extras).toEqual([])
+  })
+
+  it('score a team as one: a teammate’s tap and typing count for the whole team', () => {
+    const p = simulateParty({ games: [new SoundtrackGame()], players: 8 })
+    const ids = p.players.map((pl) => pl.id)
+    const teams = p.makeTeams(4)
+    for (const id of ids) p.setTeam(id, null)
+    ids.forEach((id, i) => p.setTeam(id, teams[i % 4].id))
+    p.addGame(GAME, 'soundtrack', 'Lydspor', settings(WALL, songsWith()))
+    expect(p.setTeamPlay(GAME, true)).toBe(true)
+    expect(p.send(p.hostUser, { type: 'start', gameId: GAME }).kind).toBe('commit')
+    play(p, 0)
+    // Team 1 (ids 0 and 4): one taps, the other types. Team 2 (ids 1 and 5) taps a wrong photo.
+    four(p, 1, ids[0], { photo: rightPhoto(p, 1) })
+    four(p, 1, ids[4], { moment: 'Roskilde 2015', title: 'Paper Lanterns', singer: 'Mira Holm' })
+    four(p, 1, ids[1], { photo: (rightPhoto(p, 1) + 1) % 3, title: 'Paper Lanterns' })
+    expect(lockWall(p).kind).toBe('commit')
+    reveal(p, 0)
+    for (const id of [ids[0], ids[4]]) expect(viewOf(p, id).songs[0]).toMatchObject({ points: 6, event: 'right', title: 'exact', singer: 'exact', moment: 'exact' })
+    for (const id of [ids[1], ids[5]]) expect(viewOf(p, id).songs[0]).toMatchObject({ points: 1, event: 'wrong', title: 'exact', moment: 'none' })
+    expect(pub(p).reveal).toMatchObject({ counts: { event: 2, title: 4, singer: 2, moment: 2 }, scoring: 4 })
+  })
+
+  it('let the AI check accept the moment, title and singer, and never ask it about the photo', () => {
+    const { p, ids } = wallParty({ aiCheck: true })
+    play(p, 0)
+    four(p, 1, ids[0], { moment: 'Camping at a festival', title: 'Papir Lanterner', singer: 'Myra Holmes', photo: rightPhoto(p, 1) })
+    four(p, 1, ids[1], { photo: (rightPhoto(p, 1) + 1) % 3 })
+    expect(lockWall(p).kind).toBe('commit')
+    const review = stateOf(p).review![0]
+    expect(Object.keys(review).sort()).toEqual(['moment', 'singer', 'title'])
+    expect(JSON.stringify(review)).not.toContain('"event"')
+    const yes = (['moment', 'title', 'singer'] as const).map((part) => ({ index: 0, part, key: review[part]![0].key }))
+    expect(hostAct(p, { type: 'ai', yes }).kind).toBe('commit')
+    expect(stateOf(p).ai).toMatchObject({ asked: 3, accepted: 3 })
+    reveal(p, 0)
+    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 6, event: 'right', title: 'accepted', singer: 'accepted', moment: 'accepted' })
+    expect(viewOf(p, ids[1]).songs[0]).toMatchObject({ points: 0, event: 'wrong' })
+    // An AI yes about a photo is no step at all.
+    const other = wallParty({ aiCheck: true })
+    play(other.p, 0)
+    lockWall(other.p)
+    expect(hostAct(other.p, { type: 'ai', yes: [{ index: 0, part: 'event', key: '0' }] })).toMatchObject({ kind: 'refuse' })
+  })
+})
+
 describe('the AI check', () => {
   const aiParty = (overrides: Record<string, unknown> = { aiCheck: true }) =>
     lockedParty(

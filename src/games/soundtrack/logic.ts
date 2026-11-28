@@ -25,6 +25,12 @@
 // moment (s5.moment) instead of tapping a photo; the moment is judged like the
 // title and singer and scores the event's points. No wall, no extra photos.
 //
+// Typed moments on the wall (momentTyped with momentPhoto 'wall'): the wall
+// is dealt and secret as with typed moments off, and each song asks four
+// parts: its photo tapped on the wall (s5.event, the event's points), and its
+// moment (s5.moment, points.moment), title and singer typed. Each part scores
+// on its own. Extra photos are optional, as with any typed moments.
+//
 // The AI check (aiCheck, default off) never runs in here: a step must stay
 // deterministic. After the lock the host page asks the server
 // (netlify/functions/lydspor-ai.mts), which asks an AI about every close or
@@ -59,12 +65,18 @@ import {
   MAX_MOMENT_TYPED,
   MAX_TYPED,
   NO_PHOTO,
+  DEFAULT_MOMENT_POINTS,
   letterOf,
+  momentOn,
+  photoShown,
   promptKey,
+  wallMoment,
+  type ModeOf,
   type EventResult,
   type PartResult,
   type Picks,
   type ReviewRow,
+  type SongPart,
   type SongReview,
   type AiYes,
   type SoundtrackConfig,
@@ -134,18 +146,32 @@ export const eventSpec = (wallSize: number): PromptSpec => ({
 
 const PARTS = ['title', 'singer', 'event'] as const
 const TYPED_PARTS = ['title', 'singer', 'moment'] as const
+const WALL_MOMENT_PARTS = ['title', 'singer', 'event', 'moment'] as const
 /** The parts a guest types: the title and singer, and the moment with typed moments on. */
 export const typedParts = (momentTyped: boolean): readonly TypedPart[] => (momentTyped ? TYPED_PARTS : ['title', 'singer'])
 
 /** A game-media path as uploads make them: `<session>/<game>/<uuid>.jpg`, nothing that climbs or points elsewhere. */
 const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
 
-/** The points one song can give: event, title and singer. */
-export const pointsPerSong = (points: SoundtrackPoints) => points.event + points.title + points.singer
+/** The points one song can give: event, title and singer, and the moment with typed moments on the wall. */
+export const pointsPerSong = (points: SoundtrackPoints, mode: ModeOf = {}) =>
+  points.event + points.title + points.singer + (wallMoment(mode) ? momentPoints(points) : 0)
 
-/** Every prompt key of the songs played so far, song by song: with typed moments on, the moment instead of the event. */
-export const playedKeys = (played: number, momentTyped = false): string[] =>
-  Array.from({ length: played }, (_, i) => (momentTyped ? TYPED_PARTS : PARTS).map((part) => promptKey(i + 1, part))).flat()
+/** The typed moment's points with typed moments on the wall. */
+export const momentPoints = (points: SoundtrackPoints) => points.moment ?? DEFAULT_MOMENT_POINTS
+
+/** A mode as the older callers pass it: true for typed moments with the photo shown. */
+const modeOf = (mode: boolean | ModeOf): ModeOf => (typeof mode === 'boolean' ? { momentTyped: mode } : mode)
+
+/** The prompts of one song: typed moments shown ask the moment instead of the event; on the wall, both. */
+export const songPrompts = (mode: boolean | ModeOf): readonly SongPart[] => {
+  const m = modeOf(mode)
+  return photoShown(m) ? TYPED_PARTS : momentOn(m) ? WALL_MOMENT_PARTS : PARTS
+}
+
+/** Every prompt key of the songs played so far, song by song (songPrompts). `true` is typed moments with the photo shown. */
+export const playedKeys = (played: number, mode: boolean | ModeOf = false): string[] =>
+  Array.from({ length: played }, (_, i) => songPrompts(mode).map((part) => promptKey(i + 1, part))).flat()
 
 /** A typed answer's text as saved (trimmed), or null for anything else. */
 export function textOf(answer: AnswerPayload | undefined | null): string | null {
@@ -215,6 +241,8 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   const warnings: string[] = []
   const rawSongs = Array.isArray(raw.songs) ? raw.songs : []
   const momentTyped = raw.momentTyped === true
+  // Typed moments on the wall: the photo is tapped as well as the moment typed.
+  const onWall = momentTyped && raw.momentPhoto === 'wall'
   if (rawSongs.length === 0) problems.push('Add at least one song in the settings')
   else if (rawSongs.length > MAX_SONGS) problems.push(`Lydspor takes at most ${MAX_SONGS} songs`)
   const songs = rawSongs.slice(0, MAX_SONGS).map((song, i) => checkSong(song, i + 1, problems, momentTyped))
@@ -239,6 +267,8 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
     event: whole(rawPoints.event ?? DEFAULT_POINTS.event),
     title: whole(rawPoints.title ?? DEFAULT_POINTS.title),
     singer: whole(rawPoints.singer ?? DEFAULT_POINTS.singer),
+    // The moment's own points: read on the wall, or when saved (a host who switched the wall off keeps them).
+    ...(onWall || rawPoints.moment !== undefined ? { moment: whole(rawPoints.moment ?? DEFAULT_MOMENT_POINTS) } : {}),
   }
   if (Object.values(points).some((p) => p === null || p < 0 || p > MAX_POINTS)) {
     problems.push(`Points must be whole numbers from 0 to ${MAX_POINTS}`)
@@ -263,11 +293,18 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   const config: SoundtrackConfig = {
     songs,
     extraPhotos,
-    points: { event: points.event ?? 2, title: points.title ?? 1, singer: points.singer ?? 1 },
+    points: {
+      event: points.event ?? 2,
+      title: points.title ?? 1,
+      singer: points.singer ?? 1,
+      ...('moment' in points ? { moment: points.moment ?? DEFAULT_MOMENT_POINTS } : {}),
+    },
     lastCallSeconds: lastCallSeconds ?? 60,
     standingsEvery: standingsEvery ?? 4,
     hints: raw.hints === true,
     momentTyped,
+    // Kept as saved even with typed moments off, so the switch remembers it; only 'wall' is stored.
+    ...(raw.momentPhoto === 'wall' ? { momentPhoto: 'wall' as const } : {}),
     aiCheck: raw.aiCheck === true,
     boardMax: boardMax ?? 20,
     intro,
@@ -406,8 +443,10 @@ function configWarnings(config: SoundtrackConfig): string[] {
 export function readPicks(
   state: Pick<SoundtrackState, 'playedAt' | 'wall'>,
   answers: Readonly<Record<string, readonly Answer[]>>,
-  momentTyped = false,
+  mode: boolean | ModeOf = false,
 ): Record<PlayerId, Picks> {
+  const momentTyped = momentOn(modeOf(mode))
+  const onWall = !photoShown(modeOf(mode))
   const played = state.playedAt.length
   const picks: Record<PlayerId, Picks> = {}
   const empty = () => Array.from({ length: played }, () => null)
@@ -416,7 +455,7 @@ export function readPicks(
       ? { event: empty(), title: empty(), singer: empty(), moment: empty() }
       : { event: empty(), title: empty(), singer: empty() })
   for (let i = 0; i < played; i++) {
-    if (!momentTyped) {
+    if (onWall) {
       for (const answer of answers[promptKey(i + 1, 'event')] ?? []) {
         const photo = photoOf(answer.answer, state.wall.length)
         if (photo !== undefined) entry(answer.playerId).event[i] = photo
@@ -546,7 +585,7 @@ type Sheet = {
   /** Lydspor points so far. */
   earned: Map<PlayerId, number>
   /** Per revealed song: scoring guests who got each part, and how many could. */
-  songs: { counts: { event: number; title: number; singer: number }; scoring: number }[]
+  songs: { counts: { event: number; title: number; singer: number; moment?: number }; scoring: number }[]
   /** Per revealed song and typed part: each guest's review row. */
   rows: { title: Map<PlayerId, ReviewRow>; singer: Map<PlayerId, ReviewRow>; moment: Map<PlayerId, ReviewRow> }[]
 }
@@ -562,7 +601,7 @@ const partCounts = (result: PartResult) => result === 'exact' || result === 'typ
 
 function outcomeOf(
   state: SoundtrackState,
-  config: Pick<SoundtrackConfig, 'points' | 'momentTyped'>,
+  config: Pick<SoundtrackConfig, 'points' | 'momentTyped' | 'momentPhoto'>,
   sheetRows: Sheet['rows'],
   playerId: PlayerId,
   i: number,
@@ -572,7 +611,7 @@ function outcomeOf(
   const singer = partResult(sheetRows[i]?.singer.get(playerId))
   let event: EventResult
   let moment: PartResult = 'none'
-  if (config.momentTyped === true) {
+  if (photoShown(config)) {
     // The typed moment scores the event's points: 'right' when it counts.
     moment = partResult(sheetRows[i]?.moment.get(playerId))
     event = partCounts(moment) ? 'right' : moment === 'none' ? 'none' : 'wrong'
@@ -582,8 +621,14 @@ function outcomeOf(
     // The guard: a photo on two of a guest's songs at the lock scores on neither.
     const doubled = e !== null && (mine?.event ?? []).filter((x) => x === e).length > 1
     event = e === null ? 'none' : doubled ? 'doubled' : e === state.wall.indexOf(i) ? 'right' : 'wrong'
+    // On the wall the typed moment is a part of its own, with its own points.
+    if (momentOn(config)) moment = partResult(sheetRows[i]?.moment.get(playerId))
   }
-  const earned = (event === 'right' ? points.event : 0) + (partCounts(title) ? points.title : 0) + (partCounts(singer) ? points.singer : 0)
+  const earned =
+    (event === 'right' ? points.event : 0) +
+    (partCounts(title) ? points.title : 0) +
+    (partCounts(singer) ? points.singer : 0) +
+    (wallMoment(config) && partCounts(moment) ? momentPoints(points) : 0)
   return { event, title, singer, moment, points: earned }
 }
 
@@ -614,7 +659,10 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
     participants,
     outcomes: new Map(),
     earned: new Map(),
-    songs: Array.from({ length: revealed }, () => ({ counts: { event: 0, title: 0, singer: 0 }, scoring: 0 })),
+    songs: Array.from({ length: revealed }, () => ({
+      counts: wallMoment(config) ? { event: 0, title: 0, singer: 0, moment: 0 } : { event: 0, title: 0, singer: 0 },
+      scoring: 0,
+    })),
     rows,
   }
   for (const id of participants) {
@@ -627,6 +675,7 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
       if (outcome.event === 'right') song.counts.event++
       if (partCounts(outcome.title)) song.counts.title++
       if (partCounts(outcome.singer)) song.counts.singer++
+      if (song.counts.moment !== undefined && partCounts(outcome.moment)) song.counts.moment++
     })
     sheet.outcomes.set(id, outcomes)
     sheet.earned.set(id, earned)
@@ -648,7 +697,7 @@ function ranked<T extends { points: number }>(rows: T[]): (T & { rank: number })
 /** Lydspor's final rows, once crowned: every participant's points, place and payout. */
 function finalRows(state: SoundtrackState, config: SoundtrackConfig, players: readonly Here[]) {
   const sheet = sheetOf(state, config, players)
-  const most = Math.min(state.revealed, state.playedAt.length) * pointsPerSong(config.points)
+  const most = Math.min(state.revealed, state.playedAt.length) * pointsPerSong(config.points, config)
   const rows = sheet.participants.map((playerId) => {
     const points = sheet.earned.get(playerId) ?? 0
     // The night board never gets raw Lydspor points: a scale to at most boardMax.
@@ -707,9 +756,9 @@ export class SoundtrackGame extends Game<
     const { songs, extraPhotos } = ctx.config
     return {
       phase: 'lobby',
-      // Typed moments: no wall to place photos on, each song keeps its own (index i is song i).
+      // Typed moments shown: no wall to place photos on, each song keeps its own (index i is song i).
       wall:
-        ctx.config.momentTyped === true
+        photoShown(ctx.config)
           ? songs.map((_, i) => i)
           : shuffle(
               Array.from({ length: songs.length + extraPhotos.length }, (_, i) => i),
@@ -846,7 +895,7 @@ export class SoundtrackGame extends Game<
 
   onWake(state: SoundtrackState, ctx: GameContext<SoundtrackConfig>): SoundtrackState {
     if (state.phase !== 'lastCall') return state
-    const keys = playedKeys(state.playedAt.length, ctx.config.momentTyped === true)
+    const keys = playedKeys(state.playedAt.length, ctx.config)
     // Closed already (a host's close list got there first): lock now.
     if (keys.every((key) => ctx.answers[key])) return this.lock(state, ctx)
     // Close what is still open; the next sync, a second later, reads the answers.
@@ -913,6 +962,7 @@ export class SoundtrackGame extends Game<
   publicState(state: SoundtrackState, info: GameInfo<SoundtrackConfig>): SoundtrackPublicState {
     const { config } = info
     const typed = config.momentTyped === true
+    const shown = photoShown(config)
     const sheet = sheetOf(state, config, info.players)
     const revealed = sheet.songs.length
     const sitOut = sittingOut(sitOutOf(state), info.players)
@@ -929,6 +979,7 @@ export class SoundtrackGame extends Game<
             moment: typed ? (song.moment ?? '') : '',
             counts: { ...sheet.songs[last].counts },
             scoring: sheet.songs[last].scoring,
+            ...(wallMoment(config) ? { got: gotOf(sheet, last) } : {}),
           }
         : null
     const afterLast = revealed > 0 && revealed === state.playedAt.length && ['reveal', 'standings', 'done'].includes(state.phase)
@@ -936,12 +987,13 @@ export class SoundtrackGame extends Game<
       phase: state.phase,
       total: config.songs.length,
       playedAt: [...state.playedAt],
-      // Typed moments: only the played songs' own photos, in play order; the rest stay secret.
-      wall: (typed ? state.wall.slice(0, state.playedAt.length) : state.wall).map((k) => {
+      // Typed moments shown: only the played songs' own photos, in play order; the rest stay secret.
+      wall: (shown ? state.wall.slice(0, state.playedAt.length) : state.wall).map((k) => {
         const photo = photoAt(config, k)
         return { path: photo.photo, hint: config.hints && photo.caption !== '' ? photo.caption : null }
       }),
       momentTyped: typed,
+      ...(wallMoment(config) ? { momentPhoto: 'wall' as const } : {}),
       points: { ...config.points },
       lockAt: state.lockAt,
       lockedAt: state.lockedAt,
@@ -949,7 +1001,7 @@ export class SoundtrackGame extends Game<
       revealed,
       reveal,
       // The photos that fit no played song: the extras, and songs never played.
-      extras: afterLast && !typed
+      extras: afterLast && !shown
         ? state.wall
             .filter((k) => k >= state.playedAt.length)
             .map((k) => {
@@ -1030,7 +1082,8 @@ export class SoundtrackGame extends Game<
     const sheet = sheetOf(state, config, round.players)
     const share = (i: number) => {
       const { counts, scoring } = sheet.songs[i]
-      return scoring > 0 ? (counts.event + counts.title + counts.singer) / (3 * scoring) : -1
+      const parts = counts.moment === undefined ? 3 : 4
+      return scoring > 0 ? (counts.event + counts.title + counts.singer + (counts.moment ?? 0)) / (parts * scoring) : -1
     }
     const known = sheet.songs.map((_, i) => i).filter((i) => share(i) >= 0)
     if (known.length >= 2) {
@@ -1049,7 +1102,10 @@ export class SoundtrackGame extends Game<
         const at = revealedAt(i + 1)
         highlights.push({
           title: `${title}: “${song.title}” by ${song.singer}`,
-          detail: `${counts.event} of ${scoring} ${config.momentTyped === true ? 'named its moment' : 'placed its photo'}, ${counts.title} typed the title, ${counts.singer} the singer`,
+          detail:
+            counts.moment !== undefined
+              ? `${counts.event} of ${scoring} placed its photo, ${counts.moment} named its moment, ${counts.title} typed the title, ${counts.singer} the singer`
+              : `${counts.event} of ${scoring} ${config.momentTyped === true ? 'named its moment' : 'placed its photo'}, ${counts.title} typed the title, ${counts.singer} the singer`,
           ...(at !== undefined ? { at } : {}),
           icon: title === 'Best known song' ? 'star' : 'target',
           weight: 'highlight',
@@ -1070,8 +1126,8 @@ export class SoundtrackGame extends Game<
     const n = index + 1
     ctx.openPrompt(promptKey(n, 'title'), { ...TEXT_SPEC })
     ctx.openPrompt(promptKey(n, 'singer'), { ...TEXT_SPEC })
+    if (!photoShown(ctx.config)) ctx.openPrompt(promptKey(n, 'event'), eventSpec(state.wall.length))
     if (ctx.config.momentTyped === true) ctx.openPrompt(promptKey(n, 'moment'), { ...MOMENT_SPEC })
-    else ctx.openPrompt(promptKey(n, 'event'), eventSpec(state.wall.length))
     ctx.record('song_played', { n })
     return { ...state, phase: 'playing', playedAt: [...state.playedAt, ctx.now] }
   }
@@ -1089,10 +1145,9 @@ export class SoundtrackGame extends Game<
 
   /** Reads every answer once, judges the typed ones, and reveals the prompts: from here nothing changes but how answers score. */
   private lock(state: SoundtrackState, ctx: GameContext<SoundtrackConfig>): SoundtrackState {
-    const typed = ctx.config.momentTyped === true
-    const keys = playedKeys(state.playedAt.length, typed)
+    const keys = playedKeys(state.playedAt.length, ctx.config)
     if (keys.some((key) => !ctx.answers[key])) throw new GameError('The answers are still coming in')
-    const picks = readPicks(state, ctx.answers, typed)
+    const picks = readPicks(state, ctx.answers, ctx.config)
     const review = buildReview(state, ctx.config, ctx.answers)
     for (const key of keys) ctx.revealPrompt(key)
     ctx.record('locked', { songs: state.playedAt.length, answered: Object.keys(picks).length })
@@ -1227,6 +1282,21 @@ function photoAt(config: SoundtrackConfig, k: number): { photo: string; caption:
   if (song) return { photo: song.photo, caption: song.caption }
   const extra = config.extraPhotos[k - config.songs.length]
   return { photo: extra?.photo ?? '', caption: extra?.caption ?? '' }
+}
+
+/** Who got each part of revealed song i, and who could score on it, in party order. */
+function gotOf(sheet: Sheet, i: number): NonNullable<SoundtrackReveal['got']> {
+  const got: NonNullable<SoundtrackReveal['got']> = { event: [], moment: [], title: [], singer: [], scoring: [] }
+  for (const id of sheet.participants) {
+    const outcome = sheet.outcomes.get(id)?.[i]
+    if (!outcome) continue
+    got.scoring.push(id)
+    if (outcome.event === 'right') got.event.push(id)
+    if (partCounts(outcome.moment)) got.moment.push(id)
+    if (partCounts(outcome.title)) got.title.push(id)
+    if (partCounts(outcome.singer)) got.singer.push(id)
+  }
+  return got
 }
 
 /** Lydspor points so far per participant: the next top 5's base. */

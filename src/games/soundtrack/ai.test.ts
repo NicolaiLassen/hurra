@@ -169,3 +169,14 @@ describe('the action', () => {
     })
   })
 })
+
+describe('typed moments on the wall', () => {
+  it('ask about the moment, title and singer only: the photo, its path and the wall never reach the AI', () => {
+    const config = { ...CONFIG, momentPhoto: 'wall' as const, extraPhotos: [{ photo: 'test/extra.jpg', caption: 'Extra' }] }
+    const questions = aiQuestions({ review: REVIEW })
+    expect(new Set(questions.map((q) => q.part))).toEqual(new Set(['title', 'singer', 'moment']))
+    const { user } = buildAiPrompt(questions, config)
+    expect(user).toContain('Roskilde Festival 2015, first time camping')
+    expect(user).not.toMatch(/\.jpg|photo|wall|event|caption/i)
+  })
+})

@@ -8,8 +8,30 @@ import type { PlayerId } from '../core/Game'
 /** The parts a guest types: the title and singer, and with typed moments on (momentTyped) the moment. */
 export type TypedPart = 'title' | 'singer' | 'moment'
 
-/** The parts of a song: the typed ones, and the event, a photo tapped on the wall (typed moments off). */
+/** The parts of a song: the typed ones, and the event, a photo tapped on the wall (unless the song's photo is shown). */
 export type SongPart = TypedPart | 'event'
+
+/**
+ * Where a song's photo is with typed moments on: 'shown' while the song plays
+ * (no wall), or 'wall': shuffled on the lettered wall with the rest, so the
+ * guests tap it as well as typing its moment. Default 'shown'.
+ */
+export type MomentPhoto = 'wall' | 'shown'
+
+/** The settings (or public state) fields that pick the mode. */
+export type ModeOf = { momentTyped?: boolean; momentPhoto?: MomentPhoto }
+
+/** A moment is typed for each song. */
+export const momentOn = (mode: ModeOf): boolean => mode.momentTyped === true
+
+/** The song's own photo shows while it plays: typed moments with no wall. */
+export const photoShown = (mode: ModeOf): boolean => mode.momentTyped === true && mode.momentPhoto !== 'wall'
+
+/** Typed moments on the wall: per song the photo tapped, and the moment, title and singer typed, each scoring on its own. */
+export const wallMoment = (mode: ModeOf): boolean => mode.momentTyped === true && mode.momentPhoto === 'wall'
+
+/** The moment's points with typed moments on the wall, when the settings have none. */
+export const DEFAULT_MOMENT_POINTS = 2
 
 /** The longest typed answer in characters: the title and singer prompts' max_length. */
 export const MAX_TYPED = 60
@@ -65,7 +87,8 @@ export type SoundtrackPhoto = {
   caption: string
 }
 
-export type SoundtrackPoints = { event: number; title: number; singer: number }
+/** `moment` with typed moments on the wall only (momentPhoto 'wall'): the typed moment's own points, default 2. */
+export type SoundtrackPoints = { event: number; title: number; singer: number; moment?: number }
 
 export type SoundtrackConfig = {
   /** 1 to 12, in play order. */
@@ -86,6 +109,14 @@ export type SoundtrackConfig = {
    * the event's points. Default false: the wall, as before.
    */
   momentTyped?: boolean
+  /**
+   * With typed moments on: 'wall' puts the songs' photos (and any extras) on
+   * the shuffled lettered wall, so the guests tap the song's photo (the
+   * event's points) and type its moment (points.moment), title and singer.
+   * Missing or 'shown': the song's own photo shows while it plays. Extra
+   * photos are optional with typed moments either way.
+   */
+  momentPhoto?: MomentPhoto
   /**
    * The AI check: after the lock, the host page asks an AI whether each typed
    * answer the rule didn't count is close enough, and its yes accepts it
@@ -240,10 +271,15 @@ export type SoundtrackReveal = {
   caption: string
   /** The moment from the settings, with typed moments on; else ''. */
   moment: string
-  /** Scoring guests who got each part, the host's accepts included. */
-  counts: { event: number; title: number; singer: number }
+  /** Scoring guests who got each part, the host's accepts included. `moment` with typed moments on the wall only (shown, `event` counts the moment). */
+  counts: { event: number; title: number; singer: number; moment?: number }
   /** Scoring guests for this song: present, not sitting out, with any answer at the lock. */
   scoring: number
+  /**
+   * With typed moments on the wall only: who got each part and who could
+   * score, so a game played in teams can count teams. Never what anyone typed.
+   */
+  got?: { event: PlayerId[]; moment: PlayerId[]; title: PlayerId[]; singer: PlayerId[]; scoring: PlayerId[] }
 }
 
 export type SoundtrackPublicState = {
@@ -257,8 +293,10 @@ export type SoundtrackPublicState = {
    * (index i is song i + 1), each public from its Play on.
    */
   wall: { path: string; hint: string | null }[]
-  /** Typed moments on: phones type each song's moment, and the TV shows the playing song's photo. */
+  /** Typed moments on: phones type each song's moment, and the TV shows the playing song's photo (unless momentPhoto is 'wall'). */
   momentTyped: boolean
+  /** With typed moments on the wall only: 'wall'. The wall is then lettered and shuffled as with typed moments off. */
+  momentPhoto?: MomentPhoto
   points: SoundtrackPoints
   lockAt: number | null
   lockedAt: number | null

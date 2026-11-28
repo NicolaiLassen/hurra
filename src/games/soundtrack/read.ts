@@ -32,7 +32,18 @@ const isId = (row: Record<string, unknown>) => typeof row.playerId === 'string'
 
 function readPoints(raw: unknown): SoundtrackPoints {
   const points = record(raw) ?? {}
-  return { event: number(points.event, 2), title: number(points.title, 1), singer: number(points.singer, 1) }
+  return {
+    event: number(points.event, 2),
+    title: number(points.title, 1),
+    singer: number(points.singer, 1),
+    ...(typeof points.moment === 'number' ? { moment: number(points.moment, 2) } : {}),
+  }
+}
+
+/** Who got each part, as ids. */
+function readGot(got: Record<string, unknown>): NonNullable<SoundtrackReveal['got']> {
+  const ids = (value: unknown) => list(value).filter((id): id is PlayerId => typeof id === 'string')
+  return { event: ids(got.event), moment: ids(got.moment), title: ids(got.title), singer: ids(got.singer), scoring: ids(got.scoring) }
 }
 
 function readReveal(raw: unknown): SoundtrackReveal | null {
@@ -46,8 +57,14 @@ function readReveal(raw: unknown): SoundtrackReveal | null {
     singer: text(reveal.singer),
     caption: text(reveal.caption),
     moment: text(reveal.moment),
-    counts: { event: number(counts.event), title: number(counts.title), singer: number(counts.singer) },
+    counts: {
+      event: number(counts.event),
+      title: number(counts.title),
+      singer: number(counts.singer),
+      ...(typeof counts.moment === 'number' ? { moment: number(counts.moment) } : {}),
+    },
     scoring: number(reveal.scoring),
+    ...(record(reveal.got) ? { got: readGot(record(reveal.got)!) } : {}),
   }
 }
 
@@ -67,6 +84,7 @@ export function readPublic(raw: unknown): SoundtrackPublicState | null {
     playedAt,
     wall: rows(pub.wall).map((photo) => ({ path: text(photo.path), hint: typeof photo.hint === 'string' ? photo.hint : null })),
     momentTyped: pub.momentTyped === true,
+    ...(pub.momentTyped === true && pub.momentPhoto === 'wall' ? { momentPhoto: 'wall' as const } : {}),
     points: readPoints(pub.points),
     lockAt: maybeNumber(pub.lockAt),
     lockedAt: maybeNumber(pub.lockedAt),
