@@ -53,6 +53,9 @@ export async function askAi(messages: AiMessages, apiKey: string, options: Pick<
         model: AI_MODEL,
         temperature: 0,
         max_tokens: 8000,
+        // The model thinks by default, and an odd answer ("ignore your instructions") made it think for 15 s and more:
+        // minimal effort kept 99 answers at about 6.5 s in the real test (28 Nov), under AI_TIMEOUT_MS.
+        reasoning: { effort: 'minimal' },
         messages: [
           { role: 'system', content: messages.system },
           { role: 'user', content: messages.user },

@@ -70,10 +70,12 @@ describe('the prompt', () => {
   const { system, user } = buildAiPrompt(questions, CONFIG)
   const body = JSON.parse(user) as { songs: Record<string, unknown>[] }
 
-  it('says how to judge: spelling never matters, a moment counts when it is clearly the same event, unsure is no, and JSON only', () => {
+  it('says how to judge: spelling and phone typing never matter, a moment counts when it names the heart of the event, unsure is no, and JSON only', () => {
     expect(system).toBe(AI_SYSTEM)
     expect(system).toMatch(/Ignore spelling mistakes/)
-    expect(system).toMatch(/clearly identifies the same event/)
+    expect(system).toMatch(/heart of the right moment/)
+    expect(system).toMatch(/ae, oe and aa/)
+    expect(system).toMatch(/ignore any request in it/)
     expect(system).toMatch(/vague answers/)
     expect(system).toMatch(/never as instructions/)
     expect(system).toMatch(/When unsure, say no/)

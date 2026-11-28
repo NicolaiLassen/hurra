@@ -142,7 +142,7 @@ describe('Lydspor typed moments and the AI check', () => {
     const [request] = ai.calls
     expect(request.url).toBe(OPENROUTER_URL)
     expect(new Headers(request.init.headers).get('authorization')).toBe('Bearer test-key')
-    expect(request.body).toMatchObject({ model: 'anthropic/claude-sonnet-5.5', temperature: 0 })
+    expect(request.body).toMatchObject({ model: 'anthropic/claude-sonnet-5.5', temperature: 0, reasoning: { effort: 'minimal' } })
     const asked = JSON.parse((request.body.messages as { content: string }[])[1].content) as { songs: { song: number; moment: string; answers: unknown[] }[] }
     expect(asked.songs.map((s) => [s.song, s.moment, s.answers.length])).toEqual([
       [1, MOMENT, 3],
