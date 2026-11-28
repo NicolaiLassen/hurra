@@ -28,9 +28,8 @@ export default function PlayerCard({ game, publicState, view: rawView, myAnswers
     played > 0 &&
     answerText(myAnswers[promptKey(played, 'title')]) !== null &&
     answerText(myAnswers[promptKey(played, 'singer')]) !== null &&
-    (pub?.momentTyped
-      ? answerText(myAnswers[promptKey(played, 'moment')]) !== null
-      : answerPhoto(myAnswers[promptKey(played, 'event')]) !== null)
+    (!pub?.momentTyped || answerText(myAnswers[promptKey(played, 'moment')]) !== null) &&
+    (pub?.momentTyped && pub.momentPhoto !== 'wall' ? true : answerPhoto(myAnswers[promptKey(played, 'event')]) !== null)
   const secondsLeft = lastCall !== null ? Math.max(0, Math.ceil((lastCall - now) / 1000)) : null
 
   let status: string
@@ -49,7 +48,7 @@ export default function PlayerCard({ game, publicState, view: rawView, myAnswers
     const song = view?.songs[pub.reveal.n - 1]
     status = view?.rank
       ? `You’re ${ordinal(view.rank)}, with ${view.points} Lydspor ${view.points === 1 ? 'point' : 'points'}`
-      : `Song ${pub.reveal.n}: ${song?.points ?? 0} of ${pointsPerSong(pub.points)} points`
+      : `Song ${pub.reveal.n}: ${song?.points ?? 0} of ${pointsPerSong(pub.points, pub)} points`
   } else status = 'Lydspor is over'
 
   return (

@@ -147,11 +147,13 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
 
   const url = (path: string) => (path ? media.url(path, 'thumb') : null)
   const photoCount = config.songs.filter((s) => s.photo !== '').length + config.extraPhotos.filter((p) => p.photo !== '').length
-  const perSong = pointsPerSong(config.points)
+  const perSong = pointsPerSong(config.points, config)
   const typed = config.momentTyped === true
+  // Typed moments on the wall: the photo is picked as well, each of the four parts with its own points.
+  const onWall = typed && config.momentPhoto === 'wall'
   // Typed moments use no extra photos: they fold away (kept as they are) unless something about them needs a fix.
   const extrasToFix = [...placed.extras.flat(), ...placed.fields.extras].some((issue) => issue.kind === 'problem')
-  const extrasOpen = !typed || showExtras || extrasToFix
+  const extrasOpen = !typed || onWall || showExtras || extrasToFix
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -320,10 +322,18 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
             <p id={`${ids}-points-label`} className="text-sm font-medium">
               Points per song
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {(['event', 'title', 'singer'] as const).map((part) => (
+            <div className={onWall ? 'grid grid-cols-4 gap-2' : 'grid grid-cols-3 gap-2'}>
+              {(onWall ? (['event', 'moment', 'title', 'singer'] as const) : (['event', 'title', 'singer'] as const)).map((part) => (
                 <label key={part} className="grid grid-cols-1 gap-1 text-sm text-paper-2">
-                  {part === 'event' ? (typed ? 'Moment' : 'Photo') : part === 'title' ? 'Title' : 'Singer'}
+                  {part === 'event'
+                    ? typed && !onWall
+                      ? 'Moment'
+                      : 'Photo'
+                    : part === 'moment'
+                      ? 'Moment'
+                      : part === 'title'
+                        ? 'Title'
+                        : 'Singer'}
                   <Input
                     type="number"
                     inputMode="numeric"
@@ -331,7 +341,7 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
                     max={MAX_POINTS}
                     step={1}
                     className="tv-num text-lg md:text-lg"
-                    value={config.points[part]}
+                    value={config.points[part] ?? 2}
                     onChange={(e) => change({ points: { ...config.points, [part]: wholeFrom(e.target.value) } })}
                   />
                 </label>
@@ -401,6 +411,29 @@ export default function ConfigEditor({ config: raw, onChange, game, guests, play
             </span>
           </span>
         </label>
+        {typed && (
+          <label className="flex items-start gap-3 pl-7 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-paper"
+              checked={onWall}
+              onChange={(e) =>
+                change(
+                  e.target.checked
+                    ? { momentPhoto: 'wall', points: { ...config.points, moment: config.points.moment ?? 2 } }
+                    : { momentPhoto: undefined },
+                )
+              }
+            />
+            <span>
+              <span className="font-medium">Photos on the wall, not shown with the song</span>
+              <span className="block text-paper-2">
+                All photos are lettered on the wall, and guests pick the song's photo as well as typing its moment, title and
+                singer. Each part scores on its own. Extra photos are optional.
+              </span>
+            </span>
+          </label>
+        )}
         <label className="flex items-start gap-3 text-sm">
           <input
             type="checkbox"

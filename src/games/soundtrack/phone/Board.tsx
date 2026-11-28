@@ -11,7 +11,9 @@ import { EMPTY_CELL } from './words'
 // what changes it until the lock; then the board is flat and read-only.
 // Under 380 px the title and singer stack in each row. With typed moments on,
 // the photo is the song's own (no letter, no swaps), and the moment sits
-// above the title and singer.
+// above the title and singer. With typed moments on the wall (wallMoment),
+// the row is the same, with the photo tapped on the wall (its letter, and
+// Pick an event while empty) in place of the song's own.
 
 export type BoardRow = {
   n: number
@@ -40,6 +42,7 @@ export function Board({
   wall,
   thumbUrl,
   momentTyped = false,
+  wallMoment = false,
   locked = false,
   open = null,
   panel,
@@ -51,6 +54,8 @@ export function Board({
   thumbUrl: (path: string) => string
   /** Typed moments: each row's photo is wall[n - 1], and the moment is a typed cell. */
   momentTyped?: boolean
+  /** Typed moments on the wall: each row has the photo picked from the wall, and the moment as a typed cell. */
+  wallMoment?: boolean
   /** After the lock: flat cells, a lock under each number, no press state. */
   locked?: boolean
   /** The row opened for typing, and its cell. */
@@ -64,9 +69,9 @@ export function Board({
     <div className="grid grid-cols-1">
       <div aria-hidden className={cn(GRID, 'max-[379px]:hidden')}>
         <span />
-        {momentTyped ? (
+        {momentTyped || wallMoment ? (
           <>
-            <span className="on-air text-[13px] text-paper-2">Photo</span>
+            <span className="on-air text-[13px] text-paper-2">{wallMoment ? 'Picture' : 'Photo'}</span>
             <span className="col-span-2 on-air text-[13px] text-paper-2">Moment, title, singer</span>
           </>
         ) : (
@@ -82,8 +87,17 @@ export function Board({
           const opened = open?.n === row.n
           return (
             <li key={row.n} className="grid grid-cols-1 gap-1.5">
-              {momentTyped ? (
-                <TypedRow row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} openPart={opened ? open.part : null} onCell={onCell} />
+              {momentTyped || wallMoment ? (
+                <TypedRow
+                  row={row}
+                  wall={wall}
+                  thumbUrl={thumbUrl}
+                  locked={locked}
+                  openPart={opened ? open.part : null}
+                  onCell={onCell}
+                  onEvent={onEvent}
+                  onWall={wallMoment}
+                />
               ) : (
                 <Row row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} openPart={opened ? open.part : null} onEvent={onEvent} onCell={onCell} />
               )}
@@ -141,6 +155,8 @@ function TypedRow({
   locked,
   openPart,
   onCell,
+  onEvent,
+  onWall,
 }: {
   row: BoardRow
   wall: readonly { path: string }[]
@@ -148,8 +164,11 @@ function TypedRow({
   locked: boolean
   openPart: TypedPart | null
   onCell?: (n: number, part: TypedPart) => void
+  onEvent?: (n: number) => void
+  /** On the wall: the photo cell is the guest's pick, and opens the sheet. */
+  onWall: boolean
 }) {
-  const photo = wall[row.n - 1]
+  const photo = onWall ? undefined : wall[row.n - 1]
   const box = 'relative overflow-hidden rounded-[10px] bg-overlay row-span-2 max-[379px]:row-span-3'
   const inner = photo ? <PhotoImage src={thumbUrl(photo.path)} className="absolute inset-0 size-full" /> : null
   return (
@@ -163,7 +182,9 @@ function TypedRow({
       <div className="row-span-2 grid max-[379px]:row-span-3">
         <SongNumber row={row} locked={locked} />
       </div>
-      {locked ? (
+      {onWall ? (
+        <Thumb row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} onEvent={onEvent} span="row-span-2 max-[379px]:row-span-3" />
+      ) : locked ? (
         <div className={box}>{inner}</div>
       ) : (
         <button type="button" aria-label={`Song ${row.n}: its photo. Type the moment`} className={box} onClick={() => onCell?.(row.n, 'moment')}>
@@ -207,14 +228,16 @@ function Thumb({
   thumbUrl,
   locked,
   onEvent,
+  span = 'max-[379px]:row-span-2',
 }: {
   row: BoardRow
   wall: readonly { path: string }[]
   thumbUrl: (path: string) => string
   locked: boolean
   onEvent?: (n: number) => void
+  /** The rows the photo cell spans. */
+  span?: string
 }) {
-  const span = 'max-[379px]:row-span-2'
   if (row.photo === null || !wall[row.photo]) {
     const empty = cn(
       span,

@@ -126,6 +126,7 @@ export default function HostView({
     extended: typeof state.extended === 'number' ? state.extended : 0,
     closing: typeof state.closingAt === 'number',
     momentTyped: settings?.momentTyped === true,
+    ...(settings?.momentPhoto === 'wall' ? { momentPhoto: 'wall' as const } : {}),
   }
   const main = nextStep(where)
   const more = moreTime(where)

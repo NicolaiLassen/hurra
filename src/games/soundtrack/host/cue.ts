@@ -21,7 +21,7 @@ export type Cue = {
 export type CueInput = {
   where: Where
   /** Null while the settings load: the cue then says what it can without them. */
-  config: Pick<SoundtrackConfig, 'songs' | 'storyteller' | 'lastCallSeconds' | 'momentTyped'> | null
+  config: Pick<SoundtrackConfig, 'songs' | 'storyteller' | 'lastCallSeconds' | 'momentTyped' | 'momentPhoto'> | null
   playedAt: readonly number[]
   lockedAt: number | null
   tallies: Readonly<Record<string, number>>
@@ -64,7 +64,8 @@ export function cueOf({ where, config, playedAt, lockedAt, tallies, playing, tit
       // Tallies count every first answer, a guest sitting out included (their phone asks nothing, but the
       // database takes an answer): never more than the guests playing.
       const tally = (part: 'title' | 'singer' | 'event' | 'moment') => Math.min(tallies[promptKey(played, part)] ?? 0, playing)
-      const typed = config?.momentTyped === true
+      // Typed moments shown count the moments typed; on the wall the photos placed, as without them.
+      const typed = config?.momentTyped === true && config.momentPhoto !== 'wall'
       const counts = {
         title: tally('title'),
         singer: tally('singer'),

@@ -10,8 +10,19 @@ import { linesOver, overflows, useNow, useStepDown } from './tv/hooks'
 import { Pips, RunningOrder, Wall } from './tv/parts'
 import Reveal from './tv/Reveal'
 import TopFive from './tv/TopFive'
-import { LAST_CALL_LINE, lobbyLine, lockedLine, MOMENT_PLAYING_LINE, PLAYING_LINE, pointChips, revealsLine, rulesFor, typedWords } from './tv/words'
-import { promptKey, type SoundtrackPublicState } from './types'
+import {
+  LAST_CALL_LINE,
+  lobbyLine,
+  lockedLine,
+  MOMENT_PLAYING_LINE,
+  PLAYING_LINE,
+  pointChips,
+  revealsLine,
+  rulesFor,
+  typedWords,
+  WALL_MOMENT_PLAYING_LINE,
+} from './tv/words'
+import { photoShown, promptKey, wallMoment, type SoundtrackPublicState } from './types'
 
 /** The house easing (docs/identity.md, Motion). */
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
@@ -25,7 +36,8 @@ const EASE_OUT = [0.22, 1, 0.36, 1] as const
  * no sound from Play song 1 to the crown: Lydspor announces nothing then.
  * With typed moments on, no lettered wall: the song playing shows its own
  * photo large, and the last call and the lock show the played songs' photos
- * by song number.
+ * by song number. With typed moments on the wall, the lettered wall as with
+ * them off, and the reveal shows four parts, counted by team in teams.
  */
 export default function TvView(props: TvViewProps<SoundtrackGame>) {
   const { game, players, tallies, serverNow, mediaUrl, finished } = props
@@ -50,7 +62,7 @@ export default function TvView(props: TvViewProps<SoundtrackGame>) {
       )
     case 'reveal':
       return pub.reveal ? (
-        <Reveal key={pub.reveal.n} pub={pub} reveal={pub.reveal} mediaUrl={mediaUrl} />
+        <Reveal key={pub.reveal.n} pub={pub} reveal={pub.reveal} mediaUrl={mediaUrl} players={players} />
       ) : (
         <Waiting>The first song is coming up…</Waiting>
       )
@@ -70,7 +82,7 @@ function Waiting({ children }: { children: ReactNode }) {
  * stage's top as in the mockup.
  */
 function BesideTheWall({ pub, mediaUrl, children }: { pub: SoundtrackPublicState; mediaUrl: TvViewProps['mediaUrl']; children: ReactNode }) {
-  if (pub.momentTyped) {
+  if (photoShown(pub)) {
     // Typed moments: the song playing's own photo, or every played song's by number; nothing before song 1.
     const played = pub.playedAt.length
     const photos = pub.wall.slice(0, played)
@@ -117,14 +129,14 @@ function Lobby({ pub }: { pub: SoundtrackPublicState }) {
       className={cn(
         'flex min-w-0 shrink-0 flex-col overflow-hidden',
         // Typed moments: no wall before song 1 (each photo is secret until its song plays), so the rules take the room.
-        pub.momentTyped ? 'w-[64%]' : 'w-[42%] short:w-[44%] low:w-[48%]',
+        photoShown(pub) ? 'w-[64%]' : 'w-[42%] short:w-[44%] low:w-[48%]',
       )}
     >
       <h2 data-fit-lines="3" className={cn('font-extrabold text-balance text-paper', head, 'leading-[1.08]')}>
         {lobbyLine(pub)}
       </h2>
       <ol className="mt-8 grid gap-4 short:mt-6 short:gap-3 low:mt-4 low:gap-2">
-        {rulesFor(pub.momentTyped).map((rule, i) => (
+        {rulesFor(pub.momentTyped, wallMoment(pub)).map((rule, i) => (
           <li key={i} className="flex min-w-0 items-baseline gap-5 short:gap-4">
             <span className="w-[1ch] shrink-0 tv-num text-tv-field text-paper-3 short:text-tv-body low:text-tv-tab">{i + 1}</span>
             <span className="min-w-0 text-tv-body leading-[1.3] text-pretty text-paper short:text-tv-tab low:text-tv-floor">{rule}</span>
@@ -132,7 +144,7 @@ function Lobby({ pub }: { pub: SoundtrackPublicState }) {
         ))}
       </ol>
       <ul aria-label="Points per song" className="mt-8 flex flex-wrap gap-3 short:mt-6 low:mt-4">
-        {pointChips(pub.points, pub.momentTyped).map((chip) => (
+        {pointChips(pub.points, pub.momentTyped, wallMoment(pub)).map((chip) => (
           <li key={chip.label} className="flex items-baseline gap-2.5 rounded-chip bg-overlay px-4 py-2 short:px-3.5 short:py-1.5">
             <span className="text-tv-body font-semibold text-paper short:text-tv-tab low:text-tv-floor">{chip.label}</span>
             <span className="tv-num text-tv-band text-paper short:text-tv-field low:text-tv-tab">+{chip.points}</span>
@@ -202,9 +214,17 @@ function OnAir({ pub, tallies, serverNow }: { pub: SoundtrackPublicState; tallie
         </motion.h2>
       )}
       {line && pub.phase !== 'lastCall' && (
-        <Line>{pub.phase === 'playing' ? (pub.momentTyped ? MOMENT_PLAYING_LINE : PLAYING_LINE) : lockedLine(pub.storyteller)}</Line>
+        <Line>
+          {pub.phase === 'playing'
+            ? wallMoment(pub)
+              ? WALL_MOMENT_PLAYING_LINE
+              : pub.momentTyped
+                ? MOMENT_PLAYING_LINE
+                : PLAYING_LINE
+            : lockedLine(pub.storyteller)}
+        </Line>
       )}
-      {pub.phase === 'playing' && n > 0 && <Typed n={n} playing={pub.playing} tallies={tallies} momentTyped={pub.momentTyped} />}
+      {pub.phase === 'playing' && n > 0 && <Typed n={n} playing={pub.playing} tallies={tallies} momentTyped={pub.momentTyped} onWall={wallMoment(pub)} />}
       <RunningOrder total={pub.total} playedAt={pub.playedAt} playing={pub.phase === 'playing'} className="mt-10 shrink-0 short:mt-7 low:mt-4" />
     </div>
   )
@@ -227,22 +247,26 @@ function Typed({
   playing,
   tallies,
   momentTyped,
+  onWall,
 }: {
   n: number
   playing: number
   tallies: Readonly<Record<string, number>>
   /** Typed moments: the third count is the moments typed, not the photos placed. */
   momentTyped: boolean
+  /** Typed moments on the wall: the moments typed and the photos placed. */
+  onWall: boolean
 }) {
   const title = tallies[promptKey(n, 'title')] ?? 0
   const singer = tallies[promptKey(n, 'singer')] ?? 0
   const photo = tallies[promptKey(n, momentTyped ? 'moment' : 'event')] ?? 0
   const third = momentTyped ? 'a moment' : 'a photo'
+  const placed = onWall ? (tallies[promptKey(n, 'event')] ?? 0) : null
   const of = Math.max(playing, title)
   return (
     <div
       role="group"
-      aria-label={`${title} of ${of} ${typedWords(title)}, ${singer} a singer, ${photo} ${third}`}
+      aria-label={`${title} of ${of} ${typedWords(title)}, ${singer} a singer, ${photo} ${third}${placed !== null ? `, ${placed} a photo` : ''}`}
       className="mt-9 shrink-0 short:mt-6 low:mt-4"
     >
       <Pips count={title} total={of} />
@@ -254,6 +278,11 @@ function Typed({
       </p>
       <p aria-hidden className="mt-1 text-tv-body font-medium whitespace-nowrap text-paper-2 short:text-tv-tab low:text-tv-floor">
         <span className="tv-num text-paper">{singer}</span> a singer, <span className="tv-num text-paper">{photo}</span> {third}
+        {placed !== null && (
+          <>
+            , <span className="tv-num text-paper">{placed}</span> a photo
+          </>
+        )}
       </p>
     </div>
   )

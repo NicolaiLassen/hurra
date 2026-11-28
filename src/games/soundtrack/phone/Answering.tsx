@@ -1,4 +1,4 @@
-import { CaretRightIcon, ChatTextIcon, ImageIcon, MicrophoneStageIcon, MusicNoteIcon, PlusIcon, TextAaIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretRightIcon, CheckIcon, ChatTextIcon, ImageIcon, MicrophoneStageIcon, MusicNoteIcon, PlusIcon, TextAaIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { clockTime } from '@/components/phone/text'
@@ -6,7 +6,9 @@ import { isTypingTarget, useTypingFocus } from '@/components/phone/useTypingFocu
 import type { AnswerPayload } from '@/games/core/Game'
 import {
   letterOf,
+  photoShown,
   promptKey,
+  wallMoment,
   type Picks,
   type SongPart,
   type SoundtrackPublicState,
@@ -21,7 +23,7 @@ import { useKeyboardKeep, useNow } from './hooks'
 import { answeredParts, bandOf, doubledPhotos, FIELD_PART, FIELD_SONG, fieldId, followsNewSong, missingParts, songParts, typedFields } from './model'
 import { PhotoSheet, SwapToast } from './PhotoSheet'
 import { useAnswers, type Answers } from './useAnswers'
-import { HeroPhoto, Wall } from './Wall'
+import { HeroPhoto, LetterChip, PhotoImage, Wall } from './Wall'
 import { laterLine, MISSING_ASK, namedLine, needsLine, quoted, sheetReminder } from './words'
 
 // Lydspor on a guest's phone while songs play, through the last call and
@@ -31,7 +33,9 @@ import { laterLine, MISSING_ASK, namedLine, needsLine, quoted, sheetReminder } f
 // for what is missing; and the board read-only once the answers lock. One
 // component throughout, so drafts, the open tab and the toast carry over.
 // With typed moments on (pub.momentTyped), Now playing shows the song's own
-// photo and three typed fields, the moment first; no wall, no swaps.
+// photo and three typed fields, the moment first; no wall, no swaps. With
+// typed moments on the wall (pub.momentPhoto 'wall'), Now playing has the
+// three typed fields and the wall to tap, and the board shows all four parts.
 
 type Tab = 'now' | 'board'
 
@@ -88,8 +92,11 @@ export function Answering({
   const round = `${game.id}:${game.started_at ?? ''}`
   const played = pub.playedAt.length
   const { phase, lockAt, momentTyped } = pub
+  // The song's own photo shows (no wall), or the wall is tapped; on the wall with typed moments, four parts.
+  const shown = photoShown(pub)
+  const onWallMoment = wallMoment(pub)
   // The parts each song asks, and its typed fields, in the phone's order.
-  const parts = songParts(momentTyped)
+  const parts = songParts(pub)
   const fields = typedFields(momentTyped)
   const now = useNow(serverNow, phase === 'lastCall' ? 250 : 5000, phase !== 'locked')
   // The phone shows the lock as soon as its clock passes lockAt, and sends nothing after it.
@@ -261,7 +268,7 @@ export function Answering({
       moment: momentTyped ? answers.savedText(n, 'moment') : null,
       unsent: fields.filter((part) => answers.unsent(n, part) && focusedKey !== promptKey(n, part)),
       swapped: answers.flash.includes(n),
-      doubled: !momentTyped && photo !== null && doubled.has(photo),
+      doubled: !shown && photo !== null && doubled.has(photo),
     }
   })
 
@@ -271,6 +278,7 @@ export function Answering({
       time={pub.playedAt[open.n - 1] !== undefined ? clockTime(pub.playedAt[open.n - 1]) : null}
       photo={answers.events[open.n - 1] ?? null}
       momentTyped={momentTyped}
+      shown={shown}
       secondsLeft={phase === 'lastCall' && lockAt !== null ? secondsTo(lockAt, now) : null}
       idPrefix={idPrefix}
       answers={answers}
@@ -285,7 +293,8 @@ export function Answering({
       rows={openRows}
       wall={pub.wall}
       thumbUrl={thumbUrl}
-      momentTyped={momentTyped}
+      momentTyped={shown}
+      wallMoment={onWallMoment}
       open={open}
       panel={panel}
       onEvent={openSheet}
@@ -308,7 +317,7 @@ export function Answering({
         n,
         time: null,
         now: false,
-        photo: momentTyped ? null : picks ? (picks.event[i] ?? null) : (answers.events[i] ?? null),
+        photo: shown ? null : picks ? (picks.event[i] ?? null) : (answers.events[i] ?? null),
         title: picks ? (picks.title[i] ?? null) : answers.savedText(n, 'title'),
         singer: picks ? (picks.singer[i] ?? null) : answers.savedText(n, 'singer'),
         moment: !momentTyped ? null : picks ? (picks.moment?.[i] ?? null) : answers.savedText(n, 'moment'),
@@ -318,7 +327,12 @@ export function Answering({
       }
     })
     const lockedAnswered = lockedRows.reduce(
-      (sum, row) => sum + ((momentTyped ? row.moment : row.photo) !== null ? 1 : 0) + (row.title !== null ? 1 : 0) + (row.singer !== null ? 1 : 0),
+      (sum, row) =>
+        sum +
+        (row.photo !== null ? 1 : 0) +
+        (row.moment !== null ? 1 : 0) +
+        (row.title !== null ? 1 : 0) +
+        (row.singer !== null ? 1 : 0),
       0,
     )
     const unsentLines = Array.from({ length: played }, (_, i) => i + 1).flatMap((n) =>
@@ -331,7 +345,7 @@ export function Answering({
       <div ref={rootRef} className="grid grid-cols-1">
         <h3 className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em]">Your answers are locked.</h3>
         <p className="mt-1.5 text-base leading-snug text-pretty text-paper-2">
-          {lockedAnswered} of {played * 3} answered. Up first: song 1.{' '}
+          {lockedAnswered} of {played * parts.length} answered. Up first: song 1.{' '}
           {storyteller !== '' ? `${storyteller} reveals the songs in order and tells each story.` : 'The songs are revealed in order, each with its story.'}
           {onStage ? ' Look at the TV.' : ''}
         </p>
@@ -345,7 +359,7 @@ export function Answering({
           </ul>
         )}
         <div className="mt-4">
-          <Board rows={lockedRows} wall={pub.wall} thumbUrl={thumbUrl} momentTyped={momentTyped} locked />
+          <Board rows={lockedRows} wall={pub.wall} thumbUrl={thumbUrl} momentTyped={shown} wallMoment={onWallMoment} locked />
         </div>
       </div>
     )
@@ -408,7 +422,7 @@ export function Answering({
     <div ref={rootRef} className={cn('grid scroll-mt-4 grid-cols-1', toastRoom)}>
       <TabSwitch tab={tab} answered={answered} total={total} onTab={showTab} />
       {banner && <div className="mt-3">{banner}</div>}
-      {tab === 'now' && momentTyped ? (
+      {tab === 'now' && shown ? (
         <NowPlayingTyped
           n={n}
           pub={pub}
@@ -432,6 +446,7 @@ export function Answering({
           onOpenSheet={openSheet}
           onOpenBoard={() => showTab('board')}
           bannerShown={Boolean(banner)}
+          fields={fields}
         />
       ) : (
         <div className="mt-3 grid grid-cols-1">
@@ -557,6 +572,7 @@ function NowPlaying({
   onOpenSheet,
   onOpenBoard,
   bannerShown,
+  fields: typed,
 }: {
   n: number
   pub: SoundtrackPublicState
@@ -569,6 +585,8 @@ function NowPlaying({
   onOpenBoard: () => void
   /** The new song's banner is up, above the heading: the fields are kept in view again. */
   bannerShown: boolean
+  /** The typed fields: the title and singer, and with typed moments on the wall the moment first. */
+  fields: readonly TypedPart[]
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const fields = useRef<HTMLDivElement>(null)
@@ -581,14 +599,20 @@ function NowPlaying({
   const note = answers.photoNote && answers.photoNote.n === n ? answers.photoNote : null
   // Earlier songs left without a photo (a take, or never picked): one-tap rows, a few at most.
   const lost = Array.from({ length: n - 1 }, (_, i) => i + 1).filter((k) => !answers.has(k, 'event')).slice(0, 3)
-  const outlined: TypedPart[] = photo === null ? [] : [...(hasTitle ? [] : ['title' as const]), ...(hasSinger ? [] : ['singer' as const])]
+  const withMoment = typed.includes('moment')
+  const missingTyped = typed.filter((part) => !answers.has(n, part))
+  const outlined: TypedPart[] = photo === null ? [] : missingTyped
 
   return (
     <section aria-labelledby={`${idPrefix}-now`} className="mt-4 grid grid-cols-1">
       <h3 id={`${idPrefix}-now`} ref={heading} className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em]">
         Name song {n}.
       </h3>
-      {!typing && <p className="mt-1.5 text-base leading-snug text-pretty text-paper-2">Close spelling counts. Change it until the last call.</p>}
+      {!typing && (
+        <p className="mt-1.5 text-base leading-snug text-pretty text-paper-2">
+          {withMoment ? 'Type the moment, the title and who sings it, then tap its photo. ' : ''}Close spelling counts. Change it until the last call.
+        </p>
+      )}
       <div ref={fields} className="mt-3">
         <SongFields
           n={n}
@@ -597,6 +621,7 @@ function NowPlaying({
           focusedKey={focusedKey}
           onFocusKey={onFocusKey}
           outlined={outlined}
+          parts={typed}
           onDone={() => {
             // Done: the event's heading goes to the top, with the wall under it.
             requestAnimationFrame(() => eventHead.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
@@ -604,9 +629,27 @@ function NowPlaying({
         />
       </div>
 
+      {withMoment ? (
+        <div ref={eventHead} className="mt-3 scroll-mt-3">
+          <PictureField
+            n={n}
+            number={typed.length + 1}
+            photo={photo}
+            wall={pub.wall}
+            thumbUrl={thumbUrl}
+            note={note ? note.words : null}
+            disabled={answers.photoBusy}
+            onOpen={() => {
+              leaveField()
+              onOpenSheet(n)
+            }}
+          />
+        </div>
+      ) : (
+        <>
       <div ref={eventHead} className="mt-[22px] scroll-mt-3">
         <p className="on-air text-[13px] text-paper-2">
-          <span className="mr-1 text-paper-3">3</span>Event
+          <span className="mr-1 text-paper-3">{typed.length + 1}</span>Event
         </p>
         <p className="mt-1 text-[20px] leading-[1.15] font-extrabold">Which photo is song {n} from?</p>
         <p role="status" className={cn('mt-1.5 text-base leading-snug', note ? 'font-semibold text-paper' : 'text-paper-2')}>
@@ -627,12 +670,16 @@ function NowPlaying({
           }}
         />
       </div>
+        </>
+      )}
 
       {photo !== null && (
         <div className="mt-5 grid grid-cols-1 gap-3">
           <div>
-            <p className="text-[20px] leading-tight font-extrabold">{namedLine(n, hasTitle, hasSinger)}</p>
-            {hasTitle && hasSinger && <p className="mt-1 text-base leading-snug text-paper-2">Talk it over. Change anything until the last call.</p>}
+            <p className="text-[20px] leading-tight font-extrabold">
+              {withMoment ? needsLine(n, missingTyped) : namedLine(n, hasTitle, hasSinger)}
+            </p>
+            {missingTyped.length === 0 && <p className="mt-1 text-base leading-snug text-paper-2">Talk it over. Change anything until the last call.</p>}
           </div>
           {lost.map((k) => (
             <MissingRow key={k} n={k} part="event" onOpen={() => onOpenSheet(k)} />
@@ -738,6 +785,82 @@ function NowPlayingTyped({
   )
 }
 
+/**
+ * With typed moments on the wall: the song's photo as a field beside the
+ * typed ones, "4 Picture", showing the chosen thumbnail and its letter, or
+ * Pick its photo. A tap opens the sheet of every photo on the wall (a photo
+ * another song has swaps, as on the wall), changeable until the last call.
+ */
+function PictureField({
+  n,
+  number,
+  photo,
+  wall,
+  thumbUrl,
+  note,
+  disabled,
+  onOpen,
+}: {
+  n: number
+  number: number
+  photo: number | null
+  wall: readonly { path: string; hint: string | null }[]
+  thumbUrl: (path: string) => string
+  note: string | null
+  disabled: boolean
+  onOpen: () => void
+}) {
+  const chosen = photo !== null ? wall[photo] : undefined
+  return (
+    <div className="grid grid-cols-1">
+      <div className="flex min-h-[22px] items-center gap-2">
+        <span className="on-air text-[13px] leading-none text-paper-2">
+          <span className="mr-1 text-paper-3">{number}</span>Picture
+        </span>
+        {chosen && (
+          <span className="ml-auto inline-flex items-center gap-1 text-[13px] font-bold text-paper-2">
+            <CheckIcon weight="bold" className="size-3.5" />
+            Saved
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-label={chosen && photo !== null ? `Song ${n}: photo ${letterOf(photo)}. Change it` : `Song ${n}: pick its photo`}
+        onClick={onOpen}
+        className={cn(
+          'mt-1.5 flex h-[72px] w-full min-w-0 items-center gap-3 rounded-phone bg-overlay pr-3.5 pl-2 text-left active:bg-rule',
+          'shadow-[inset_0_0_0_1.5px_color-mix(in_oklab,var(--color-paper-3)_60%,transparent)]',
+          !chosen && 'pl-3.5',
+        )}
+      >
+        {chosen && photo !== null ? (
+          <>
+            <span className="relative h-14 w-[84px] shrink-0 overflow-hidden rounded-[10px] bg-raised">
+              <PhotoImage src={thumbUrl(chosen.path)} className="absolute inset-0 size-full" />
+              <LetterChip index={photo} size="small" />
+            </span>
+            <span className="min-w-0 flex-1 text-[20px] font-semibold text-paper">Photo {letterOf(photo)}</span>
+          </>
+        ) : (
+          <>
+            <ImageIcon className="size-6 shrink-0 text-paper-2" />
+            <span className="min-w-0 flex-1 text-[20px] font-medium text-paper-3">Pick its photo</span>
+          </>
+        )}
+        <CaretDownIcon weight="bold" className="size-5 shrink-0 text-paper-2" />
+      </button>
+      {note && (
+        <p role="status" className="mt-1.5 text-sm leading-snug font-semibold text-paper">
+          {note}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** A missing part as an outlined one-tap row: "Song 7: who sings it?" */
 function MissingRow({ n, part, onOpen }: { n: number; part: SongPart; onOpen: () => void }) {
   const Icon = PART_ICON[part]
@@ -762,6 +885,7 @@ function RowPanel({
   time,
   photo,
   momentTyped,
+  shown,
   secondsLeft,
   idPrefix,
   answers,
@@ -773,6 +897,8 @@ function RowPanel({
   time: string | null
   photo: number | null
   momentTyped: boolean
+  /** The song's own photo shows: no letter to name. */
+  shown: boolean
   secondsLeft: number | null
   idPrefix: string
   answers: Answers
@@ -784,7 +910,7 @@ function RowPanel({
   // The opened row above the panel is the top the keyboard rule keeps in view.
   useKeyboardKeep(panel)
   // No-break spaces keep "Photo C." and "at 21:04" whole when the line wraps.
-  const facts = [time ? `Started at\u00a0${time}.` : null, momentTyped ? null : photo !== null ? `Photo\u00a0${letterOf(photo)}.` : 'No photo yet.']
+  const facts = [time ? `Started at\u00a0${time}.` : null, shown ? null : photo !== null ? `Photo\u00a0${letterOf(photo)}.` : 'No photo yet.']
     .filter(Boolean)
     .join(' ')
   return (

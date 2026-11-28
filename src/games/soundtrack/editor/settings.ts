@@ -56,11 +56,17 @@ export function readSettings(raw: unknown): SoundtrackConfig {
   return {
     songs: Array.isArray(config.songs) ? config.songs.map(readSong) : [],
     extraPhotos: Array.isArray(config.extraPhotos) ? config.extraPhotos.map(readPhoto) : [],
-    points: { event: num(points.event, 2), title: num(points.title, 1), singer: num(points.singer, 1) },
+    points: {
+      event: num(points.event, 2),
+      title: num(points.title, 1),
+      singer: num(points.singer, 1),
+      ...(points.moment !== undefined || (config.momentTyped === true && config.momentPhoto === 'wall') ? { moment: num(points.moment, 2) } : {}),
+    },
     lastCallSeconds: num(config.lastCallSeconds, 60),
     standingsEvery: num(config.standingsEvery, 4),
     hints: config.hints === true,
     momentTyped: config.momentTyped === true,
+    ...(config.momentPhoto === 'wall' ? { momentPhoto: 'wall' as const } : {}),
     aiCheck: config.aiCheck === true,
     boardMax: num(config.boardMax, 20),
     intro: text(config.intro),

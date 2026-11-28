@@ -152,12 +152,24 @@ export const gotItLine = (count: number, of: number) => `${count} of ${of} got i
  * a missing part says so), as its lead and what the guest has, which the
  * phone sets in bold. `have` is null with no answer at all.
  */
-export function nextLine(n: number, mine: Picks | null, momentTyped = false): { lead: string; have: string | null } {
+export function nextLine(n: number, mine: Picks | null, momentTyped = false, onWall = false): { lead: string; have: string | null } {
   const i = n - 1
   const photo = mine?.event[i] ?? null
   const title = mine?.title[i] ?? null
   const singer = mine?.singer[i] ?? null
   const lead = `Song ${n} is next.`
+  if (momentTyped && onWall) {
+    // "photo F, “Berlin roadtrip”, no title and “coldwave”".
+    const moment = mine?.moment?.[i] ?? null
+    if (photo === null && moment === null && title === null && singer === null) return { lead, have: null }
+    const parts = [
+      photo === null ? 'no photo' : `photo ${letterOf(photo)}`,
+      moment === null ? 'no moment' : quoted(moment),
+      title === null ? 'no title' : quoted(title),
+      singer === null ? 'no singer' : quoted(singer),
+    ]
+    return { lead, have: `${parts.slice(0, 3).join(', ')} and ${parts[3]}` }
+  }
   if (momentTyped) {
     // The moment as typed, then the title and singer: "“Berlin roadtrip”, no title and “coldwave”".
     const moment = mine?.moment?.[i] ?? null

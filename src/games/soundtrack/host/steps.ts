@@ -23,6 +23,8 @@ export type Where = {
   closing: boolean
   /** Typed moments: the songs' prompts are the moment, title and singer. */
   momentTyped?: boolean
+  /** With typed moments: 'wall' asks the photo too (s5.event). */
+  momentPhoto?: 'wall' | 'shown'
 }
 
 export type StepIcon = 'play' | 'lastCall' | 'more' | 'lock' | 'reveal' | 'top' | 'crown'
@@ -124,7 +126,7 @@ export function menuSteps(where: Where): Step[] {
     label: 'Lock now…',
     icon: 'lock',
     action: { type: 'lock' },
-    close: playedKeys(played, where.momentTyped === true),
+    close: playedKeys(played, { momentTyped: where.momentTyped === true, momentPhoto: where.momentPhoto }),
     confirm: {
       title: 'Lock the answers now?',
       description:

@@ -46,6 +46,6 @@ export function soundtrackSetup(raw: SoundtrackConfig): SetupStatus {
   if (ready < songs.length) return { ready: false, line: songsLine }
 
   // Typed moments use no extra photos: the line doesn't count them.
-  const extras = typed ? 0 : config.extraPhotos.length
+  const extras = typed && config.momentPhoto !== 'wall' ? 0 : config.extraPhotos.length
   return { ready: true, line: extras > 0 ? `${counted(songs.length, 'song')} and ${counted(extras, 'extra photo')} ready` : songsLine }
 }

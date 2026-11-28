@@ -43,11 +43,27 @@ export const MOMENT_RULES = [
   'Each song has its own photo. The moment is what happened in it.',
 ] as const
 
+/** The rules with typed moments on the wall: the photo is picked, and the moment, title and singer typed. */
+export const WALL_MOMENT_RULES = [
+  'A song plays. Type its moment, its title and who sings it, and pick its photo from the wall.',
+  'Close spelling counts. Any song can change until the last call.',
+  'Each photo fits one song. Every part scores on its own.',
+] as const
+
 /** The lobby's rules for the mode. */
-export const rulesFor = (momentTyped: boolean): readonly string[] => (momentTyped ? MOMENT_RULES : RULES)
+export const rulesFor = (momentTyped: boolean, onWall = false): readonly string[] =>
+  momentTyped && onWall ? WALL_MOMENT_RULES : momentTyped ? MOMENT_RULES : RULES
 
 /** The points a song gives, as the lobby's chips: Event +2, Title +1, Singer +1 (Moment +2 with typed moments on). */
-export function pointChips(points: SoundtrackPoints, momentTyped = false): { label: string; points: number }[] {
+export function pointChips(points: SoundtrackPoints, momentTyped = false, onWall = false): { label: string; points: number }[] {
+  if (momentTyped && onWall) {
+    return [
+      { label: 'Picture', points: points.event },
+      { label: 'Moment', points: points.moment ?? 2 },
+      { label: 'Title', points: points.title },
+      { label: 'Singer', points: points.singer },
+    ]
+  }
   return [
     { label: momentTyped ? 'Moment' : 'Event', points: points.event },
     { label: 'Title', points: points.title },
@@ -66,6 +82,9 @@ export const PLAYING_LINE = 'Type its title and who sings it on your phone, and 
 
 /** Under "Song 5 is playing." with typed moments on. */
 export const MOMENT_PLAYING_LINE = 'Type its moment, its title and who sings it on your phone. Any song can change until the last call.'
+
+/** Under "Song 5 is playing." with typed moments on the wall. */
+export const WALL_MOMENT_PLAYING_LINE = 'Type its moment, its title and who sings it on your phone, and pick its photo. Any song can change until the last call.'
 
 /** Under the last call's countdown (the strap says Last call). */
 export const LAST_CALL_LINE = 'Check every song on your phone now. Then all the answers lock.'
@@ -88,7 +107,7 @@ export function storyLine(storyteller: string): string {
 export const typedWords = (count: number) => (count === 1 ? 'has typed a title' : 'have typed a title')
 
 /** One count at the reveal: the figure ("15 of 22") and its words ("got the event, photo B"). */
-export type RevealCount = { part: 'event' | 'title' | 'singer'; figure: string; words: string }
+export type RevealCount = { part: 'event' | 'moment' | 'title' | 'singer'; figure: string; words: string }
 
 /**
  * The reveal's three counts, of the guests who could score on this song (the
@@ -103,6 +122,32 @@ export function revealCounts(reveal: Pick<SoundtrackReveal, 'counts' | 'scoring'
     { part: 'title', figure: of(reveal.counts.title), words: 'got the title' },
     { part: 'singer', figure: of(reveal.counts.singer), words: 'got the singer' },
   ]
+}
+
+/**
+ * With typed moments on the wall: the four counts, the picture first. In a
+ * game played in teams (every guest who could score has a team), each counts
+ * teams: "3 of 4" "teams got the title". Otherwise guests, as revealCounts.
+ */
+export function wallRevealCounts(
+  reveal: Pick<SoundtrackReveal, 'counts' | 'scoring' | 'event' | 'got'>,
+  teamOf?: (playerId: string) => string | null | undefined,
+): RevealCount[] {
+  const photo = reveal.event >= 0 ? `the picture, photo ${letterOf(reveal.event)}` : 'the picture'
+  const what = { event: photo, moment: 'the moment', title: 'the title', singer: 'the singer' } as const
+  const parts = ['event', 'moment', 'title', 'singer'] as const
+  const got = reveal.got
+  const teams = got && teamOf && got.scoring.length > 0 && got.scoring.every((id) => teamOf(id)) ? new Set(got.scoring.map((id) => teamOf(id))) : null
+  if (got && teams && teams.size >= 2) {
+    return parts.map((part) => ({
+      part,
+      figure: `${new Set(got[part].map((id) => teamOf!(id))).size} of ${teams.size}`,
+      words: `teams got ${what[part]}`,
+    }))
+  }
+  if (reveal.scoring <= 0) return []
+  const count = (part: (typeof parts)[number]) => (part === 'moment' ? (reveal.counts.moment ?? 0) : reveal.counts[part])
+  return parts.map((part) => ({ part, figure: `${count(part)} of ${reveal.scoring}`, words: `got ${what[part]}` }))
 }
 
 /** When nobody could score on a revealed song. */

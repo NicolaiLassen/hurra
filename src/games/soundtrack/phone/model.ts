@@ -4,7 +4,7 @@
 // answered and missing, when a new song takes the phone, and how far the
 // page scrolls with the keyboard up. Relative imports only.
 import type { AnswerPayload } from '../../core/Game'
-import { NO_PHOTO, type SongPart, type TypedPart } from '../types'
+import { NO_PHOTO, momentOn, photoShown, type ModeOf, type SongPart, type TypedPart } from '../types'
 
 /** The data attributes a typed field carries, so the page can save the focused one when it goes hidden. */
 export const FIELD_SONG = 'data-lydspor-song'
@@ -133,8 +133,14 @@ export const PARTS: readonly SongPart[] = ['title', 'singer', 'event']
 /** With typed moments on: the moment first, then the title and singer; no photo to tap. */
 export const MOMENT_PARTS: readonly SongPart[] = ['moment', 'title', 'singer']
 
-/** The parts a song asks, in the phone's order: with typed moments on, the moment in place of the event. */
-export const songParts = (momentTyped: boolean): readonly SongPart[] => (momentTyped ? MOMENT_PARTS : PARTS)
+/** With typed moments on the wall: the moment, title and singer typed, then the photo tapped. */
+export const WALL_MOMENT_PARTS: readonly SongPart[] = ['moment', 'title', 'singer', 'event']
+
+/** The parts a song asks, in the phone's order: with typed moments shown, the moment in place of the event; on the wall, both. */
+export const songParts = (mode: boolean | ModeOf): readonly SongPart[] => {
+  const m = typeof mode === 'boolean' ? { momentTyped: mode } : mode
+  return photoShown(m) ? MOMENT_PARTS : momentOn(m) ? WALL_MOMENT_PARTS : PARTS
+}
 
 /** The typed fields of a song, in the phone's order. */
 export const typedFields = (momentTyped: boolean): readonly TypedPart[] =>

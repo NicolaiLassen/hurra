@@ -1,7 +1,8 @@
 import { CheckIcon } from '@phosphor-icons/react'
 import { ordinal } from '@/components/phone/text'
 import { pointsPerSong } from '@/games/soundtrack/logic'
-import { letterOf, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
+import { letterOf, photoShown, wallMoment, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
+import { wallRevealCounts } from '@/games/soundtrack/tv/words'
 import { cn } from '@/lib/utils'
 import { HeroPhoto, LetterChip } from './Wall'
 import { eventLine, gotItLine, nextLine, partCounts, partLine, soFarWords, storyLine } from './words'
@@ -33,11 +34,16 @@ export function Reveal({
   view,
   mediaUrl,
   onStage,
+  player,
+  players = [],
 }: {
   pub: SoundtrackPublicState
   view: SoundtrackPlayerView | null
   mediaUrl: (path: string, size?: 'full' | 'thumb') => string
   onStage: boolean
+  /** This phone's player and the party's, for the team counts with typed moments on the wall. */
+  player?: { id: string; team_id?: string | null }
+  players?: readonly { id: string; team_id?: string | null }[]
 }) {
   const reveal = pub.reveal
   if (!reveal) return <p className="text-paper-2">The first song is about to be revealed.</p>
@@ -45,14 +51,23 @@ export function Reveal({
   const song = view?.songs[i] ?? null
   const mine = view?.mine ?? null
   const played = pub.playedAt.length
-  const most = pointsPerSong(pub.points)
+  const most = pointsPerSong(pub.points, pub)
   const photo = pub.wall[reveal.event]
   const standings = pub.phase === 'standings'
   const head = standings ? 'Lydspor’s top 5 is on the TV.' : storyLine(pub.storyteller)
   const points = view?.points ?? 0
   const place = view?.rank ? ordinal(view.rank) : null
-  const typed = pub.momentTyped
-  const next = reveal.n < played ? nextLine(reveal.n + 1, mine, typed) : null
+  const typed = photoShown(pub)
+  const onWall = wallMoment(pub)
+  const next = reveal.n < played ? nextLine(reveal.n + 1, mine, pub.momentTyped, onWall) : null
+  // On the wall: each part's count, by team in teams ("3 of 4 teams got it.").
+  const teamOf = (id: string) => (id === player?.id ? player?.team_id : players.find((p) => p.id === id)?.team_id) ?? null
+  const wallCounts = onWall ? wallRevealCounts(reveal, teamOf) : []
+  const countLine = (part: 'event' | 'moment' | 'title' | 'singer', count: number) => {
+    const row = wallCounts.find((c) => c.part === part)
+    if (!onWall || !row) return gotItLine(count, reveal.scoring)
+    return row.words.startsWith('teams') ? `${row.figure} teams got it.` : `${row.figure} got it.`
+  }
 
   return (
     <div className="grid grid-cols-1">
@@ -75,7 +90,29 @@ export function Reveal({
       </div>
 
       <ul className="mt-2.5 grid gap-1.5" aria-label={`How song ${reveal.n} went for you`}>
-        {typed ? (
+        {onWall && (
+          <>
+            <ResultRow
+              label="Picture"
+              truth={reveal.event >= 0 ? `Photo ${letterOf(reveal.event)}` : 'The photo'}
+              counted={song?.event === 'right'}
+              points={pub.points.event}
+              sub={eventLine(song?.event ?? 'none', mine?.event[i] ?? null)}
+              count={countLine('event', reveal.counts.event)}
+              wide
+            />
+            <ResultRow
+              label="Moment"
+              truth={reveal.moment}
+              counted={partCounts(song?.moment ?? 'none')}
+              points={pub.points.moment ?? 2}
+              sub={partLine(song?.moment ?? 'none', mine?.moment?.[i] ?? null)}
+              count={countLine('moment', reveal.counts.moment ?? 0)}
+              wide
+            />
+          </>
+        )}
+        {onWall ? null : typed ? (
           <ResultRow
             label="Moment"
             truth={reveal.moment}
@@ -101,8 +138,8 @@ export function Reveal({
           counted={partCounts(song?.title ?? 'none')}
           points={pub.points.title}
           sub={partLine(song?.title ?? 'none', mine?.title[i] ?? null)}
-          count={gotItLine(reveal.counts.title, reveal.scoring)}
-          wide={typed}
+          count={countLine('title', reveal.counts.title)}
+          wide={typed || onWall}
         />
         <ResultRow
           label="Singer"
@@ -110,8 +147,8 @@ export function Reveal({
           counted={partCounts(song?.singer ?? 'none')}
           points={pub.points.singer}
           sub={partLine(song?.singer ?? 'none', mine?.singer[i] ?? null)}
-          count={gotItLine(reveal.counts.singer, reveal.scoring)}
-          wide={typed}
+          count={countLine('singer', reveal.counts.singer)}
+          wide={typed || onWall}
         />
       </ul>
 

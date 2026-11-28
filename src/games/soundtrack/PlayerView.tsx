@@ -22,6 +22,8 @@ export default function PlayerView({
   submit,
   serverNow,
   mediaUrl,
+  player,
+  players,
 }: PlayerViewProps<SoundtrackGame>) {
   const pub = readPublic(publicState)
   const view = readView(rawView)
@@ -50,7 +52,7 @@ export default function PlayerView({
       )
     case 'reveal':
     case 'standings':
-      return <Reveal pub={pub} view={view} mediaUrl={mediaUrl} onStage={onStage} />
+      return <Reveal pub={pub} view={view} mediaUrl={mediaUrl} onStage={onStage} player={player} players={players} />
     case 'done':
       return (
         <div className="grid gap-1.5">

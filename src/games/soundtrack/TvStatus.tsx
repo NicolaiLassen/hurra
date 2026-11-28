@@ -36,7 +36,7 @@ function Detail({ pub, tallies }: { pub: SoundtrackPublicState; tallies: TvStatu
   if ((pub.phase === 'reveal' || pub.phase === 'standings') && pub.reveal && pub.reveal.scoring > 0) {
     return (
       <>
-        <strong>{pub.reveal.counts.event}</strong> of {pub.reveal.scoring} got song {pub.reveal.n}'s {pub.momentTyped ? 'moment' : 'event'}
+        <strong>{pub.reveal.counts.event}</strong> of {pub.reveal.scoring} got song {pub.reveal.n}'s {pub.momentPhoto === 'wall' ? 'picture' : pub.momentTyped ? 'moment' : 'event'}
       </>
     )
   }

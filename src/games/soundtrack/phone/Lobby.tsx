@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import type { SoundtrackPublicState } from '@/games/soundtrack/types'
+import { wallMoment, type SoundtrackPublicState } from '@/games/soundtrack/types'
 import { introLine, payoutLine } from './words'
 
 // Lydspor's lobby on a phone (spec 4.1): whose songs these are, where to look,
@@ -23,6 +23,15 @@ const MOMENT_RULES: ReactNode[] = [
   'Each song has its own photo. The moment is what happened in it.',
 ]
 
+/** The rules with typed moments on the wall: the guest types the moment, title and singer, and picks the photo. */
+const WALL_MOMENT_RULES: ReactNode[] = [
+  <>
+    A song plays. Type its <b>moment</b>, its <b>title</b> and <b>who sings it</b>, and pick its <b>picture</b> from the photos.
+  </>,
+  'Close spelling counts. Change any song until the last call.',
+  'Each photo fits one song. Every part scores on its own.',
+]
+
 export function Lobby({
   pub,
   onStage,
@@ -43,18 +52,26 @@ export function Lobby({
     }
   }, [paths, mediaUrl])
 
-  const chips = [
-    [pub.momentTyped ? 'Moment' : 'Event', pub.points.event],
-    ['Title', pub.points.title],
-    ['Singer', pub.points.singer],
-  ] as const
+  const onWall = wallMoment(pub)
+  const chips: (readonly [string, number])[] = onWall
+    ? [
+        ['Picture', pub.points.event],
+        ['Moment', pub.points.moment ?? 2],
+        ['Title', pub.points.title],
+        ['Singer', pub.points.singer],
+      ]
+    : [
+        [pub.momentTyped ? 'Moment' : 'Event', pub.points.event],
+        ['Title', pub.points.title],
+        ['Singer', pub.points.singer],
+      ]
 
   return (
     <div className="grid grid-cols-1">
       <p className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em] text-balance">{introLine(pub.intro, pub.total, pub.momentTyped)}</p>
       <p className="mt-1.5 text-base leading-snug text-paper-2">{onStage ? 'Look at the TV. Song 1 starts soon.' : 'Song 1 starts soon.'}</p>
       <ol className="mt-3.5 border-t border-rule">
-        {(pub.momentTyped ? MOMENT_RULES : RULES).map((rule, i) => (
+        {(onWall ? WALL_MOMENT_RULES : pub.momentTyped ? MOMENT_RULES : RULES).map((rule, i) => (
           <li key={i} className="grid grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-[11px] text-[17px] leading-[1.3]">
             <span aria-hidden className="text-[24px] leading-none text-paper-3 tv-num">
               {i + 1}

@@ -2,10 +2,10 @@ import { motion, useReducedMotion } from 'motion/react'
 import { Tab } from '@/components/tv/onAir'
 import type { TvViewProps } from '@/games/types'
 import { cn } from '@/lib/utils'
-import { letterOf, type SoundtrackPublicState, type SoundtrackReveal } from '../types'
+import { letterOf, photoShown, wallMoment, type SoundtrackPublicState, type SoundtrackReveal } from '../types'
 import { linesOver, useStepDown } from './hooks'
 import { LetterChip, Photo } from './parts'
-import { NOBODY_LINE, revealCounts, storyLine } from './words'
+import { NOBODY_LINE, revealCounts, storyLine, wallRevealCounts } from './words'
 
 /** The house easing (docs/identity.md, Motion). */
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
@@ -26,6 +26,9 @@ const STEPS = [
   ['text-tv-band short:text-tv-field low:text-tv-body', 'text-tv-field short:text-tv-body low:text-tv-floor'],
 ] as const
 
+/** With typed moments on the wall, each part's delay in seconds, by its usual one: the tab, moment, title, singer, counts, story. */
+const WALL_DELAY: Readonly<Record<number, number>> = { 0.1: 0.4, 0.15: 1, 0.2: 1.9, 0.35: 2.8, 0.5: 3.7, 0.65: 4.3 }
+
 /** The column runs past its room, or a line marked to fit doesn't. */
 const tooBig = (el: HTMLElement) => {
   const inner = el.firstElementChild as HTMLElement | null
@@ -41,26 +44,37 @@ const tooBig = (el: HTMLElement) => {
  * and who tells the story. Key it on the song. With typed moments on, the
  * photo is the song's own (no letter, no caption) and its moment comes first
  * in the column, above the title; the TV never shows what anyone typed.
+ * With typed moments on the wall, the photo with its letter comes in first,
+ * then the moment, the title and the singer one after the other, and four
+ * counts (the picture first), by team in a game played in teams.
  */
 export default function Reveal({
   pub,
   reveal,
   mediaUrl,
+  players = [],
 }: {
   pub: SoundtrackPublicState
   reveal: SoundtrackReveal
   mediaUrl: TvViewProps['mediaUrl']
+  /** The party's players, for their teams. */
+  players?: readonly { id: string; team_id?: string | null }[]
 }) {
   const reduce = useReducedMotion()
   const [ref, step] = useStepDown<HTMLDivElement>(STEPS.length - 1, tooBig)
   const [titleSize, singerSize] = STEPS[step]
   const photo = reveal.event >= 0 ? pub.wall[reveal.event] : undefined
-  const typed = pub.momentTyped
-  const counts = revealCounts(reveal, typed)
-  const rise = (delay: number) =>
-    reduce
+  const typed = photoShown(pub)
+  const onWall = wallMoment(pub)
+  const teamOf = (id: string) => players.find((p) => p.id === id)?.team_id ?? null
+  const counts = onWall ? wallRevealCounts(reveal, teamOf) : revealCounts(reveal, pub.momentTyped)
+  const rise = (base: number) => {
+    // On the wall the parts come one after the other, slower, while the photo sinks in.
+    const delay = onWall ? (WALL_DELAY[base] ?? base) : base
+    return reduce
       ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.3, delay } }
       : { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4, ease: EASE_OUT, delay } }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 items-center gap-[4.5%] short:gap-[4%]">
@@ -100,7 +114,7 @@ export default function Reveal({
             </Tab>
           </motion.div>
 
-          {typed && reveal.moment && (
+          {pub.momentTyped && reveal.moment && (
             <motion.div {...rise(0.15)} className="mt-9 w-full min-w-0 short:mt-6 low:mt-4">
               <p className="on-air text-tv-floor text-paper-2">Moment</p>
               <p data-fit-lines="3" className={cn('mt-1 font-extrabold text-balance break-words text-paper', singerSize, 'leading-[1.1]')}>
