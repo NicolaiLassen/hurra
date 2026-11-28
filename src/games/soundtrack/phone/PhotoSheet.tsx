@@ -25,6 +25,7 @@ export function PhotoSheet({
   onTap,
   disabled,
   failed,
+  ask = 'which event?',
 }: {
   n: number
   open: boolean
@@ -39,6 +40,8 @@ export function PhotoSheet({
   onTap: (index: number) => void
   disabled: boolean
   failed: number | null
+  /** The question after "Song n:". The wall with a typed moment asks for the photo, as its Picture field says. */
+  ask?: string
 }) {
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
@@ -51,7 +54,7 @@ export function PhotoSheet({
         <div className="mx-auto grid w-full max-w-md grid-cols-1">
           <div aria-hidden className="mx-auto mb-2.5 h-1 w-10 rounded-sm bg-rule" />
           <div className="flex items-center gap-3">
-            <SheetTitle className="min-w-0 flex-1 text-[22px] leading-tight font-extrabold text-paper">Song {n}: which event?</SheetTitle>
+            <SheetTitle className="min-w-0 flex-1 text-[22px] leading-tight font-extrabold text-paper">Song {n}: {ask}</SheetTitle>
             <SheetClose asChild>
               <Button variant="secondary" size="icon-lg" aria-label="Close" className="size-11 rounded-[12px]">
                 <XIcon className="size-5" />

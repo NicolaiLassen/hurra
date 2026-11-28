@@ -483,6 +483,7 @@ export function Answering({
             onClose={() => setSheetSong(null)}
             reminder={reminderFor(song)}
             note={sheetNote}
+            ask={wallMoment(pub) ? 'which photo?' : undefined}
             photos={pub.wall}
             bandOf={(i) => bandOf(answers.events, song, i)}
             thumbUrl={thumbUrl}
