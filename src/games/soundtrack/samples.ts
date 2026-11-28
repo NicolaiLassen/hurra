@@ -28,6 +28,12 @@ export type SoundtrackScene = (typeof SOUNDTRACK_SCENES)[number]
 /** The scenes played with typed moments on (momentTyped): song 5 playing, and reveal 1. */
 export const SOUNDTRACK_TYPED_SCENES = ['playing', 'reveal'] as const
 
+/** The scenes played with typed moments on the wall (momentPhoto 'wall', no extra photos): song 5 playing, and reveal 1. */
+export const SOUNDTRACK_WALL_SCENES = ['playing', 'reveal'] as const
+
+/** How a sample round asks the moment: not at all, typed with the photo shown, or typed with the photo on the wall. */
+export type SampleMode = boolean | 'wall'
+
 /** Each sample song's invented moment, for typed moments. */
 export const SAMPLE_MOMENTS = [
   'The harbour party when the boat broke down',
@@ -98,7 +104,9 @@ export type SoundtrackSample = {
  * and the operator sitting out, by name as the host types them (the operator
  * in lower case: case never matters).
  */
-export function sampleSettings(cast: SampleCast, momentTyped = false): SoundtrackConfig {
+export function sampleSettings(cast: SampleCast, mode: SampleMode = false): SoundtrackConfig {
+  const momentTyped = mode !== false
+  const onWall = mode === 'wall'
   const named = (i: number, typed: (name: string) => string = (name) => name) => (cast.players[i] ? [typed(cast.players[i].name)] : [])
   return {
     songs: SAMPLE_SONGS.map((song, i) => ({
@@ -112,12 +120,14 @@ export function sampleSettings(cast: SampleCast, momentTyped = false): Soundtrac
       note: i === 0 ? 'The night the boat broke down.' : '',
       ...(momentTyped ? { moment: SAMPLE_MOMENTS[i], alsoMoments: i === 6 ? ['Roskilde 2015'] : [] } : {}),
     })),
-    extraPhotos: EXTRA_CAPTIONS.map((caption, k) => ({ photo: photoPath(20 + k), caption })),
-    points: { event: 2, title: 1, singer: 1 },
+    // On the wall as tonight: no extra photos, each part with its own points.
+    extraPhotos: onWall ? [] : EXTRA_CAPTIONS.map((caption, k) => ({ photo: photoPath(20 + k), caption })),
+    points: onWall ? { event: 1, title: 1, singer: 1, moment: 2 } : { event: 2, title: 1, singer: 1 },
     lastCallSeconds: 60,
     standingsEvery: 4,
     hints: false,
     ...(momentTyped ? { momentTyped: true } : {}),
+    ...(onWall ? { momentPhoto: 'wall' as const } : {}),
     boardMax: 20,
     intro: '',
     storyteller: cast.players[6]?.name ?? '',
@@ -183,7 +193,7 @@ function script(cast: SampleCast, config: SoundtrackConfig, wall: readonly numbe
         if (config.momentTyped) {
           const moment = MINE_MOMENTS[i]
           if (moment) mine[promptKey(n, 'moment')] = { text: moment }
-          return
+          if (config.momentPhoto !== 'wall') return
         }
         const letter = event === 'right' ? wall.indexOf(i) : event === 'extra' ? extras.find((x) => !used.has(x)) : undefined
         if (letter !== undefined) {
@@ -200,7 +210,7 @@ function script(cast: SampleCast, config: SoundtrackConfig, wall: readonly numbe
       if (config.momentTyped) {
         const text = typedSample(song.moment ?? '', random)
         if (text) mine[promptKey(n, 'moment')] = { text }
-        return
+        if (config.momentPhoto !== 'wall') return
       }
       const roll = random()
       if (roll < 0.08) return
@@ -227,7 +237,7 @@ function typedSample(right: string, random: () => number): string | null {
 }
 
 /** One sample round of Lydspor in the given scene, played through the real logic at the fixture's `now`. */
-export function soundtrackSample(scene: SoundtrackScene, cast: SampleCast, now: number, momentTyped = false): SoundtrackSample {
+export function soundtrackSample(scene: SoundtrackScene, cast: SampleCast, now: number, momentTyped: SampleMode = false): SoundtrackSample {
   const game = new SoundtrackGame()
   const players: GamePlayer[] = cast.players.map((p) => ({ id: p.id, name: p.name, profile: {} }))
   const config = game.parseConfig({ ...game.defaultConfig, ...sampleSettings(cast, momentTyped) })

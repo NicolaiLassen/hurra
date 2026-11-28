@@ -610,7 +610,7 @@ function NowPlaying({
       </h3>
       {!typing && (
         <p className="mt-1.5 text-base leading-snug text-pretty text-paper-2">
-          {withMoment ? 'Type the moment, the title and who sings it, then tap its photo. ' : ''}Close spelling counts. Change it until the last call.
+          {withMoment ? 'Type the moment, the title and who sings it, then pick its photo. ' : ''}Close spelling counts. Change it until the last call.
         </p>
       )}
       <div ref={fields} className="mt-3">

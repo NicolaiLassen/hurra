@@ -4457,6 +4457,19 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   reveal carries `moment`; `extras` stays null. Fixtures
   `soundtrack-typed-playing` and `soundtrack-typed-reveal`; `botSettings(n,
   true)` for bots.
+- **Typed moments on the wall** (`momentTyped: true` with `momentPhoto:
+  'wall'`; missing or 'shown' is the mode above; 28 November): the wall is
+  dealt, shuffled and secret as with typed moments off, and Play opens four
+  prompts, `s5.title`, `s5.singer`, `s5.event` (the wall) and `s5.moment`.
+  Each part scores on its own: the photo `points.event`, the moment
+  `points.moment` (whole 0 to 5, default 2, read only in this mode or when
+  saved), the title and singer as ever. Extra photos are optional. The
+  reveal's `counts` gains `moment`, and its `got` lists who got each part and
+  who could score, so the TV and phones count teams in a game played in
+  teams. The AI check judges the moment, title and singer only; the photo is
+  a tap, never in the review. The public state says `momentPhoto: 'wall'`.
+  Fixtures `soundtrack-wall-playing` and `soundtrack-wall-reveal`;
+  `botSettings(n, true, 'wall')` for bots.
 - **The AI check** (`aiCheck`, default off; 28 November): never in the
   step. After the lock the host page posts `{ gameId }` to
   `/api/lydspor-ai` (`netlify/functions/lydspor-ai.mts`, hosts only),

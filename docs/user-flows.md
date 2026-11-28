@@ -283,6 +283,14 @@ song's own photo, on the phone and the TV, instead of the wall, and asks
 three typed fields: Moment, Title and Who sings it. The moment scores the
 event's points; the reveal shows the photo with its moment. No photo swaps.
 
+With **photos on the wall** as well (a second switch under typed moments),
+no photo shows with the song: the TV shows the lettered wall of every photo,
+and the phone asks four parts per song: Moment, Title and Who sings it
+typed, and Picture, a field that opens the photos to pick from (a photo
+another song has swaps, as on the wall). Each part scores on its own. The
+reveal brings the photo in first, then the moment, the title and the singer
+one after the other, with how many (in teams: how many teams) got each part.
+
 With the **AI check** on (a setting, off by default), the host page asks an
 AI right after the lock whether each typed answer the rule didn't count is
 close enough (spelling, accents, word order and wording aside; a moment must
