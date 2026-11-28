@@ -36,8 +36,10 @@ export default function ReviewPanel({
   latest: number | null
   onShowLatest: () => void
 }) {
-  const others = review.title.wrong.length + review.singer.wrong.length
-  const counted = review.title.typo.length + review.singer.typo.length
+  // With typed moments on, the moment first, as the phones ask it.
+  const parts = [...(review.moment ? [review.moment] : []), review.title, review.singer]
+  const others = parts.reduce((sum, part) => sum + part.wrong.length, 0)
+  const counted = parts.reduce((sum, part) => sum + part.typo.length, 0)
 
   return (
     <section className="grid grid-cols-1 gap-4 rounded-lg bg-overlay p-4" aria-labelledby={`review-${review.n}`}>
@@ -57,23 +59,26 @@ export default function ReviewPanel({
         </p>
       </div>
 
-      <Part review={review} part={review.title} {...accept} />
-      <Part review={review} part={review.singer} {...accept} />
+      {parts.map((part) => (
+        <Part key={part.part} review={review} part={part} {...accept} />
+      ))}
 
       {(others > 0 || counted > 0) && (
         <div className="grid grid-cols-1 gap-1 border-t border-rule pt-2">
           {others > 0 && (
             <Fold label="Other answers" count={`(${others})`}>
               <p className="text-sm text-paper-2">Wrong by the rule. Accept one if it should count: a cover's singer, a nickname.</p>
-              <FoldPart review={review} part={review.title} rows={review.title.wrong} {...accept} />
-              <FoldPart review={review} part={review.singer} rows={review.singer.wrong} {...accept} />
+              {parts.map((part) => (
+                <FoldPart key={part.part} review={review} part={part} rows={part.wrong} {...accept} />
+              ))}
             </Fold>
           )}
           {counted > 0 && (
             <Fold label="Counted already" count={`(${counted} ${counted === 1 ? 'spelling' : 'spellings'})`}>
               <p className="text-sm text-paper-2">The rule forgave these spellings. They count, and stay counted.</p>
-              <FoldPart review={review} part={review.title} rows={review.title.typo} {...accept} readOnly />
-              <FoldPart review={review} part={review.singer} rows={review.singer.typo} {...accept} readOnly />
+              {parts.map((part) => (
+                <FoldPart key={part.part} review={review} part={part} rows={part.typo} {...accept} readOnly />
+              ))}
             </Fold>
           )}
         </div>
@@ -152,6 +157,11 @@ function Row({
               </Badge>
             )
           )}
+          {!readOnly && row.ai && (
+            <Badge variant="secondary" className="h-6 px-1.5 text-[13px]">
+              {row.ai === 'yes' ? 'AI: close enough' : 'AI: no'}
+            </Badge>
+          )}
         </p>
       </div>
       {!readOnly &&
@@ -160,7 +170,7 @@ function Row({
             {/* A step lighter with the word and a check: never gold, which is the next step's. */}
             <span className="flex h-8 items-center gap-1.5 rounded-chip bg-paper px-2.5 text-sm font-bold text-ink">
               <CheckIcon weight="bold" className="size-4" />
-              Accepted
+              {row.ai === 'yes' && !row.byHost ? 'AI accepted' : 'Accepted'}
             </span>
             {open && (
               <Button

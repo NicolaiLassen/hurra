@@ -6,12 +6,13 @@ import {
   LockKeyIcon,
   MegaphoneSimpleIcon,
   PlayIcon,
+  RobotIcon,
   SparkleIcon,
   TelevisionSimpleIcon,
   UserMinusIcon,
   type Icon,
 } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import Confirm from '@/components/Confirm'
 import { clockTime } from '@/components/tv/clock'
@@ -25,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { PlayerId } from '@/games/core/Game'
+import { aiDue, aiLine, aiStatus, requestAiCheck } from '@/games/soundtrack/host/aiCheck'
 import { cueOf, titleLine } from '@/games/soundtrack/host/cue'
 import CueCard from '@/games/soundtrack/host/CueCard'
 import CueList from '@/games/soundtrack/host/CueList'
@@ -88,7 +90,25 @@ export default function HostView({
   const [dialog, setDialog] = useState<'sitOut' | null>(null)
   // An older song's review, opened from the cue list until the next reveal.
   const [picked, setPicked] = useState<{ index: number; at: number } | null>(null)
+  // The AI check (aiCheck): asked once per page after the lock, again only from Try again.
+  const [aiRequest, setAiRequest] = useState<{ kind: 'idle' } | { kind: 'running' } | { kind: 'failed'; message: string }>({ kind: 'idle' })
+  const aiAsked = useRef(false)
+  const aiOn = config?.aiCheck === true
+  const aiNow = aiDue(aiOn, state)
   const pub = readPublic(publicState)
+
+  async function runAiCheck() {
+    setAiRequest({ kind: 'running' })
+    const reply = await requestAiCheck(game.id)
+    setAiRequest(reply.ran ? { kind: 'idle' } : { kind: 'failed', message: reply.message })
+  }
+  useEffect(() => {
+    if (!aiNow || aiAsked.current) return
+    aiAsked.current = true
+    void runAiCheck()
+    // runAiCheck reads only the game's id, which a page keeps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiNow])
 
   if (state === undefined) return <p className="text-paper-2">Loading Lydspor…</p>
   if (!state || !pub) return <p className="text-paper-2">Hanging the photos…</p>
@@ -105,6 +125,7 @@ export default function HostView({
     lastCallSeconds: settings?.lastCallSeconds ?? 60,
     extended: typeof state.extended === 'number' ? state.extended : 0,
     closing: typeof state.closingAt === 'number',
+    momentTyped: settings?.momentTyped === true,
   }
   const main = nextStep(where)
   const more = moreTime(where)
@@ -160,6 +181,8 @@ export default function HostView({
           {game.title} plays on the TV: show it on the TV before the next step.
         </p>
       )}
+
+      {aiOn && <AiLine status={aiStatus(aiOn, state, aiRequest)} onRetry={() => void runAiCheck()} retrying={aiRequest.kind === 'running'} />}
 
       <CueCard cue={cue} lockAt={pub.phase === 'lastCall' ? pub.lockAt : null} serverNow={serverNow} titleLine={settings ? titleLine(where, settings.songs) : null} />
 
@@ -263,6 +286,25 @@ export default function HostView({
         current={Array.isArray(state.sitOut) ? state.sitOut : []}
         onSave={(names: string[]) => act({ type: 'sitOut', names })}
       />
+    </div>
+  )
+}
+
+/** How the AI check went, with Try again when it didn't run. */
+function AiLine({ status, onRetry, retrying }: { status: ReturnType<typeof aiStatus>; onRetry: () => void; retrying: boolean }) {
+  const line = aiLine(status)
+  if (!line) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="status">
+      <p className="flex min-w-0 flex-1 items-start gap-2 text-sm font-bold text-paper">
+        <RobotIcon weight="fill" className="mt-0.5 shrink-0" />
+        {line}
+      </p>
+      {status.kind === 'failed' && (
+        <Button type="button" variant="secondary" size="sm" isPending={retrying} disabled={retrying} onClick={onRetry}>
+          Try again
+        </Button>
+      )}
     </div>
   )
 }

@@ -10,9 +10,9 @@ export type PartReview = {
   part: TypedPart
   /** The truth as the reveal shows it. */
   truth: string
-  /** Close answers, most guests first, then fewest letters off. */
+  /** Close answers, most guests first, then fewest letters off; then wrong ones the AI check said yes to. */
   close: ReviewRow[]
-  /** Wrong answers, most guests first: the host may still accept one (a cover, a nickname). */
+  /** Wrong answers, most guests first: the host may still accept one (a cover, a nickname). Not the AI's yeses. */
   wrong: ReviewRow[]
   /** Answers the rule counted for a typo: shown read-only, so the host sees what it gave. */
   typo: ReviewRow[]
@@ -28,6 +28,8 @@ export type SongReview = {
   of: number
   title: PartReview
   singer: PartReview
+  /** With typed moments on: the moment's review; else null. */
+  moment: PartReview | null
 }
 
 const counts = (row: ReviewRow) => row.verdict === 'exact' || row.verdict === 'typo' || row.accepted
@@ -58,22 +60,24 @@ export function songReview(
       .map((row) => ({ ...row, players: row.players.filter((id) => scoring.has(id)) }))
       .filter((row) => row.players.length > 0)
     const truth = config?.songs[index]?.[name] ?? ''
+    // A wrong answer the AI said yes to stands with the close ones, so the host sees it without opening a fold.
+    const aiYes = (row: ReviewRow) => row.verdict === 'wrong' && row.ai === 'yes'
     return {
       part: name,
       truth,
-      close: rows.filter((row) => row.verdict === 'close'),
-      wrong: rows.filter((row) => row.verdict === 'wrong'),
+      close: [...rows.filter((row) => row.verdict === 'close'), ...rows.filter(aiYes)],
+      wrong: rows.filter((row) => row.verdict === 'wrong' && !aiYes(row)),
       typo: rows.filter((row) => row.verdict === 'typo'),
       got: rows.filter(counts).reduce((sum, row) => sum + row.players.length, 0),
     }
   }
-  return { n: index + 1, index, of: scoring.size, title: part('title'), singer: part('singer') }
+  return { n: index + 1, index, of: scoring.size, title: part('title'), singer: part('singer'), moment: song.moment ? part('moment') : null }
 }
 
 /** Close answers on song `index` the host hasn't accepted yet: the cue list's "2 close". */
 export function closeLeft(review: SongReview | null): number {
   if (!review) return 0
-  return [...review.title.close, ...review.singer.close].filter((row) => !row.accepted).length
+  return [...review.title.close, ...review.singer.close, ...(review.moment?.close ?? [])].filter((row) => !row.accepted).length
 }
 
 /** Why a close answer is close, as its quiet tag in the review. */
