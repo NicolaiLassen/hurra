@@ -579,6 +579,41 @@ export class FakeParty {
     return true
   }
 
+  /**
+   * choose_team: a guest who is here picks their own team, or switches to
+   * another. The same team again changes nothing (false). Refused while a
+   * game played in teams is live, so nobody hops teams mid round; the host's
+   * setTeam still moves anyone then. True when it changed anything.
+   */
+  chooseTeam(playerId: PlayerId, teamId: string): boolean {
+    const team = this.teamRows.find((t) => t.id === teamId)
+    if (!team) throw new FakeDbError(404, 'team_not_found', 'That team is gone')
+    const player = this.players.find((p) => p.id === playerId)
+    if (!player) throw new FakeDbError(403, 'not_player', "You're not a player in this party")
+    const from = this.teamOf(playerId)
+    if (from === teamId) return false
+    try {
+      this.refuseWhileTeamGameLive('switch')
+    } catch (error) {
+      if (error instanceof FakeDbError && error.code === 'team_game_live') {
+        throw new FakeDbError(409, 'team_game_live', 'Teams stay as they are while a team game is live. You can switch once it ends.')
+      }
+      throw error
+    }
+    this.teamIds.set(playerId, teamId)
+    this.write('team.joined', null, null, 'player', playerId, [playerId], {
+      player_id: playerId,
+      name: player.name,
+      team_id: teamId,
+      team: team.name,
+      from,
+      chosen: true,
+    })
+    this.beginTx()
+    this.ping('room')
+    return true
+  }
+
   /** host_clear_teams: every team goes and everyone is in none; games keep team play and play alone until there are teams again. */
   clearTeams(): number {
     this.refuseWhileTeamGameLive('clear the')

@@ -618,4 +618,34 @@ describe('teams', () => {
     expect(p.clearTeams()).toBe(2)
     expect(p.teamOf(ana)).toBeNull()
   })
+
+  it('lets a guest pick their own team, even before anyone is here, and switch only while no team game is live', () => {
+    const p = simulateParty({ games: [probe, new Vote()], players: 0 })
+    p.addGame('g', 'probe', 'Probe')
+    p.setTeamPlay('g', true)
+    // Four teams before anyone came: all empty.
+    p.makeTeams(4)
+    const [gold, pink, teal] = p.teams.map((t) => t.id)
+    expect(p.teams.map((t) => p.membersOf(t.id).length)).toEqual([0, 0, 0, 0])
+    // A guest who never picks lands in the smallest team; one who picks is where they picked.
+    const ana = p.addPlayer('Ana').id
+    expect(p.teamOf(ana)).toBe(gold)
+    expect(p.chooseTeam(ana, teal)).toBe(true)
+    expect(p.chooseTeam(ana, teal)).toBe(false)
+    expect(p.teamOf(ana)).toBe(teal)
+    expect(p.log.at(-1)).toMatchObject({ kind: 'team.joined', actor: 'player', data: { team_id: teal, from: gold, chosen: true } })
+    const bo = p.addPlayer('Bo').id
+    expect(p.teamOf(bo)).toBe(gold)
+    expect(() => p.chooseTeam(bo, 'gone')).toThrow(expect.objectContaining({ code: 'team_not_found' }))
+    expect(() => p.chooseTeam(p.listGuest('Zelda').id, pink)).toThrow(expect.objectContaining({ code: 'not_player' }))
+
+    // While the team game is live nobody switches; the host still moves anyone.
+    p.send(p.hostUser, { type: 'start', gameId: 'g' })
+    expect(() => p.chooseTeam(bo, pink)).toThrow(expect.objectContaining({ code: 'team_game_live' }))
+    expect(p.chooseTeam(bo, gold)).toBe(false)
+    expect(p.setTeam(bo, pink)).toBe(true)
+    p.send(p.hostUser, { type: 'end', gameId: 'g' })
+    expect(p.chooseTeam(bo, teal)).toBe(true)
+    expect(p.membersOf(teal)).toEqual([ana, bo].sort())
+  })
 })

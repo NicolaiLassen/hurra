@@ -6,7 +6,9 @@
 // timer syncs come on time, late or early, and every table is reloaded from
 // JSON now and then. After every engine call the game's oracle compares. In
 // teams, the host makes teams before the start and switches team play on, and
-// moves a guest to another team or out of every team now and then.
+// moves a guest to another team or out of every team now and then; guests
+// pick their own team before the start and between rounds, and a guest who
+// tries to switch mid round is refused.
 import { createHash } from 'node:crypto'
 import type { GameBot } from '../../src/games/core/bot'
 import type { AnswerPayload, AnyGame, GamePlayer, PlayerId } from '../../src/games/core/Game'
@@ -143,6 +145,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
   if (teams) {
     party.setTeamPlay(GAME_ID, true)
     makeTeams('the host makes')
+    guestsPick('before the start')
   }
 
   // ---------------------------------------------------------------------------
@@ -451,8 +454,38 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
     trace(`the host moves ${player.name} ${to === null ? 'out of every team' : `to ${party.teams.find((t) => t.id === to)!.name}`}`)
   }
 
+  /** Between rounds, a few guests pick another team on their phone (choose_team). */
+  function guestsPick(when: string) {
+    const n = teamRng.int(Math.min(4, party.players.length) + 1)
+    for (let i = 0; i < n; i++) {
+      const player = teamRng.pick(party.players)
+      const others = party.teams.filter((t) => t.id !== party.teamOf(player.id))
+      if (others.length === 0) continue
+      const to = teamRng.pick(others)
+      if (!party.chooseTeam(player.id, to.id)) continue
+      steady.delete(player.id)
+      count('guests who picked another team')
+      trace(`${when}, ${player.name} picks ${to.name}`)
+    }
+  }
+
+  /** Mid round, a guest tries to switch team: refused while the round, played in teams, is live. */
+  function triesToSwitch() {
+    const player = teamRng.pick(party.players)
+    const other = teamRng.pick(party.teams.filter((t) => t.id !== party.teamOf(player.id)))
+    if (!other) return
+    try {
+      party.chooseTeam(player.id, other.id)
+      run.fail('team-members-equal', `${player.name} switched to ${other.name} while the round, played in teams, was live`)
+    } catch (error) {
+      if (!(error instanceof FakeDbError) || error.code !== 'team_game_live') throw error
+      count('switches refused mid round')
+    }
+  }
+
   function chaos() {
     if (teams && party.players.length > 0 && teamRng.chance(0.008)) moveSomeone()
+    if (teams && party.players.length > 0 && teamRng.chance(0.004)) triesToSwitch()
     const r = rng.next() / (adapter.churn ?? 1)
     const big = party.players.length > 30
     if (r < 0.012) join('new')
@@ -499,6 +532,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
         count('restarts')
         trace('the host starts the round again after it finished')
         if (teams && teamRng.chance(0.5)) makeTeams('between rounds the host makes')
+        if (teams) guestsPick('between rounds')
         if (!start()) break
         continue
       }
@@ -511,6 +545,7 @@ export function runParty(adapter: Adapter, logic: AnyGame, bot: GameBot, size: n
       end()
       party.tick(1000)
       if (teams && teamRng.chance(0.5) && party.game(GAME_ID).status !== 'active') makeTeams('between rounds the host makes')
+      if (teams && party.game(GAME_ID).status !== 'active') guestsPick('between rounds')
       if (!start()) break
       continue
     }
