@@ -5,14 +5,20 @@
 // function bundles it.
 import type { PlayerId } from '../core/Game'
 
-/** The two parts a guest types. */
-export type TypedPart = 'title' | 'singer'
+/** The parts a guest types: the title and singer, and with typed moments on (momentTyped) the moment. */
+export type TypedPart = 'title' | 'singer' | 'moment'
 
-/** The three parts of a song, in the order the phone asks them. */
+/** The parts of a song: the typed ones, and the event, a photo tapped on the wall (typed moments off). */
 export type SongPart = TypedPart | 'event'
 
-/** The longest typed answer in characters: the text prompts' max_length. */
+/** The longest typed answer in characters: the title and singer prompts' max_length. */
 export const MAX_TYPED = 60
+
+/** The longest typed moment answer in characters: the moment prompt's max_length. */
+export const MAX_MOMENT_TYPED = 100
+
+/** The longest moment in the settings, and each of its other accepted moments. */
+export const MAX_MOMENT = 140
 
 /** The event prompt's choice for no photo (a take leaves the other song without one). */
 export const NO_PHOTO = 'none'
@@ -42,6 +48,14 @@ export type SoundtrackSong = {
   startAt: number
   /** 0 to 140 characters, host only: a story prompt on the cue card. */
   note: string
+  /**
+   * With typed moments on: what happened, as the guests should type it
+   * ("Roskilde 2015, first time camping"), 1 to 140 characters, shown at the
+   * reveal. Empty and unused with them off.
+   */
+  moment?: string
+  /** Other moments that count: 0 to 6, each 1 to 140 characters. Never shown to guests. */
+  alsoMoments?: string[]
 }
 
 /** A photo that fits no song. */
@@ -66,6 +80,18 @@ export type SoundtrackConfig = {
   standingsEvery: number
   /** Captions under the photos while songs play. Default false. */
   hints: boolean
+  /**
+   * Typed moments: each song's own photo shows while it plays, and the guests
+   * type its moment instead of tapping a photo on the wall. The moment scores
+   * the event's points. Default false: the wall, as before.
+   */
+  momentTyped?: boolean
+  /**
+   * The AI check: after the lock, the host page asks an AI whether each typed
+   * answer the rule didn't count is close enough, and its yes accepts it
+   * (the host can undo any). Default false.
+   */
+  aiCheck?: boolean
   /** The most Lydspor pays on the night board, 1 to 25. Default 20. */
   boardMax: number
   /** 0 to 120 characters: the lobby's first line. */
@@ -92,6 +118,8 @@ export type Picks = {
   /** The text as saved (the database trims it), or null when never typed. */
   title: (string | null)[]
   singer: (string | null)[]
+  /** With typed moments on only: the typed moment per song. */
+  moment?: (string | null)[]
 }
 
 /** How the matching rule judged a typed answer at the lock. */
@@ -137,10 +165,17 @@ export type ReviewRow = {
   off: number | null
   /** The host accepted it. Only a 'close' or 'wrong' row can be. */
   accepted: boolean
+  /** What the AI check said about it (a 'close' or 'wrong' row only); missing when it wasn't asked. */
+  ai?: 'yes' | 'no'
+  /** The host accepted or undid it themselves: the AI check never changes it. */
+  byHost?: true
 }
 
-/** One played song's typed answers, judged at the lock. */
-export type SongReview = { title: ReviewRow[]; singer: ReviewRow[] }
+/** One played song's typed answers, judged at the lock. `moment` with typed moments on only. */
+export type SongReview = { title: ReviewRow[]; singer: ReviewRow[]; moment?: ReviewRow[] }
+
+/** How the AI check went, once it ran: how many answers it was asked about, and how many it accepted. */
+export type AiCheck = { at: number; asked: number; accepted: number }
 
 export type SoundtrackState = {
   phase: SoundtrackPhase
@@ -164,6 +199,8 @@ export type SoundtrackState = {
   sitOut: string[]
   /** Points at the last top 5, for its gains. */
   shownTop: Record<PlayerId, number>
+  /** The AI check's result, once its verdicts are in; missing or null before (and in saves from before it). */
+  ai?: AiCheck | null
 }
 
 // Host actions --------------------------------------------------------------------
@@ -175,10 +212,20 @@ export type SoundtrackHostAction =
   | { type: 'lock' }
   | { type: 'reveal'; index: number }
   | { type: 'accept'; index: number; part: TypedPart; key: string; accepted: boolean }
+  /**
+   * The AI check's verdicts, once per lock, sent by the server after it asked
+   * the AI: the rows it said yes to (by song, part and row key). Every other
+   * close or wrong row was asked and is a no. A row the host decided already
+   * keeps the host's decision.
+   */
+  | { type: 'ai'; yes: AiYes[] }
   | { type: 'standings'; after: number }
   | { type: 'crown' }
   /** Replaces who sits out: typed names (a host page from before names sent ids, which still work). */
   | { type: 'sitOut'; names: string[] }
+
+/** One answer the AI check said yes to. */
+export type AiYes = { index: number; part: TypedPart; key: string }
 
 // What everyone sees ----------------------------------------------------------------
 
@@ -191,6 +238,8 @@ export type SoundtrackReveal = {
   title: string
   singer: string
   caption: string
+  /** The moment from the settings, with typed moments on; else ''. */
+  moment: string
   /** Scoring guests who got each part, the host's accepts included. */
   counts: { event: number; title: number; singer: number }
   /** Scoring guests for this song: present, not sitting out, with any answer at the lock. */
@@ -202,8 +251,14 @@ export type SoundtrackPublicState = {
   /** Songs in the settings. */
   total: number
   playedAt: number[]
-  /** Per letter: the photo, and its caption only when hints are on. */
+  /**
+   * Per letter: the photo, and its caption only when hints are on. With
+   * typed moments on, no wall: the played songs' own photos in play order
+   * (index i is song i + 1), each public from its Play on.
+   */
   wall: { path: string; hint: string | null }[]
+  /** Typed moments on: phones type each song's moment, and the TV shows the playing song's photo. */
+  momentTyped: boolean
   points: SoundtrackPoints
   lockAt: number | null
   lockedAt: number | null
@@ -249,6 +304,8 @@ export type SoundtrackSongView = {
   event: EventResult
   title: PartResult
   singer: PartResult
+  /** With typed moments on, how the typed moment went ('none' with them off). `event` is then 'right' when it counted. */
+  moment: PartResult
 }
 
 export type SoundtrackPlayerView = {

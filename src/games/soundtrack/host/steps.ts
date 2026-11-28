@@ -21,6 +21,8 @@ export type Where = {
   extended: number
   /** The timer has closed the prompts and the lock follows. */
   closing: boolean
+  /** Typed moments: the songs' prompts are the moment, title and singer. */
+  momentTyped?: boolean
 }
 
 export type StepIcon = 'play' | 'lastCall' | 'more' | 'lock' | 'reveal' | 'top' | 'crown'
@@ -122,7 +124,7 @@ export function menuSteps(where: Where): Step[] {
     label: 'Lock now…',
     icon: 'lock',
     action: { type: 'lock' },
-    close: playedKeys(played),
+    close: playedKeys(played, where.momentTyped === true),
     confirm: {
       title: 'Lock the answers now?',
       description:

@@ -25,6 +25,21 @@ import {
 export const SOUNDTRACK_SCENES = ['lobby', 'playing', 'last-call', 'locked', 'reveal', 'standings', 'final'] as const
 export type SoundtrackScene = (typeof SOUNDTRACK_SCENES)[number]
 
+/** The scenes played with typed moments on (momentTyped): song 5 playing, and reveal 1. */
+export const SOUNDTRACK_TYPED_SCENES = ['playing', 'reveal'] as const
+
+/** Each sample song's invented moment, for typed moments. */
+export const SAMPLE_MOMENTS = [
+  'The harbour party when the boat broke down',
+  'Island trip with the whole class',
+  'Moving into the first flat on Nørrebro',
+  'Graduation day, the white caps',
+  'Road trip to Berlin in the old Volvo',
+  'Summers at the allotment garden',
+  'Roskilde Festival 2015, first time camping',
+  'First day at the new job',
+] as const
+
 /** Eight invented songs, in play order. */
 export const SAMPLE_SONGS = [
   { title: 'Paper Lanterns', singer: 'Mira Holm', caption: 'The harbour, 2009', startAt: 48, also: [[], []] },
@@ -83,7 +98,7 @@ export type SoundtrackSample = {
  * and the operator sitting out, by name as the host types them (the operator
  * in lower case: case never matters).
  */
-export function sampleSettings(cast: SampleCast): SoundtrackConfig {
+export function sampleSettings(cast: SampleCast, momentTyped = false): SoundtrackConfig {
   const named = (i: number, typed: (name: string) => string = (name) => name) => (cast.players[i] ? [typed(cast.players[i].name)] : [])
   return {
     songs: SAMPLE_SONGS.map((song, i) => ({
@@ -95,12 +110,14 @@ export function sampleSettings(cast: SampleCast): SoundtrackConfig {
       caption: song.caption,
       startAt: song.startAt,
       note: i === 0 ? 'The night the boat broke down.' : '',
+      ...(momentTyped ? { moment: SAMPLE_MOMENTS[i], alsoMoments: i === 6 ? ['Roskilde 2015'] : [] } : {}),
     })),
     extraPhotos: EXTRA_CAPTIONS.map((caption, k) => ({ photo: photoPath(20 + k), caption })),
     points: { event: 2, title: 1, singer: 1 },
     lastCallSeconds: 60,
     standingsEvery: 4,
     hints: false,
+    ...(momentTyped ? { momentTyped: true } : {}),
     boardMax: 20,
     intro: '',
     storyteller: cast.players[6]?.name ?? '',
@@ -118,6 +135,18 @@ const MINE: [string | null, string | null, 'right' | 'extra' | 'none'][] = [
   ['Under the old oak tree', 'Lanterns', 'right'],
   ['Rock and roll harbor', 'Chloe Olstad', 'none'],
   ['Route 41', 'Mira Holm', 'right'],
+]
+
+/** The phone's guest's typed moments, by song, with typed moments on. */
+const MINE_MOMENTS: (string | null)[] = [
+  'harbor party, boat broke',
+  'Class trip to the island',
+  'Første lejlighed',
+  null,
+  'Berlin roadtrip',
+  'Kolonihaven',
+  'roskilde 2015',
+  'New job',
 ]
 
 /** Scripted answers beside the generated ones: [player index, song from 1, part, text]. */
@@ -151,6 +180,11 @@ function script(cast: SampleCast, config: SoundtrackConfig, wall: readonly numbe
         const [title, singer, event] = MINE[i]
         if (title) mine[promptKey(n, 'title')] = { text: title }
         if (singer) mine[promptKey(n, 'singer')] = { text: singer }
+        if (config.momentTyped) {
+          const moment = MINE_MOMENTS[i]
+          if (moment) mine[promptKey(n, 'moment')] = { text: moment }
+          return
+        }
         const letter = event === 'right' ? wall.indexOf(i) : event === 'extra' ? extras.find((x) => !used.has(x)) : undefined
         if (letter !== undefined) {
           used.add(letter)
@@ -162,6 +196,11 @@ function script(cast: SampleCast, config: SoundtrackConfig, wall: readonly numbe
         const scripted = SCRIPTED.find(([who, song, p]) => who === g && song === n && p === part)
         const text = scripted ? scripted[3] : typedSample(part === 'title' ? song.title : song.singer, random)
         if (text) mine[promptKey(n, part)] = { text }
+      }
+      if (config.momentTyped) {
+        const text = typedSample(song.moment ?? '', random)
+        if (text) mine[promptKey(n, 'moment')] = { text }
+        return
       }
       const roll = random()
       if (roll < 0.08) return
@@ -188,10 +227,10 @@ function typedSample(right: string, random: () => number): string | null {
 }
 
 /** One sample round of Lydspor in the given scene, played through the real logic at the fixture's `now`. */
-export function soundtrackSample(scene: SoundtrackScene, cast: SampleCast, now: number): SoundtrackSample {
+export function soundtrackSample(scene: SoundtrackScene, cast: SampleCast, now: number, momentTyped = false): SoundtrackSample {
   const game = new SoundtrackGame()
   const players: GamePlayer[] = cast.players.map((p) => ({ id: p.id, name: p.name, profile: {} }))
-  const config = game.parseConfig({ ...game.defaultConfig, ...sampleSettings(cast) })
+  const config = game.parseConfig({ ...game.defaultConfig, ...sampleSettings(cast, momentTyped) })
   const prompts: Record<string, { -readonly [K in keyof Prompt]: Prompt[K] }> = {}
   const announcements: SoundtrackSample['announcements'] = []
   const random = seededRandom(2026)

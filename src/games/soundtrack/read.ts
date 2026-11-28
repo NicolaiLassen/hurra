@@ -45,6 +45,7 @@ function readReveal(raw: unknown): SoundtrackReveal | null {
     title: text(reveal.title),
     singer: text(reveal.singer),
     caption: text(reveal.caption),
+    moment: text(reveal.moment),
     counts: { event: number(counts.event), title: number(counts.title), singer: number(counts.singer) },
     scoring: number(reveal.scoring),
   }
@@ -65,6 +66,7 @@ export function readPublic(raw: unknown): SoundtrackPublicState | null {
     total: number(pub.total, playedAt.length),
     playedAt,
     wall: rows(pub.wall).map((photo) => ({ path: text(photo.path), hint: typeof photo.hint === 'string' ? photo.hint : null })),
+    momentTyped: pub.momentTyped === true,
     points: readPoints(pub.points),
     lockAt: maybeNumber(pub.lockAt),
     lockedAt: maybeNumber(pub.lockedAt),
@@ -94,9 +96,10 @@ function readPicks(raw: unknown): Picks | null {
   const typed = (value: unknown) => list(value).map((t) => (typeof t === 'string' && t !== '' ? t : null))
   const title = typed(picks.title)
   const singer = typed(picks.singer)
-  const songs = Math.max(events.length, title.length, singer.length)
+  const moment = Array.isArray(picks.moment) ? typed(picks.moment) : null
+  const songs = Math.max(events.length, title.length, singer.length, moment?.length ?? 0)
   const pad = <T>(items: (T | null)[]) => Array.from({ length: songs }, (_, i) => items[i] ?? null)
-  return { event: pad(events), title: pad(title), singer: pad(singer) }
+  return { event: pad(events), title: pad(title), singer: pad(singer), ...(moment ? { moment: pad(moment) } : {}) }
 }
 
 function readSong(row: Record<string, unknown>, i: number): SoundtrackSongView {
@@ -107,6 +110,7 @@ function readSong(row: Record<string, unknown>, i: number): SoundtrackSongView {
     event: EVENT_RESULTS.includes(row.event as EventResult) ? (row.event as EventResult) : 'none',
     title: part(row.title),
     singer: part(row.singer),
+    moment: part(row.moment),
   }
 }
 

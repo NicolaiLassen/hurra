@@ -20,6 +20,17 @@
 // answer: a song reaches publicState only at its reveal, and a typed answer
 // never does. Relative imports only: the Netlify function bundles this file.
 //
+// Typed moments (momentTyped, default off): each song's own photo shows while
+// it plays (public from its Play on, secret before), and the phones type its
+// moment (s5.moment) instead of tapping a photo; the moment is judged like the
+// title and singer and scores the event's points. No wall, no extra photos.
+//
+// The AI check (aiCheck, default off) never runs in here: a step must stay
+// deterministic. After the lock the host page asks the server
+// (netlify/functions/lydspor-ai.mts), which asks an AI about every close or
+// wrong row (ai.ts) and sends its yeses back as the host action `ai`, applied
+// here once per lock: a yes accepts the row unless the host decided it.
+//
 // "Doesn't play this game" is typed names, not tied to the guest list
 // (people.ts): a guest here sits out when their name folds to one on it, so
 // one who joins later with that name sits out from then on, and a name nobody
@@ -44,6 +55,8 @@ import { MAX_NAME_LENGTH, uniqueNames } from '../core/names'
 import { counts as verdictCounts, judge, normalise, type Judgement } from './match'
 import { MAX_SIT_OUT, sameNames, sitOutNames, sittingOut } from './people'
 import {
+  MAX_MOMENT,
+  MAX_MOMENT_TYPED,
   MAX_TYPED,
   NO_PHOTO,
   letterOf,
@@ -53,6 +66,7 @@ import {
   type Picks,
   type ReviewRow,
   type SongReview,
+  type AiYes,
   type SoundtrackConfig,
   type SoundtrackHostAction,
   type SoundtrackPhoto,
@@ -106,6 +120,12 @@ export const DEFAULT_POINTS: SoundtrackPoints = { event: 2, title: 1, singer: 1 
 /** Title and singer: any text up to MAX_TYPED characters, changeable until the lock. Never an answer in it: specs are public. */
 export const TEXT_SPEC: PromptSpec = { kind: 'text', max_length: MAX_TYPED }
 
+/** The typed moment: any text up to MAX_MOMENT_TYPED characters, changeable until the lock. */
+export const MOMENT_SPEC: PromptSpec = { kind: 'text', max_length: MAX_MOMENT_TYPED }
+
+/** The most yeses one `ai` action carries. */
+export const MAX_AI_YES = 400
+
 /** The event: a wall index, or NO_PHOTO (a take leaves the other song without one). Changeable until the lock. */
 export const eventSpec = (wallSize: number): PromptSpec => ({
   kind: 'choice',
@@ -113,7 +133,9 @@ export const eventSpec = (wallSize: number): PromptSpec => ({
 })
 
 const PARTS = ['title', 'singer', 'event'] as const
-const TYPED: readonly TypedPart[] = ['title', 'singer']
+const TYPED_PARTS = ['title', 'singer', 'moment'] as const
+/** The parts a guest types: the title and singer, and the moment with typed moments on. */
+export const typedParts = (momentTyped: boolean): readonly TypedPart[] => (momentTyped ? TYPED_PARTS : ['title', 'singer'])
 
 /** A game-media path as uploads make them: `<session>/<game>/<uuid>.jpg`, nothing that climbs or points elsewhere. */
 const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
@@ -121,9 +143,9 @@ const MEDIA_PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.jpg$/
 /** The points one song can give: event, title and singer. */
 export const pointsPerSong = (points: SoundtrackPoints) => points.event + points.title + points.singer
 
-/** Every prompt key of the songs played so far, song by song. */
-export const playedKeys = (played: number): string[] =>
-  Array.from({ length: played }, (_, i) => PARTS.map((part) => promptKey(i + 1, part))).flat()
+/** Every prompt key of the songs played so far, song by song: with typed moments on, the moment instead of the event. */
+export const playedKeys = (played: number, momentTyped = false): string[] =>
+  Array.from({ length: played }, (_, i) => (momentTyped ? TYPED_PARTS : PARTS).map((part) => promptKey(i + 1, part))).flat()
 
 /** A typed answer's text as saved (trimmed), or null for anything else. */
 export function textOf(answer: AnswerPayload | undefined | null): string | null {
@@ -192,9 +214,10 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   const problems: string[] = []
   const warnings: string[] = []
   const rawSongs = Array.isArray(raw.songs) ? raw.songs : []
+  const momentTyped = raw.momentTyped === true
   if (rawSongs.length === 0) problems.push('Add at least one song in the settings')
   else if (rawSongs.length > MAX_SONGS) problems.push(`Lydspor takes at most ${MAX_SONGS} songs`)
-  const songs = rawSongs.slice(0, MAX_SONGS).map((song, i) => checkSong(song, i + 1, problems))
+  const songs = rawSongs.slice(0, MAX_SONGS).map((song, i) => checkSong(song, i + 1, problems, momentTyped))
 
   const rawExtras = Array.isArray(raw.extraPhotos) ? raw.extraPhotos : []
   if (rawExtras.length > MAX_EXTRA_PHOTOS) problems.push(`Lydspor takes at most ${MAX_EXTRA_PHOTOS} extra photos`)
@@ -206,7 +229,8 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   if (twice >= 0) problems.push(`Two songs are called ${songs[titleKeys.indexOf(titleKeys[twice])].title}`)
   const photos = [...songs.map((song) => song.photo), ...extraPhotos.map((photo) => photo.photo)].filter(Boolean)
   if (new Set(photos).size !== photos.length) problems.push('The same photo is used twice')
-  if (songs.length >= EXTRAS_NEEDED_FROM && extraPhotos.length < MIN_EXTRA_PHOTOS) {
+  // Typed moments need no decoys: nobody places a photo.
+  if (!momentTyped && songs.length >= EXTRAS_NEEDED_FROM && extraPhotos.length < MIN_EXTRA_PHOTOS) {
     problems.push(`Add at least ${MIN_EXTRA_PHOTOS} extra photos, so the last song's photo isn't free`)
   }
 
@@ -243,6 +267,8 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
     lastCallSeconds: lastCallSeconds ?? 60,
     standingsEvery: standingsEvery ?? 4,
     hints: raw.hints === true,
+    momentTyped,
+    aiCheck: raw.aiCheck === true,
     boardMax: boardMax ?? 20,
     intro,
     storyteller,
@@ -252,7 +278,7 @@ export function checkConfig(input: unknown): { config: SoundtrackConfig; problem
   return { config, problems, warnings }
 }
 
-function checkSong(input: unknown, n: number, problems: string[]): SoundtrackSong {
+function checkSong(input: unknown, n: number, problems: string[], momentTyped: boolean): SoundtrackSong {
   const raw = record(input)
   const photo = trimmed(raw.photo)
   if (!photo) problems.push(`Song ${n} needs its photo`)
@@ -278,9 +304,21 @@ function checkSong(input: unknown, n: number, problems: string[]): SoundtrackSon
   if (extras.some((text) => length(text) > MAX_TYPED)) problems.push(`Song ${n}: an extra answer is at most ${MAX_TYPED} characters`)
   else if (extras.some((text) => normalise(text) === '')) problems.push(`Song ${n}: an extra answer needs a letter or a digit`)
 
+  // With typed moments on, the moment says what the caption would: a caption is optional.
   const caption = trimmed(raw.caption)
-  if (!caption) problems.push(`Song ${n} needs a caption`)
+  if (!caption && !momentTyped) problems.push(`Song ${n} needs a caption`)
   else if (length(caption) > MAX_CAPTION) problems.push(`Song ${n}: the caption is at most ${MAX_CAPTION} characters`)
+
+  const moment = trimmed(raw.moment)
+  const alsoMoments = texts(raw.alsoMoments)
+  if (momentTyped) {
+    if (!moment) problems.push(`Song ${n} needs its moment`)
+    else if (normalise(moment) === '') problems.push(`Song ${n}: the moment needs a letter or a digit`)
+  }
+  if (length(moment) > MAX_MOMENT) problems.push(`Song ${n}: the moment is at most ${MAX_MOMENT} characters`)
+  if (alsoMoments.length > MAX_ALSO) problems.push(`Song ${n} takes at most ${MAX_ALSO} extra moments`)
+  if (alsoMoments.some((text) => length(text) > MAX_MOMENT)) problems.push(`Song ${n}: an extra moment is at most ${MAX_MOMENT} characters`)
+  else if (alsoMoments.some((text) => normalise(text) === '')) problems.push(`Song ${n}: an extra moment needs a letter or a digit`)
 
   const startAt = raw.startAt === undefined || raw.startAt === null || raw.startAt === '' ? 0 : whole(raw.startAt)
   if (startAt === null || startAt < 0 || startAt > MAX_START) problems.push(`Song ${n}: the start must be within the first hour`)
@@ -298,6 +336,8 @@ function checkSong(input: unknown, n: number, problems: string[]): SoundtrackSon
     caption,
     startAt: startAt ?? 0,
     note,
+    moment,
+    alsoMoments: alsoMoments.slice(0, MAX_ALSO),
   }
 }
 
@@ -316,7 +356,7 @@ function checkExtraPhoto(input: unknown, k: number, problems: string[]): Soundtr
 function configWarnings(config: SoundtrackConfig): string[] {
   const warnings: string[] = []
   const { songs, extraPhotos } = config
-  if (songs.length > 0 && extraPhotos.length < SUGGESTED_EXTRA_PHOTOS) {
+  if (!config.momentTyped && songs.length > 0 && extraPhotos.length < SUGGESTED_EXTRA_PHOTOS) {
     warnings.push(`${extraPhotos.length === 0 ? 'No' : `Only ${extraPhotos.length}`} extra ${extraPhotos.length === 1 ? 'photo' : 'photos'}: ${SUGGESTED_EXTRA_PHOTOS} keep the last songs hard to place.`)
   }
   songs.forEach((song, i) => {
@@ -366,24 +406,26 @@ function configWarnings(config: SoundtrackConfig): string[] {
 export function readPicks(
   state: Pick<SoundtrackState, 'playedAt' | 'wall'>,
   answers: Readonly<Record<string, readonly Answer[]>>,
+  momentTyped = false,
 ): Record<PlayerId, Picks> {
   const played = state.playedAt.length
   const picks: Record<PlayerId, Picks> = {}
+  const empty = () => Array.from({ length: played }, () => null)
   const entry = (id: PlayerId) =>
-    (picks[id] ??= {
-      event: Array.from({ length: played }, () => null),
-      title: Array.from({ length: played }, () => null),
-      singer: Array.from({ length: played }, () => null),
-    })
+    (picks[id] ??= momentTyped
+      ? { event: empty(), title: empty(), singer: empty(), moment: empty() }
+      : { event: empty(), title: empty(), singer: empty() })
   for (let i = 0; i < played; i++) {
-    for (const answer of answers[promptKey(i + 1, 'event')] ?? []) {
-      const photo = photoOf(answer.answer, state.wall.length)
-      if (photo !== undefined) entry(answer.playerId).event[i] = photo
+    if (!momentTyped) {
+      for (const answer of answers[promptKey(i + 1, 'event')] ?? []) {
+        const photo = photoOf(answer.answer, state.wall.length)
+        if (photo !== undefined) entry(answer.playerId).event[i] = photo
+      }
     }
-    for (const part of TYPED) {
+    for (const part of typedParts(momentTyped)) {
       for (const answer of answers[promptKey(i + 1, part)] ?? []) {
         const text = textOf(answer.answer)
-        if (text !== null) entry(answer.playerId)[part][i] = text
+        if (text !== null) (entry(answer.playerId)[part] ??= empty())[i] = text
       }
     }
   }
@@ -457,9 +499,16 @@ function reviewPart(list: readonly Answer[], part: TypedPart, accepted: readonly
   return rows.sort(byReviewOrder)
 }
 
+/** A row the AI check is asked about: the rule didn't count it, and the host hasn't accepted or decided it. */
+export const aiAskable = (row: ReviewRow) => (row.verdict === 'close' || row.verdict === 'wrong') && !row.byHost && !row.accepted
+
 /** The accepted texts of one part of a song: the truth, then the settings' extras. */
-const acceptedFor = (song: SoundtrackSong, part: TypedPart) =>
-  part === 'title' ? [song.title, ...song.alsoTitles] : [song.singer, ...song.alsoSingers]
+export const acceptedFor = (song: SoundtrackSong, part: TypedPart): string[] =>
+  part === 'title'
+    ? [song.title, ...song.alsoTitles]
+    : part === 'singer'
+      ? [song.singer, ...song.alsoSingers]
+      : [song.moment ?? '', ...(song.alsoMoments ?? [])].filter((text) => text !== '')
 
 /**
  * Every played song's typed answers, grouped and judged, built once at the
@@ -472,11 +521,13 @@ export function buildReview(
 ): SongReview[] {
   return state.playedAt.map((_, i) => {
     const song = config.songs[i]
-    const review: SongReview = { title: [], singer: [] }
+    const momentTyped = config.momentTyped === true
+    const review: SongReview = momentTyped ? { title: [], singer: [], moment: [] } : { title: [], singer: [] }
     if (!song) return review
-    for (const part of TYPED) {
-      const other: TypedPart = part === 'title' ? 'singer' : 'title'
-      review[part] = reviewPart(answers[promptKey(i + 1, part)] ?? [], part, acceptedFor(song, part), acceptedFor(song, other))
+    for (const part of typedParts(momentTyped)) {
+      // A moment has no other part to mix it up with.
+      const other = part === 'title' ? acceptedFor(song, 'singer') : part === 'singer' ? acceptedFor(song, 'title') : []
+      review[part] = reviewPart(answers[promptKey(i + 1, part)] ?? [], part, acceptedFor(song, part), other)
     }
     return review
   })
@@ -485,7 +536,7 @@ export function buildReview(
 // Scoring, from the state when read ------------------------------------------------
 
 /** How one revealed song went for one guest. */
-type Outcome = { event: EventResult; title: PartResult; singer: PartResult; points: number }
+type Outcome = { event: EventResult; title: PartResult; singer: PartResult; moment: PartResult; points: number }
 
 /** Everything the projections need, computed from the state, the settings and who is here. */
 type Sheet = {
@@ -497,7 +548,7 @@ type Sheet = {
   /** Per revealed song: scoring guests who got each part, and how many could. */
   songs: { counts: { event: number; title: number; singer: number }; scoring: number }[]
   /** Per revealed song and typed part: each guest's review row. */
-  rows: { title: Map<PlayerId, ReviewRow>; singer: Map<PlayerId, ReviewRow> }[]
+  rows: { title: Map<PlayerId, ReviewRow>; singer: Map<PlayerId, ReviewRow>; moment: Map<PlayerId, ReviewRow> }[]
 }
 
 /** How a typed part went: its row's verdict, or 'accepted' for a close or wrong row the host accepted. */
@@ -509,16 +560,31 @@ function partResult(row: ReviewRow | undefined): PartResult {
 
 const partCounts = (result: PartResult) => result === 'exact' || result === 'typo' || result === 'accepted'
 
-function outcomeOf(state: SoundtrackState, points: SoundtrackPoints, sheetRows: Sheet['rows'], playerId: PlayerId, i: number): Outcome {
-  const mine = state.picks?.[playerId]
-  const e = mine?.event[i] ?? null
-  // The guard: a photo on two of a guest's songs at the lock scores on neither.
-  const doubled = e !== null && (mine?.event ?? []).filter((x) => x === e).length > 1
-  const event: EventResult = e === null ? 'none' : doubled ? 'doubled' : e === state.wall.indexOf(i) ? 'right' : 'wrong'
+function outcomeOf(
+  state: SoundtrackState,
+  config: Pick<SoundtrackConfig, 'points' | 'momentTyped'>,
+  sheetRows: Sheet['rows'],
+  playerId: PlayerId,
+  i: number,
+): Outcome {
+  const { points } = config
   const title = partResult(sheetRows[i]?.title.get(playerId))
   const singer = partResult(sheetRows[i]?.singer.get(playerId))
+  let event: EventResult
+  let moment: PartResult = 'none'
+  if (config.momentTyped === true) {
+    // The typed moment scores the event's points: 'right' when it counts.
+    moment = partResult(sheetRows[i]?.moment.get(playerId))
+    event = partCounts(moment) ? 'right' : moment === 'none' ? 'none' : 'wrong'
+  } else {
+    const mine = state.picks?.[playerId]
+    const e = mine?.event[i] ?? null
+    // The guard: a photo on two of a guest's songs at the lock scores on neither.
+    const doubled = e !== null && (mine?.event ?? []).filter((x) => x === e).length > 1
+    event = e === null ? 'none' : doubled ? 'doubled' : e === state.wall.indexOf(i) ? 'right' : 'wrong'
+  }
   const earned = (event === 'right' ? points.event : 0) + (partCounts(title) ? points.title : 0) + (partCounts(singer) ? points.singer : 0)
-  return { event, title, singer, points: earned }
+  return { event, title, singer, moment, points: earned }
 }
 
 let memo: { state: SoundtrackState; config: SoundtrackConfig; players: readonly unknown[]; sheet: Sheet } | null = null
@@ -539,7 +605,7 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
       for (const row of list ?? []) for (const id of row.players) map.set(id, row)
       return map
     }
-    return { title: byPlayer(state.review?.[i]?.title), singer: byPlayer(state.review?.[i]?.singer) }
+    return { title: byPlayer(state.review?.[i]?.title), singer: byPlayer(state.review?.[i]?.singer), moment: byPlayer(state.review?.[i]?.moment) }
   })
   const sitOut = sittingOut(sitOutOf(state), players)
   const picks = state.picks ?? {}
@@ -552,7 +618,7 @@ function sheetOf(state: SoundtrackState, config: SoundtrackConfig, players: read
     rows,
   }
   for (const id of participants) {
-    const outcomes = Array.from({ length: revealed }, (_, i) => outcomeOf(state, config.points, rows, id, i))
+    const outcomes = Array.from({ length: revealed }, (_, i) => outcomeOf(state, config, rows, id, i))
     let earned = 0
     outcomes.forEach((outcome, i) => {
       earned += outcome.points
@@ -617,6 +683,8 @@ export class SoundtrackGame extends Game<
     lastCallSeconds: 60,
     standingsEvery: 4,
     hints: false,
+    momentTyped: false,
+    aiCheck: false,
     boardMax: 20,
     intro: '',
     storyteller: '',
@@ -639,10 +707,14 @@ export class SoundtrackGame extends Game<
     const { songs, extraPhotos } = ctx.config
     return {
       phase: 'lobby',
-      wall: shuffle(
-        Array.from({ length: songs.length + extraPhotos.length }, (_, i) => i),
-        ctx.random,
-      ),
+      // Typed moments: no wall to place photos on, each song keeps its own (index i is song i).
+      wall:
+        ctx.config.momentTyped === true
+          ? songs.map((_, i) => i)
+          : shuffle(
+              Array.from({ length: songs.length + extraPhotos.length }, (_, i) => i),
+              ctx.random,
+            ),
       playedAt: [],
       lockAt: null,
       extended: 0,
@@ -686,7 +758,7 @@ export class SoundtrackGame extends Game<
       case 'accept':
         if (
           step(action.index) &&
-          (action.part === 'title' || action.part === 'singer') &&
+          (action.part === 'title' || action.part === 'singer' || action.part === 'moment') &&
           typeof action.key === 'string' &&
           action.key.length <= 400 &&
           typeof action.accepted === 'boolean'
@@ -694,6 +766,18 @@ export class SoundtrackGame extends Game<
           return { type: 'accept', index: action.index, part: action.part, key: action.key, accepted: action.accepted }
         }
         break
+      case 'ai': {
+        const list = action.yes
+        if (!Array.isArray(list) || list.length > MAX_AI_YES) break
+        const yes: AiYes[] = []
+        for (const item of list) {
+          const row = item !== null && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : {}
+          if (!step(row.index) || (row.part !== 'title' && row.part !== 'singer' && row.part !== 'moment')) throw new GameError('Unknown Lydspor step')
+          if (typeof row.key !== 'string' || row.key.length > 400) throw new GameError('Unknown Lydspor step')
+          yes.push({ index: row.index, part: row.part, key: row.key })
+        }
+        return { type: 'ai', yes }
+      }
       case 'standings':
         if (step(action.after)) return { type: 'standings', after: action.after }
         break
@@ -736,6 +820,8 @@ export class SoundtrackGame extends Game<
         return this.reveal(state, action.index, ctx)
       case 'accept':
         return this.accept(state, action, ctx)
+      case 'ai':
+        return this.aiVerdicts(state, action.yes, ctx)
       case 'standings':
         if (state.phase !== 'reveal' || action.after !== state.revealed) return stale(state)
         return { ...state, phase: 'standings' }
@@ -760,7 +846,7 @@ export class SoundtrackGame extends Game<
 
   onWake(state: SoundtrackState, ctx: GameContext<SoundtrackConfig>): SoundtrackState {
     if (state.phase !== 'lastCall') return state
-    const keys = playedKeys(state.playedAt.length)
+    const keys = playedKeys(state.playedAt.length, ctx.config.momentTyped === true)
     // Closed already (a host's close list got there first): lock now.
     if (keys.every((key) => ctx.answers[key])) return this.lock(state, ctx)
     // Close what is still open; the next sync, a second later, reads the answers.
@@ -778,7 +864,9 @@ export class SoundtrackGame extends Game<
    */
   onPlayerLeave(state: SoundtrackState, playerId: PlayerId): SoundtrackState {
     const picked = state.picks !== null && Object.hasOwn(state.picks, playerId)
-    const reviewed = (state.review ?? []).some((song) => [...song.title, ...song.singer].some((row) => row.players.includes(playerId)))
+    const reviewed = (state.review ?? []).some((song) =>
+      [...song.title, ...song.singer, ...(song.moment ?? [])].some((row) => row.players.includes(playerId)),
+    )
     const shown = Object.hasOwn(state.shownTop, playerId)
     if (!picked && !reviewed && !shown) return state
     const rows = (list: ReviewRow[]) =>
@@ -788,7 +876,14 @@ export class SoundtrackGame extends Game<
     return {
       ...state,
       picks: state.picks === null ? null : without(state.picks, playerId),
-      review: state.review === null ? null : state.review.map((song) => ({ title: rows(song.title), singer: rows(song.singer) })),
+      review:
+        state.review === null
+          ? null
+          : state.review.map((song) => ({
+              title: rows(song.title),
+              singer: rows(song.singer),
+              ...(song.moment ? { moment: rows(song.moment) } : {}),
+            })),
       shownTop: without(state.shownTop, playerId),
     }
   }
@@ -817,6 +912,7 @@ export class SoundtrackGame extends Game<
 
   publicState(state: SoundtrackState, info: GameInfo<SoundtrackConfig>): SoundtrackPublicState {
     const { config } = info
+    const typed = config.momentTyped === true
     const sheet = sheetOf(state, config, info.players)
     const revealed = sheet.songs.length
     const sitOut = sittingOut(sitOutOf(state), info.players)
@@ -830,6 +926,7 @@ export class SoundtrackGame extends Game<
             title: song.title,
             singer: song.singer,
             caption: song.caption,
+            moment: typed ? (song.moment ?? '') : '',
             counts: { ...sheet.songs[last].counts },
             scoring: sheet.songs[last].scoring,
           }
@@ -839,10 +936,12 @@ export class SoundtrackGame extends Game<
       phase: state.phase,
       total: config.songs.length,
       playedAt: [...state.playedAt],
-      wall: state.wall.map((k) => {
+      // Typed moments: only the played songs' own photos, in play order; the rest stay secret.
+      wall: (typed ? state.wall.slice(0, state.playedAt.length) : state.wall).map((k) => {
         const photo = photoAt(config, k)
-        return { path: photo.photo, hint: config.hints ? photo.caption : null }
+        return { path: photo.photo, hint: config.hints && photo.caption !== '' ? photo.caption : null }
       }),
+      momentTyped: typed,
       points: { ...config.points },
       lockAt: state.lockAt,
       lockedAt: state.lockedAt,
@@ -850,7 +949,7 @@ export class SoundtrackGame extends Game<
       revealed,
       reveal,
       // The photos that fit no played song: the extras, and songs never played.
-      extras: afterLast
+      extras: afterLast && !typed
         ? state.wall
             .filter((k) => k >= state.playedAt.length)
             .map((k) => {
@@ -875,14 +974,14 @@ export class SoundtrackGame extends Game<
     if (sittingOut(sitOutOf(state), info.players).has(playerId)) return { sittingOut: true, mine: null, songs: [], points: 0, rank: null, final: null }
     const sheet = sheetOf(state, info.config, info.players)
     const mine = state.picks && Object.hasOwn(state.picks, playerId) ? state.picks[playerId] : null
-    const outcomes =
-      sheet.outcomes.get(playerId) ?? sheet.songs.map((_, i) => outcomeOf(state, info.config.points, sheet.rows, playerId, i))
+    const outcomes = sheet.outcomes.get(playerId) ?? sheet.songs.map((_, i) => outcomeOf(state, info.config, sheet.rows, playerId, i))
     const songs: SoundtrackSongView[] = outcomes.map((outcome, i) => ({
       n: i + 1,
       points: sheet.outcomes.has(playerId) ? outcome.points : 0,
       event: outcome.event,
       title: outcome.title,
       singer: outcome.singer,
+      moment: outcome.moment,
     }))
     // Ranked as the TV's top 5 ranks.
     const points = sheet.outcomes.has(playerId) ? (sheet.earned.get(playerId) ?? 0) : 0
@@ -895,7 +994,9 @@ export class SoundtrackGame extends Game<
     const final = state.phase === 'done' ? finalRows(state, info.config, info.players).find((row) => row.playerId === playerId) : undefined
     return {
       sittingOut: false,
-      mine: mine ? { event: [...mine.event], title: [...mine.title], singer: [...mine.singer] } : null,
+      mine: mine
+        ? { event: [...mine.event], title: [...mine.title], singer: [...mine.singer], ...(mine.moment ? { moment: [...mine.moment] } : {}) }
+        : null,
       songs,
       points,
       rank,
@@ -948,7 +1049,7 @@ export class SoundtrackGame extends Game<
         const at = revealedAt(i + 1)
         highlights.push({
           title: `${title}: “${song.title}” by ${song.singer}`,
-          detail: `${counts.event} of ${scoring} placed its photo, ${counts.title} typed the title, ${counts.singer} the singer`,
+          detail: `${counts.event} of ${scoring} ${config.momentTyped === true ? 'named its moment' : 'placed its photo'}, ${counts.title} typed the title, ${counts.singer} the singer`,
           ...(at !== undefined ? { at } : {}),
           icon: title === 'Best known song' ? 'star' : 'target',
           weight: 'highlight',
@@ -969,7 +1070,8 @@ export class SoundtrackGame extends Game<
     const n = index + 1
     ctx.openPrompt(promptKey(n, 'title'), { ...TEXT_SPEC })
     ctx.openPrompt(promptKey(n, 'singer'), { ...TEXT_SPEC })
-    ctx.openPrompt(promptKey(n, 'event'), eventSpec(state.wall.length))
+    if (ctx.config.momentTyped === true) ctx.openPrompt(promptKey(n, 'moment'), { ...MOMENT_SPEC })
+    else ctx.openPrompt(promptKey(n, 'event'), eventSpec(state.wall.length))
     ctx.record('song_played', { n })
     return { ...state, phase: 'playing', playedAt: [...state.playedAt, ctx.now] }
   }
@@ -987,9 +1089,10 @@ export class SoundtrackGame extends Game<
 
   /** Reads every answer once, judges the typed ones, and reveals the prompts: from here nothing changes but how answers score. */
   private lock(state: SoundtrackState, ctx: GameContext<SoundtrackConfig>): SoundtrackState {
-    const keys = playedKeys(state.playedAt.length)
+    const typed = ctx.config.momentTyped === true
+    const keys = playedKeys(state.playedAt.length, typed)
     if (keys.some((key) => !ctx.answers[key])) throw new GameError('The answers are still coming in')
-    const picks = readPicks(state, ctx.answers)
+    const picks = readPicks(state, ctx.answers, typed)
     const review = buildReview(state, ctx.config, ctx.answers)
     for (const key of keys) ctx.revealPrompt(key)
     ctx.record('locked', { songs: state.playedAt.length, answered: Object.keys(picks).length })
@@ -1023,13 +1126,15 @@ export class SoundtrackGame extends Game<
     const n = index + 1
     if (state.phase === 'done') throw new GameError('Lydspor is over')
     if (index >= state.revealed || !state.review || !state.review[index]) throw new GameError(`Reveal song ${n} first`)
-    const row = state.review[index][part].find((r) => r.key === key)
+    const row = (state.review[index][part] ?? []).find((r) => r.key === key)
     if (!row) throw new GameError(`Nobody typed that for song ${n}`)
     if (row.verdict === 'exact' || row.verdict === 'typo') throw new GameError('That answer counts already')
     // A double tap asks for what is there already.
     if (row.accepted === accepted) return stale(state)
+    // With the AI check on, the host's own decision (an undo of an AI yes too) is one the AI never changes.
+    const mark = ctx.config.aiCheck === true ? { byHost: true as const } : {}
     const review = state.review.map((song, i) =>
-      i === index ? { ...song, [part]: song[part].map((r) => (r.key === key ? { ...r, accepted } : r)) } : song,
+      i === index ? { ...song, [part]: (song[part] ?? []).map((r) => (r.key === key ? { ...r, accepted, ...mark } : r)) } : song,
     )
     const present = new Set(ctx.players.map((p) => p.id))
     ctx.record(
@@ -1038,6 +1143,41 @@ export class SoundtrackGame extends Game<
       { about: row.players.filter((id) => present.has(id)) },
     )
     return { ...state, review }
+  }
+
+  /**
+   * The AI check's verdicts, once per lock: every close or wrong row was
+   * asked; a yes accepts it, a no leaves it; a row the host decided keeps the
+   * host's decision. Deterministic: the verdicts come in the action, the AI
+   * call was the server's (netlify/functions/lydspor-ai.mts).
+   */
+  private aiVerdicts(state: SoundtrackState, yes: readonly AiYes[], ctx: GameContext<SoundtrackConfig>): SoundtrackState {
+    if (ctx.config.aiCheck !== true) throw new GameError('The AI check is off for this game')
+    if (state.phase === 'done') throw new GameError('Lydspor is over')
+    if (state.phase === 'lobby' || state.phase === 'playing' || state.phase === 'lastCall' || !state.review) {
+      throw new GameError('Lock the answers first')
+    }
+    // Once per lock: a second host page's check, or a retry that raced the first, changes nothing.
+    if (state.ai) return stale(state)
+    const said = new Set(yes.map((y) => `${y.index}|${y.part}|${y.key}`))
+    let asked = 0
+    let accepted = 0
+    const judged = (index: number, part: TypedPart, rows: ReviewRow[]) =>
+      rows.map((row) => {
+        if (!aiAskable(row)) return row
+        asked++
+        const ok = said.has(`${index}|${part}|${row.key}`)
+        if (ok) accepted++
+        return { ...row, ai: ok ? ('yes' as const) : ('no' as const), accepted: ok }
+      })
+    const review = state.review.map((song, i) => ({
+      ...song,
+      title: judged(i, 'title', song.title),
+      singer: judged(i, 'singer', song.singer),
+      ...(song.moment ? { moment: judged(i, 'moment', song.moment) } : {}),
+    }))
+    ctx.record('ai_checked', { asked, accepted })
+    return { ...state, review, ai: { at: ctx.now, asked, accepted } }
   }
 
   /** The crown (or End by the host): the payout and the winner. */
@@ -1081,7 +1221,7 @@ export class SoundtrackGame extends Game<
   }
 }
 
-/** A wall index's photo: a song's, or an extra one. */
+/** A wall index's photo: a song's, or an extra one. A song's caption may be empty with typed moments on. */
 function photoAt(config: SoundtrackConfig, k: number): { photo: string; caption: string } {
   const song = config.songs[k]
   if (song) return { photo: song.photo, caption: song.caption }

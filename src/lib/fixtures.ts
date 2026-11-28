@@ -13,7 +13,7 @@
 // as joined and four guests still expected, docs/guest-list.md). The host page
 // also reads each scene's game settings (fixtureSettings), as game_settings
 // would hold them.
-import { sampleSettings, SOUNDTRACK_SCENES, soundtrackSample, type SoundtrackScene } from '@/games/soundtrack/samples'
+import { sampleSettings, SOUNDTRACK_SCENES, SOUNDTRACK_TYPED_SCENES, soundtrackSample, type SoundtrackScene } from '@/games/soundtrack/samples'
 import type { Screen } from './live'
 import type { RecapDoc } from './recap'
 import type { AnswerPayload, FeedItem, ListedGuest, Player, PromptState, Session, SessionGame, Snapshot, Tallies, Team } from './types'
@@ -72,6 +72,8 @@ export const FIXTURE_SCENES = [
   // the last call, locked, reveal 1 with an accepted close title, the top 5
   // after reveal 4, and the crown.
   ...SOUNDTRACK_SCENES.map((scene) => `soundtrack-${scene}` as const),
+  // Lydspor with typed moments: song 5 of 8 playing with its own photo, and reveal 1 with its moment.
+  ...SOUNDTRACK_TYPED_SCENES.map((scene) => `soundtrack-typed-${scene}` as const),
   // Before the party, no TV yet: a program with Lydspor and fusion still to set up, and the same program ready, with a TV.
   'setup',
   'setup-ready',
@@ -617,8 +619,8 @@ function fusionRound(revealedCount: number) {
 // Lydspor (.design/lydspor/spec.md) ---------------------------------------------------------------
 
 /** A Lydspor scene's party: the sample round played through the real logic, beside a live Last one standing. */
-function soundtrackWorld(scene: SoundtrackScene): World {
-  const round = soundtrackSample(scene, { players: PLAYERS }, FIXTURE_NOW)
+function soundtrackWorld(scene: SoundtrackScene, momentTyped = false): World {
+  const round = soundtrackSample(scene, { players: PLAYERS }, FIXTURE_NOW, momentTyped)
   const elimination = eliminationLive()
   const members = [...ids]
   const finished = round.finishedAt !== null
@@ -1463,6 +1465,9 @@ function world(scene: Exclude<FixtureScene, 'removed'>): World {
     case 'soundtrack-standings':
     case 'soundtrack-final':
       return soundtrackWorld(scene.slice('soundtrack-'.length) as SoundtrackScene)
+    case 'soundtrack-typed-playing':
+    case 'soundtrack-typed-reveal':
+      return soundtrackWorld(scene.slice('soundtrack-typed-'.length) as SoundtrackScene, true)
     case 'archived': {
       const elimination = eliminationDone(FIXTURE_NOW - 150 * MIN, FIXTURE_NOW - 40 * MIN)
       const quiz = quizRound('leaderboard', 2)

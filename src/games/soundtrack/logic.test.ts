@@ -107,7 +107,10 @@ describe('settings', () => {
       caption: 'The harbour, 2009',
       startAt: 40,
       note: '',
+      moment: '',
+      alsoMoments: [],
     })
+    expect(config).toMatchObject({ momentTyped: false, aiCheck: false })
     expect(game.defaultConfig).toMatchObject({ songs: [], extraPhotos: [] })
   })
 
@@ -532,14 +535,15 @@ describe('reveals', () => {
       title: 'Paper Lanterns',
       singer: 'Mira Holm',
       caption: 'The harbour, 2009',
+      moment: '',
       counts: { event: 1, title: 2, singer: 2 },
       // Guests with any answer at the lock: ids[3] typed only song 2's title, and still counts.
       scoring: 4,
     })
-    expect(viewOf(p, ids[0]).songs).toEqual([{ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact' }])
-    expect(viewOf(p, ids[1]).songs).toEqual([{ n: 1, points: 2, event: 'wrong', title: 'typo', singer: 'exact' }])
-    expect(viewOf(p, ids[2]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'close', singer: 'wrong' }])
-    expect(viewOf(p, ids[3]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none' }])
+    expect(viewOf(p, ids[0]).songs).toEqual([{ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact', moment: 'none' }])
+    expect(viewOf(p, ids[1]).songs).toEqual([{ n: 1, points: 2, event: 'wrong', title: 'typo', singer: 'exact', moment: 'none' }])
+    expect(viewOf(p, ids[2]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'close', singer: 'wrong', moment: 'none' }])
+    expect(viewOf(p, ids[3]).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none', moment: 'none' }])
     expect(viewOf(p, ids[0])).toMatchObject({ points: 4, rank: 1 })
     expect(viewOf(p, ids[1])).toMatchObject({ points: 2, rank: 2 })
     expect(viewOf(p, ids[2])).toMatchObject({ points: 0, rank: null })
@@ -703,7 +707,7 @@ describe('scoring', () => {
     lockNow(p)
     reveal(p, 0)
     expect(pub(p).reveal).toMatchObject({ counts: { event: 1, title: 2, singer: 1 }, scoring: 2 })
-    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact' })
+    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 4, event: 'right', title: 'exact', singer: 'exact', moment: 'none' })
     reveal(p, 1)
     expect(viewOf(p, ids[0])).toMatchObject({ points: 8, rank: 1 })
     reveal(p, 2)
@@ -896,7 +900,7 @@ describe('guests leaving and joining late', () => {
     // Someone who joins after the lock has no answers: their phone shows each revealed song as no answer.
     const later = p.addPlayer('After the lock')
     p.sync(GAME)
-    expect(viewOf(p, later.id).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none' }])
+    expect(viewOf(p, later.id).songs).toEqual([{ n: 1, points: 0, event: 'none', title: 'none', singer: 'none', moment: 'none' }])
     hostAct(p, { type: 'crown' })
     expect(Object.keys(p.game(GAME).scores)).toEqual([late.id])
   })
@@ -1260,5 +1264,129 @@ describe('the bot', () => {
     const sight = { playerId: 'a', players: [], view: null, prompts: [], myAnswers: {}, now: 0, random }
     expect(bot.move({ ...sight, publicState: { phase: 'locked', wall: [] } })).toBeNull()
     expect(bot.move({ ...sight, publicState: { phase: 'playing', wall: [] }, view: { sittingOut: true } })).toBeNull()
+  })
+})
+
+describe('typed moments', () => {
+  const MOMENTS = ['Roskilde Festival 2015, first time camping', 'Moving into the first flat', 'The wedding in the barn']
+  const typed = (overrides: Record<string, unknown> = {}) =>
+    startParty(6, { momentTyped: true, extraPhotos: [], ...overrides }, MOMENTS.map((moment, i) => ({ moment, alsoMoments: i === 0 ? ['Roskilde 2015'] : [], caption: '' })))
+  const lockTyped = (p: FakeParty) => hostAct(p, { type: 'lock' }, playedKeys(stateOf(p).playedAt.length, true))
+
+  it('need each song’s moment and no extra photos or captions; off, the settings read as before', () => {
+    const songs = SONGS.map((song, i) => ({ ...song, photo: `test/lydspor/song-${i + 1}.jpg`, caption: '' }))
+    expect(checkConfig({ songs, momentTyped: true }).problems).toEqual(['Song 1 needs its moment', 'Song 2 needs its moment', 'Song 3 needs its moment'])
+    expect(checkConfig({ songs: songs.map((s, i) => ({ ...s, moment: MOMENTS[i] })), momentTyped: true }).problems).toEqual([])
+    expect(checkConfig({ songs: songs.map((s) => ({ ...s, moment: 'x'.repeat(141) })), momentTyped: true }).problems[0]).toBe('Song 1: the moment is at most 140 characters')
+    expect(checkConfig({ songs }).problems).toContain('Song 1 needs a caption')
+    expect(checkConfig({ songs }).problems).toContain(`Add at least 2 extra photos, so the last song's photo isn't free`)
+  })
+
+  it('show each song’s own photo from its Play on, never before, and ask its moment, title and singer', () => {
+    const { p } = typed()
+    expect(stateOf(p).wall).toEqual([0, 1, 2])
+    expect(pub(p)).toMatchObject({ momentTyped: true, wall: [] })
+    play(p, 0)
+    expect(pub(p).wall).toEqual([{ path: 'test/lydspor/song-1.jpg', hint: null }])
+    expect(p.promptsOf(GAME).map((pr) => [pr.key, pr.spec])).toEqual([
+      ['s1.title', TEXT_SPEC],
+      ['s1.singer', TEXT_SPEC],
+      ['s1.moment', { kind: 'text', max_length: 100 }],
+    ])
+    expect(JSON.stringify(pub(p))).not.toContain('song-2.jpg')
+    expect(JSON.stringify(pub(p))).not.toContain('Roskilde')
+  })
+
+  it('score the moment with the event’s points, judged like a title, and reveal the moment', () => {
+    const { p, ids } = typed()
+    playAll(p)
+    typeIn(p, 1, 'moment', ids[0], 'roskilde festival 2015, first time camping')
+    typeIn(p, 1, 'title', ids[0], 'Paper Lanterns')
+    typeIn(p, 1, 'moment', ids[1], 'Roskilde 2015')
+    typeIn(p, 1, 'moment', ids[2], 'Roskilde camping')
+    typeIn(p, 1, 'moment', ids[3], 'A party')
+    expect(lockTyped(p).kind).toBe('commit')
+    const review = stateOf(p).review![0].moment!
+    expect(review.map((r) => [r.text, r.verdict])).toEqual([
+      ['Roskilde camping', 'close'],
+      ['A party', 'wrong'],
+      ['Roskilde 2015', 'exact'],
+      ['roskilde festival 2015, first time camping', 'exact'],
+    ])
+    expect(stateOf(p).picks![ids[0]]).toEqual({ event: [null, null, null], title: ['Paper Lanterns', null, null], singer: [null, null, null], moment: ['roskilde festival 2015, first time camping', null, null] })
+    reveal(p, 0)
+    expect(pub(p).reveal).toMatchObject({ n: 1, event: 0, moment: MOMENTS[0], counts: { event: 2, title: 1, singer: 0 }, scoring: 4 })
+    expect(viewOf(p, ids[0]).songs[0]).toEqual({ n: 1, points: 3, event: 'right', title: 'exact', singer: 'none', moment: 'exact' })
+    expect(viewOf(p, ids[2]).songs[0]).toMatchObject({ points: 0, event: 'wrong', moment: 'close' })
+    expect(accept(p, 0, 'moment', review[0].key).kind).toBe('commit')
+    expect(viewOf(p, ids[2]).songs[0]).toMatchObject({ points: 2, event: 'right', moment: 'accepted' })
+    expect(pub(p).extras).toBeNull()
+  })
+})
+
+describe('the AI check', () => {
+  const aiParty = (overrides: Record<string, unknown> = { aiCheck: true }) =>
+    lockedParty(
+      (p, ids) => {
+        answer(p, 1, ids[0], 'Papir Lanterner', 'Myra Holmes', null)
+        answer(p, 1, ids[1], 'Papir Lanterner', 'Coldwave', null)
+        answer(p, 1, ids[2], 'Paper Lanterns', 'Mira', null)
+      },
+      { overrides },
+    )
+  const rowOf = (p: FakeParty, part: TypedPart, key: string) => stateOf(p).review![0][part]!.find((r) => r.key === key)!
+
+  it('accepts the rows it says yes to, marks the rest no, once per lock, and the reveal counts them', () => {
+    const { p, ids } = aiParty()
+    const yes = [{ index: 0, part: 'title', key: rowOf(p, 'title', 'papirlanterner').key }]
+    expect(hostAct(p, { type: 'ai', yes }).kind).toBe('commit')
+    expect(rowOf(p, 'title', 'papirlanterner')).toMatchObject({ accepted: true, ai: 'yes' })
+    expect(rowOf(p, 'singer', 'myraholmes')).toMatchObject({ accepted: false, ai: 'no' })
+    expect(rowOf(p, 'singer', 'coldwave')).toMatchObject({ accepted: false, ai: 'no' })
+    expect(rowOf(p, 'title', 'paperlanterns').ai).toBeUndefined()
+    expect(stateOf(p).ai).toMatchObject({ asked: 3, accepted: 1 })
+    // A second check (another host page, a retry that raced) changes nothing.
+    expect(hostAct(p, { type: 'ai', yes: [] }).kind).toBe('skip')
+    reveal(p, 0)
+    expect(pub(p).reveal?.counts.title).toBe(3)
+    expect(viewOf(p, ids[0]).songs[0].title).toBe('accepted')
+  })
+
+  it('lets the host overrule any verdict, and never changes a row the host decided', () => {
+    const { p, ids } = aiParty()
+    reveal(p, 0)
+    // The host accepts a close singer before the AI is back: the AI's no leaves it accepted.
+    expect(accept(p, 0, 'singer', 'myraholmes').kind).toBe('commit')
+    hostAct(p, { type: 'ai', yes: [{ index: 0, part: 'title', key: 'papirlanterner' }] })
+    expect(rowOf(p, 'singer', 'myraholmes')).toMatchObject({ accepted: true, byHost: true })
+    expect(rowOf(p, 'singer', 'myraholmes').ai).toBeUndefined()
+    expect(stateOf(p).ai).toMatchObject({ asked: 2, accepted: 1 })
+    // The host undoes the AI's yes, and accepts what it said no to.
+    expect(accept(p, 0, 'title', 'papirlanterner', false).kind).toBe('commit')
+    expect(accept(p, 0, 'singer', 'coldwave').kind).toBe('commit')
+    expect(viewOf(p, ids[0]).songs[0]).toMatchObject({ title: 'close', singer: 'accepted' })
+    expect(viewOf(p, ids[1]).songs[0]).toMatchObject({ title: 'close', singer: 'accepted' })
+    expect(pub(p).reveal?.counts).toMatchObject({ title: 1, singer: 3 })
+  })
+
+  it('is refused while off, before the lock and after the crown, and for a malformed list', () => {
+    const off = aiParty({})
+    expect(hostAct(off.p, { type: 'ai', yes: [] })).toMatchObject({ kind: 'refuse', message: 'The AI check is off for this game' })
+    const { p } = startParty(6, { aiCheck: true })
+    play(p, 0)
+    expect(hostAct(p, { type: 'ai', yes: [] })).toMatchObject({ kind: 'refuse', message: 'Lock the answers first' })
+    const locked = aiParty()
+    expect(hostAct(locked.p, { type: 'ai', yes: [{ index: 0, part: 'event', key: 'x' }] })).toMatchObject({ kind: 'refuse' })
+    expect(hostAct(locked.p, { type: 'ai', yes: 'all' })).toMatchObject({ kind: 'refuse' })
+    // The crown ends the round: the engine refuses anything after it.
+    hostAct(locked.p, { type: 'crown' })
+    expect(hostAct(locked.p, { type: 'ai', yes: [] })).toMatchObject({ kind: 'refuse' })
+  })
+
+  it('with the check off, an accept leaves the row as it always was', () => {
+    const { p } = aiParty({})
+    reveal(p, 0)
+    accept(p, 0, 'title', 'papirlanterner')
+    expect(Object.keys(rowOf(p, 'title', 'papirlanterner')).sort()).toEqual(['accepted', 'key', 'off', 'players', 'reason', 'text', 'verdict'])
   })
 })

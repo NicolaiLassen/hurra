@@ -59,7 +59,7 @@ export default function CueCard({
             {cue.counts.title} of {cue.counts.of}
           </span>{' '}
           typed a title, <span className="tv-num text-lg text-paper">{cue.counts.singer}</span> a singer,{' '}
-          <span className="tv-num text-lg text-paper">{cue.counts.event}</span> a photo.
+          <span className="tv-num text-lg text-paper">{cue.counts.event}</span> {cue.counts.moment ? 'a moment' : 'a photo'}.
         </p>
       )}
       {cue.note && <p className="text-sm text-paper-2">Note: {cue.note}</p>}

@@ -12,7 +12,8 @@ export type Cue = {
   /** What to do next, after the lead. */
   text: string
   /** While songs play: how many typed a title, a singer and tapped a photo for the song playing. */
-  counts: { title: number; singer: number; event: number; of: number } | null
+  /** `event` counts the photos placed, or with typed moments (`moment` true) the moments typed. */
+  counts: { title: number; singer: number; event: number; of: number; moment?: boolean } | null
   /** The story note of the song this cue is about. */
   note: string | null
 }
@@ -20,7 +21,7 @@ export type Cue = {
 export type CueInput = {
   where: Where
   /** Null while the settings load: the cue then says what it can without them. */
-  config: Pick<SoundtrackConfig, 'songs' | 'storyteller' | 'lastCallSeconds'> | null
+  config: Pick<SoundtrackConfig, 'songs' | 'storyteller' | 'lastCallSeconds' | 'momentTyped'> | null
   playedAt: readonly number[]
   lockedAt: number | null
   tallies: Readonly<Record<string, number>>
@@ -62,8 +63,15 @@ export function cueOf({ where, config, playedAt, lockedAt, tallies, playing, tit
     case 'playing': {
       // Tallies count every first answer, a guest sitting out included (their phone asks nothing, but the
       // database takes an answer): never more than the guests playing.
-      const tally = (part: 'title' | 'singer' | 'event') => Math.min(tallies[promptKey(played, part)] ?? 0, playing)
-      const counts = { title: tally('title'), singer: tally('singer'), event: tally('event'), of: playing }
+      const tally = (part: 'title' | 'singer' | 'event' | 'moment') => Math.min(tallies[promptKey(played, part)] ?? 0, playing)
+      const typed = config?.momentTyped === true
+      const counts = {
+        title: tally('title'),
+        singer: tally('singer'),
+        event: tally(typed ? 'moment' : 'event'),
+        of: playing,
+        ...(typed ? { moment: true } : {}),
+      }
       if (played < total) {
         const next = played + 1
         const seek = song(next) ? `seek to ${startText(song(next)!.startAt)}, ` : ''

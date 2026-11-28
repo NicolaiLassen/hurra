@@ -62,7 +62,7 @@ export function fieldState({
   return text === saved ? 'saved' : 'unsent'
 }
 
-const PART_WORD: Record<SongPart, string> = { title: 'title', singer: 'singer', event: 'event' }
+const PART_WORD: Record<SongPart, string> = { title: 'title', singer: 'singer', event: 'event', moment: 'moment' }
 
 const withStop = (text: string) => (text === '' || /[.?]$/.test(text) ? text : `${text}.`)
 

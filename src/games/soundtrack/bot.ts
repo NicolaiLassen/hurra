@@ -13,14 +13,14 @@ import { NO_PHOTO, promptKey, type SoundtrackConfig, type SoundtrackState, type 
  * plays all eight (botSettings), and the guests type answers to every one.
  */
 export const BOT_SONGS = [
-  { title: 'Paper Lanterns', singer: 'Mira Holm', alsoTitle: 'Lanterns', alsoSinger: 'Mira', caption: 'The harbour, 2009' },
-  { title: 'Seven Ferries', singer: 'Coldwave', alsoTitle: 'The Ferry Song', alsoSinger: 'Cold Wave Band', caption: 'Island trip, 2014' },
-  { title: 'Blå Mandag', singer: 'Søren Bækgaard', alsoTitle: 'Mandag', alsoSinger: 'Søren B', caption: 'First flat, 2019' },
-  { title: 'Route 41', singer: 'The Pale Harbour', alsoTitle: 'The Long Road', alsoSinger: 'Pale Harbour Band', caption: 'The road trip, 2012' },
-  { title: 'Sommer i Skagen', singer: 'Ærø Kvartet', alsoTitle: 'Skagen', alsoSinger: 'Kvartetten', caption: 'Skagen, 2016' },
-  { title: 'Glasshouse Summer (Live)', singer: 'Nora Lind feat. Otto Berg', alsoTitle: 'Glasshouse', alsoSinger: 'Nora', caption: 'The festival, 2018' },
-  { title: 'Midnight Ferry Lights', singer: 'Kasper Holt', alsoTitle: 'Ferry Lights', alsoSinger: 'Holt', caption: 'New Year, 2020' },
-  { title: 'Copper Sky', singer: 'Linnea Vass', alsoTitle: 'Kobberhimmel', alsoSinger: 'Linnea', caption: 'The wedding, 2023' },
+  { title: 'Paper Lanterns', singer: 'Mira Holm', alsoTitle: 'Lanterns', alsoSinger: 'Mira', caption: 'The harbour, 2009', moment: 'The harbour party when the boat broke down', alsoMoment: 'Harbour party 2009' },
+  { title: 'Seven Ferries', singer: 'Coldwave', alsoTitle: 'The Ferry Song', alsoSinger: 'Cold Wave Band', caption: 'Island trip, 2014', moment: 'Island trip with the whole class', alsoMoment: 'Class trip 2014' },
+  { title: 'Blå Mandag', singer: 'Søren Bækgaard', alsoTitle: 'Mandag', alsoSinger: 'Søren B', caption: 'First flat, 2019', moment: 'Moving into the first flat', alsoMoment: 'First flat' },
+  { title: 'Route 41', singer: 'The Pale Harbour', alsoTitle: 'The Long Road', alsoSinger: 'Pale Harbour Band', caption: 'The road trip, 2012', moment: 'Road trip down the coast in the old van', alsoMoment: 'The road trip' },
+  { title: 'Sommer i Skagen', singer: 'Ærø Kvartet', alsoTitle: 'Skagen', alsoSinger: 'Kvartetten', caption: 'Skagen, 2016', moment: 'Summer holiday in Skagen', alsoMoment: 'Skagen 2016' },
+  { title: 'Glasshouse Summer (Live)', singer: 'Nora Lind feat. Otto Berg', alsoTitle: 'Glasshouse', alsoSinger: 'Nora', caption: 'The festival, 2018', moment: 'Roskilde Festival, first time camping', alsoMoment: 'Roskilde 2018' },
+  { title: 'Midnight Ferry Lights', singer: 'Kasper Holt', alsoTitle: 'Ferry Lights', alsoSinger: 'Holt', caption: 'New Year, 2020', moment: 'New Year on the ferry to Oslo', alsoMoment: 'Oslo ferry' },
+  { title: 'Copper Sky', singer: 'Linnea Vass', alsoTitle: 'Kobberhimmel', alsoSinger: 'Linnea', caption: 'The wedding, 2023', moment: 'Dancing at the wedding in the barn', alsoMoment: 'The wedding' },
 ] as const
 
 const SONG_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
@@ -30,7 +30,7 @@ const SONG_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
  * photo paths: 2 extra photos up to 3 songs, else 4; a short last call;
  * the top 5 every 2 songs up to 3, else 4.
  */
-export function botSettings(count = 3): Record<string, unknown> {
+export function botSettings(count = 3, momentTyped = false): Record<string, unknown> {
   const songs = BOT_SONGS.slice(0, Math.max(1, Math.min(BOT_SONGS.length, count)))
   const extras = songs.length <= 3 ? 2 : 4
   return {
@@ -43,6 +43,7 @@ export function botSettings(count = 3): Record<string, unknown> {
       caption: song.caption,
       startAt: 30 + i * 15,
       note: '',
+      ...(momentTyped ? { moment: song.moment, alsoMoments: [song.alsoMoment] } : {}),
     })),
     extraPhotos: [
       { photo: 'rehearsal/soundtrack/extra-1.jpg', caption: 'A wedding, 2016' },
@@ -54,6 +55,7 @@ export function botSettings(count = 3): Record<string, unknown> {
     lastCallSeconds: 20,
     standingsEvery: songs.length <= 3 ? 2 : 4,
     hints: false,
+    ...(momentTyped ? { momentTyped: true } : {}),
     boardMax: 20,
     intro: `${SONG_WORDS[songs.length]} songs from a rehearsal.`,
     storyteller: 'The host',
@@ -66,7 +68,7 @@ const WRONG = ['Night Harbour', 'Glass Rain', 'Copper Sun', 'Lake Dancers', 'The
 
 /** The scripted host waits this long between its steps. */
 const STEP_MS = 3000
-const KEY = /^s(\d+)\.(title|singer|event)$/
+const KEY = /^s(\d+)\.(title|singer|event|moment)$/
 
 export const bot: GameBot = {
   /** The first 3 invented songs with sample photo paths, 2 extra photos and a short last call; everyone plays. */
@@ -188,7 +190,7 @@ function photoIn(payload: AnswerPayload | undefined): number | null {
 export function typed(n: number, part: TypedPart, random: () => number): string {
   const song = BOT_SONGS[n - 1]
   if (!song) return pick(WRONG, random)
-  const right = part === 'title' ? song.title : song.singer
+  const right = part === 'title' ? song.title : part === 'singer' ? song.singer : song.moment
   const roll = random()
   if (roll < 0.55) return random() < 0.5 ? right.toLowerCase() : right
   // A slip inside a word: with a leading "The" dropped, a word's first letter can be the answer's first, which must be right.

@@ -70,7 +70,7 @@ describe('the Lydspor scenes', () => {
     expect(pub).toMatchObject({ phase: 'standings', revealed: 4 })
     expect(pub.top.length).toBeGreaterThan(0)
     expect(pub.top.every((row) => !('credit' in row))).toBe(true)
-    expect(view!.songs[3]).toEqual({ n: 4, points: 4, event: 'right', title: 'exact', singer: 'exact' })
+    expect(view!.songs[3]).toEqual({ n: 4, points: 4, event: 'right', title: 'exact', singer: 'exact', moment: 'none' })
   })
 
   it('sit the operator and the storyteller out by the names the host typed, whatever their case', () => {
