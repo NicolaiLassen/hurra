@@ -75,7 +75,7 @@ describe("Lydspor's TV words", () => {
     expect(lockedLine('Ida')).toBe('Up first: song 1. Ida reveals the songs in order and tells each story.')
     expect(lockedLine('')).toBe('Up first: song 1. The songs are revealed in order, each with its story.')
     expect(storyLine('Ida')).toBe('Ida tells the story.')
-    expect(storyLine('')).toBe('Story time.')
+    expect(storyLine('')).toBeNull()
   })
 
   it('says where the round is in the strap', () => {

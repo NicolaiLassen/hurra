@@ -153,12 +153,14 @@ export default function Reveal({
             )}
           </motion.dl>
 
-          <motion.p
-            {...rise(0.65)}
-            className="mt-9 text-tv-band leading-[1.15] font-bold text-balance text-paper short:mt-6 short:text-tv-field low:mt-4 low:text-tv-tab"
-          >
-            {storyLine(pub.storyteller)}
-          </motion.p>
+          {storyLine(pub.storyteller) !== null && (
+            <motion.p
+              {...rise(0.65)}
+              className="mt-9 text-tv-band leading-[1.15] font-bold text-balance text-paper short:mt-6 short:text-tv-field low:mt-4 low:text-tv-tab"
+            >
+              {storyLine(pub.storyteller)}
+            </motion.p>
+          )}
         </div>
       </div>
     </div>

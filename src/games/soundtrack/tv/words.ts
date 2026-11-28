@@ -97,10 +97,10 @@ export function lockedLine(storyteller: string): string {
     : 'Up first: song 1. The songs are revealed in order, each with its story.'
 }
 
-/** The reveal's last line: "Ida tells the story.", or "Story time." without a storyteller. */
-export function storyLine(storyteller: string): string {
+/** The reveal's last line: "Ida tells the story.", or nothing without a storyteller (the host simply talks). */
+export function storyLine(storyteller: string): string | null {
   const name = storyteller.trim()
-  return name ? `${name} tells the story.` : 'Story time.'
+  return name ? `${name} tells the story.` : null
 }
 
 /** "have typed a title", or "has typed a title" for one. */
