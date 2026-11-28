@@ -16,8 +16,12 @@ import {
   winnerDeck,
   LAST_CALL_LINE,
   NOBODY_LINE,
+  MOMENT_PLAYING_LINE,
+  MOMENT_RULES,
   PLAYING_LINE,
+  pointChips,
   RULES,
+  rulesFor,
 } from './words'
 
 const PUB: SoundtrackPublicState = {
@@ -25,6 +29,7 @@ const PUB: SoundtrackPublicState = {
   total: 8,
   playedAt: [],
   wall: [],
+  momentTyped: false,
   points: { event: 2, title: 1, singer: 1 },
   lockAt: null,
   lockedAt: null,
@@ -48,6 +53,20 @@ describe("Lydspor's TV words", () => {
     expect(lobbyLine({ ...PUB, total: 12 })).toBe('Twelve songs, twelve events. Pair each song with its event.')
     expect(lobbyLine({ ...PUB, intro: '  Songs from a summer.  ' })).toBe('Songs from a summer.')
     expect(numberWord(13)).toBe('13')
+  })
+
+  it('names the moments in the lobby with typed moments on', () => {
+    const typed = { ...PUB, momentTyped: true }
+    expect(lobbyLine(typed)).toBe('Eight songs, eight moments. Name each song and its moment.')
+    expect(lobbyLine({ ...typed, total: 1 })).toBe('One song, one moment. Name the song and its moment.')
+    expect(rulesFor(true)).toBe(MOMENT_RULES)
+    expect(rulesFor(false)).toBe(RULES)
+    expect(pointChips(PUB.points).map((chip) => chip.label)).toEqual(['Event', 'Title', 'Singer'])
+    expect(pointChips(PUB.points, true)).toEqual([
+      { label: 'Moment', points: 2 },
+      { label: 'Title', points: 1 },
+      { label: 'Singer', points: 1 },
+    ])
   })
 
   it('names the storyteller where the spec does, and gets by without one', () => {
@@ -81,6 +100,8 @@ describe("Lydspor's TV words", () => {
       { part: 'singer', figure: '9 of 22', words: 'got the singer' },
     ])
     expect(revealCounts({ ...reveal, scoring: 0 })).toEqual([])
+    // Typed moments: the event's count is the moment's, and there is no letter.
+    expect(revealCounts({ ...reveal, event: 0 }, true)[0]).toEqual({ part: 'event', figure: '15 of 22', words: 'got the moment' })
     expect(NOBODY_LINE).toBe('Nobody answered this one.')
   })
 
@@ -114,7 +135,7 @@ describe("Lydspor's TV words", () => {
   })
 
   it('keeps the copy free of dashes and exclamation marks', () => {
-    const copy = [...RULES, PLAYING_LINE, LAST_CALL_LINE, NOBODY_LINE, lockedLine('Ida'), revealsLine('Ida'), storyLine('Ida')]
+    const copy = [...RULES, ...MOMENT_RULES, MOMENT_PLAYING_LINE, PLAYING_LINE, LAST_CALL_LINE, NOBODY_LINE, lockedLine('Ida'), revealsLine('Ida'), storyLine('Ida')]
     for (const line of copy) expect(line).not.toMatch(/[\u2013\u2014!]| - /)
   })
 })

@@ -130,17 +130,35 @@ export function doubledPhotos(events: Events): Map<number, number[]> {
 /** The parts of a song in the order the phone asks them. */
 export const PARTS: readonly SongPart[] = ['title', 'singer', 'event']
 
+/** With typed moments on: the moment first, then the title and singer; no photo to tap. */
+export const MOMENT_PARTS: readonly SongPart[] = ['moment', 'title', 'singer']
+
+/** The parts a song asks, in the phone's order: with typed moments on, the moment in place of the event. */
+export const songParts = (momentTyped: boolean): readonly SongPart[] => (momentTyped ? MOMENT_PARTS : PARTS)
+
+/** The typed fields of a song, in the phone's order. */
+export const typedFields = (momentTyped: boolean): readonly TypedPart[] =>
+  momentTyped ? ['moment', 'title', 'singer'] : ['title', 'singer']
+
 /** Parts answered of parts played: "13 of 15" on the board's tab. */
-export function answeredParts(played: number, has: (n: number, part: SongPart) => boolean): { answered: number; total: number } {
+export function answeredParts(
+  played: number,
+  has: (n: number, part: SongPart) => boolean,
+  parts: readonly SongPart[] = PARTS,
+): { answered: number; total: number } {
   let answered = 0
-  for (let n = 1; n <= played; n++) for (const part of PARTS) if (has(n, part)) answered++
-  return { answered, total: played * PARTS.length }
+  for (let n = 1; n <= played; n++) for (const part of parts) if (has(n, part)) answered++
+  return { answered, total: played * parts.length }
 }
 
 /** Every part of the songs played that has no answer yet, song by song: the last call's one-tap rows. */
-export function missingParts(played: number, has: (n: number, part: SongPart) => boolean): { n: number; part: SongPart }[] {
+export function missingParts(
+  played: number,
+  has: (n: number, part: SongPart) => boolean,
+  parts: readonly SongPart[] = PARTS,
+): { n: number; part: SongPart }[] {
   const missing: { n: number; part: SongPart }[] = []
-  for (let n = 1; n <= played; n++) for (const part of PARTS) if (!has(n, part)) missing.push({ n, part })
+  for (let n = 1; n <= played; n++) for (const part of parts) if (!has(n, part)) missing.push({ n, part })
   return missing
 }
 

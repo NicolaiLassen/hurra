@@ -1,6 +1,6 @@
 import { CheckIcon, XIcon } from '@phosphor-icons/react'
 import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
-import { MAX_TYPED, promptKey, type TypedPart } from '@/games/soundtrack/types'
+import { MAX_MOMENT_TYPED, MAX_TYPED, promptKey, type TypedPart } from '@/games/soundtrack/types'
 import { fieldState, type FieldState } from '@/games/soundtrack/typing'
 import { cn } from '@/lib/utils'
 import { FIELD_PART, FIELD_SONG, fieldId } from './model'
@@ -9,10 +9,13 @@ import type { Answers } from './useAnswers'
 // A song's two typed fields (spec 4.3 and 4.6.1), the same on Now playing and
 // in a board row: "1 Title" and "2 Who sings it", one under the other, so the
 // keyboard's Next moves from the title to the singer without closing. Each
-// saves when it is left (useAnswers), never per letter.
+// saves when it is left (useAnswers), never per letter. With typed moments
+// on, three: "1 Moment", "2 Title" and "3 Who sings it".
 
-const LABEL: Record<TypedPart, string> = { title: 'Title', singer: 'Who sings it' }
-const PLACEHOLDER: Record<TypedPart, string> = { title: 'Type the title', singer: 'Type the singer or band' }
+const LABEL: Record<TypedPart, string> = { title: 'Title', singer: 'Who sings it', moment: 'Moment' }
+const PLACEHOLDER: Record<TypedPart, string> = { title: 'Type the title', singer: 'Type the singer or band', moment: 'What happened?' }
+const MAX_LENGTH: Record<TypedPart, number> = { title: MAX_TYPED, singer: MAX_TYPED, moment: MAX_MOMENT_TYPED }
+const TWO_FIELDS: readonly TypedPart[] = ['title', 'singer']
 const STATE_WORD: Record<Exclude<FieldState, null>, string> = { saved: 'Saved', saving: 'Saving', unsent: 'Not sent' }
 
 export function SongFields({
@@ -23,6 +26,7 @@ export function SongFields({
   onFocusKey,
   onDone,
   outlined = [],
+  parts = TWO_FIELDS,
   className,
 }: {
   n: number
@@ -35,9 +39,15 @@ export function SongFields({
   onDone: () => void
   /** Labels outlined because their part is still missing ("Song 5 needs its title."). */
   outlined?: readonly TypedPart[]
+  /** The fields in order: the title and singer, or with typed moments on the moment, title and singer. */
+  parts?: readonly TypedPart[]
   className?: string
 }) {
-  const field = (part: TypedPart, number: number, enterKeyHint: 'next' | 'done') => {
+  const field = (part: TypedPart, index: number) => {
+    const number = index + 1
+    const following = parts[index + 1]
+    const enterKeyHint = following ? 'next' : 'done'
+
     const key = promptKey(n, part)
     const focused = focusedKey === key
     const value = answers.fieldText(n, part)
@@ -61,11 +71,11 @@ export function SongFields({
           answers.leave(n, part, text)
         }}
         onEnter={(input) => {
-          if (part === 'title') {
-            // Next: the singer takes the focus in this same handler, so the keyboard stays up. Leaving the title saves it.
-            document.getElementById(fieldId(idPrefix, n, 'singer'))?.focus()
+          if (following) {
+            // Next: the next field takes the focus in this same handler, so the keyboard stays up. Leaving this one saves it.
+            document.getElementById(fieldId(idPrefix, n, following))?.focus()
           } else {
-            // Done: leaving the singer saves it and closes the keyboard.
+            // Done: leaving the last field saves it and closes the keyboard.
             input.blur()
             onDone()
           }
@@ -76,8 +86,7 @@ export function SongFields({
   }
   return (
     <div className={cn('grid gap-3', className)}>
-      {field('title', 1, 'next')}
-      {field('singer', 2, 'done')}
+      {parts.map((part, index) => field(part, index))}
     </div>
   )
 }
@@ -161,11 +170,11 @@ function Field({
           name={`lydspor-s${n}-${part}`}
           type="text"
           inputMode="text"
-          autoCapitalize="words"
+          autoCapitalize={part === 'moment' ? 'sentences' : 'words'}
           autoCorrect="off"
           autoComplete="off"
           spellCheck={false}
-          maxLength={MAX_TYPED}
+          maxLength={MAX_LENGTH[part]}
           enterKeyHint={enterKeyHint}
           placeholder={PLACEHOLDER[part]}
           value={value}

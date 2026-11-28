@@ -32,6 +32,33 @@ export function PhotoImage({ src, className }: { src: string; className?: string
   )
 }
 
+/**
+ * A song's photo across the phone (the reveal, and Now playing with typed moments on): the thumbnail at once, then the
+ * full photo over it once it has loaded, so a real photo is sharp on a 3x
+ * screen. If the full one fails, the thumbnail stays.
+ */
+export function HeroPhoto({ thumb, full }: { thumb: string; full: string }) {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  return (
+    <>
+      <PhotoImage src={thumb} className="absolute inset-0 size-full" />
+      {full !== '' && (
+        <img
+          src={full}
+          alt=""
+          decoding="async"
+          draggable={false}
+          onLoad={() => setLoaded(full)}
+          className={cn(
+            'absolute inset-0 size-full object-cover transition-opacity duration-300 motion-reduce:transition-none',
+            loaded === full ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      )}
+    </>
+  )
+}
+
 /** A photo's tilted letter chip, paper with ink, as on the TV. */
 export function LetterChip({ index, size = 'tile', className }: { index: number; size?: 'tile' | 'small' | 'hero'; className?: string }) {
   return (

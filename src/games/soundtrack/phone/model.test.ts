@@ -12,6 +12,8 @@ import {
   IDLE_MS,
   keyboardScroll,
   missingParts,
+  songParts,
+  typedFields,
   photoChoice,
   planPhoto,
   settleLedger,
@@ -126,6 +128,16 @@ describe('answeredParts and missingParts', () => {
       { n: 3, part: 'singer' },
       { n: 3, part: 'event' },
     ])
+  })
+
+  it('asks the moment first and no photo with typed moments on', () => {
+    expect(songParts(false)).toEqual(['title', 'singer', 'event'])
+    expect(songParts(true)).toEqual(['moment', 'title', 'singer'])
+    expect(typedFields(false)).toEqual(['title', 'singer'])
+    expect(typedFields(true)).toEqual(['moment', 'title', 'singer'])
+    const typed = (n: number, part: string) => part !== 'event' && !(n === 2 && part === 'moment')
+    expect(answeredParts(2, typed, songParts(true))).toEqual({ answered: 5, total: 6 })
+    expect(missingParts(2, typed, songParts(true))).toEqual([{ n: 2, part: 'moment' }])
   })
 })
 

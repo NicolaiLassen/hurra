@@ -7,6 +7,7 @@ import {
   laterLine,
   MISSING_ASK,
   namedLine,
+  needsLine,
   nextLine,
   partLine,
   payoutLine,
@@ -30,6 +31,9 @@ describe('the lobby', () => {
     expect(introLine('', 8)).toBe('Eight songs, eight events. Pair each song with its event.')
     expect(introLine('', 8)).toBe('Eight songs, eight events. Pair each song with its event.')
     expect(introLine('', 1)).toBe('One song, one event. Pair the song with its event.')
+    expect(introLine('', 8, true)).toBe('Eight songs, eight moments. Name each song and its moment.')
+    expect(introLine('', 1, true)).toBe('One song, one moment. Name the song and its moment.')
+    expect(introLine(' Our summer. ', 8, true)).toBe('Our summer.')
   })
 
   it('says who reveals the songs', () => {
@@ -47,7 +51,7 @@ describe('the board', () => {
   })
 
   it('asks for each missing part', () => {
-    expect(MISSING_ASK).toEqual({ title: 'what is it called?', singer: 'who sings it?', event: 'which event?' })
+    expect(MISSING_ASK).toEqual({ title: 'what is it called?', singer: 'who sings it?', event: 'which event?', moment: 'what happened?' })
   })
 
   it('says what a song still needs after its photo', () => {
@@ -55,6 +59,13 @@ describe('the board', () => {
     expect(namedLine(5, false, true)).toBe('Song 5 needs its title.')
     expect(namedLine(5, true, false)).toBe('Song 5 needs its singer.')
     expect(namedLine(5, false, false)).toBe('Song 5 needs its title and singer.')
+  })
+
+  it('says what a song still needs with typed moments on', () => {
+    expect(needsLine(5, [])).toBe('Song 5 is named.')
+    expect(needsLine(5, ['moment'])).toBe('Song 5 needs its moment.')
+    expect(needsLine(5, ['title', 'singer'])).toBe('Song 5 needs its title and singer.')
+    expect(needsLine(5, ['moment', 'title', 'singer'])).toBe('Song 5 needs its moment, title and singer.')
   })
 })
 
@@ -127,6 +138,14 @@ describe('the reveal', () => {
     const gaps = { event: [1, null], title: ['Papir Lanterner', null], singer: ['Mira', 'coldwave'] }
     expect(nextLine(2, gaps)).toEqual({ lead: 'Song 2 is next.', have: 'no photo, no title and “coldwave”' })
     expect(nextLine(2, null)).toEqual({ lead: 'Song 2 is next.', have: null })
+  })
+
+  it('says the typed moment first on the next song with typed moments on, never a photo', () => {
+    const mine = { event: [null, null], title: ['Papir Lanterner', null], singer: ['Mira', 'coldwave'], moment: ['harbour', 'Berlin roadtrip'] }
+    expect(nextLine(2, mine, true)).toEqual({ lead: 'Song 2 is next.', have: '“Berlin roadtrip”, no title and “coldwave”' })
+    const none = { event: [null, null], title: [null, null], singer: [null, null], moment: [null, null] }
+    expect(nextLine(2, none, true)).toEqual({ lead: 'Song 2 is next.', have: null })
+    expect(nextLine(2, { ...none, moment: undefined, singer: [null, 'x'] }, true)).toEqual({ lead: 'Song 2 is next.', have: 'no moment, no title and “x”' })
   })
 
   it('gives the place only once the guest has scored', () => {

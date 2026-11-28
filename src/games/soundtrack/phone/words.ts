@@ -12,10 +12,18 @@ export function songsWord(count: number): string {
   return `${number} ${count === 1 ? 'song' : 'songs'}`
 }
 
-/** The lobby's first line: the host's intro, else "Eight songs, eight events. Pair each song with its event." */
-export function introLine(intro: string, total: number): string {
+/**
+ * The lobby's first line: the host's intro, else "Eight songs, eight events.
+ * Pair each song with its event." With typed moments on, "Eight songs, eight
+ * moments. Name each song and its moment."
+ */
+export function introLine(intro: string, total: number, momentTyped = false): string {
   const own = intro.trim()
   if (own !== '') return own
+  if (momentTyped) {
+    if (total === 1) return 'One song, one moment. Name the song and its moment.'
+    return `${songsWord(total)}, ${(NUMBER_WORDS[total] ?? String(total)).toLowerCase()} moments. Name each song and its moment.`
+  }
   if (total === 1) return 'One song, one event. Pair the song with its event.'
   const events = `${(NUMBER_WORDS[total] ?? String(total)).toLowerCase()} events`
   return `${songsWord(total)}, ${events}. Pair each song with its event.`
@@ -62,16 +70,33 @@ export const MISSING_ASK: Record<SongPart, string> = {
   title: 'what is it called?',
   singer: 'who sings it?',
   event: 'which event?',
+  moment: 'what happened?',
 }
 
 /** The cell of an empty part on the board, still open: "Type a title". */
-export const EMPTY_CELL: Record<SongPart, string> = { title: 'Type a title', singer: 'Type a singer', event: 'Pick an event' }
+export const EMPTY_CELL: Record<SongPart, string> = {
+  title: 'Type a title',
+  singer: 'Type a singer',
+  event: 'Pick an event',
+  moment: 'Type the moment',
+}
 
 /** After the photo on Now playing (spec 4.4): "Song 5 is named.", or what it still needs. */
 export function namedLine(n: number, hasTitle: boolean, hasSinger: boolean): string {
   if (hasTitle && hasSinger) return `Song ${n} is named.`
   if (!hasTitle && !hasSinger) return `Song ${n} needs its title and singer.`
   return `Song ${n} needs its ${hasTitle ? 'singer' : 'title'}.`
+}
+
+/** The words for a part in a list: "Song 5 needs its moment and title." */
+const NEED_WORD: Record<SongPart, string> = { title: 'title', singer: 'singer', event: 'event', moment: 'moment' }
+
+/** With typed moments on, after the fields: "Song 5 is named.", or what it still needs ("its moment, title and singer"). */
+export function needsLine(n: number, missing: readonly SongPart[]): string {
+  if (missing.length === 0) return `Song ${n} is named.`
+  const words = missing.map((part) => NEED_WORD[part])
+  const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
+  return `Song ${n} needs its ${list}.`
 }
 
 /** The swap toast's two lines (spec 4.7), with the letters of the photos. */
@@ -127,12 +152,19 @@ export const gotItLine = (count: number, of: number) => `${count} of ${of} got i
  * a missing part says so), as its lead and what the guest has, which the
  * phone sets in bold. `have` is null with no answer at all.
  */
-export function nextLine(n: number, mine: Picks | null): { lead: string; have: string | null } {
+export function nextLine(n: number, mine: Picks | null, momentTyped = false): { lead: string; have: string | null } {
   const i = n - 1
   const photo = mine?.event[i] ?? null
   const title = mine?.title[i] ?? null
   const singer = mine?.singer[i] ?? null
   const lead = `Song ${n} is next.`
+  if (momentTyped) {
+    // The moment as typed, then the title and singer: "“Berlin roadtrip”, no title and “coldwave”".
+    const moment = mine?.moment?.[i] ?? null
+    if (moment === null && title === null && singer === null) return { lead, have: null }
+    const parts = [moment === null ? 'no moment' : quoted(moment), title === null ? 'no title' : quoted(title), singer === null ? 'no singer' : quoted(singer)]
+    return { lead, have: `${parts[0]}, ${parts[1]} and ${parts[2]}` }
+  }
   if (photo === null && title === null && singer === null) return { lead, have: null }
   const parts = [photo === null ? 'no photo' : `photo ${letterOf(photo)}`, title === null ? 'no title' : quoted(title), singer === null ? 'no singer' : quoted(singer)]
   return { lead, have: `${parts[0]}, ${parts[1]} and ${parts[2]}` }

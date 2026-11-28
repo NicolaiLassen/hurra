@@ -26,7 +26,8 @@ export type PhotoNote = { n: number; photo: number; words: string; offline: bool
 
 type TextSave = { n: number; part: TypedPart; text: string }
 
-const TYPED: readonly TypedPart[] = ['title', 'singer']
+/** Every typed part a draft may be kept for: the moment only ever has one with typed moments on. */
+const TYPED: readonly TypedPart[] = ['title', 'singer', 'moment']
 
 const without = <T>(record: Record<string, T>, key: string): Record<string, T> => {
   if (!(key in record)) return record

@@ -16,9 +16,14 @@ export function numberWord(n: number): string {
 export const plural = (n: number, word: string, words = `${word}s`) => `${n} ${n === 1 ? word : words}`
 
 /** The lobby's first line: the host's intro, else "Eight songs, eight events. Pair each song with its event." */
-export function lobbyLine(pub: Pick<SoundtrackPublicState, 'intro' | 'storyteller' | 'total'>): string {
+export function lobbyLine(pub: Pick<SoundtrackPublicState, 'intro' | 'storyteller' | 'total'> & { momentTyped?: boolean }): string {
   const intro = pub.intro.trim()
   if (intro) return intro
+  if (pub.momentTyped) {
+    if (pub.total === 1) return 'One song, one moment. Name the song and its moment.'
+    const n = numberWord(pub.total)
+    return `${n} songs, ${n.toLowerCase()} moments. Name each song and its moment.`
+  }
   if (pub.total === 1) return 'One song, one event. Pair the song with its event.'
   const n = numberWord(pub.total)
   return `${n} songs, ${n.toLowerCase()} events. Pair each song with its event.`
@@ -31,10 +36,20 @@ export const RULES = [
   'Each photo fits one song. Some photos fit none.',
 ] as const
 
-/** The points a song gives, as the lobby's chips: Event +2, Title +1, Singer +1. */
-export function pointChips(points: SoundtrackPoints): { label: string; points: number }[] {
+/** The rules with typed moments on: each song shows its own photo, and the phones type its moment. */
+export const MOMENT_RULES = [
+  'A song plays and its photo shows. Type the moment, the title and who sings it.',
+  'Close spelling counts. Any song can change until the last call.',
+  'Each song has its own photo. The moment is what happened in it.',
+] as const
+
+/** The lobby's rules for the mode. */
+export const rulesFor = (momentTyped: boolean): readonly string[] => (momentTyped ? MOMENT_RULES : RULES)
+
+/** The points a song gives, as the lobby's chips: Event +2, Title +1, Singer +1 (Moment +2 with typed moments on). */
+export function pointChips(points: SoundtrackPoints, momentTyped = false): { label: string; points: number }[] {
   return [
-    { label: 'Event', points: points.event },
+    { label: momentTyped ? 'Moment' : 'Event', points: points.event },
     { label: 'Title', points: points.title },
     { label: 'Singer', points: points.singer },
   ]
@@ -48,6 +63,9 @@ export function revealsLine(storyteller: string): string {
 
 /** Under "Song 5 is playing.": what to do, and that nothing is final yet. */
 export const PLAYING_LINE = 'Type its title and who sings it on your phone, and tap its photo. Any song can change until the last call.'
+
+/** Under "Song 5 is playing." with typed moments on. */
+export const MOMENT_PLAYING_LINE = 'Type its moment, its title and who sings it on your phone. Any song can change until the last call.'
 
 /** Under the last call's countdown (the strap says Last call). */
 export const LAST_CALL_LINE = 'Check every song on your phone now. Then all the answers lock.'
@@ -76,11 +94,12 @@ export type RevealCount = { part: 'event' | 'title' | 'singer'; figure: string; 
  * The reveal's three counts, of the guests who could score on this song (the
  * host's accepts included). Empty when nobody could: the screen then says so.
  */
-export function revealCounts(reveal: Pick<SoundtrackReveal, 'counts' | 'scoring' | 'event'>): RevealCount[] {
+export function revealCounts(reveal: Pick<SoundtrackReveal, 'counts' | 'scoring' | 'event'>, momentTyped = false): RevealCount[] {
   if (reveal.scoring <= 0) return []
   const of = (n: number) => `${n} of ${reveal.scoring}`
+  const event = momentTyped ? 'got the moment' : reveal.event >= 0 ? `got the event, photo ${letterOf(reveal.event)}` : 'got the event'
   return [
-    { part: 'event', figure: of(reveal.counts.event), words: reveal.event >= 0 ? `got the event, photo ${letterOf(reveal.event)}` : 'got the event' },
+    { part: 'event', figure: of(reveal.counts.event), words: event },
     { part: 'title', figure: of(reveal.counts.title), words: 'got the title' },
     { part: 'singer', figure: of(reveal.counts.singer), words: 'got the singer' },
   ]

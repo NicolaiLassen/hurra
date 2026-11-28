@@ -1,10 +1,9 @@
 import { CheckIcon } from '@phosphor-icons/react'
-import { useState } from 'react'
 import { ordinal } from '@/components/phone/text'
 import { pointsPerSong } from '@/games/soundtrack/logic'
 import { letterOf, type SoundtrackPlayerView, type SoundtrackPublicState } from '@/games/soundtrack/types'
 import { cn } from '@/lib/utils'
-import { LetterChip, PhotoImage } from './Wall'
+import { HeroPhoto, LetterChip } from './Wall'
 import { eventLine, gotItLine, nextLine, partCounts, partLine, soFarWords, storyLine } from './words'
 
 // The reveal on a guest's phone (spec 4.11), for the song just revealed: the
@@ -12,7 +11,9 @@ import { eventLine, gotItLine, nextLine, partCounts, partLine, soFarWords, story
 // part by part, with what they typed and whether it counted; their Lydspor
 // points and place; a tally of every song; and what they have on the next.
 // When the host accepts a close answer during the story, the row turns to
-// paper in place: no sound, no toast.
+// paper in place: no sound, no toast. With typed moments on, the photo is the
+// song's own (no letter) and the moment's row comes first, with what the
+// guest typed for it.
 
 /** Sets the quoted typed text in a line in bold: “Papir Lanterner”. */
 function withQuotes(line: string, counted: boolean) {
@@ -50,7 +51,8 @@ export function Reveal({
   const head = standings ? 'Lydspor’s top 5 is on the TV.' : storyLine(pub.storyteller)
   const points = view?.points ?? 0
   const place = view?.rank ? ordinal(view.rank) : null
-  const next = reveal.n < played ? nextLine(reveal.n + 1, mine) : null
+  const typed = pub.momentTyped
+  const next = reveal.n < played ? nextLine(reveal.n + 1, mine, typed) : null
 
   return (
     <div className="grid grid-cols-1">
@@ -64,8 +66,8 @@ export function Reveal({
 
       <div className="relative mt-3 h-[132px] overflow-hidden rounded-phone bg-overlay">
         {photo && <HeroPhoto thumb={mediaUrl(photo.path, 'thumb')} full={mediaUrl(photo.path, 'full')} />}
-        {reveal.event >= 0 && <LetterChip index={reveal.event} size="hero" />}
-        {reveal.caption && (
+        {!typed && reveal.event >= 0 && <LetterChip index={reveal.event} size="hero" />}
+        {!typed && reveal.caption && (
           <span className="absolute bottom-3 left-0 z-[2] h-8 max-w-[calc(100%-1rem)] truncate bg-paper pr-3.5 pl-3 text-[17px] leading-8 font-extrabold text-ink">
             {reveal.caption}
           </span>
@@ -73,14 +75,26 @@ export function Reveal({
       </div>
 
       <ul className="mt-2.5 grid gap-1.5" aria-label={`How song ${reveal.n} went for you`}>
-        <ResultRow
-          label="Event"
-          truth={reveal.event >= 0 ? `Photo ${letterOf(reveal.event)}` : 'The photo'}
-          counted={song?.event === 'right'}
-          points={pub.points.event}
-          sub={eventLine(song?.event ?? 'none', mine?.event[i] ?? null)}
-          count={gotItLine(reveal.counts.event, reveal.scoring)}
-        />
+        {typed ? (
+          <ResultRow
+            label="Moment"
+            truth={reveal.moment}
+            counted={partCounts(song?.moment ?? 'none')}
+            points={pub.points.event}
+            sub={partLine(song?.moment ?? 'none', mine?.moment?.[i] ?? null)}
+            count={gotItLine(reveal.counts.event, reveal.scoring)}
+            wide
+          />
+        ) : (
+          <ResultRow
+            label="Event"
+            truth={reveal.event >= 0 ? `Photo ${letterOf(reveal.event)}` : 'The photo'}
+            counted={song?.event === 'right'}
+            points={pub.points.event}
+            sub={eventLine(song?.event ?? 'none', mine?.event[i] ?? null)}
+            count={gotItLine(reveal.counts.event, reveal.scoring)}
+          />
+        )}
         <ResultRow
           label="Title"
           truth={reveal.title}
@@ -88,6 +102,7 @@ export function Reveal({
           points={pub.points.title}
           sub={partLine(song?.title ?? 'none', mine?.title[i] ?? null)}
           count={gotItLine(reveal.counts.title, reveal.scoring)}
+          wide={typed}
         />
         <ResultRow
           label="Singer"
@@ -96,6 +111,7 @@ export function Reveal({
           points={pub.points.singer}
           sub={partLine(song?.singer ?? 'none', mine?.singer[i] ?? null)}
           count={gotItLine(reveal.counts.singer, reveal.scoring)}
+          wide={typed}
         />
       </ul>
 
@@ -118,33 +134,6 @@ export function Reveal({
   )
 }
 
-/**
- * The revealed song's photo across the phone: the thumbnail at once, then the
- * full photo over it once it has loaded, so a real photo is sharp on a 3x
- * screen. If the full one fails, the thumbnail stays.
- */
-function HeroPhoto({ thumb, full }: { thumb: string; full: string }) {
-  const [loaded, setLoaded] = useState<string | null>(null)
-  return (
-    <>
-      <PhotoImage src={thumb} className="absolute inset-0 size-full" />
-      {full !== '' && (
-        <img
-          src={full}
-          alt=""
-          decoding="async"
-          draggable={false}
-          onLoad={() => setLoaded(full)}
-          className={cn(
-            'absolute inset-0 size-full object-cover transition-opacity duration-300 motion-reduce:transition-none',
-            loaded === full ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-      )}
-    </>
-  )
-}
-
 /** One part of the song just revealed: on paper with a check and its points when it counted, else on the overlay with 0. */
 function ResultRow({
   label,
@@ -153,6 +142,7 @@ function ResultRow({
   points,
   sub,
   count,
+  wide = false,
 }: {
   label: string
   truth: string
@@ -160,6 +150,8 @@ function ResultRow({
   points: number
   sub: string | null
   count: string
+  /** Room for the longer "Moment" label (typed moments on), the same on every row. */
+  wide?: boolean
 }) {
   return (
     <li
@@ -168,7 +160,13 @@ function ResultRow({
         counted ? 'bg-paper text-ink' : 'bg-overlay',
       )}
     >
-      <span className={cn('w-[62px] shrink-0 on-air text-[13px] max-[379px]:w-[54px] max-[379px]:text-[12px]', counted ? 'text-ink' : 'text-paper-2')}>
+      <span
+        className={cn(
+          'shrink-0 on-air text-[13px] max-[379px]:text-[12px]',
+          wide ? 'w-[80px] max-[379px]:w-[70px]' : 'w-[62px] max-[379px]:w-[54px]',
+          counted ? 'text-ink' : 'text-paper-2',
+        )}
+      >
         {label}
       </span>
       <div className="min-w-0 flex-1">

@@ -22,7 +22,7 @@ export default function TvStatus(props: TvStatusProps<SoundtrackGame>) {
 
 TvStatus.variants = ['band', 'strap'] as const
 
-/** One line on the round: the titles typed for the song playing, or how many got the latest reveal's photo. */
+/** One line on the round: the titles typed for the song playing, or how many got the latest reveal's photo (its moment, with typed moments on). */
 function Detail({ pub, tallies }: { pub: SoundtrackPublicState; tallies: TvStatusProps['tallies'] }) {
   const n = pub.playedAt.length
   if (pub.phase === 'playing' && n > 0) {
@@ -36,7 +36,7 @@ function Detail({ pub, tallies }: { pub: SoundtrackPublicState; tallies: TvStatu
   if ((pub.phase === 'reveal' || pub.phase === 'standings') && pub.reveal && pub.reveal.scoring > 0) {
     return (
       <>
-        <strong>{pub.reveal.counts.event}</strong> of {pub.reveal.scoring} got song {pub.reveal.n}'s event
+        <strong>{pub.reveal.counts.event}</strong> of {pub.reveal.scoring} got song {pub.reveal.n}'s {pub.momentTyped ? 'moment' : 'event'}
       </>
     )
   }

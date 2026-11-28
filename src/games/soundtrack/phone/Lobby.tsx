@@ -14,6 +14,15 @@ const RULES: ReactNode[] = [
   'Each photo fits one song. Some photos fit none.',
 ]
 
+/** The rules with typed moments on: each song shows its own photo, and the guest types its moment. */
+const MOMENT_RULES: ReactNode[] = [
+  <>
+    A song plays and its photo shows. Type the <b>moment</b>, the song’s <b>title</b> and <b>who sings it</b>.
+  </>,
+  'Close spelling counts. Change any song until the last call.',
+  'Each song has its own photo. The moment is what happened in it.',
+]
+
 export function Lobby({
   pub,
   onStage,
@@ -35,17 +44,17 @@ export function Lobby({
   }, [paths, mediaUrl])
 
   const chips = [
-    ['Event', pub.points.event],
+    [pub.momentTyped ? 'Moment' : 'Event', pub.points.event],
     ['Title', pub.points.title],
     ['Singer', pub.points.singer],
   ] as const
 
   return (
     <div className="grid grid-cols-1">
-      <p className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em] text-balance">{introLine(pub.intro, pub.total)}</p>
+      <p className="text-[24px] leading-[1.12] font-extrabold tracking-[-0.01em] text-balance">{introLine(pub.intro, pub.total, pub.momentTyped)}</p>
       <p className="mt-1.5 text-base leading-snug text-paper-2">{onStage ? 'Look at the TV. Song 1 starts soon.' : 'Song 1 starts soon.'}</p>
       <ol className="mt-3.5 border-t border-rule">
-        {RULES.map((rule, i) => (
+        {(pub.momentTyped ? MOMENT_RULES : RULES).map((rule, i) => (
           <li key={i} className="grid grid-cols-[30px_minmax(0,1fr)] gap-2 border-b border-rule py-[11px] text-[17px] leading-[1.3]">
             <span aria-hidden className="text-[24px] leading-none text-paper-3 tv-num">
               {i + 1}

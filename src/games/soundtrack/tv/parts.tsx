@@ -39,14 +39,14 @@ export function Photo({ path, mediaUrl, alt, className }: { path: string; mediaU
 /** Each chip sits at its own small tilt, like the quiz's letters: only tabs, letter chips and hero tokens tilt. */
 const TILTS = ['-rotate-3', 'rotate-2', '-rotate-2', 'rotate-3'] as const
 
-/** A photo's letter on a paper chip, in wide Archivo, tilted. Size and place come from `className`. */
-export function LetterChip({ index, className }: { index: number; className?: string }) {
+/** A photo's letter (or `label`, a song's number) on a paper chip, in wide Archivo, tilted. Size and place come from `className`. */
+export function LetterChip({ index, label, className }: { index: number; label?: string; className?: string }) {
   return (
     <span
       aria-hidden
       className={cn('grid shrink-0 place-items-center rounded-chip bg-paper wide leading-none text-ink', TILTS[index % TILTS.length], className)}
     >
-      {letterOf(index)}
+      {label ?? letterOf(index)}
     </span>
   )
 }
@@ -60,10 +60,13 @@ export function LetterChip({ index, className }: { index: number; className?: st
 export function Wall({
   wall,
   mediaUrl,
+  songs,
   className,
 }: {
   wall: readonly { path: string; hint: string | null }[]
   mediaUrl: MediaUrl
+  /** Typed moments: each photo's song number, on its chip in place of a letter. */
+  songs?: readonly number[]
   className?: string
 }) {
   const [ref, { width, height }] = useElementSize<HTMLDivElement>()
@@ -73,18 +76,30 @@ export function Wall({
     <div ref={ref} className={cn('min-h-0 min-w-0', className)}>
       {grid.tileWidth > 0 && (
         <ol
-          aria-label="The photos"
+          aria-label={songs ? 'The songs’ photos' : 'The photos'}
           className="grid h-full content-start justify-end"
           style={{ gridTemplateColumns: `repeat(${grid.columns}, ${grid.tileWidth}px)`, gridAutoRows: `${grid.tileHeight}px`, gap }}
         >
           {wall.map((photo, i) => (
             <li key={i} className="@container relative overflow-hidden rounded-tile bg-overlay">
-              <Photo path={photo.path} mediaUrl={mediaUrl} alt={`Photo ${letterOf(i)}`} className="absolute inset-0 size-full" />
+              <Photo
+                path={photo.path}
+                mediaUrl={mediaUrl}
+                alt={songs ? `Song ${songs[i]}’s photo` : `Photo ${letterOf(i)}`}
+                className="absolute inset-0 size-full"
+              />
               {/* The chip and its letter never go under the TV's floor, however small the tile; nor does a hint, on a band across the
                   photo's foot: two lines at most, one on a small tile (720p), so the photo stays in sight. */}
               <LetterChip
                 index={i}
-                className="absolute top-[5cqw] left-[5cqw] size-[max(2.75rem,19cqw)] text-[length:max(var(--text-tv-floor),12cqw)]"
+                label={songs ? String(songs[i]) : undefined}
+                className={cn(
+                  'absolute',
+                  // A song's number stays chip sized on one large photo.
+                  songs
+                    ? 'top-[min(5cqw,2rem)] left-[min(5cqw,2rem)] size-[max(2.75rem,min(19cqw,7.5rem))] text-[length:max(var(--text-tv-floor),min(12cqw,4.75rem))]'
+                    : 'top-[5cqw] left-[5cqw] size-[max(2.75rem,19cqw)] text-[length:max(var(--text-tv-floor),12cqw)]',
+                )}
               />
               {photo.hint && (
                 <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-paper px-[4cqw] py-[1.5cqw] text-[length:max(var(--text-tv-floor),9cqw)] leading-[1.12] font-bold break-words text-ink @max-[12rem]:line-clamp-1 @max-[12rem]:break-all">

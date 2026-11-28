@@ -1,6 +1,6 @@
 import { LockSimpleIcon, PlusIcon } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
-import { letterOf, type SongPart, type TypedPart } from '@/games/soundtrack/types'
+import { letterOf, type TypedPart } from '@/games/soundtrack/types'
 import { cn } from '@/lib/utils'
 import { LetterChip, PhotoImage } from './Wall'
 import { EMPTY_CELL } from './words'
@@ -9,7 +9,9 @@ import { EMPTY_CELL } from './words'
 // with the clock time it started, the photo with its letter, and the title
 // and singer as the guest typed them (never corrected). Every cell opens
 // what changes it until the lock; then the board is flat and read-only.
-// Under 380 px the title and singer stack in each row.
+// Under 380 px the title and singer stack in each row. With typed moments on,
+// the photo is the song's own (no letter, no swaps), and the moment sits
+// above the title and singer.
 
 export type BoardRow = {
   n: number
@@ -21,6 +23,8 @@ export type BoardRow = {
   photo: number | null
   title: string | null
   singer: string | null
+  /** The typed moment, with typed moments on; else null. */
+  moment: string | null
   /** Text typed but not sent (a refusal, no connection, a reload). */
   unsent: readonly TypedPart[]
   /** "Swapped" on the photo for a few seconds after a swap. */
@@ -35,6 +39,7 @@ export function Board({
   rows,
   wall,
   thumbUrl,
+  momentTyped = false,
   locked = false,
   open = null,
   panel,
@@ -44,6 +49,8 @@ export function Board({
   rows: readonly BoardRow[]
   wall: readonly { path: string }[]
   thumbUrl: (path: string) => string
+  /** Typed moments: each row's photo is wall[n - 1], and the moment is a typed cell. */
+  momentTyped?: boolean
   /** After the lock: flat cells, a lock under each number, no press state. */
   locked?: boolean
   /** The row opened for typing, and its cell. */
@@ -57,18 +64,29 @@ export function Board({
     <div className="grid grid-cols-1">
       <div aria-hidden className={cn(GRID, 'max-[379px]:hidden')}>
         <span />
-        {['Event', 'Title', 'Singer'].map((head) => (
-          <span key={head} className="on-air text-[13px] text-paper-2">
-            {head}
-          </span>
-        ))}
+        {momentTyped ? (
+          <>
+            <span className="on-air text-[13px] text-paper-2">Photo</span>
+            <span className="col-span-2 on-air text-[13px] text-paper-2">Moment, title, singer</span>
+          </>
+        ) : (
+          ['Event', 'Title', 'Singer'].map((head) => (
+            <span key={head} className="on-air text-[13px] text-paper-2">
+              {head}
+            </span>
+          ))
+        )}
       </div>
       <ol aria-label="Your board" className="mt-1.5 grid grid-cols-1 gap-1.5 max-[379px]:mt-0">
         {rows.map((row) => {
           const opened = open?.n === row.n
           return (
             <li key={row.n} className="grid grid-cols-1 gap-1.5">
-              <Row row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} openPart={opened ? open.part : null} onEvent={onEvent} onCell={onCell} />
+              {momentTyped ? (
+                <TypedRow row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} openPart={opened ? open.part : null} onCell={onCell} />
+              ) : (
+                <Row row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} openPart={opened ? open.part : null} onEvent={onEvent} onCell={onCell} />
+              )}
               {row.doubled && row.photo !== null && (
                 <p className="pl-9 text-sm font-semibold">Photo {letterOf(row.photo)} is on 2 songs. Pick one for each.</p>
               )}
@@ -109,6 +127,52 @@ function Row({
     >
       <SongNumber row={row} locked={locked} />
       <Thumb row={row} wall={wall} thumbUrl={thumbUrl} locked={locked} onEvent={onEvent} />
+      <Cell row={row} part="title" locked={locked} selected={openPart === 'title'} onCell={onCell} />
+      <Cell row={row} part="singer" locked={locked} selected={openPart === 'singer'} onCell={onCell} />
+    </div>
+  )
+}
+
+/** A row with typed moments on: the song's own photo, the moment across, the title and singer under it. */
+function TypedRow({
+  row,
+  wall,
+  thumbUrl,
+  locked,
+  openPart,
+  onCell,
+}: {
+  row: BoardRow
+  wall: readonly { path: string }[]
+  thumbUrl: (path: string) => string
+  locked: boolean
+  openPart: TypedPart | null
+  onCell?: (n: number, part: TypedPart) => void
+}) {
+  const photo = wall[row.n - 1]
+  const box = 'relative overflow-hidden rounded-[10px] bg-overlay row-span-2 max-[379px]:row-span-3'
+  const inner = photo ? <PhotoImage src={thumbUrl(photo.path)} className="absolute inset-0 size-full" /> : null
+  return (
+    <div
+      className={cn(
+        GRID,
+        'grid-rows-2 h-[114px] max-[379px]:h-[170px] max-[379px]:grid-rows-3',
+        openPart && 'max-[379px]:hidden',
+      )}
+    >
+      <div className="row-span-2 grid max-[379px]:row-span-3">
+        <SongNumber row={row} locked={locked} />
+      </div>
+      {locked ? (
+        <div className={box}>{inner}</div>
+      ) : (
+        <button type="button" aria-label={`Song ${row.n}: its photo. Type the moment`} className={box} onClick={() => onCell?.(row.n, 'moment')}>
+          {inner}
+        </button>
+      )}
+      <div className="col-span-2 grid min-w-0 grid-cols-1 max-[379px]:col-span-1">
+        <Cell row={row} part="moment" locked={locked} selected={openPart === 'moment'} onCell={onCell} />
+      </div>
       <Cell row={row} part="title" locked={locked} selected={openPart === 'title'} onCell={onCell} />
       <Cell row={row} part="singer" locked={locked} selected={openPart === 'singer'} onCell={onCell} />
     </div>
@@ -203,7 +267,7 @@ function Cell({
 }) {
   const text = row[part]
   const unsent = row.unsent.includes(part)
-  const name = `Song ${row.n}: ${part === 'title' ? 'title' : 'singer'}`
+  const name = `Song ${row.n}: ${part}`
   if (text === null && !unsent) {
     if (locked) {
       return (
@@ -215,7 +279,7 @@ function Cell({
     return (
       <button
         type="button"
-        aria-label={`${name}. ${EMPTY_CELL[part as SongPart]}`}
+        aria-label={`${name}. ${EMPTY_CELL[part]}`}
         onClick={() => onCell?.(row.n, part)}
         className={cn(
           'flex min-w-0 items-center gap-1.5 rounded-[10px] px-2 text-left text-[15px] leading-[1.12] font-bold text-paper-2 shadow-[inset_0_0_0_2px_var(--color-rule)] active:bg-overlay',
@@ -223,7 +287,7 @@ function Cell({
         )}
       >
         <PlusIcon weight="bold" className="size-4 shrink-0" />
-        <span className="line-clamp-2 max-[379px]:line-clamp-1">{EMPTY_CELL[part as SongPart]}</span>
+        <span className="line-clamp-2 max-[379px]:line-clamp-1">{EMPTY_CELL[part]}</span>
       </button>
     )
   }
@@ -233,7 +297,7 @@ function Cell({
         <span
           className={cn(
             'line-clamp-2 text-base leading-[1.12] [overflow-wrap:anywhere] max-[379px]:line-clamp-1',
-            part === 'title' ? 'font-bold' : 'font-medium',
+            part === 'singer' ? 'font-medium' : 'font-bold',
           )}
         >
           {text}
