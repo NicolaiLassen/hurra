@@ -15,7 +15,10 @@
 // public from its Play on, the moment a secret until its reveal. With the AI
 // check on (aiCheck), the host sometimes sends the `ai` action itself, with
 // made-up yeses (the AI call is the server's, never here): a yes accepts a
-// close or wrong row the host hasn't decided, once per lock.
+// close or wrong row the host hasn't decided, once per lock. With typed
+// moments on the wall (momentPhoto 'wall'), the photo is placed on the wall
+// as with them off (the event's points) and the moment typed as well, with
+// points.moment of its own: four parts per song, each scoring on its own.
 import { botSight, hostBotSight } from '../../../src/games/core/contract'
 import type { AnswerPayload, PlayerId } from '../../../src/games/core/Game'
 import type { Step } from '../../../src/games/core/runtime'
@@ -71,6 +74,7 @@ export const soundtrack: Adapter = {
     const count = rng.between(1, run.size >= 24 ? 6 : 8)
     const picked = rng.shuffle(SONGS.map((_, i) => i)).slice(0, count)
     const momentTyped = rng.chance(0.4)
+    const onWall = momentTyped && rng.chance(0.5)
     const aiCheck = rng.chance(0.5)
     // Typed moments need no extra photos.
     const extras = count >= 3 && !momentTyped ? rng.between(2, 4) : rng.between(0, 4)
@@ -94,11 +98,17 @@ export const soundtrack: Adapter = {
         }
       }),
       extraPhotos: Array.from({ length: extras }, (_, k) => ({ photo: `verify/lydspor/s${run.seed}/extra-${k + 1}.jpg`, caption: `Extra photo ${k + 1}` })),
-      points: { event: rng.between(0, 5), title: rng.between(0, 5), singer: rng.between(0, 5) },
+      points: {
+        event: rng.between(0, 5),
+        title: rng.between(0, 5),
+        singer: rng.between(0, 5),
+        ...(onWall ? { moment: rng.between(0, 5) } : {}),
+      },
       lastCallSeconds: rng.between(20, 90),
       standingsEvery: rng.between(0, 5),
       hints: rng.chance(0.3),
       momentTyped,
+      ...(onWall ? { momentPhoto: 'wall' } : {}),
       aiCheck,
       boardMax: rng.between(1, 25),
       intro: 'A verifier round',
@@ -132,6 +142,10 @@ class SoundtrackOracle implements Oracle {
   private readonly aiYes = new Set<string>()
   private aiDone = false
   private readonly typedMoments: boolean
+  /** Typed moments on the wall: the photo is placed as well, and the moment has points of its own. */
+  private readonly onWall: boolean
+  /** Typed moments with the song's own photo shown: the moment takes the event's place. */
+  private readonly shown: boolean
   /** The typed parts: the moment too with typed moments on. */
   private readonly parts: readonly TypedPart[]
   private shownTop = new Map<PlayerId, number>()
@@ -144,11 +158,13 @@ class SoundtrackOracle implements Oracle {
     this.run = run
     this.config = run.config<SoundtrackConfig>()
     this.typedMoments = this.config.momentTyped === true
+    this.onWall = this.typedMoments && this.config.momentPhoto === 'wall'
+    this.shown = this.typedMoments && !this.onWall
     this.parts = this.typedMoments ? ['title', 'singer', 'moment'] : ['title', 'singer']
     this.sitOut = this.namesOf(this.config.sitOut)
     const state = run.state<SoundtrackState>()
     if (!sameSet(state.sitOut.map(fold), this.sitOut.map(fold))) run.fail('scores-match-oracle', 'the start read the sit out list differently')
-    if (this.typedMoments) {
+    if (this.shown) {
       // No wall to place on: each song keeps its own photo.
       if (state.wall.join() !== this.config.songs.map((_, i) => i).join()) run.fail('scores-match-oracle', 'with typed moments the wall is not each song in order')
     } else {
@@ -445,7 +461,12 @@ class SoundtrackOracle implements Oracle {
       return picks.get(id)!
     }
     for (let i = 0; i < played; i++) {
-      for (const part of this.typedMoments ? (['title', 'singer', 'moment'] as const) : (['event', 'title', 'singer'] as const)) {
+      const parts = this.shown
+        ? (['title', 'singer', 'moment'] as const)
+        : this.onWall
+          ? (['event', 'title', 'singer', 'moment'] as const)
+          : (['event', 'title', 'singer'] as const)
+      for (const part of parts) {
         for (const [id, answer] of this.answers.get(`s${i + 1}.${part}`) ?? []) {
           if (!here.has(id)) continue
           if (part === 'event' && 'choice' in answer) entry(id).event[i] = answer.choice[0] === 'none' ? null : Number(answer.choice[0])
@@ -522,7 +543,7 @@ class SoundtrackOracle implements Oracle {
   }
 
   /** Each participant's Lydspor points over the first `revealed` songs. */
-  private points(revealed: number, perSong?: { event: number; title: number; singer: number }[]): Map<PlayerId, number> {
+  private points(revealed: number, perSong?: { event: number; title: number; singer: number; moment?: number }[]): Map<PlayerId, number> {
     const state = this.run.state<SoundtrackState>()
     const { points } = this.config
     const out = new Map<PlayerId, number>()
@@ -532,12 +553,15 @@ class SoundtrackOracle implements Oracle {
       for (let i = 0; i < revealed; i++) {
         const e = mine.event[i]
         const doubled = e !== null && mine.event.filter((x) => x === e).length > 1
-        // With typed moments on, the moment scores the event's points.
-        const right = this.typedMoments ? this.counts(state, i, 'moment', id) : e !== null && !doubled && state.wall[e] === i
+        // With typed moments shown, the moment scores the event's points; on the wall its own.
+        const right = this.shown ? this.counts(state, i, 'moment', id) : e !== null && !doubled && state.wall[e] === i
+        const moment = this.onWall && this.counts(state, i, 'moment', id)
         const title = this.counts(state, i, 'title', id)
         const singer = this.counts(state, i, 'singer', id)
-        total += (right ? points.event : 0) + (title ? points.title : 0) + (singer ? points.singer : 0)
+        total += (right ? points.event : 0) + (title ? points.title : 0) + (singer ? points.singer : 0) + (moment ? (points.moment ?? 2) : 0)
         if (perSong) {
+          const counts = perSong[i]
+          if (counts.moment !== undefined) counts.moment += moment ? 1 : 0
           perSong[i].event += right ? 1 : 0
           perSong[i].title += title ? 1 : 0
           perSong[i].singer += singer ? 1 : 0
@@ -554,10 +578,12 @@ class SoundtrackOracle implements Oracle {
     const pub = run.publicState<SoundtrackPublicState>()
     if (!state || !pub) return
     const revealed = this.picks ? Math.min(state.revealed, state.playedAt.length) : 0
-    const perSong = Array.from({ length: revealed }, () => ({ event: 0, title: 0, singer: 0 }))
+    const perSong = Array.from({ length: revealed }, () =>
+      this.onWall ? { event: 0, title: 0, singer: 0, moment: 0 } : { event: 0, title: 0, singer: 0 },
+    ) as { event: number; title: number; singer: number; moment?: number }[]
     const points = this.points(revealed, perSong)
     const participants = this.participants()
-    const pps = this.config.points.event + this.config.points.title + this.config.points.singer
+    const pps = this.config.points.event + this.config.points.title + this.config.points.singer + (this.onWall ? (this.config.points.moment ?? 2) : 0)
     const most = revealed * pps
     const done = state.phase === 'done'
     const all = participants.map((id) => points.get(id) ?? 0)
@@ -600,7 +626,11 @@ class SoundtrackOracle implements Oracle {
         if (r.n !== revealed || r.title !== song.title || r.singer !== song.singer || r.event !== state.wall.indexOf(i) || r.moment !== (this.typedMoments ? song.moment : '')) {
           run.fail('scores-match-oracle', `the reveal of song ${revealed} shows the wrong song or photo`)
         }
-        if (r.scoring !== participants.length || JSON.stringify(r.counts) !== JSON.stringify(perSong[i])) {
+        // The database's jsonb orders keys its own way: compare part by part.
+        const sameCounts =
+          Object.keys(r.counts).length === Object.keys(perSong[i]).length &&
+          (['event', 'title', 'singer', 'moment'] as const).every((part) => r.counts[part] === perSong[i][part])
+        if (r.scoring !== participants.length || !sameCounts) {
           run.fail('scores-match-oracle', `song ${revealed}'s reveal counts ${JSON.stringify(r.counts)} of ${r.scoring}, the oracle ${JSON.stringify(perSong[i])} of ${participants.length}`)
         }
       }

@@ -30,7 +30,8 @@ const SONG_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
  * photo paths: 2 extra photos up to 3 songs, else 4; a short last call;
  * the top 5 every 2 songs up to 3, else 4.
  */
-export function botSettings(count = 3, momentTyped = false): Record<string, unknown> {
+export function botSettings(count = 3, momentTyped = false, momentPhoto: 'wall' | 'shown' = 'shown'): Record<string, unknown> {
+  const onWall = momentTyped && momentPhoto === 'wall'
   const songs = BOT_SONGS.slice(0, Math.max(1, Math.min(BOT_SONGS.length, count)))
   const extras = songs.length <= 3 ? 2 : 4
   return {
@@ -51,11 +52,12 @@ export function botSettings(count = 3, momentTyped = false): Record<string, unkn
       { photo: 'rehearsal/soundtrack/extra-3.jpg', caption: 'Moving day, 2021' },
       { photo: 'rehearsal/soundtrack/extra-4.jpg', caption: 'Ski trip, 2017' },
     ].slice(0, extras),
-    points: { event: 2, title: 1, singer: 1 },
+    points: onWall ? { event: 1, title: 1, singer: 1, moment: 2 } : { event: 2, title: 1, singer: 1 },
     lastCallSeconds: 20,
     standingsEvery: songs.length <= 3 ? 2 : 4,
     hints: false,
     ...(momentTyped ? { momentTyped: true } : {}),
+    ...(onWall ? { momentPhoto: 'wall' } : {}),
     boardMax: 20,
     intro: `${SONG_WORDS[songs.length]} songs from a rehearsal.`,
     storyteller: 'The host',
