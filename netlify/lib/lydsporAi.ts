@@ -15,7 +15,8 @@ import type { SoundtrackConfig, SoundtrackState } from '../../src/games/soundtra
 import { handleGameRequest, HttpError } from './engine'
 
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-export const AI_TIMEOUT_MS = 15_000
+/** Under Netlify's 10 s limit for a function, so a slow model ends as a clean "didn't run" with Try again, never a cut-off request. */
+export const AI_TIMEOUT_MS = 8_500
 
 export type AiCheckResult =
   /** The verdicts are in the game: `asked` answers, `accepted` of them yes. `already` when an earlier check had put them there. */

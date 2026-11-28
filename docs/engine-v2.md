@@ -4462,7 +4462,7 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   `/api/lydspor-ai` (`netlify/functions/lydspor-ai.mts`, hosts only),
   which reads the state with `game_load`, puts every close or wrong row the
   host hasn't decided to `anthropic/claude-sonnet-5.5` through OpenRouter
-  in one batched call (temperature 0, 15 s timeout, prompt and strict
+  in one batched call (temperature 0, 8.5 s timeout, under Netlify's 10 s function limit, prompt and strict
   reader in `src/games/soundtrack/ai.ts`), and sends the yeses back through
   the engine as the host action `{ type: 'ai', yes: [{ index, part, key }] }`.
   The game applies it once per lock (a second is a skip): a yes accepts the
