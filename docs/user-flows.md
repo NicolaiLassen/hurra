@@ -278,6 +278,19 @@ never per letter. Spelling is forgiven on the
 server at the lock, never judged on the phone, and nobody's typed answer ever
 reaches another phone or the TV.
 
+With **typed moments** on (a setting, off by default), Now playing shows the
+song's own photo, on the phone and the TV, instead of the wall, and asks
+three typed fields: Moment, Title and Who sings it. The moment scores the
+event's points; the reveal shows the photo with its moment. No photo swaps.
+
+With the **AI check** on (a setting, off by default), the host page asks an
+AI right after the lock whether each typed answer the rule didn't count is
+close enough (spelling, accents, word order and wording aside; a moment must
+clearly be the same event). Its yeses are accepted for everyone who typed
+them before the reveals, tagged in the host's review, and the host can undo
+any of them or accept a no. If the AI can't help, the rule's verdicts stand
+and the host page offers Try again.
+
 ## 3. Host
 
 The host pages are the same on a laptop and a phone. On a phone the header

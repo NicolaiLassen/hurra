@@ -4445,6 +4445,35 @@ full design, with every screen, is `.design/lydspor/spec.md` (approved on
   the last call, reveals 3 s apart, accepts the first close title of each
   reveal, shows the top 5 when it is due and after the last reveal, and
   crowns.
+- **Typed moments** (`momentTyped`, default off; 28 November): each song
+  has a `moment` (1 to 140 characters, what happened) and `alsoMoments` (0
+  to 6). Play opens `s5.moment` (text, at most 100 characters) instead of
+  `s5.event`; there is no wall (`wall` in the state is the songs in order,
+  no extra photos needed, no caption required), and the public `wall` holds
+  only the played songs' own photos, each public from its Play on. The lock
+  reads the moments into `picks.moment` and judges them like a title into
+  `review[i].moment`; a moment that counts scores `points.event` and makes
+  the guest's `event` 'right' (the view's `moment` says how it went). The
+  reveal carries `moment`; `extras` stays null. Fixtures
+  `soundtrack-typed-playing` and `soundtrack-typed-reveal`; `botSettings(n,
+  true)` for bots.
+- **The AI check** (`aiCheck`, default off; 28 November): never in the
+  step. After the lock the host page posts `{ gameId }` to
+  `/api/lydspor-ai` (`netlify/functions/lydspor-ai.mts`, hosts only),
+  which reads the state with `game_load`, puts every close or wrong row the
+  host hasn't decided to `anthropic/claude-sonnet-5.5` through OpenRouter
+  in one batched call (temperature 0, 15 s timeout, prompt and strict
+  reader in `src/games/soundtrack/ai.ts`), and sends the yeses back through
+  the engine as the host action `{ type: 'ai', yes: [{ index, part, key }] }`.
+  The game applies it once per lock (a second is a skip): a yes accepts the
+  row (`ai: 'yes'`), every other asked row gets `ai: 'no'`, and a row the
+  host accepted or undid (`byHost`, set by Accept while the check is on)
+  keeps the host's decision; `state.ai` holds `{ at, asked, accepted }`.
+  The host overrules any verdict with Accept or Undo. No key
+  (`OPENROUTER_API_KEY`, server env only), a failure, a timeout or a reply
+  of the wrong shape changes nothing: the host page says the check didn't
+  run and offers Try again. Typed answers go to OpenRouter and the host
+  only, and are never logged.
 
 ## 9. Testing plan
 

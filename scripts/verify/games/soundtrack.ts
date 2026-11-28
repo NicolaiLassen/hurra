@@ -9,6 +9,13 @@
 // be judged without the game's matcher; the host's review rows only say which
 // guests typed the same thing. The titles, singers and each song's photo are
 // the secrets until its reveal, every typed answer always.
+//
+// With typed moments on (momentTyped), each song's moment is typed instead of
+// a photo placed, and scores the event's points when it counts; the photo is
+// public from its Play on, the moment a secret until its reveal. With the AI
+// check on (aiCheck), the host sometimes sends the `ai` action itself, with
+// made-up yeses (the AI call is the server's, never here): a yes accepts a
+// close or wrong row the host hasn't decided, once per lock.
 import { botSight, hostBotSight } from '../../../src/games/core/contract'
 import type { AnswerPayload, PlayerId } from '../../../src/games/core/Game'
 import type { Step } from '../../../src/games/core/runtime'
@@ -40,12 +47,12 @@ import {
 } from '../core'
 
 /** Invented songs: the bot's eight and four more. Titles and singers far apart, so a near miss is what it is meant to be. */
-const SONGS: { title: string; singer: string; alsoTitle?: string; alsoSinger?: string; caption: string }[] = [
-  ...BOT_SONGS.map((s) => ({ title: s.title, singer: s.singer, alsoTitle: s.alsoTitle, alsoSinger: s.alsoSinger, caption: s.caption })),
-  { title: 'Velvet Morning Tide', singer: 'Ingrid Sol', caption: 'Sunrise swim, 2015' },
-  { title: 'Northern Kites', singer: 'Hamid Rask', alsoTitle: 'Kites', caption: 'Beach day, 2010' },
-  { title: 'Lemon Tree Parade', singer: 'The Brass Owls', alsoSinger: 'Brass Owls', caption: 'Graduation, 2013' },
-  { title: 'Silver Bicycle', singer: 'Emma Fjeld', alsoSinger: 'Emma', caption: 'First bike, 2001' },
+const SONGS: { title: string; singer: string; alsoTitle?: string; alsoSinger?: string; caption: string; moment: string; alsoMoment?: string }[] = [
+  ...BOT_SONGS.map((s) => ({ title: s.title, singer: s.singer, alsoTitle: s.alsoTitle, alsoSinger: s.alsoSinger, caption: s.caption, moment: s.moment, alsoMoment: s.alsoMoment })),
+  { title: 'Velvet Morning Tide', singer: 'Ingrid Sol', caption: 'Sunrise swim, 2015', moment: 'Sunrise swim after the graduation party' },
+  { title: 'Northern Kites', singer: 'Hamid Rask', alsoTitle: 'Kites', caption: 'Beach day, 2010', moment: 'Flying kites on the beach at Hornbaek', alsoMoment: 'Beach day' },
+  { title: 'Lemon Tree Parade', singer: 'The Brass Owls', alsoSinger: 'Brass Owls', caption: 'Graduation, 2013', moment: 'Graduation parade through town' },
+  { title: 'Silver Bicycle', singer: 'Emma Fjeld', alsoSinger: 'Emma', caption: 'First bike, 2001', moment: 'Learning to ride the first bike' },
 ]
 
 /** What a typed answer is meant to be. `counts` scores by itself; `close` and `wrong` only when the host accepts. */
@@ -63,7 +70,10 @@ export const soundtrack: Adapter = {
     const { rng } = run
     const count = rng.between(1, run.size >= 24 ? 6 : 8)
     const picked = rng.shuffle(SONGS.map((_, i) => i)).slice(0, count)
-    const extras = count >= 3 ? rng.between(2, 4) : rng.between(0, 4)
+    const momentTyped = rng.chance(0.4)
+    const aiCheck = rng.chance(0.5)
+    // Typed moments need no extra photos.
+    const extras = count >= 3 && !momentTyped ? rng.between(2, 4) : rng.between(0, 4)
     const people = [...run.present(), ...run.expected()]
     const sitOut: string[] = []
     for (const p of people) if (rng.chance(0.12)) sitOut.push(rng.chance(0.1) ? p.id : spelling(p.name, run))
@@ -80,6 +90,7 @@ export const soundtrack: Adapter = {
           caption: song.caption,
           startAt: rng.between(0, 200),
           note: `Verifier note ${i + 1}: the story behind ${song.title}`,
+          ...(momentTyped ? { moment: song.moment, alsoMoments: song.alsoMoment ? [song.alsoMoment] : [] } : {}),
         }
       }),
       extraPhotos: Array.from({ length: extras }, (_, k) => ({ photo: `verify/lydspor/s${run.seed}/extra-${k + 1}.jpg`, caption: `Extra photo ${k + 1}` })),
@@ -87,6 +98,8 @@ export const soundtrack: Adapter = {
       lastCallSeconds: rng.between(20, 90),
       standingsEvery: rng.between(0, 5),
       hints: rng.chance(0.3),
+      momentTyped,
+      aiCheck,
       boardMax: rng.between(1, 25),
       intro: 'A verifier round',
       storyteller: 'The host',
@@ -102,7 +115,7 @@ function spelling(name: string, run: Run) {
   return r < 0.5 ? name : r < 0.75 ? name.toLowerCase() : name.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
-type Picks = { event: (number | null)[]; title: (string | null)[]; singer: (string | null)[] }
+type Picks = { event: (number | null)[]; title: (string | null)[]; singer: (string | null)[]; moment?: (string | null)[] }
 
 class SoundtrackOracle implements Oracle {
   private readonly config: SoundtrackConfig
@@ -115,6 +128,12 @@ class SoundtrackOracle implements Oracle {
   private sitOut: string[]
   /** The host's accepts, by song index, part and row key. */
   private readonly accepted = new Map<string, boolean>()
+  /** The AI check's yeses, by song index, part and row key: rows it was asked about and said yes to. */
+  private readonly aiYes = new Set<string>()
+  private aiDone = false
+  private readonly typedMoments: boolean
+  /** The typed parts: the moment too with typed moments on. */
+  private readonly parts: readonly TypedPart[]
   private shownTop = new Map<PlayerId, number>()
   private readonly skill = new Map<PlayerId, number>()
   private counter = 0
@@ -124,11 +143,18 @@ class SoundtrackOracle implements Oracle {
   constructor(run: Run) {
     this.run = run
     this.config = run.config<SoundtrackConfig>()
+    this.typedMoments = this.config.momentTyped === true
+    this.parts = this.typedMoments ? ['title', 'singer', 'moment'] : ['title', 'singer']
     this.sitOut = this.namesOf(this.config.sitOut)
     const state = run.state<SoundtrackState>()
     if (!sameSet(state.sitOut.map(fold), this.sitOut.map(fold))) run.fail('scores-match-oracle', 'the start read the sit out list differently')
-    const size = this.config.songs.length + this.config.extraPhotos.length
-    if (!sameSet(state.wall.map(String), Array.from({ length: size }, (_, i) => String(i)))) run.fail('scores-match-oracle', 'the wall is not every photo once')
+    if (this.typedMoments) {
+      // No wall to place on: each song keeps its own photo.
+      if (state.wall.join() !== this.config.songs.map((_, i) => i).join()) run.fail('scores-match-oracle', 'with typed moments the wall is not each song in order')
+    } else {
+      const size = this.config.songs.length + this.config.extraPhotos.length
+      if (!sameSet(state.wall.map(String), Array.from({ length: size }, (_, i) => String(i)))) run.fail('scores-match-oracle', 'the wall is not every photo once')
+    }
   }
 
   /** A sit out list as names: an id is its guest's name; an id on no list is dropped; each name once. */
@@ -161,7 +187,7 @@ class SoundtrackOracle implements Oracle {
     const { run } = this
     const move = run.bot.move(botSight(run.party, run.gameId, playerId, run.rng.fn()))
     if (!move || move.kind !== 'answer') return move
-    const [, n, part] = /^s(\d+)\.(title|singer|event)$/.exec(move.key) ?? []
+    const [, n, part] = /^s(\d+)\.(title|singer|event|moment)$/.exec(move.key) ?? []
     const i = Number(n) - 1
     const song = this.config.songs[i]
     if (!song) return move
@@ -190,6 +216,7 @@ class SoundtrackOracle implements Oracle {
   private typed(i: number, part: TypedPart, playerId: PlayerId): { text: string; intent: Intent } {
     const { rng } = this.run
     const song = this.config.songs[i]
+    if (part === 'moment') return this.typedMoment(i, playerId)
     const truth = part === 'title' ? song.title : song.singer
     const other = part === 'title' ? song.singer : song.title
     const also = part === 'title' ? song.alsoTitles : song.alsoSingers
@@ -227,13 +254,37 @@ class SoundtrackOracle implements Oracle {
       return { text: lettersOff(truth, Math.floor(keyLength(truth) / 5) + 1), intent: 'close' }
     }
     // Wrong, and unique to this guest, so a leak of it shows anywhere.
+    return { text: this.wrongText(), intent: 'wrong' }
+  }
+
+  /** A typed moment for song i: the moment or another accepted one, as typed; a swap inside a word; or wrong and unique. */
+  private typedMoment(i: number, playerId: PlayerId): { text: string; intent: Intent } {
+    const { rng } = this.run
+    const song = this.config.songs[i]
+    const truth = song.moment ?? ''
+    const also = song.alsoMoments ?? []
+    const roll = rng.next()
+    const skill = this.skillOf(playerId)
+    if (roll < skill * 0.6) {
+      const base = also.length > 0 && rng.chance(0.3) ? also[0] : truth
+      return { text: rng.chance(0.5) ? base.toLowerCase() : base, intent: 'exact' }
+    }
+    if (roll < skill * 0.85) {
+      const slip = swapInside(truth, rng.int(1000))
+      if (slip && keyLength(truth) >= 5 && !digraphs(slip) && !digraphs(truth)) return { text: slip, intent: 'typo' }
+    }
+    return { text: this.wrongText(), intent: 'wrong' }
+  }
+
+  /** Wrong, and unique to this guest, so a leak of it shows anywhere. */
+  private wrongText(): string {
     let token = ''
     let k = ++this.counter
     for (let j = 0; j < 9; j++) {
       token += ODD[k % ODD.length]
       k = Math.floor(k / ODD.length)
     }
-    return { text: `${token.slice(0, 4)} ${token.slice(4)}`, intent: 'wrong' }
+    return `${token.slice(0, 4)} ${token.slice(4)}`
   }
 
   host(): HostStep | null {
@@ -249,9 +300,18 @@ class SoundtrackOracle implements Oracle {
       const names = run.present().filter(() => run.rng.chance(0.15)).map((p) => spelling(p.name, run))
       return { action: { type: 'sitOut', names }, note: 'who sits out' }
     }
+    if (r < 0.22 && (state.review || run.rng.chance(0.2))) {
+      // The AI check, stubbed: the yeses a server would send, picked at random from the rows (and a key nobody typed).
+      const yes: { index: number; part: TypedPart; key: string }[] = []
+      ;(state.review ?? []).forEach((song, index) => {
+        for (const part of this.parts) for (const row of song[part] ?? []) if (run.rng.chance(0.5)) yes.push({ index, part, key: row.key })
+      })
+      if (run.rng.chance(0.1)) yes.push({ index: 0, part: 'title', key: 'nobody typed this' })
+      return { action: { type: 'ai', yes }, note: `AI check, ${yes.length} yes` }
+    }
     if (r < 0.45 && state.review && state.revealed > 0) {
       const index = run.rng.int(state.revealed)
-      const part: TypedPart = run.rng.chance(0.5) ? 'title' : 'singer'
+      const part: TypedPart = run.rng.pick(this.parts)
       const rows = state.review[index]?.[part] ?? []
       const row = rows.length > 0 ? run.rng.pick(rows) : null
       const key = row?.key ?? 'nobody typed this'
@@ -336,9 +396,37 @@ class SoundtrackOracle implements Oracle {
         row.verdict !== 'typo'
       if (result.kind === 'refuse' && valid) run.fail('scores-match-oracle', `accepting ${key} was refused: ${result.message}`)
       if (result.kind !== 'refuse' && !valid) run.fail('scores-match-oracle', `accepting ${key} (${row?.verdict ?? 'no row'}) was taken, the rules refuse it`)
-      if (valid && result.kind !== 'refuse') {
+      // A skip asks for what is there already: with the AI check on, only a change is the host's decision.
+      if (valid && result.kind === 'commit') {
         this.accepted.set(`${index}|${part}|${key}`, action.accepted as boolean)
         run.count(action.accepted ? 'near misses accepted' : 'accepts taken back')
+      }
+    }
+    if (action.type === 'ai') {
+      const valid = this.config.aiCheck === true && ['locked', 'reveal', 'standings'].includes(was.phase) && was.review !== null
+      if (result.kind === 'refuse' && valid) run.fail('scores-match-oracle', `the AI check's verdicts were refused: ${result.message}`)
+      if (result.kind !== 'refuse' && !valid) run.fail('scores-match-oracle', `the AI check's verdicts were taken in phase ${was.phase} with aiCheck ${this.config.aiCheck}`)
+      if (valid && was.ai && result.kind === 'commit') run.fail('scores-match-oracle', 'a second AI check changed the game')
+      if (valid && !was.ai && result.kind !== 'commit') run.fail('scores-match-oracle', 'the first AI check changed nothing')
+      if (valid && !was.ai && result.kind === 'commit') {
+        const said = new Set((action.yes as { index: number; part: string; key: string }[]).map((y) => `${y.index}|${y.part}|${y.key}`))
+        let asked = 0
+        ;(was.review ?? []).forEach((song, index) => {
+          for (const part of this.parts) {
+            for (const row of song[part] ?? []) {
+              const key = `${index}|${part}|${row.key}`
+              // Asked: the rule didn't count it, and the host hasn't decided it.
+              if (row.verdict === 'exact' || row.verdict === 'typo' || this.accepted.has(key) || row.accepted) continue
+              asked++
+              if (said.has(key)) this.aiYes.add(key)
+            }
+          }
+        })
+        this.aiDone = true
+        const got = run.state<SoundtrackState>().ai
+        if (!got || got.asked !== asked) run.fail('scores-match-oracle', `the AI check says it was asked about ${got?.asked} answers, the oracle ${asked}`)
+        run.count('AI checks')
+        run.count('AI yeses', this.aiYes.size)
       }
     }
   }
@@ -349,16 +437,19 @@ class SoundtrackOracle implements Oracle {
     const played = state.playedAt.length
     const here = new Set(run.present().map((p) => p.id))
     const picks = new Map<PlayerId, Picks>()
+    const empty = () => Array(played).fill(null)
     const entry = (id: PlayerId) => {
-      if (!picks.has(id)) picks.set(id, { event: Array(played).fill(null), title: Array(played).fill(null), singer: Array(played).fill(null) })
+      if (!picks.has(id)) {
+        picks.set(id, this.typedMoments ? { event: empty(), title: empty(), singer: empty(), moment: empty() } : { event: empty(), title: empty(), singer: empty() })
+      }
       return picks.get(id)!
     }
     for (let i = 0; i < played; i++) {
-      for (const part of ['event', 'title', 'singer'] as const) {
+      for (const part of this.typedMoments ? (['title', 'singer', 'moment'] as const) : (['event', 'title', 'singer'] as const)) {
         for (const [id, answer] of this.answers.get(`s${i + 1}.${part}`) ?? []) {
           if (!here.has(id)) continue
           if (part === 'event' && 'choice' in answer) entry(id).event[i] = answer.choice[0] === 'none' ? null : Number(answer.choice[0])
-          if (part !== 'event' && 'text' in answer) entry(id)[part][i] = answer.text.trim()
+          if (part !== 'event' && 'text' in answer && answer.text.trim() !== '') entry(id)[part]![i] = answer.text.trim()
         }
       }
     }
@@ -369,17 +460,19 @@ class SoundtrackOracle implements Oracle {
       run.fail('scores-match-oracle', `the lock read answers from ${Object.keys(got).length} guests, the oracle ${picks.size}`)
     }
     for (const [id, mine] of picks) {
-      if (JSON.stringify(got[id]) !== JSON.stringify(mine)) {
+      // The database's jsonb orders keys its own way: compare part by part.
+      const same = (['event', 'title', 'singer', 'moment'] as const).every((part) => JSON.stringify(got[id]?.[part]) === JSON.stringify(mine[part]))
+      if (!same) {
         run.fail('scores-match-oracle', `the lock read ${run.nameOf(id)}'s answers as ${JSON.stringify(got[id])}, they left ${JSON.stringify(mine)}`)
         break
       }
     }
     // The review: every typed answer in exactly one row, judged as it was meant.
     for (let i = 0; i < played; i++) {
-      for (const part of ['title', 'singer'] as const) {
+      for (const part of this.parts) {
         const rows = state.review?.[i]?.[part] ?? []
         for (const [id, mine] of picks) {
-          const text = mine[part][i]
+          const text = mine[part]?.[i] ?? null
           const holding = rows.filter((row) => row.players.includes(id))
           if (text === null) {
             if (holding.length > 0) run.fail('scores-match-oracle', `${run.nameOf(id)} is in a review row of song ${i + 1} without typing`)
@@ -399,7 +492,8 @@ class SoundtrackOracle implements Oracle {
             (intent === 'close' && verdict === 'close') ||
             (intent === 'wrong' && verdict === 'wrong')
           if (!fits) {
-            run.fail('scores-match-oracle', `song ${i + 1}'s ${part} “${text}” (meant ${intent}) was judged ${verdict}; the song says “${part === 'title' ? this.config.songs[i].title : this.config.songs[i].singer}”`)
+            const song = this.config.songs[i]
+            run.fail('scores-match-oracle', `song ${i + 1}'s ${part} “${text}” (meant ${intent}) was judged ${verdict}; the song says “${part === 'title' ? song.title : part === 'singer' ? song.singer : song.moment}”`)
           }
         }
       }
@@ -411,7 +505,9 @@ class SoundtrackOracle implements Oracle {
     const row: ReviewRow | undefined = state.review?.[i]?.[part]?.find((r) => r.players.includes(id))
     if (!row) return false
     if (row.verdict === 'exact' || row.verdict === 'typo') return true
-    const accepted = this.accepted.get(`${i}|${part}|${row.key}`) ?? false
+    // The host's decision; else the AI check's yes; else not.
+    const key = `${i}|${part}|${row.key}`
+    const accepted = this.accepted.get(key) ?? (this.aiDone && this.aiYes.has(key))
     if (row.accepted !== accepted) this.run.fail('scores-match-oracle', `song ${i + 1}'s row ${row.key} reads accepted ${row.accepted}, the host left it ${accepted}`)
     return accepted
   }
@@ -436,7 +532,8 @@ class SoundtrackOracle implements Oracle {
       for (let i = 0; i < revealed; i++) {
         const e = mine.event[i]
         const doubled = e !== null && mine.event.filter((x) => x === e).length > 1
-        const right = e !== null && !doubled && state.wall[e] === i
+        // With typed moments on, the moment scores the event's points.
+        const right = this.typedMoments ? this.counts(state, i, 'moment', id) : e !== null && !doubled && state.wall[e] === i
         const title = this.counts(state, i, 'title', id)
         const singer = this.counts(state, i, 'singer', id)
         total += (right ? points.event : 0) + (title ? points.title : 0) + (singer ? points.singer : 0)
@@ -500,7 +597,7 @@ class SoundtrackOracle implements Oracle {
         const i = revealed - 1
         const song = this.config.songs[i]
         const r = pub.reveal
-        if (r.n !== revealed || r.title !== song.title || r.singer !== song.singer || r.event !== state.wall.indexOf(i)) {
+        if (r.n !== revealed || r.title !== song.title || r.singer !== song.singer || r.event !== state.wall.indexOf(i) || r.moment !== (this.typedMoments ? song.moment : '')) {
           run.fail('scores-match-oracle', `the reveal of song ${revealed} shows the wrong song or photo`)
         }
         if (r.scoring !== participants.length || JSON.stringify(r.counts) !== JSON.stringify(perSong[i])) {
@@ -533,7 +630,7 @@ class SoundtrackOracle implements Oracle {
         if (typists !== undefined && !typists.has(p.id)) run.fail('secrets-kept', `${p.name}'s phone shows what another guest typed`)
       }
       // A guest's own answers are theirs to see, the right ones included.
-      const own = new Set([...(view.mine?.title ?? []), ...(view.mine?.singer ?? [])].filter((t): t is string => t !== null))
+      const own = new Set([...(view.mine?.title ?? []), ...(view.mine?.singer ?? []), ...(view.mine?.moment ?? [])].filter((t): t is string => t !== null))
       this.noSongSecrets(view, `${p.name}'s phone`, state, own)
     }
     // The room: no typing ever, no song before its reveal.
@@ -560,8 +657,15 @@ class SoundtrackOracle implements Oracle {
     this.config.songs.forEach((song, i) => {
       const out = i < state.revealed && this.picks !== null
       const captionShown = this.config.hints || (afterLast && i >= played)
-      const secret = [...song.alsoTitles, ...song.alsoSingers, song.note, ...(out ? [] : [song.title, song.singer, ...(captionShown ? [] : [song.caption])])]
-      const shown = out ? [song.title, song.singer, song.caption] : []
+      const moment = this.typedMoments && song.moment ? [song.moment] : []
+      const secret = [
+        ...song.alsoTitles,
+        ...song.alsoSingers,
+        ...(song.alsoMoments ?? []),
+        song.note,
+        ...(out ? [] : [song.title, song.singer, ...moment, ...(captionShown || song.caption === '' ? [] : [song.caption])]),
+      ]
+      const shown = out ? [song.title, song.singer, song.caption, ...moment] : []
       for (const s of secret) if (strings.has(s) && !shown.includes(s)) this.run.fail('secrets-kept', `${where} has “${s}” of song ${i + 1} before its moment`)
     })
   }
