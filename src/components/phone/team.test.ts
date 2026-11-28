@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Player, PromptState, Snapshot, Team } from '@/lib/types'
-import { answerRule, teamLine, teamWords } from './team'
+import { answerRule, teamLine, teamSizeLine, teamWords } from './team'
 
 const gold: Team = { id: 'tg', name: 'Team Gold', colour: 'gold', position: 0 }
 const pink: Team = { id: 'tp', name: 'Team Pink', colour: 'pink', position: 1 }
@@ -110,5 +110,15 @@ describe('when a phone shows the team line', () => {
       rule: 'One answer from any of you counts for all of you.',
       answered: null,
     })
+  })
+})
+
+describe('teamSizeLine', () => {
+  it('counts a team from this guest’s side', () => {
+    expect(teamSizeLine(1, true)).toBe('Just you so far')
+    expect(teamSizeLine(5, true)).toBe('You and 4 more')
+    expect(teamSizeLine(0, false)).toBe('Nobody yet')
+    expect(teamSizeLine(1, false)).toBe('1 guest')
+    expect(teamSizeLine(6, false)).toBe('6 guests')
   })
 })

@@ -60,3 +60,14 @@ export function teamLine(
   const prompts = s.prompts.filter((p) => p.game_id === game.id)
   return { team, words: teamWords(team, answerRule(prompts), latestTeamAnswer(s, game.id, prompts)) }
 }
+
+/**
+ * A team's line on the phone's team picker: how many are in it, said from
+ * this guest's side for their own team. "Just you so far", "You and 4 more",
+ * "Nobody yet", "1 guest", "5 guests".
+ */
+export function teamSizeLine(members: number, mine: boolean): string {
+  if (mine) return members <= 1 ? 'Just you so far' : `You and ${members - 1} more`
+  if (members === 0) return 'Nobody yet'
+  return `${members} ${members === 1 ? 'guest' : 'guests'}`
+}

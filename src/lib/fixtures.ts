@@ -91,6 +91,9 @@ export const FIXTURE_SCENES = [
   // The quiz question again, played in teams (docs/user-flows.md, Teams): four
   // teams of three, and Sofie's teammate Ana has answered for their team.
   'teams-quiz',
+  // The lobby with four teams the host made before the guests came: Sofie
+  // picks or switches hers on the phone home (docs/user-flows.md, Teams).
+  'teams-lobby',
 ] as const
 
 export type FixtureScene = (typeof FIXTURE_SCENES)[number]
@@ -1192,6 +1195,7 @@ function fusionStageWorld(scene: FusionStageScene): World {
 function world(scene: Exclude<FixtureScene, 'removed'>): World {
   feedId = 100
   if (scene === 'teams-quiz') return world('quiz-question')
+  if (scene === 'teams-lobby') return world('lobby')
   if (isFusionStageScene(scene)) return fusionStageWorld(scene)
   const members = [...ids]
   switch (scene) {
@@ -1539,10 +1543,14 @@ const FIXTURE_TEAMS: Team[] = ['Gold', 'Pink', 'Teal', 'Violet'].map((name, i) =
 /** Who is in which: Sofie (index 3) with Ana and Lars in Team Gold. */
 const TEAM_OF = [0, 1, 2, 0, 3, 0, 1, 2, 3, 1, 2, 3]
 
+/** A scene's snapshot with the four teams, everyone in theirs (TEAM_OF). */
+function withTeams(base: Snapshot): Snapshot {
+  return { ...base, players: base.players.map((p) => ({ ...p, team_id: FIXTURE_TEAMS[TEAM_OF[ids.indexOf(p.id)] ?? 0].id })), teams: FIXTURE_TEAMS }
+}
+
 /** The quiz question, played in teams: Ana answered for Team Gold, so Sofie's phone shows her team's answer. */
 function teamsQuizSnapshot(screen: Screen): Snapshot {
-  const base = fixtureSnapshot('quiz-question', screen)
-  const players = base.players.map((p) => ({ ...p, team_id: FIXTURE_TEAMS[TEAM_OF[ids.indexOf(p.id)] ?? 0].id }))
+  const base = withTeams(fixtureSnapshot('quiz-question', screen))
   const prompt = base.prompts.find((p) => p.game_id === QUIZ && p.closed_at === null)
   const me =
     base.me && prompt
@@ -1555,8 +1563,6 @@ function teamsQuizSnapshot(screen: Screen): Snapshot {
   return {
     ...base,
     games: base.games.map((g) => (g.id === QUIZ ? { ...g, team_play: true } : g)),
-    players,
-    teams: FIXTURE_TEAMS,
     me,
   }
 }
@@ -1564,6 +1570,7 @@ function teamsQuizSnapshot(screen: Screen): Snapshot {
 /** A typed snapshot of that scene as the given screen reads it ('phone' as one guest, with `me`). */
 export function fixtureSnapshot(scene: FixtureScene, screen: Screen): Snapshot {
   if (scene === 'teams-quiz') return teamsQuizSnapshot(screen)
+  if (scene === 'teams-lobby') return withTeams(fixtureSnapshot('lobby', screen))
   if (scene === 'removed') {
     return {
       now: FIXTURE_NOW,

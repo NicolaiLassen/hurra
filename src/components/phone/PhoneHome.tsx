@@ -14,6 +14,7 @@ import { GameCompactCard, GameResult, GameView } from '@/components/phone/PhoneG
 import { barSecret, homeLayout, mainCardNews, peekOpen, phoneFocus, sheetGivesWay, tvRows } from '@/components/phone/running'
 import { useScannedCode } from '@/components/phone/scan'
 import ShowMyCode from '@/components/phone/ShowMyCode'
+import TeamPicker from '@/components/phone/TeamPicker'
 import type { TabTone } from '@/components/phone/Strap'
 import { finishedAt, finishedLine, runningSince } from '@/components/phone/text'
 import { isTypingTarget, useTypingFocus } from '@/components/phone/useTypingFocus'
@@ -28,7 +29,7 @@ import type { RecapDoc } from '@/lib/recap'
 import { PHONE_SOUNDS } from '@/lib/sound'
 import { scanTarget, tvScene } from '@/lib/stage'
 import { rememberJoinCode } from '@/lib/storage'
-import { teamOf } from '@/lib/teams'
+import { liveTeamGame, teamOf, teamsOf } from '@/lib/teams'
 import { toast } from '@/lib/toast'
 import type { Player, PromptState, PublicSession, Session, SessionGame, Snapshot } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -191,6 +192,8 @@ function Home({
   const myToken = <Avatar name={player.name} playerId={player.id} className="size-9" />
   // This guest's team: it follows them all night, under their place and on their code.
   const team = teamOf(snapshot, player.id)
+  // While the party has teams, the guest picks or switches theirs; not while a game played in teams is live.
+  const picker = !over && teamsOf(snapshot).length > 0 && liveTeamGame(snapshot.games) === null
   const standings = snapshot.standings.length > 1 && <Standings rows={snapshot.standings} playerId={player.id} out={out} className="mt-8" />
   // In the peek the bar is the peek's own, so a game's layer opened there (the hunt's scan sheet) covers it as on the home.
   const codeBar = !over && <ShowMyCode player={player} hidden={timed || typing} secret={secret?.secret ?? null} team={team} />
@@ -263,6 +266,8 @@ function Home({
         <div className="mt-7">
           <MyPlace session={session} player={player} standings={snapshot.standings} team={team} />
         </div>
+
+        {picker && <TeamPicker snapshot={snapshot} player={player} className="mt-8" />}
 
         {/* Opened from Standings, the peek has them right under your place. */}
         {peeking && standings}

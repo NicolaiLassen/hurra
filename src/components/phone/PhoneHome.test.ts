@@ -540,6 +540,29 @@ describe('the takeover', () => {
     expect(peek.indexOf('Sofie , tonight')).toBeLessThan(peek.indexOf('Your team: Team Gold'))
   })
 
+  it('teams made before the guests came: the home lets Sofie pick or switch hers, never in gold', async () => {
+    const html = inSight(await phoneMarkup('teams-lobby', '/play/HURRA30?fixture=teams-lobby'))
+    const text = plain(html)
+    expect(headings(html)).toContain('Your team')
+    expect(text).toContain('Tap another team to switch. You can switch until a team game starts.')
+    // Each team with its size, said from Sofie's side for her own.
+    expect(text).toContain('Team Gold You and 2 more')
+    expect(text).toContain('Team Pink 3 guests')
+    expect(text).toContain('Team Violet 3 guests')
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+    expect(html.match(/aria-pressed="false"/g)).toHaveLength(3)
+    // Show my code stays the home's one gold step.
+    expect(goldButtons(html)).toEqual(['Show my code S9F4X'])
+    expect(text.indexOf('Sofie , tonight')).toBeLessThan(text.indexOf('Your team Tap another team'))
+  })
+
+  it('while a game played in teams is live, the team shows but the switch does not', async () => {
+    const peek = plain(inSight(await phoneMarkup('teams-quiz', '/play/HURRA30?fixture=teams-quiz&peek=1')))
+    expect(peek).toContain('Your team: Team Gold')
+    expect(peek).not.toContain('Tap another team')
+    expect(peek).not.toContain('You and 2 more')
+  })
+
   it('a party without teams: no team line and no team', async () => {
     const text = plain(await phoneMarkup('quiz-question', '/play/HURRA30?fixture=quiz-question&peek=1'))
     expect(text).not.toContain('answers together')
