@@ -60,6 +60,17 @@ export function teamless(s: Pick<Snapshot, 'players' | 'teams'>): Player[] {
   return s.players.filter((p) => !p.team_id || !ids.has(p.team_id))
 }
 
+/**
+ * The first live game played in teams (the server's order: by position), or
+ * null. While one is live, the host can't make or clear teams and a guest
+ * can't switch team: that would change who answers for whom in the middle of
+ * it (refuse_while_team_game_live). The host can still move one guest.
+ */
+export function liveTeamGame<G extends Pick<SessionGame, 'status' | 'archived_at' | 'team_play' | 'position' | 'created_at'>>(games: readonly G[]): G | null {
+  const live = games.filter((g) => g.status === 'active' && g.archived_at === null && g.team_play === true)
+  return [...live].sort((a, b) => a.position - b.position || a.created_at - b.created_at)[0] ?? null
+}
+
 /** Whether a game is played in teams (its switch is on). It only changes anything once the party has teams. */
 export const teamPlayOn = (game: Pick<SessionGame, 'team_play'>): boolean => game.team_play === true
 

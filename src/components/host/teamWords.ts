@@ -2,14 +2,11 @@
 // teams gives, why it can't be done right now, the Make teams again note, the
 // Move to team choices and the Play in teams line. Pure, so the unit tests pin
 // them. The core never names a game: a game is only its title here.
-import { MAX_TEAMS, MIN_TEAMS, teamList } from '@/lib/teams'
+import { liveTeamGame, MAX_TEAMS, MIN_TEAMS, teamList } from '@/lib/teams'
 import type { SessionGame, Team } from '@/lib/types'
 
 /** The counts the host picks from: 2 to 6. */
 export const TEAM_COUNTS: readonly number[] = Array.from({ length: MAX_TEAMS - MIN_TEAMS + 1 }, (_, i) => MIN_TEAMS + i)
-
-/** Teams need this many guests here before they can be made. */
-export const MIN_GUESTS_FOR_TEAMS = 2
 
 const guestsWord = (n: number) => `${n} ${n === 1 ? 'guest' : 'guests'}`
 
@@ -29,25 +26,18 @@ export function splitLine(guests: number, count: number): string {
   return `${here}: ${count} teams of ${small} or ${big}`
 }
 
-/**
- * The first live game played in teams (the server's order: by position), or
- * null. While one is live, teams can't be made or cleared: that would change
- * who answers for whom in the middle of it.
- */
-export function liveTeamGame(games: readonly SessionGame[]): SessionGame | null {
-  const live = games.filter((g) => g.status === 'active' && g.archived_at === null && g.team_play === true)
-  return [...live].sort((a, b) => a.position - b.position || a.created_at - b.created_at)[0] ?? null
-}
+/** The first live game played in teams, or null (src/lib/teams.ts: the phones use it too). */
+export { liveTeamGame }
 
 /**
  * Why Make teams (or Make teams again) can't be pressed now, or null when it
- * can: a game played in teams is live, or fewer than 2 guests are here.
+ * can: only while a game played in teams is live. Teams may be made before
+ * anyone is here, or with fewer guests than teams: they start empty, and
+ * guests pick one on their phone or go into the smallest as they join.
  */
-export function makeBlock(games: readonly SessionGame[], guestsHere: number, teamsExist: boolean): string | null {
+export function makeBlock(games: readonly SessionGame[], teamsExist: boolean): string | null {
   const live = liveTeamGame(games)
   if (live) return teamsExist ? `End ${live.title} to make new teams or clear them.` : `End ${live.title} before you make teams.`
-  if (guestsHere === 0) return 'Nobody is here yet. Make teams once 2 or more guests have joined.'
-  if (guestsHere < MIN_GUESTS_FOR_TEAMS) return 'Only 1 guest is here. Make teams once 2 or more have joined.'
   return null
 }
 

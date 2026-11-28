@@ -23,8 +23,9 @@ import { cn } from '@/lib/utils'
  * and what that gives for the guests here now, and Make teams, which splits
  * them at random. With teams: each team's colour, name and members, with
  * Rename; guests here in no team; Make teams again (a reshuffle, behind a
- * confirm with the count again) and Clear teams. Making or clearing them
- * waits while a game played in teams is live. Default names (Team Gold, Team
+ * confirm with the count again) and Clear teams. Teams can be made before
+ * anyone is here (they start empty; guests pick one on their phone). Making
+ * or clearing them waits while a game played in teams is live. Default names (Team Gold, Team
  * Pink, ...) come from the database.
  */
 export default function TeamsCard({ snapshot, className }: { snapshot: Snapshot; className?: string }) {
@@ -41,7 +42,7 @@ export default function TeamsCard({ snapshot, className }: { snapshot: Snapshot;
   const renaming = useDialogTarget<Team>()
   const members = useMemo(() => new Map(teams.map((t) => [t.id, membersOf(snapshot, t.id)])), [snapshot, teams])
   const alone = useMemo(() => (teams.length > 0 ? teamless(snapshot) : []), [snapshot, teams.length])
-  const blocked = makeBlock(snapshot.games, guestsHere, teams.length > 0)
+  const blocked = makeBlock(snapshot.games, teams.length > 0)
   const clearBlocked = clearBlock(snapshot.games)
   const labelId = useId()
 
@@ -62,8 +63,8 @@ export default function TeamsCard({ snapshot, className }: { snapshot: Snapshot;
         <CardTitle>Teams</CardTitle>
         <CardDescription>
           {teams.length === 0
-            ? 'Some games can be played in teams: one answer from any member counts for the whole team.'
-            : 'In games played in teams, one answer from any member counts for the whole team. Late guests go into the smallest team.'}
+            ? 'Some games can be played in teams: one answer from any member counts for the whole team. Make them before guests arrive if you like: each guest picks one on their phone.'
+            : 'Guests pick or switch their team on their phone, and a guest who never picks is in the smallest team. In games played in teams, one answer from any member counts for the whole team.'}
         </CardDescription>
       </CardHeader>
 

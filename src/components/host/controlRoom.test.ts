@@ -493,12 +493,16 @@ describe('the teams', () => {
     expect(raw).toMatch(/<button[^>]*data-variant="secondary"[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
   })
 
-  it('waits for 2 guests before it makes teams, and says so', async () => {
+  it('makes teams before the guests come, or with fewer guests than teams: they start empty', async () => {
     const lobby = fixtureSnapshot('lobby', 'host')
     const one = await controlRoomOf({ ...lobby, players: lobby.players.slice(0, 1), standings: lobby.standings.slice(0, 1) })
-    expect(one).toContain('Only 1 guest is here. Make teams once 2 or more have joined.')
-    const raw = await controlRoomOf({ ...lobby, players: [], standings: [] }, markup)
-    expect(raw).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
+    expect(one).toContain('1 guest here: 4 teams, 1 of 1 and 3 empty for now.')
+    const empty = { ...lobby, players: [], standings: [] }
+    expect(await controlRoomOf(empty)).toContain('Nobody here yet: 4 empty teams for now.')
+    expect(await controlRoomOf(empty)).toContain('Make them before guests arrive if you like: each guest picks one on their phone.')
+    const raw = await controlRoomOf(empty, markup)
+    expect(raw).toMatch(/<button[^>]*data-variant="secondary"[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
+    expect(raw).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[^])*Make teams<\/button>/)
   })
 
   it('shows each team with its members and Rename, and holds Make and Clear while a game played in teams is live', async () => {
@@ -509,7 +513,7 @@ describe('the teams', () => {
     expect(text).toContain('Team Gold 3 guests Ana Ana Sofie Sofie Lars Lars')
     expect(text).toContain('Team Violet 3 guests Freja Freja Clara Clara Oscar Oscar')
     for (const name of ['Team Gold', 'Team Pink', 'Team Teal', 'Team Violet']) expect(raw).toContain(`aria-label="Rename ${name}"`)
-    expect(text).toContain('Late guests go into the smallest team.')
+    expect(text).toContain('Guests pick or switch their team on their phone, and a guest who never picks is in the smallest team.')
     expect(text).not.toContain('How many teams')
     expect(text).not.toContain('No team')
     // The quiz is live in teams: the buttons wait, and say why.

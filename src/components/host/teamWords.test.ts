@@ -67,14 +67,14 @@ describe('the teams’ words in the control room', () => {
 
   it('says why teams can’t be made or cleared now, in the server’s terms', () => {
     const live = [game({ status: 'active', team_play: true })]
-    expect(makeBlock(live, 12, false)).toBe('End Quiz before you make teams.')
-    expect(makeBlock(live, 12, true)).toBe('End Quiz to make new teams or clear them.')
+    expect(makeBlock(live, false)).toBe('End Quiz before you make teams.')
+    expect(makeBlock(live, true)).toBe('End Quiz to make new teams or clear them.')
     expect(clearBlock(live)).toBe('End Quiz to make new teams or clear them.')
-    expect(makeBlock([], 0, false)).toBe('Nobody is here yet. Make teams once 2 or more guests have joined.')
-    expect(makeBlock([], 1, false)).toBe('Only 1 guest is here. Make teams once 2 or more have joined.')
-    expect(makeBlock([], 2, false)).toBeNull()
+    // Before anyone is here, or with fewer guests than teams, teams can be made: they start empty and guests pick one.
+    expect(makeBlock([], false)).toBeNull()
+    expect(makeBlock([], true)).toBeNull()
     // A live game played alone doesn't hold teams back.
-    expect(makeBlock([game({ status: 'active' })], 12, true)).toBeNull()
+    expect(makeBlock([game({ status: 'active' })], true)).toBeNull()
     expect(clearBlock([game({ status: 'active' })])).toBeNull()
   })
 
@@ -136,8 +136,8 @@ describe('the teams’ words in the control room', () => {
     const words = [
       splitLine(22, 4),
       splitLine(3, 4),
-      makeBlock([], 0, false),
-      makeBlock([], 1, false),
+      makeBlock([game({ status: 'active', team_play: true })], false),
+      makeBlock([game({ status: 'active', team_play: true })], true),
       remakeNote([gold, pink], 3),
       teamPlayLine({ on: true, live: false, teams: 0 }),
     ]
